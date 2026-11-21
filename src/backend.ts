@@ -142,6 +142,10 @@ interface Settings {
   // How speech is marked in the story: auto, single quotes too, or plain
   // text as speech with *asterisks* for actions.
   speechMarks: string;
+  // Text between *asterisks*: read as narration, or left out.
+  asterisks: string;
+  // Speech: read aloud, or left out.
+  speechRead: string;
   // The engine a connection runs, by connection id, when it is said outright
   // rather than found from the connection.
   engines: Record<string, string>;
@@ -204,6 +208,8 @@ const DEFAULT_SETTINGS: Settings = {
   skipOn: true,
   skipPatterns: '',
   speechMarks: 'auto',
+  asterisks: 'narration',
+  speechRead: 'read',
   thinkingMode: 'off',
   thinkingEffort: 'low',
   samplers: {},
@@ -483,6 +489,8 @@ function cleanSettings(raw: any): Settings {
     skipOn: bool(r.skipOn, d.skipOn),
     skipPatterns: str(r.skipPatterns, 8000),
     speechMarks: pick(r.speechMarks, ['auto', 'single', 'plain'] as const, 'auto'),
+    asterisks: pick(r.asterisks, ['narration', 'skip'] as const, 'narration'),
+    speechRead: pick(r.speechRead, ['read', 'skip'] as const, 'read'),
     keepAudio: KEEP_AUDIO_CHOICES.indexOf(Number(r.keepAudio)) >= 0 ? Number(r.keepAudio) : d.keepAudio,
     thinkingMode: pick(r.thinkingMode, ['off', 'inherit', 'custom'] as const, 'off'),
     thinkingEffort: pick(r.thinkingEffort, EFFORTS, 'low'),
@@ -890,6 +898,8 @@ interface SplitOptions {
   bound?: ThinkPair[];
   skips?: RegExp[];
   marks?: string;
+  // 'skip' leaves out text between *asterisks*.
+  asterisks?: string;
 }
 
 // Splits a message into lines in the order they are read. Text in speech
@@ -898,7 +908,10 @@ interface SplitOptions {
 // text outside *asterisks* is speech, for a story written that way.
 function splitSegments(raw: string, extra?: string[] | SplitOptions, bound?: ThinkPair[]): Segment[] {
   const o: SplitOptions = Array.isArray(extra) || extra === undefined ? { extra: extra as string[] | undefined, bound } : extra;
-  const t = cleanForVoice(raw, o.extra, o.bound, o.skips);
+  let t = cleanForVoice(raw, o.extra, o.bound, o.skips);
+  // Text between asterisks, such as *she shrugs*, left out when asked. A
+  // span stays on one line, so a stray asterisk cannot take a whole reply.
+  if (o.asterisks === 'skip') t = t.replace(/\*[^*\n]{1,600}\*/g, ' ');
   const marks = o.marks || 'auto';
   const parts: { kind: SegKind; text: string; para: number }[] = [];
   let buf = '';
@@ -2296,7 +2309,7 @@ function settingsSig(s: Settings): string {
     JSON.stringify([
       s.directorOn, s.directorConnection, s.strength, s.tagsOn, s.breathsOn, s.soundsOn, s.soundStyle, s.narration,
       s.intimateOn, s.findSpeakers, s.bigMoments, s.prompt, s.decisionsOn, s.decisionConnection, s.extraThinkTags,
-      s.thinkingMode, s.thinkingEffort, s.samplers, s.engineNotes, s.skipOn, s.skipPatterns, s.speechMarks,
+      s.thinkingMode, s.thinkingEffort, s.samplers, s.engineNotes, s.skipOn, s.skipPatterns, s.speechMarks, s.asterisks,
       s.promptRole, s.decisionQuestions, s.soundCheck,
       s.cast.map((c) => [c.name, c.aliases, c.note, c.muted]),
     ]),
@@ -2590,7 +2603,7 @@ async function direct(userId: string | undefined, p: any): Promise<Script> {
     if (kept) return Object.assign({}, kept, { added: [], log: kept.log.concat('Played from the copy directed before.') });
   }
   const skip = s.skipOn ? skipsFor(s.skipPatterns) : { list: [], bad: [] };
-  const segs = splitSegments(text, { extra: s.extraThinkTags, bound: await boundPairs(userId), skips: skip.list, marks: s.speechMarks });
+  const segs = splitSegments(text, { extra: s.extraThinkTags, bound: await boundPairs(userId), skips: skip.list, marks: s.speechMarks, asterisks: s.asterisks });
   const script: Script = {
     key, messageId, author, lines: [], log: [], directed: false, added: authorAdded ? [author] : [], inScene: [], isUser, model: '', cost: 0,
   };

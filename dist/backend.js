@@ -49,6 +49,8 @@ const DEFAULT_SETTINGS = {
     skipOn: true,
     skipPatterns: '',
     speechMarks: 'auto',
+    asterisks: 'narration',
+    speechRead: 'read',
     thinkingMode: 'off',
     thinkingEffort: 'low',
     samplers: {},
@@ -334,6 +336,8 @@ function cleanSettings(raw) {
         skipOn: bool(r.skipOn, d.skipOn),
         skipPatterns: str(r.skipPatterns, 8000),
         speechMarks: pick(r.speechMarks, ['auto', 'single', 'plain'], 'auto'),
+        asterisks: pick(r.asterisks, ['narration', 'skip'], 'narration'),
+        speechRead: pick(r.speechRead, ['read', 'skip'], 'read'),
         keepAudio: KEEP_AUDIO_CHOICES.indexOf(Number(r.keepAudio)) >= 0 ? Number(r.keepAudio) : d.keepAudio,
         thinkingMode: pick(r.thinkingMode, ['off', 'inherit', 'custom'], 'off'),
         thinkingEffort: pick(r.thinkingEffort, EFFORTS, 'low'),
@@ -730,7 +734,11 @@ const LETTER = /[\p{L}\p{N}]/u;
 // text outside *asterisks* is speech, for a story written that way.
 function splitSegments(raw, extra, bound) {
     const o = Array.isArray(extra) || extra === undefined ? { extra: extra, bound } : extra;
-    const t = cleanForVoice(raw, o.extra, o.bound, o.skips);
+    let t = cleanForVoice(raw, o.extra, o.bound, o.skips);
+    // Text between asterisks, such as *she shrugs*, left out when asked. A
+    // span stays on one line, so a stray asterisk cannot take a whole reply.
+    if (o.asterisks === 'skip')
+        t = t.replace(/\*[^*\n]{1,600}\*/g, ' ');
     const marks = o.marks || 'auto';
     const parts = [];
     let buf = '';
@@ -2077,7 +2085,7 @@ function settingsSig(s) {
     return hash(JSON.stringify([
         s.directorOn, s.directorConnection, s.strength, s.tagsOn, s.breathsOn, s.soundsOn, s.soundStyle, s.narration,
         s.intimateOn, s.findSpeakers, s.bigMoments, s.prompt, s.decisionsOn, s.decisionConnection, s.extraThinkTags,
-        s.thinkingMode, s.thinkingEffort, s.samplers, s.engineNotes, s.skipOn, s.skipPatterns, s.speechMarks,
+        s.thinkingMode, s.thinkingEffort, s.samplers, s.engineNotes, s.skipOn, s.skipPatterns, s.speechMarks, s.asterisks,
         s.promptRole, s.decisionQuestions, s.soundCheck,
         s.cast.map((c) => [c.name, c.aliases, c.note, c.muted]),
     ]));
@@ -2381,7 +2389,7 @@ async function direct(userId, p) {
             return Object.assign({}, kept, { added: [], log: kept.log.concat('Played from the copy directed before.') });
     }
     const skip = s.skipOn ? skipsFor(s.skipPatterns) : { list: [], bad: [] };
-    const segs = splitSegments(text, { extra: s.extraThinkTags, bound: await boundPairs(userId), skips: skip.list, marks: s.speechMarks });
+    const segs = splitSegments(text, { extra: s.extraThinkTags, bound: await boundPairs(userId), skips: skip.list, marks: s.speechMarks, asterisks: s.asterisks });
     const script = {
         key, messageId, author, lines: [], log: [], directed: false, added: authorAdded ? [author] : [], inScene: [], isUser, model: '', cost: 0,
     };

@@ -928,6 +928,8 @@ const DEFAULTS = {
     skipOn: true,
     skipPatterns: '',
     speechMarks: 'auto',
+    asterisks: 'narration',
+    speechRead: 'read',
     keepAudio: 100,
     applauseSound: '',
     applauseSeconds: 5,
@@ -1448,7 +1450,7 @@ export function setup(ctx, overrides) {
             const isNarr = line.kind === 'narration';
             const who = isNarr ? narratorMember() : memberFor(line.speaker);
             const mutedPerson = who && who.muted;
-            const spoken = !(isNarr && S.narration !== 'read') && !mutedPerson;
+            const spoken = !(isNarr && S.narration !== 'read') && !(!isNarr && S.speechRead === 'skip') && !mutedPerson;
             if (spoken)
                 items.push({ kind: 'voice', line, at: line.i });
             if (line.after && S.soundsOn)
@@ -5196,10 +5198,16 @@ export function setup(ctx, overrides) {
                 kin.placeholder = hasKey ? 'A key is saved' : 'Paste your ElevenLabs key';
                 forget.disabled = !hasKey;
                 testB.disabled = !hasKey;
+                // A key test says how it went in a Lumiverse notification too, since
+                // it can take a few seconds and the reader may have moved on.
+                if (msg.type !== 'key_forget' && r && typeof r.ok === 'boolean')
+                    notify(r.ok ? 'success' : 'warning', r.ok ? 'Your ElevenLabs sound effects key works.' : 'The sound effects key did not work: ' + keyText);
             }
             catch (e) {
                 kst.textContent = String((e && e.message) || 'The backend did not answer.');
                 kst.dataset.kind = 'bad';
+                if (msg.type !== 'key_forget')
+                    notify('warning', 'The sound effects key could not be tested: the backend did not answer.');
             }
         };
         krow.appendChild(button('Save', () => {
@@ -5422,11 +5430,6 @@ export function setup(ctx, overrides) {
             toggle('Read your own messages', 'Off by default. Your own messages are performed too, in your persona’s voice. The button on a message always works.', 'readOwnMessages'),
         ].concat(bothAutoplayWarning())));
         p.appendChild(toggle('Prepare replies ahead', 'Off by default. With Autoplay off, each new reply is directed in the background, so pressing Play starts at once. It costs a Director call for every reply, played or not.', 'prepareAhead'));
-        p.appendChild(segmented('Narration', [
-            { id: 'read', label: 'Read aloud' },
-            { id: 'sounds', label: 'Sounds only' },
-            { id: 'skip', label: 'Skip' },
-        ], S.narration, (v) => set({ narration: v }), 'What happens to text outside quotes. Read aloud uses the Narrator’s voice, and is the default. Sounds only plays the sounds of what happens with no narrator. Skip leaves narration out.'));
         p.appendChild(toggle('Save the performance to the message', 'Off by default. After a message plays through, its audio is saved to the message, and Lumiverse’s own player plays it again for free. It uses storage on the server.', 'saveAudio'));
         p.appendChild(keptAudioBox());
         p.appendChild(toggle('Reduce motion', 'Off by default. On, nothing in Auto Foley moves or fades. Your device’s own reduce motion setting does the same.', 'reduceMotion'));
@@ -5439,6 +5442,19 @@ export function setup(ctx, overrides) {
             { id: 'single', label: 'Quote marks, single quotes too' },
             { id: 'plain', label: 'Plain text is speech, *asterisks* are actions' },
         ], S.speechMarks || 'auto', (v) => set({ speechMarks: v }), 'Auto reads "double", “curly”, «guillemet», „low” and 「corner」 quotes, and a line that starts with a dash. Pick the plain style for stories written as *she waves* Hello.'));
+        r.appendChild(segmented('Narration', [
+            { id: 'read', label: 'Read aloud' },
+            { id: 'sounds', label: 'Sounds only' },
+            { id: 'skip', label: 'Skip' },
+        ], S.narration, (v) => set({ narration: v }), 'What happens to text outside quotes. Read aloud uses the Narrator’s voice, and is the default. Sounds only plays the sounds of what happens with no narrator. Skip leaves narration out.'));
+        r.appendChild(segmented('Speech', [
+            { id: 'read', label: 'Read aloud' },
+            { id: 'skip', label: 'Skip' },
+        ], S.speechRead || 'read', (v) => set({ speechRead: v }), 'What happens to text in quotes. Read aloud is the default. Skip plays only the narration and the sounds.'));
+        r.appendChild(segmented('Text between asterisks', [
+            { id: 'narration', label: 'Read as narration' },
+            { id: 'skip', label: 'Skip' },
+        ], S.asterisks || 'narration', (v) => set({ asterisks: v }), 'Text such as *she shrugs*. Read as narration is the default. Skip leaves it out, in every style of speech marks.'));
         r.appendChild(toggle('Leave out trackers and status blocks', 'On by default. Tables, status lines such as Time: 9:40 PM, lines that start with an emoji, folded blocks, and bars are not read. The patterns are below.', 'skipOn', undefined, () => {
             const cur = S.skipPatterns || builtInSkips;
             const said = el('<div class="af-col"></div>');

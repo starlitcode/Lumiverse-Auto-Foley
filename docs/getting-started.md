@@ -57,6 +57,14 @@ Thinking a model writes in the message is never read aloud. The same nine format
 - **HTML, code blocks and comments.**
 - **Text in double parentheses**, such as `((brb))`.
 
+### Narration, speech and actions
+
+Under **Reading messages** in the Settings tab:
+
+- **Narration**: **Read aloud**, the default, **Sounds only**, or **Skip**.
+- **Speech**: **Read aloud**, the default, or **Skip**. Skip plays only the narration and the sounds.
+- **Text between asterisks**, such as `*she shrugs*`: **Read as narration**, the default, or **Skip**.
+
 ### Trackers and status blocks
 
 **Leave out trackers and status blocks**, in the Settings tab, is on by default. These are not read:

@@ -30,7 +30,7 @@ What is kept in a sound tag:
 - Up to 140 characters.
 - Letters, numbers, spaces, and the punctuation of a short quoted line.
 
-When **Narration** is set to **Sounds only** or **Skip**, narration is not spoken. Sounds in the voice then go on speech lines only.
+When **Narration**, under **Reading messages** in the Settings tab, is set to **Sounds only** or **Skip**, narration is not spoken. Sounds in the voice then go on speech lines only.
 
 ## Only sounds the text shows
 

@@ -206,6 +206,12 @@ describe("writing styles and text not meant to be heard", () => {
     expect(split("*shrugs and turns away* Fine by me. *pauses* Mostly.", { marks: "plain" })).toEqual(["n:shrugs and turns away", "s:Fine by me.", "n:pauses", "s:Mostly."]);
   });
 
+  test("text between asterisks can be left out, in any style", () => {
+    expect(split('*leans on the rail* "Not tonight." *turns away*', { asterisks: "skip" })).toEqual(["s:Not tonight."]);
+    expect(split("*leans on the rail* Not tonight.", { marks: "plain", asterisks: "skip" })).toEqual(["s:Not tonight."]);
+    expect(split('*leans on the rail* "Not tonight."')).toEqual(["n:leans on the rail", "s:Not tonight."]);
+  });
+
   test("trackers, status lines and bars are left out", () => {
     const text = 'Brin set the lamp down. "Night shift again."\n\nTime: 11:20 PM\n| Mood | tired |\n📍 The east dock\nStamina ▓▓▓░░\n【Day 4】\n<details><summary>Notes</summary>Owes a favor.</details>';
     expect(split(text, { skips: skips() })).toEqual(["n:Brin set the lamp down.", "s:Night shift again."]);

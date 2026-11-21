@@ -31,6 +31,7 @@
 - **The look.** A pattern behind the panel and how solid the boxes are, the same as Auto Refine's. The tab bar stays at the top while you scroll.
 - **Expand** for every long text box, and **Clear the log** on the Stage tab.
 - **Leave out trackers and status blocks.** Tables, status lines, emoji markers, folded blocks and bars are not read. The patterns can be changed in the Settings tab, with **Use defaults**.
+- **Speech and Text between asterisks**, beside Narration: read each aloud or skip it.
 - **How speech is marked.** Guillemets, low quotes, corner brackets and dash dialogue are read as speech, with single quotes, or plain text with *asterisk* actions, as choices.
 - **Speakers found from the text.** A speech verb, a name and a colon, script-style lines, an action in the same paragraph, the same speaker going on, and two people taking turns. The Director is told who it is, or who it likely is.
 - **Only sounds the text shows**, on by default. A sound the text around it gives no sign of is left out.
