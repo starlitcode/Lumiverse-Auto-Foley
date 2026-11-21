@@ -51,4 +51,10 @@ Auto Foley is for adults, 18 and older. It is not for sexual content involving m
 
 ## Credits
 
-Made by starlitcode. Sister extensions: [Auto Retry](https://github.com/starlitcode/Lumiverse-Auto-Retry) and [Auto Refine](https://github.com/starlitcode/Lumiverse-Auto-Refine).
+- **starlitcode**: built and maintains the extension
+- **[Claude](https://claude.ai)** (Anthropic): wrote the code, directed and tested by starlitcode
+- **[Choir](https://github.com/patatasbravasch-arch/Choir)**: the extension that showed a voice for every character, with sound effects, was worth having, and inspired the floating player. Auto Foley is written from scratch and shares no code with it
+- **[Chat Voice](https://github.com/WanderingMonk8/custom_voice)** by WanderingMonk8: the extension that showed a TTS voice for each speaker in a chat was worth having. Auto Foley is written from scratch and shares no code with it
+- Sister extensions: [Auto Retry](https://github.com/starlitcode/Lumiverse-Auto-Retry) and [Auto Refine](https://github.com/starlitcode/Lumiverse-Auto-Refine)
+
+Licensed under the GNU General Public License v3.0. See [LICENSE](LICENSE).
