@@ -24,6 +24,7 @@ You also need a TTS connection in Lumiverse, under **Connections**, in the TTS s
 
 - **The drawer:** a tab called **Foley**, with a headphones icon. It has five tabs: Stage, Cast, Director, Sounds and Settings.
 - **Each message:** the Auto Foley button in its row of buttons. Press it to perform the message. Press it again to stop.
+- **The floating player:** a round button over the chat. Turn on **A floating player** in the Settings tab. See [The floating player](docs/getting-started.md#the-floating-player).
 
 ## Documentation
 

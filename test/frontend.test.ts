@@ -6,7 +6,7 @@ import { join } from "node:path";
 import vm from "node:vm";
 import { __testing } from "../src/frontend";
 
-const { engineOf, fitTag, tagSound, textFor, styleFor, stripTags, stabilityFor, lineHtml, ENGINES } = __testing;
+const { engineOf, fitTag, tagSound, textFor, styleFor, stripTags, stabilityFor, ENGINES } = __testing;
 
 describe("which engine a connection runs", () => {
   test("ElevenLabs: v3 and v4 act, and the older models are not used", () => {
@@ -121,17 +121,6 @@ describe("stability", () => {
   });
 });
 
-describe("drawing a line", () => {
-  test("voice tags and sound tags are drawn as different chips", () => {
-    const html = lineHtml("[softly] Hush. [sound of rain]");
-    expect(html).toContain('<span class="af-chip af-chip-tag">softly</span>');
-    expect(html).toContain('<span class="af-chip af-chip-insound">sound of rain</span>');
-  });
-
-  test("text from a message is escaped", () => {
-    expect(lineHtml('<img src=x onerror="alert(1)">')).not.toContain("<img");
-  });
-});
 
 describe("word timing from the sound", () => {
   const { voicedFrames, wordWeight, partTimes } = __testing;

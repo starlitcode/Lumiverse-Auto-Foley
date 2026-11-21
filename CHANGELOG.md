@@ -16,7 +16,7 @@
 - **Sounds in the voice.** With Eleven v3 or v4, the Director can put a `[sound of ...]` tag inside a spoken line, and ElevenLabs performs the sound with the speech. Suggested by a Discord user.
 - **Sound effects and a sound library.** Separate sounds before or after a line, made by ElevenLabs with a key saved in the Sounds tab. Every sound made is saved, so the same sound is free the next time. Your own uploads are used first.
 - **The Decision model.** An optional Decision connection picks who says each quoted line, and checks which lines describe a sound.
-- **The Stage tab.** Now playing shows who speaks and the line, word by word, with Back, Play, Next, Stop, a mark for each part of the message to tap, **Make this part again** and **Direct again**. A mixer for voices and sounds, and a Log.
+- **The Stage tab.** Now playing shows who speaks and the line, word by word, with Back, Play, Next, Stop, a mark for each part of the message to tap, **Make this part again** and **Direct again**. A line read as written says why under it. A mixer for voices and sounds, and a Log.
 - **A button on each message** to perform it, and **Autoplay new replies**.
 - **Edited replies are directed again.** A reply changed after it was directed, such as one Auto Refine rewrote, is directed again, and one playing starts again with the new text. **Wait before autoplay** gives another extension time to change a reply first.
 - **Debug info**, on the Settings tab. Build a report to paste into a bug report. People in the cast are named by their role, and no message text is included.

@@ -107,7 +107,7 @@ interface Settings {
   askNote: boolean;
   askNotes: Record<string, string>;
   // A second connection to ask when the Director still refuses or fails.
-  // The look and the floating button, which follow the account like every
+  // The look and the floating player, which follow the account like every
   // The audience: a cheer after a performance, for the AI's characters, for
   // you, or both, and when.
   applauseOn: boolean;
@@ -1667,12 +1667,6 @@ function errorKind(text: string): string {
   }
   if (HARD_STATUS.test(text) || HARD_LOOSE.test(text)) return 'hard';
   return WAIT_ERROR.test(text) ? 'wait' : '';
-}
-
-function rateLimited(err: any): boolean {
-  const s = String(err == null ? '' : err);
-  if (!s) return false;
-  return errorKind(s) === 'wait';
 }
 
 // How long the provider said to wait, in milliseconds, or 0 when it said
@@ -3273,7 +3267,7 @@ async function onPanel(p: any, userId: string | undefined) {
         // A new take of a made sound, for someone who does not like it.
         const id = str(p.id, 64).replace(/[^a-z0-9_-]/gi, '');
         const list = await loadSounds(userId);
-        // From the script, a sound is named by its description instead.
+        // From Now playing, a sound is named by its description instead.
         const e = id ? list.find((x) => x.id === id) : matchSound(list, cleanSound(p.description));
         if (!e) return answer({ type: 'sound', error: 'That sound is no longer in the library.' });
         if (e.source !== 'made') return answer({ type: 'sound', error: 'Only a sound made by ElevenLabs can be made again. Upload a new file for one of yours.' });
@@ -3421,7 +3415,12 @@ async function onPanel(p: any, userId: string | undefined) {
         if (!url) return answer({ type: 'uploaded', ok: false, error: 'That does not look like a link. It has to start with http:// or https://.' });
         const list = await loadSounds(userId);
         if (list.length >= MAX_SOUNDS) return answer({ type: 'uploaded', ok: false, error: 'The library is full (' + MAX_SOUNDS + ' sounds). Delete some first.' });
-        const fromUrl = decodeURIComponent((url.split(/[?#]/)[0].split('/').pop() || '').replace(/%(?![0-9a-f]{2})/gi, '')).replace(/\.[a-z0-9]{2,4}$/i, '').replace(/[_-]+/g, ' ').trim();
+        // The file name in the link, as a name to show. A link with a broken
+        // escape, such as a lone %C3, keeps its file name as written.
+        const tail = url.split(/[?#]/)[0].split('/').pop() || '';
+        let file = tail;
+        try { file = decodeURIComponent(tail); } catch { /* kept as written */ }
+        const fromUrl = file.replace(/\.[a-z0-9]{2,4}$/i, '').replace(/[_-]+/g, ' ').trim();
         const entry: SoundEntry = {
           id: 'l' + newId(),
           name: str(p.name, 160).trim() || fromUrl.slice(0, 160) || 'A linked sound',

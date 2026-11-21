@@ -547,7 +547,7 @@ if (section("perform")) {
   check((await page.evaluate(() => window.__settings.prompt)) === "<my_prompt>Tag lightly.</my_prompt>", "Done writes the text back and saves it");
   check((await page.locator(".af-over").count()) === 0, "and the big editor closes");
 
-  console.log("Look and the floating button");
+  console.log("Look and the floating player");
   await page.click('.af-tab[data-tab="settings"]');
   await page.waitForTimeout(250);
   await page.evaluate(() => {
@@ -632,8 +632,14 @@ if (section("player")) {
         return [was, b.checked, window.__settings.soundsOn];
       });
       check(chip[0] === true && chip[1] === false, where + ": a quick switch is the panel's own switch, and turns its setting off");
-      await page.evaluate(() => window.__widget.querySelector('[data-p="fold"]').click());
-      await page.waitForTimeout(250);
+      const fmid = await page.evaluate(async () => {
+        window.__widget.querySelector('[data-p="fold"]').click();
+        await new Promise((r) => setTimeout(r, 120));
+        return window.__widget.querySelector('[data-p="cast"]').getBoundingClientRect().height;
+      });
+      await page.waitForTimeout(500);
+      const fend = await page.evaluate(() => window.__widget.querySelector('[data-p="cast"]').getBoundingClientRect().height);
+      check(fmid > 0 && fmid < fend, where + ": Who is voiced opens over several frames (" + fmid.toFixed(1) + " of " + fend.toFixed(1) + " px)");
       const lv = await page.evaluate(() => {
         const w = window.__widget.getBoundingClientRect();
         const c = window.__widget.querySelector(".af-pl").getBoundingClientRect();
@@ -649,8 +655,13 @@ if (section("player")) {
       await page.evaluate(() => window.__widget.querySelector('[data-p="menu"]').click());
       await page.waitForTimeout(150);
       check(await page.evaluate(() => !!window.__menu && ["hide", "open"].every((k) => window.__menu.items.some((i) => i.key === k))), where + ": More offers Open the Auto Foley tab and Hide the player");
-      await page.evaluate(() => window.__widget.querySelector('[data-p="close"]').click());
-      await page.waitForTimeout(450);
+      const closing = await page.evaluate(() => {
+        const card = window.__widget.querySelector(".af-pl");
+        window.__widget.querySelector('[data-p="close"]').click();
+        return card.getAnimations().some((x) => /circle/.test(JSON.stringify(x.effect.getKeyframes())));
+      });
+      check(closing, where + ": the player draws back into the round button over several frames");
+      await page.waitForTimeout(600);
       check(await page.evaluate(() => !!window.__widget.querySelector(".af-float") && !window.__widget.querySelector(".af-pl")), where + ": closing it leaves the round button");
       check(!errors.length, where + ": no console errors. " + errors.slice(0, 2).join("; "));
       await context.close();

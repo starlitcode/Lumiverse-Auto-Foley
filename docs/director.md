@@ -18,7 +18,7 @@
    - The words outside the brackets must be the same words. Capitals, ellipses and dashes may change.
    - Tags that describe something seen, such as `[smiles]`, are taken out. No voice can say them.
    - A line keeps no more tags than **How much acting** allows: 1, 2 or 4.
-5. A line that fails the word check is read as written. The Stage tab shows a note under it.
+5. A line that fails the word check is read as written. While it plays, **Now playing** on the Stage tab shows a note under it.
 
 ## What it sends
 
@@ -61,7 +61,7 @@ With **How sounds are made** set to **In the voice**, the Director answers, and 
 | 3 | Odessa | Is it ALWAYS this loud? |
 | 4 | Narrator | Odessa asked. |
 
-If the Director had sent line 3 as "Is it always this noisy?", the word check fails. Line 3 is then read as written, "Is it always this loud?", and the Stage tab says why.
+If the Director had sent line 3 as "Is it always this noisy?", the word check fails. Line 3 is then read as written, "Is it always this loud?", and **Now playing** says why under the line while it plays.
 
 ## The switches
 

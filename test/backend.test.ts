@@ -607,6 +607,13 @@ describe("sounds by link", () => {
     const out = await h.ask({ type: "sound_link", url: "javascript:alert(1)" });
     expect(out.find((m) => m.type === "uploaded").error).toContain("http://");
   });
+
+  test("a link with a broken escape in its file name is still kept", async () => {
+    const h = host();
+    const out = await h.ask({ type: "sound_link", url: "https://sounds.example.org/creak%C3_door.ogg", name: "" });
+    expect(out.find((m) => m.type === "uploaded").ok).toBe(true);
+    expect(out.filter((m) => m.type === "sounds").pop().sounds[0].name).toBe("creak%C3 door");
+  });
 });
 
 describe("each account keeps its own", () => {

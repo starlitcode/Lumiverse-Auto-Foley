@@ -305,19 +305,6 @@ function esc(text) {
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#39;');
 }
-// A line with its tags drawn as chips, for the script on the Stage tab.
-function lineHtml(text) {
-    const parts = String(text || '').split(/(\[[^\]]*\])/g);
-    return parts
-        .map((p) => {
-        if (!/^\[[^\]]*\]$/.test(p))
-            return esc(p);
-        const inner = p.slice(1, -1);
-        const cls = /^sounds? of\b/i.test(inner) ? 'af-chip af-chip-insound' : 'af-chip af-chip-tag';
-        return '<span class="' + cls + '">' + esc(inner) + '</span>';
-    })
-        .join('');
-}
 // A short, stable fingerprint of a text, the same as the backend's. It tells
 // two clips apart. It is not for security.
 function fingerprint(text) {
@@ -471,12 +458,6 @@ function errorKind(text) {
     if (HARD_STATUS.test(text) || HARD_LOOSE.test(text))
         return 'hard';
     return WAIT_ERROR.test(text) ? 'wait' : '';
-}
-function rateLimited(err) {
-    const s = String(err == null ? '' : err);
-    if (!s)
-        return false;
-    return errorKind(s) === 'wait';
 }
 // How long the provider said to wait, in milliseconds, or 0 when it said
 // nothing. The header's own form first, which is a whole number of seconds
@@ -785,7 +766,6 @@ textarea.af-tall { min-height: 260px; }
 .af-chip { display: inline-flex; align-items: center; gap: 4px; margin: 0 2px; padding: 0 7px; border-radius: 999px; font-size: 11px; font-weight: 600; line-height: 19px; vertical-align: 1px; white-space: nowrap; }
 .af-chip-tag { background: var(--af-accent-soft); color: var(--af-text); }
 .af-chip-insound { background: var(--af-sound-soft); color: var(--af-text); box-shadow: inset 0 0 0 1px var(--af-sound); white-space: normal; }
-button.af-chip-sound { min-height: 24px; border: 1px solid var(--af-sound); background: var(--af-sound-soft); color: var(--af-text); font: inherit; font-size: 11px; font-weight: 600; cursor: pointer; white-space: normal; text-align: left; }
 button.af-chip-sound svg { width: 12px; height: 12px; flex: none; color: var(--af-sound); }
 .af-empty { padding: 14px 10px; color: var(--af-muted); text-align: center; font-size: 12.5px; }
 .af-log { display: flex; flex-direction: column; gap: 4px; max-height: 220px; overflow: auto; }
@@ -851,8 +831,7 @@ button.af-chip-sound svg { width: 12px; height: 12px; flex: none; color: var(--a
   .af-box::after { width: 24px; height: 24px; left: 4px; }
   .af-box:checked::after { left: 24px; }
   .af-box::before { content: ""; position: absolute; inset: -6px -4px; }
-  button.af-chip-sound { min-height: 32px; }
-}
+  }
 @media (pointer: coarse) and (prefers-reduced-motion: no-preference) {
   html:not([data-af-still]) .af-box:active:not(:disabled)::after { width: 29px; }
   html:not([data-af-still]) .af-box:checked:active:not(:disabled)::after { left: 19px; }
@@ -3557,7 +3536,7 @@ export function setup(ctx, overrides) {
     }
     // The size the widget takes: the round button, or the card at its height.
     function fitWidget() {
-        if (!widget || !floatBox)
+        if (!widget || !floatBox || holdSize)
             return;
         const d = widgetSize;
         // Lumiverse's UI Scale zooms the page, so the screen is this many CSS
@@ -3596,6 +3575,9 @@ export function setup(ctx, overrides) {
     // and closing draws it back in, then shows the button. With reduce motion
     // on, it opens and closes at once.
     let playerMoving = null;
+    // While the card or its fold moves, the widget keeps its size, so the
+    // movement is not cut off by a box that shrank first.
+    let holdSize = false;
     function openPlayer(open) {
         if (playerMoving) {
             try {
@@ -3646,13 +3628,28 @@ export function setup(ctx, overrides) {
         };
         if (still || !card)
             return done();
+        // The contents fade first, then the card draws back into a circle the
+        // size of the button, where the button is drawn. The circle ends on the
+        // button's own place and size, so the swap at the end does not show.
         const d = widgetSize;
         const far = Math.hypot(card.offsetWidth, card.offsetHeight) + 2;
+        holdSize = true;
         try {
-            playerMoving = card.animate([{ clipPath: 'circle(' + far + 'px at ' + d / 2 + 'px ' + d / 2 + 'px)', opacity: 1 }, { clipPath: 'circle(' + d / 2 + 'px at ' + d / 2 + 'px ' + d / 2 + 'px)', opacity: 0.6 }], { duration: 240, easing: 'cubic-bezier(.4,0,.6,1)', fill: 'forwards' });
-            playerMoving.onfinish = done;
+            Array.prototype.forEach.call(card.children, (kid) => {
+                kid.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 140, easing: 'ease-in', fill: 'forwards' });
+            });
+            playerMoving = card.animate([
+                { clipPath: 'circle(' + far + 'px at ' + d / 2 + 'px ' + d / 2 + 'px)', offset: 0 },
+                { clipPath: 'circle(' + far + 'px at ' + d / 2 + 'px ' + d / 2 + 'px)', offset: 0.25 },
+                { clipPath: 'circle(' + d / 2 + 'px at ' + d / 2 + 'px ' + d / 2 + 'px)', offset: 1 },
+            ], { duration: 380, easing: 'cubic-bezier(.45,0,.2,1)', fill: 'forwards' });
+            playerMoving.onfinish = () => {
+                holdSize = false;
+                done();
+            };
         }
         catch (_) {
+            holdSize = false;
             done();
         }
     }
@@ -3752,7 +3749,6 @@ export function setup(ctx, overrides) {
         paused = false;
         stopAudio();
     }
-    const initialsOf = (name) => firstLetter(name);
     function drawFloat() {
         if (!floatBox)
             return;
@@ -3807,7 +3803,7 @@ export function setup(ctx, overrides) {
             SWITCHES.map((w) => '<label title="' + esc(w.title) + '"><span>' + esc(w.label) + '</span><input type="checkbox" class="af-box" role="switch" data-sw="' + w.key + '" aria-label="' + esc(w.label) + '"></label>').join('') +
             '</div>' +
             '<button type="button" class="af-fold" data-p="fold" aria-expanded="false"><span class="af-caret">▶</span><span>Who is voiced</span></button>' +
-            '<div class="af-pl-cast" data-p="cast" hidden></div>' +
+            '<div class="af-sub" data-p="cast" hidden><div class="af-pl-cast"></div></div>' +
             '</div>');
         const q = (k) => c.querySelector('[data-p="' + k + '"]');
         q('close').addEventListener('click', () => openPlayer(false));
@@ -3874,11 +3870,40 @@ export function setup(ctx, overrides) {
             if (b)
                 jumpTo(Number(b.dataset.at));
         });
+        // Who is voiced opens and closes over several frames. The widget is
+        // made tall enough first, and fitted to the card once the fold has
+        // finished moving.
         q('fold').addEventListener('click', () => {
             levelsOpen = !levelsOpen;
             keepFloat();
-            paintLevels();
-            fitWidget();
+            const box = q('cast');
+            const fold = q('fold');
+            fold.setAttribute('aria-expanded', levelsOpen ? 'true' : 'false');
+            if (levelsOpen)
+                fillCast(box);
+            if (calm()) {
+                box.hidden = !levelsOpen;
+                fitWidget();
+                return;
+            }
+            let zoom = 1;
+            try {
+                zoom = parseFloat(getComputedStyle(document.documentElement).zoom) || 1;
+            }
+            catch (_) { }
+            const vh = (window.innerHeight || 640) / zoom;
+            try {
+                widget.setSize(Math.min(PLAYER_W, (window.innerWidth || 360) / zoom - 16), Math.floor(vh - 16));
+            }
+            catch (_) { }
+            holdSize = true;
+            reveal(box, levelsOpen);
+            const t = setTimeout(() => {
+                timers.delete(t);
+                holdSize = false;
+                fitWidget();
+            }, 380);
+            timers.add(t);
         });
         floatBox.appendChild(c);
         paintLevels();
@@ -3898,6 +3923,11 @@ export function setup(ctx, overrides) {
         box.hidden = !levelsOpen;
         if (!levelsOpen)
             return;
+        fillCast(box);
+        paintFloat();
+    }
+    function fillCast(wrap) {
+        const box = wrap.querySelector('.af-pl-cast') || wrap;
         box.innerHTML = '';
         const order = { narrator: 0, persona: 1, character: 2, npc: 3 };
         const people = S.cast.slice().sort((a, b) => (order[a.kind] ?? 9) - (order[b.kind] ?? 9));
@@ -3923,7 +3953,6 @@ export function setup(ctx, overrides) {
             });
             box.appendChild(ch);
         }
-        paintFloat();
     }
     // Text and icons are written only when they change. Writing the same text
     // again still swaps the node, and on a phone that can show as a flicker.
@@ -4057,7 +4086,7 @@ export function setup(ctx, overrides) {
         catch (_) {
             widget = null;
             widgetFailed = true;
-            log('The floating player could not be added. Check that Auto Foley has the ui_panels permission, in Lumiverse under Extensions.', 'bad');
+            log('The floating player could not be added. Check that Auto Foley has the UI panels permission, in Lumiverse under Extensions.', 'bad');
             return;
         }
         widgetFailed = false;
@@ -4564,8 +4593,9 @@ export function setup(ctx, overrides) {
             cue.innerHTML = '<span class="af-cue">' + ICON_SOUND + '<span>' + esc(it.kind === 'applause' ? 'The audience cheers' : it.sound || '') + '</span></span>';
             return;
         }
-        cue.innerHTML = '';
         const line = it.line;
+        // A line read as written says why, under it, while it plays.
+        cue.innerHTML = line.note ? '<span class="af-note">' + esc(line.note) + '</span>' : '';
         const name = line.kind === 'narration' ? 'Narrator' : line.speaker;
         const m = line.kind === 'narration' ? narratorMember() : memberFor(line.speaker);
         who.innerHTML = '<span class="af-avatar af-avatar-' + esc((m && m.kind) || 'character') + '">' + faceHtml(m, name) + '</span><span>' + esc(name) + '</span>';
@@ -4711,12 +4741,12 @@ export function setup(ctx, overrides) {
         const people = S.cast.slice().sort((a, b) => (order[a.kind] ?? 9) - (order[b.kind] ?? 9));
         const known = new Set(groups().map((f) => f.id));
         for (const f of groups())
-            page.appendChild(groupSection(f, people.filter((m) => m.group === f.id), conn));
+            page.appendChild(groupSection(f, people.filter((m) => m.group === f.id)));
         for (const m of people)
             if (!m.group || !known.has(m.group))
-                page.appendChild(personCard(m, conn));
+                page.appendChild(personCard(m));
     }
-    function groupSection(f, people, conn) {
+    function groupSection(f, people) {
         const sec = el('<section class="af-group" data-group="' + esc(f.id) + '" data-open="' + (f.open ? 'true' : 'false') + '"><div class="af-group-head"></div><div class="af-sub af-group-body"' + (f.open ? '' : ' hidden') + '><div></div></div></section>');
         const head = sec.querySelector('.af-group-head');
         const body = sec.querySelector('.af-group-body');
@@ -4789,13 +4819,13 @@ export function setup(ctx, overrides) {
             if (!people.length)
                 inner.appendChild(el('<p class="af-group-empty">Nobody is in this group yet. Open a person and pick it under Group.</p>'));
             for (const m of people)
-                inner.appendChild(personCard(m, conn));
+                inner.appendChild(personCard(m));
         };
         if (f.open)
             fillGroup();
         return sec;
     }
-    function personCard(m, conn) {
+    function personCard(m) {
         const open = openPeople.has(m.id);
         const badge = ADDED_LABEL[m.addedBy] ? '<span class="af-badge af-badge-ai">' + esc(ADDED_LABEL[m.addedBy]) + '</span>' : '<span class="af-badge">' + esc(KIND_LABEL[m.kind] || m.kind) + '</span>';
         const c = el('<section class="af-card af-person" data-kind="' + esc(m.kind) + '" data-open="' + (open ? 'true' : 'false') + '">' +
@@ -4817,7 +4847,7 @@ export function setup(ctx, overrides) {
             if (built)
                 return;
             built = true;
-            fillPerson(inner, m, conn, paintName);
+            fillPerson(inner, m, paintName);
         };
         if (open)
             build();
@@ -4912,7 +4942,7 @@ export function setup(ctx, overrides) {
         paint();
         return row;
     }
-    function fillPerson(inner, m, conn, paintName) {
+    function fillPerson(inner, m, paintName) {
         inner.appendChild(pictureRow(m, paintName));
         if (m.kind !== 'narrator') {
             const g1 = el('<div class="af-grid2"></div>');
@@ -5191,7 +5221,7 @@ export function setup(ctx, overrides) {
         return wrap;
     }
     function renderDirector() {
-        const main = card('The Director', 'A second model reads each message before it is spoken, like a director with a script. It marks how every line is said, with voice tags such as [whispers] or [sighs], and adds the sounds of what happens. It never changes your words.');
+        const main = card('The Director', 'A second model reads each message before it is spoken. It marks how every line is said, with voice tags such as [whispers] or [sighs], and adds the sounds of what happens. It never changes your words.');
         main.appendChild(toggle('Use the Director', 'On by default. Off: messages are read as written, with no voice tags and no sounds, and no second model is asked.', 'directorOn', undefined, () => {
             const rows = [];
             rows.push(segmented('How much acting', [
@@ -6584,7 +6614,7 @@ export function setup(ctx, overrides) {
         catch (_) { }
     };
 }
-export const __testing = { looksLikeDate, voicedFrames, wordWeight, partTimes, engineOf, fitTag, tagSound, textFor, styleFor, stripTags, stabilityFor, lineHtml, ENGINES };
+export const __testing = { looksLikeDate, voicedFrames, wordWeight, partTimes, engineOf, fitTag, tagSound, textFor, styleFor, stripTags, stabilityFor, ENGINES };
 // The built-in cheer: "Cheering and clapping crowd 1" by freesound_community,
 // a free sound from Pixabay (pixabay.com/sound-effects/people-cheering-and-clapping-crowd-1-5995/),
 // made mono at 64 kbps so it stays small. assets/applause.mp3 is the same
