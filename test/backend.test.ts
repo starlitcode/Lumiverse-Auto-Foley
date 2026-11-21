@@ -642,6 +642,28 @@ describe("Start again", () => {
   });
 });
 
+describe("code in a message is never read", () => {
+  const read = (h: Host, t: string) => h.box.cleanForVoice(t).replace(/\s+/g, " ").trim();
+  test("colored and gradient text is read as its words only", () => {
+    const h = host();
+    const long = '<span style="background: linear-gradient(90deg, #ff6ec4 0%, #c56cf0 20%, #7873f5 40%, #4ade80 60%, #facc15 80%, #f97316 100%); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; color: transparent; font-weight: 700;">Velma grinned.</span>';
+    expect(long.length).toBeGreaterThan(200);
+    expect(read(h, long)).toBe("Velma grinned.");
+    expect(read(h, '<font color="#8a2be2">"Over here," Bram called.</font>')).toBe('"Over here," Bram called.');
+    expect(read(h, "<p style='color: rgb(200, 120, 255)'>The lantern flickered.</p>")).toBe("The lantern flickered.");
+    expect(read(h, '<div title="a > b" style="color:#fff">Tide came in.</div>')).toBe("Tide came in.");
+  });
+  test("a style block is never read, closed or not", () => {
+    const h = host();
+    expect(read(h, "<style>.glow { background: linear-gradient(red, blue); }</style>Dusk fell.")).toBe("Dusk fell.");
+    expect(read(h, "Dusk fell. <style>.glow { color: #abc; }")).toBe("Dusk fell.");
+  });
+  test("prose with a < in it is kept", () => {
+    const h = host();
+    expect(read(h, "Thanks <3 see you at 5 < 6.")).toBe("Thanks <3 see you at 5 < 6.");
+  });
+});
+
 describe("Freesound", () => {
   const clip = new Uint8Array(400).fill(7);
   const results = [

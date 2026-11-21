@@ -54,7 +54,7 @@ Thinking a model writes in the message is never read aloud. The same nine format
 ### Everything else left out
 
 - **Anything in square brackets**, such as an out-of-character note. Left in, the voice would read it as a voice tag.
-- **HTML, code blocks and comments.**
+- **HTML, code blocks and comments.** Only the words inside HTML are read. Its code is not, such as the colors and gradients of colored text, however long. A `<style>` block is never read, even one that is not closed.
 - **Text in double parentheses**, such as `((brb))`.
 
 ### Narration, speech and actions

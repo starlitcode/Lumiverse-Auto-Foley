@@ -546,7 +546,13 @@ function cleanForVoice(raw, extra, bound, skips) {
         t = leaveOut(t, skips);
     t = t.replace(/<!--[\s\S]*?-->/g, ' ');
     t = t.replace(/```[\s\S]*?```/g, ' ');
-    t = t.replace(/<(style|script)\b[\s\S]*?<\/\1\s*>/gi, ' ');
+    // A style or script block is never read, even one that is never closed,
+    // since its text is code: colors, gradients and the like.
+    t = t.replace(/<(style|script)\b[\s\S]*?(?:<\/\1\s*>|$)/gi, ' ');
+    // An HTML tag of any length, by its shape: a name, then attributes whose
+    // quoted values may hold any character, > included. A long style, such as
+    // a gradient on colored text, goes with the tag.
+    t = t.replace(/<\/?[a-zA-Z][\w:-]*(?:\s+[^\s"'>\/=]+(?:\s*=\s*(?:"[^"]*"|'[^']*'|[^\s"'>]+))?)*\s*\/?>/g, ' ');
     t = t.replace(/<[^>]{1,200}>/g, ' ');
     t = t.replace(/\(\([\s\S]*?\)\)/g, ' ');
     t = t.replace(/\[[^\]\n]{0,400}\]/g, ' ');
