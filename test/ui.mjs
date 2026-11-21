@@ -1351,7 +1351,7 @@ if (section("key notice")) {
   const { context, page } = await open(THEMES[0], SIZES[1]);
   await page.click('.af-tab[data-tab="sounds"]');
   await page.waitForTimeout(250);
-  await page.locator(".af-btn", { hasText: "Test" }).first().click();
+  await page.locator('[data-af-key="eleven"] .af-btn', { hasText: "Test" }).first().click();
   await page.waitForTimeout(250);
   check(await page.evaluate(() => window.__sent.some((m) => m.type === "notify" && m.kind === "success" && /key works/.test(m.text))), "a key that works says so");
   await context.close();
