@@ -2,15 +2,15 @@
 
 ## In short
 
-- Auto Foley speaks through a TTS connection in Lumiverse: ElevenLabs, Fish Audio, Gemini, Chatterbox, Qwen3-TTS or another engine.
-- Pick a model that acts, so voice tags work. [Voice engines](engines.md) lists them.
+- Auto Foley speaks through a TTS connection in Lumiverse: ElevenLabs, Fish Audio, Gemini, Chatterbox or Qwen3-TTS.
+- It works only with a model that acts. [Voice engines](engines.md) lists them.
 - Give each person in the Cast tab a voice.
 - Press the boom microphone button on a message.
 
 ## Steps
 
 1. **Add a TTS connection in Lumiverse**, if you do not have one. Open **Connections**, go to the TTS section, and add one with your key. For Chatterbox on your own computer, see [Chatterbox](engines.md#chatterbox).
-2. **Pick the model.** On the connection, choose one that acts: Eleven v3 or v4, Fish Audio S2.1 Pro or Drama 3, or Gemini 3.8 Flash TTS. You can also pick a model for each person later, in the Cast tab.
+2. **Pick the model.** On the connection, choose one that acts: Eleven v3 or v4, Fish Audio S2.1 Pro or Drama 3, or Gemini 3.8 Flash TTS. You can also pick a model for each person later, in the Cast tab. Only models that act are offered there.
 3. **Open the Foley tab** in the drawer. Go to **Settings** and check that **TTS connection** shows yours. The line under it says what its engine can do.
 4. **Press Check my setup** on the Settings tab. It says what is ready and what is missing. It speaks nothing, so it spends no voice credits.
 5. **Perform a message.** Press the boom microphone button on any message. The first time, the Director reads it, and the Stage tab shows the script.
@@ -69,6 +69,16 @@ On the **Settings** tab:
 A message edited after it was directed is directed again. If it was playing, it starts again with the new text, so what you hear matches what is on screen.
 
 Your browser may block sound until you tap the page. Auto Foley then waits, and the Stage tab says so. Press Play, or the button on the message, to start.
+
+## Playing a message again
+
+With **Keep made audio** on, in the Settings tab:
+
+- Each spoken line is kept in your account, with the directed message.
+- Going back to a chat later, even after closing Lumiverse, and pressing the button plays the kept lines. Nothing is spent on them, and the Log says how many were kept.
+- A line is made again only when something about it changed, such as the voice, the model or the words.
+- **Up to 100 MB** is the default. When the total passes it, the oldest lines go first.
+- **Clear kept audio**, under it, deletes them all. It asks first.
 
 ## What it costs
 

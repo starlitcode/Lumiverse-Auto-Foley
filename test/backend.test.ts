@@ -483,6 +483,60 @@ describe("directing for each voice engine", () => {
   });
 });
 
+describe("keeping made audio", () => {
+  const b64 = (n: number) => Buffer.from(new Uint8Array(n).fill(7)).toString("base64");
+
+  test("a kept line comes back by its fingerprint", async () => {
+    const h = host();
+    const put = await h.ask({ type: "clip_put", sig: "abc123def", mime: "audio/mpeg", base64: b64(500) });
+    expect(put.find((m) => m.type === "clip_kept").ok).toBe(true);
+    const got = (await h.ask({ type: "clip_get", sig: "abc123def" })).find((m) => m.type === "clip");
+    expect(got.found).toBe(true);
+    expect(Buffer.from(got.base64, "base64").length).toBe(500);
+    expect((await h.ask({ type: "clip_get", sig: "zzz999zzz" })).find((m) => m.type === "clip").found).toBe(false);
+  });
+
+  test("nothing is kept or found with Keep made audio off", async () => {
+    const h = host();
+    await h.ask({ type: "save", settings: { keepAudio: 0 } });
+    expect((await h.ask({ type: "clip_put", sig: "abc123def", mime: "audio/mpeg", base64: b64(100) })).find((m) => m.type === "clip_kept").ok).toBe(false);
+    expect([...h.files.keys()].some((k) => k.includes("clips/abc123def"))).toBe(false);
+  });
+
+  test("the oldest go first once the total passes the limit", async () => {
+    const h = host();
+    await h.ask({ type: "save", settings: { keepAudio: 50 } });
+    const mb = 1024 * 1024;
+    for (let k = 0; k < 22; k++) await h.ask({ type: "clip_put", sig: "clip" + String(k).padStart(4, "0"), mime: "audio/mpeg", base64: b64(2.4 * mb) });
+    const state = (await h.ask({ type: "clips_state" })).find((m) => m.type === "clips_state");
+    expect(state.bytes).toBeLessThanOrEqual(50 * mb);
+    expect((await h.ask({ type: "clip_get", sig: "clip0000" })).find((m) => m.type === "clip").found).toBe(false);
+    expect((await h.ask({ type: "clip_get", sig: "clip0021" })).find((m) => m.type === "clip").found).toBe(true);
+    expect([...h.files.keys()].some((k) => k.endsWith("clips/clip0000"))).toBe(false);
+  });
+
+  test("Clear kept audio deletes every clip", async () => {
+    const h = host();
+    await h.ask({ type: "clip_put", sig: "abc123def", mime: "audio/mpeg", base64: b64(100) });
+    const out = (await h.ask({ type: "clips_clear" })).find((m) => m.type === "clips_state");
+    expect(out.count).toBe(0);
+    expect([...h.files.keys()].some((k) => k.endsWith("clips/abc123def"))).toBe(false);
+  });
+
+  test("a directed message is still there after Lumiverse restarts", async () => {
+    const msg = { type: "direct", chatId: "c1", messageId: "m9", swipeId: 0, name: "Tamsin Reyes", text: 'Tamsin knocked twice. "Anyone home?"' };
+    const good = JSON.stringify({ lines: [{ i: 0, speaker: "Narrator", text: "Tamsin knocked twice." }, { i: 1, speaker: "Tamsin Reyes", text: "[softly] Anyone home?" }], new_speakers: [] });
+    const first = host({ answers: [good] });
+    await first.ask(msg);
+    await new Promise((r) => setTimeout(r, 20));
+    const second = host({ answers: [] });
+    for (const [k, v] of first.files) second.files.set(k, v);
+    const out = await second.ask(msg);
+    expect(second.calls.generate.length).toBe(0);
+    expect(out.find((m) => m.type === "script").script.lines[1].text).toBe("[softly] Anyone home?");
+  });
+});
+
 describe("the Decision model", () => {
   const msg = { type: "direct", chatId: "c1", messageId: "m2", swipeId: 0, name: "Mara Vell", text: 'Mara looked at Tobin. "Go." "No," he said.' };
   const setup = async (h: Host) => {

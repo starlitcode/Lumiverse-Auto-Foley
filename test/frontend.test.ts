@@ -9,35 +9,36 @@ import { __testing } from "../src/frontend";
 const { engineOf, fitTag, tagSound, textFor, styleFor, stripTags, stabilityFor, lineHtml, ENGINES } = __testing;
 
 describe("which engine a connection runs", () => {
-  test("ElevenLabs: v3 and v4 act, the older models do not", () => {
+  test("ElevenLabs: v3 and v4 act, and the older models are not used", () => {
     expect(engineOf({ provider: "elevenlabs" }, "eleven_v3").id).toBe("eleven_v3");
     expect(engineOf({ provider: "elevenlabs" }, "eleven_v4_turbo").id).toBe("eleven_v3");
-    expect(engineOf({ provider: "elevenlabs" }, "eleven_multilingual_v2").id).toBe("eleven_plain");
-    expect(engineOf({ provider: "elevenlabs" }, "").id).toBe("eleven_plain");
+    expect(engineOf({ provider: "elevenlabs" }, "eleven_multilingual_v2").supported).toBe(false);
+    expect(engineOf({ provider: "elevenlabs" }, "").supported).toBe(false);
   });
 
   test("Fish Audio: S2, S2.1 and Drama 3 act, S1 does not", () => {
     for (const m of ["s2-pro", "s2.1-pro", "s2.1-pro-free", "drama-3-preview", ""]) expect(engineOf({ provider: "fish_audio" }, m).id).toBe("fish");
-    expect(engineOf({ provider: "fish_audio" }, "s1").id).toBe("fish_s1");
+    expect(engineOf({ provider: "fish_audio" }, "s1").supported).toBe(false);
   });
 
   test("Gemini: only 3.8 takes tags and line notes", () => {
     expect(engineOf({ provider: "google_tts" }, "gemini-3.8-flash-tts").id).toBe("gemini");
     expect(engineOf({ provider: "google_vertex_tts" }, "gemini-3.8-flash-lite-tts").id).toBe("gemini");
-    expect(engineOf({ provider: "google_tts" }, "gemini-2.5-pro-preview-tts").id).toBe("gemini_plain");
+    expect(engineOf({ provider: "google_tts" }, "gemini-2.5-pro-preview-tts").supported).toBe(false);
   });
 
   test("Qwen3-TTS, and Chatterbox found by name on an OpenAI-style connection", () => {
     expect(engineOf({ provider: "qwen3_tts_server" }, "auto").id).toBe("qwen");
     expect(engineOf({ provider: "openai_tts", name: "Local Chatterbox", api_url: "http://localhost:8004/v1" }, "tts-1").id).toBe("chatterbox_turbo");
-    expect(engineOf({ provider: "openai_tts", api_url: "http://box:8004/v1" }, "chatterbox-multilingual").id).toBe("chatterbox_multi");
-    expect(engineOf({ provider: "openai_tts", api_url: "https://api.openai.com/v1" }, "tts-1").id).toBe("plain");
-    expect(engineOf({ provider: "kokoro" }, "").id).toBe("plain");
+    expect(engineOf({ provider: "openai_tts", api_url: "http://box:8004/v1" }, "chatterbox-multilingual").supported).toBe(false);
+    expect(engineOf({ provider: "openai_tts", api_url: "https://api.openai.com/v1" }, "tts-1").supported).toBe(false);
+    expect(engineOf({ provider: "kokoro" }, "").supported).toBe(false);
   });
 
-  test("an engine picked in Settings wins over the one found", () => {
+  test("an OpenAI-style connection can be named a Chatterbox-Turbo server in Settings", () => {
     expect(engineOf({ provider: "openai_tts", name: "Box" }, "tts-1", "chatterbox_turbo").id).toBe("chatterbox_turbo");
-    expect(engineOf({ provider: "elevenlabs" }, "eleven_v3", "nothing").id).toBe("eleven_v3");
+    // It names only that. A model with no tags stays unused.
+    expect(engineOf({ provider: "elevenlabs" }, "eleven_flash_v2_5", "chatterbox_turbo").supported).toBe(false);
   });
 });
 
@@ -129,5 +130,51 @@ describe("drawing a line", () => {
 
   test("text from a message is escaped", () => {
     expect(lineHtml('<img src=x onerror="alert(1)">')).not.toContain("<img");
+  });
+});
+
+describe("word timing from the sound", () => {
+  const { voicedFrames, wordWeight, partTimes } = __testing;
+  // Half a second of quiet, a second of tone, a third of quiet, a second of
+  // tone, and quiet to the end, at 8000 samples a second.
+  const rate = 8000;
+  const wave: number[] = [];
+  const add = (secs: number, loud: number) => {
+    for (let k = 0; k < secs * rate; k++) wave.push(loud ? loud * Math.sin(k / 3) : 0.0005 * Math.sin(k));
+  };
+  add(0.5, 0);
+  add(1, 0.5);
+  add(0.34, 0);
+  add(1, 0.5);
+  add(0.5, 0);
+
+  test("only the frames with a voice in them count as voiced", () => {
+    const v = voicedFrames(wave, rate);
+    expect(v.slice(0, 24).some(Boolean)).toBe(false);
+    expect(v.slice(26, 74).every(Boolean)).toBe(true);
+    expect(v.slice(77, 91).some(Boolean)).toBe(false);
+    expect(v.slice(95, 140).every(Boolean)).toBe(true);
+    expect(v.slice(-20).some(Boolean)).toBe(false);
+  });
+
+  test("words wait out the silence at the start and a pause in the middle", () => {
+    const v = voicedFrames(wave, rate);
+    const at = partTimes([1, 1, 1, 1], v, 3.34);
+    expect(at[0]).toBeGreaterThanOrEqual(0.48);
+    expect(at[0]).toBeLessThan(0.56);
+    // The third word starts after the pause, not inside it.
+    expect(at[2]).toBeGreaterThan(1.82);
+    expect(at[2]).toBeLessThan(1.9);
+  });
+
+  test("with no sound read, the words are spread over the clip", () => {
+    expect(partTimes([1, 1], [], 2)).toEqual([0, 1]);
+  });
+
+  test("a word weighs about its syllables", () => {
+    expect(wordWeight("go")).toBe(1);
+    expect(wordWeight("tomorrow")).toBe(3);
+    expect(wordWeight("stone")).toBe(1);
+    expect(wordWeight("...")).toBe(0);
   });
 });

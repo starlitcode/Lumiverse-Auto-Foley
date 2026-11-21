@@ -143,6 +143,8 @@ interface Settings {
   engines: Record<string, string>;
   // The reader's own wording of the note sent with each engine, by engine id.
   engineNotes: Record<string, string>;
+  // How much made audio to keep in the account, in MB. 0 keeps none.
+  keepAudio: number;
   cast: CastMember[];
 }
 
@@ -177,6 +179,7 @@ const DEFAULT_SETTINGS: Settings = {
   debugConsole: false,
   engines: {},
   engineNotes: {},
+  keepAudio: 100,
   thinkingMode: 'off',
   thinkingEffort: 'low',
   samplers: {},
@@ -204,7 +207,7 @@ const DEFAULT_SETTINGS: Settings = {
   guideSeen: false,
   exportParts: ['settings', 'prompt', 'cast'],
   importParts: ['settings', 'prompt', 'cast'],
-  resetParts: ['settings', 'prompt', 'cast', 'sounds', 'key'],
+  resetParts: ['settings', 'prompt', 'cast', 'sounds', 'audio', 'key'],
   cast: [],
 };
 
@@ -339,7 +342,8 @@ function cleanSamplerInput(raw: any): Record<string, number | ''> {
   }
   return out;
 }
-const RESET_PARTS = ['settings', 'prompt', 'cast', 'sounds', 'key'];
+const RESET_PARTS = ['settings', 'prompt', 'cast', 'sounds', 'audio', 'key'];
+const KEEP_AUDIO_CHOICES = [0, 50, 100, 250, 500];
 
 function cleanNotes(v: any): Record<string, string> {
   const out: Record<string, string> = {};
@@ -416,6 +420,7 @@ function cleanSettings(raw: any): Settings {
     debugConsole: bool(r.debugConsole, d.debugConsole),
     engines: cleanEngineChoices(r.engines),
     engineNotes: cleanEngineNotes(r.engineNotes),
+    keepAudio: KEEP_AUDIO_CHOICES.indexOf(Number(r.keepAudio)) >= 0 ? Number(r.keepAudio) : d.keepAudio,
     thinkingMode: pick(r.thinkingMode, ['off', 'inherit', 'custom'] as const, 'off'),
     thinkingEffort: pick(r.thinkingEffort, EFFORTS, 'low'),
     samplers: cleanSamplerInput(r.samplers),
@@ -750,7 +755,8 @@ interface TagRules {
 // The panel says which engine Auto Foley's connection runs, and what it can
 // do. The Director is told, so it writes what that engine can read. The panel
 // fits each line again to the engine that speaks it.
-const ENGINE_IDS = ['eleven_v3', 'eleven_plain', 'fish', 'fish_s1', 'gemini', 'gemini_plain', 'chatterbox_turbo', 'chatterbox_multi', 'qwen', 'plain'];
+// Only models that act are used. The panel speaks nothing through any other.
+const ENGINE_IDS = ['eleven_v3', 'fish', 'gemini', 'chatterbox_turbo', 'qwen'];
 
 interface EngineInfo {
   id: string;
@@ -784,21 +790,14 @@ function cleanEngine(v: any): EngineInfo {
 const ENGINE_NOTES: Record<string, string> = {
   eleven_v3:
     'ElevenLabs v3 acts out any short tag in square brackets. A tag shapes the words right after it, so it goes just before them. It can also perform a [sound of ...] tag inside the line.',
-  eleven_plain:
-    'This ElevenLabs model reads tags out loud, so it gets none. Send every line back with no tags, and still pick the speakers and the sounds.',
   fish:
     'Fish Audio acts out free tags in square brackets, like [barely holding it together] or [whispering]. Put a tag at the start of the sentence it shapes. A tag keeps going until the next one, so when a whisper ends, mark where the voice comes back up. One feeling per sentence works best. Fish can\'t make the sounds of the world, so sounds go in "before" and "after".',
-  fish_s1:
-    'This Fish Audio model gets no tags. Send every line back with none, and still pick the speakers and the sounds.',
   gemini:
     'Gemini knows only the tags in "tag_list". Use them as written, in square brackets, right where the sound happens, even mid-sentence. How a line is said goes in its "style": a few plain words like "hushed and nervous" or "fast, out of breath". Most lines need no style at all. Leave age, accent and who they are out of it, since the voice already carries those.',
-  gemini_plain: 'This Gemini model gets no tags. Send every line back with none, and still pick the speakers and the sounds.',
   chatterbox_turbo:
     'Chatterbox knows only the nine tags in "tag_list", and they\'re all sounds a voice makes. Use them as written, in square brackets, and rarely: one in a line at most, and most lines get none. It can\'t take a delivery tag like [quietly], so the punctuation carries the delivery.',
-  chatterbox_multi: 'This voice gets no tags. Send every line back with none. Punctuation is all it reads.',
   qwen:
     'Qwen takes no tags inside a line. How a line is said goes in its "style" instead: a short plain instruction like "whispered, close to the ear" or "clipped and angry". Leave it empty when the line works plain.',
-  plain: 'This voice reads lines exactly as written and gets no tags. Still pick the speakers and the sounds.',
 };
 
 function engineNote(s: Settings, id: string): string {
@@ -1863,6 +1862,68 @@ function keepScript(userId: string, script: Script) {
   if (at >= 0) list.splice(at, 1);
   list.push({ key: script.key, script });
   while (list.length > SCRIPTS_KEPT) list.shift();
+  void saveKeptScripts(userId);
+}
+
+// Directed messages are kept in the account too, with Keep made audio on, so
+// a message played again after Lumiverse restarts asks the Director nothing.
+const SCRIPTS_FILE = 'scripts.json';
+const scriptsRead: Record<string, boolean> = {};
+async function readKeptScripts(userId: string, s: Settings): Promise<void> {
+  if (scriptsRead[userId]) return;
+  scriptsRead[userId] = true;
+  if (!s.keepAudio) return;
+  const saved = await readJson(SCRIPTS_FILE, userId || undefined);
+  if (!Array.isArray(saved)) return;
+  const mine = scripts[userId] || [];
+  const old = saved.filter((x: any) => x && typeof x.key === 'string' && x.script && Array.isArray(x.script.lines) && !mine.some((m) => m.key === x.key));
+  scripts[userId] = old.concat(mine).slice(-SCRIPTS_KEPT);
+}
+async function saveKeptScripts(userId: string): Promise<void> {
+  try {
+    const s = await loadSettings(userId || undefined);
+    if (!s.keepAudio) return;
+    await writeJson(SCRIPTS_FILE, scripts[userId] || [], userId || undefined);
+  } catch (_) {}
+}
+
+// ---- Made audio ----
+// Each spoken line is kept by a fingerprint of everything sent to speak it:
+// the connection, the voice, the model, the words with their tags, and the
+// settings. The same line asked for again is played from here, and nothing is
+// spent. A changed voice or setting is a new fingerprint, so only that line is
+// made again. The oldest go first once the total passes Keep made audio.
+const CLIP_INDEX = 'clips/index.json';
+const CLIP_MAX_BYTES = 2.5 * 1024 * 1024;
+interface ClipEntry {
+  sig: string;
+  mime: string;
+  bytes: number;
+  at: number;
+}
+const clipLists: Record<string, ClipEntry[]> = {};
+async function loadClips(userId: string | undefined): Promise<ClipEntry[]> {
+  const uid = userId || '';
+  if (clipLists[uid]) return clipLists[uid];
+  const raw = await readJson(CLIP_INDEX, userId);
+  const list: ClipEntry[] = Array.isArray(raw)
+    ? raw
+        .filter((e: any) => e && /^[a-z0-9]{6,40}$/.test(String(e.sig)) && /^audio\/[a-z0-9.+-]+$/i.test(String(e.mime)))
+        .map((e: any) => ({ sig: String(e.sig), mime: String(e.mime), bytes: num(e.bytes, 0, CLIP_MAX_BYTES, 0), at: num(e.at, 0, 1e15, 0) }))
+    : [];
+  clipLists[uid] = list;
+  return list;
+}
+async function saveClips(userId: string | undefined, list: ClipEntry[]): Promise<boolean> {
+  clipLists[userId || ''] = list;
+  return writeJson(CLIP_INDEX, list, userId);
+}
+async function dropClips(userId: string | undefined, gone: ClipEntry[]) {
+  for (const e of gone) {
+    try {
+      await spindle.userStorage.delete('clips/' + e.sig, userId);
+    } catch (_) {}
+  }
 }
 
 function keptScript(userId: string, key: string): Script | null {
@@ -2117,6 +2178,7 @@ async function direct(userId: string | undefined, p: any): Promise<Script> {
     await saveSettings(userId, s);
   }
   const key = keyFor(s);
+  await readKeptScripts(uid, s);
   if (!p.fresh) {
     const kept = keptScript(uid, key);
     if (kept) return Object.assign({}, kept, { added: [], log: kept.log.concat('Played from the copy directed before.') });
@@ -2682,6 +2744,70 @@ async function onPanel(p: any, userId: string | undefined) {
           return answer({ type: 'sound', error: 'The file for this sound could not be read.' });
         }
       }
+      case 'clip_get': {
+        const sig = str(p.sig, 40);
+        const s = await loadSettings(userId);
+        if (!s.keepAudio || !/^[a-z0-9]{6,40}$/.test(sig)) return answer({ type: 'clip', found: false });
+        const list = await loadClips(userId);
+        const e = list.find((x) => x.sig === sig);
+        if (!e) return answer({ type: 'clip', found: false });
+        let bytes: Uint8Array | null = null;
+        try {
+          bytes = await spindle.userStorage.readBinary('clips/' + sig, userId);
+        } catch (_) {
+          bytes = null;
+        }
+        if (!bytes || !bytes.length) {
+          await saveClips(userId, list.filter((x) => x.sig !== sig));
+          return answer({ type: 'clip', found: false });
+        }
+        e.at = Date.now();
+        void saveClips(userId, list);
+        return answer({ type: 'clip', found: true, base64: toBase64(bytes), mime: e.mime });
+      }
+      case 'clip_put': {
+        const sig = str(p.sig, 40);
+        const s = await loadSettings(userId);
+        const mime = /^audio\/[a-z0-9.+-]+$/i.test(String(p.mime)) ? String(p.mime) : '';
+        if (!s.keepAudio || !/^[a-z0-9]{6,40}$/.test(sig) || !mime) return answer({ type: 'clip_kept', ok: false });
+        const bytes = fromBase64(str(p.base64, CLIP_MAX_BYTES * 2));
+        if (!bytes.length || bytes.length > CLIP_MAX_BYTES) return answer({ type: 'clip_kept', ok: false });
+        try {
+          await spindle.userStorage.writeBinary('clips/' + sig, bytes, userId);
+        } catch (e: any) {
+          return answer({ type: 'clip_kept', ok: false, error: 'The audio could not be kept: ' + String((e && e.message) || e).slice(0, 200) });
+        }
+        const list = (await loadClips(userId)).filter((x) => x.sig !== sig);
+        list.push({ sig, mime, bytes: bytes.length, at: Date.now() });
+        // The oldest go first, until the total fits.
+        list.sort((a, b) => a.at - b.at);
+        const cap = s.keepAudio * 1024 * 1024;
+        let total = list.reduce((n, x) => n + x.bytes, 0);
+        const gone: ClipEntry[] = [];
+        while (total > cap && list.length > 1) {
+          const old = list.shift() as ClipEntry;
+          total -= old.bytes;
+          gone.push(old);
+        }
+        const ok = await saveClips(userId, list);
+        await dropClips(userId, gone);
+        return answer({ type: 'clip_kept', ok });
+      }
+      case 'clips_state': {
+        const list = await loadClips(userId);
+        return answer({ type: 'clips_state', count: list.length, bytes: list.reduce((n, x) => n + x.bytes, 0) });
+      }
+      case 'clips_clear': {
+        const list = await loadClips(userId);
+        await dropClips(userId, list);
+        const ok = await saveClips(userId, []);
+        delete scripts[userId || ''];
+        scriptsRead[userId || ''] = true;
+        try {
+          await writeJson(SCRIPTS_FILE, [], userId);
+        } catch (_) {}
+        return answer({ type: 'clips_state', ok, count: 0, bytes: 0, error: ok ? '' : 'The kept audio could not all be cleared.' });
+      }
       case 'sound_upload': {
         const bytes = fromBase64(str(p.base64, MAX_UPLOAD_BYTES * 2));
         const mime = /^audio\/[a-z0-9.+-]+$/i.test(String(p.mime)) ? String(p.mime) : '';
@@ -2813,10 +2939,14 @@ async function onPanel(p: any, userId: string | undefined) {
         const s = await loadSettings(userId);
         const fresh = cleanSettings({});
         if (parts.indexOf('settings') >= 0) {
-          const keep = { cast: s.cast, prompt: s.prompt, exportParts: s.exportParts, importParts: s.importParts, resetParts: s.resetParts };
+          const keep = { cast: s.cast, prompt: s.prompt, askNotes: s.askNotes, engineNotes: s.engineNotes, exportParts: s.exportParts, importParts: s.importParts, resetParts: s.resetParts };
           Object.assign(s, fresh, keep);
         }
-        if (parts.indexOf('prompt') >= 0) s.prompt = '';
+        if (parts.indexOf('prompt') >= 0) {
+          s.prompt = '';
+          s.askNotes = {};
+          s.engineNotes = {};
+        }
         if (parts.indexOf('cast') >= 0) s.cast = fresh.cast;
         let ok = await saveSettings(userId, s);
         if (parts.indexOf('sounds') >= 0) {
@@ -2827,6 +2957,14 @@ async function onPanel(p: any, userId: string | undefined) {
             } catch (_) {}
           }
           ok = (await saveSounds(userId, [])) && ok;
+        }
+        if (parts.indexOf('audio') >= 0) {
+          const list = await loadClips(userId);
+          await dropClips(userId, list);
+          ok = (await saveClips(userId, [])) && ok;
+          try {
+            await writeJson(SCRIPTS_FILE, [], userId);
+          } catch (_) {}
         }
         if (parts.indexOf('key') >= 0) {
           try {

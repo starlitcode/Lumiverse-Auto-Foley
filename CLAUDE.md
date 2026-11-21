@@ -107,11 +107,14 @@ Two skills are available. Load them before starting work.
 
 ## Voice engines
 
-- Auto Foley speaks through any TTS connection in Lumiverse, with Lumiverse's
-  own `/api/v1/tts/synthesize` route. Lumiverse keeps every speech key.
-- Five engines act: ElevenLabs, Fish Audio, Gemini, Chatterbox and Qwen3-TTS.
-  Any other engine reads lines plain. `ENGINE_LIST` in `src/frontend.ts` says
+- Auto Foley is only for models that act out tags. It speaks through a TTS
+  connection in Lumiverse, with Lumiverse's own `/api/v1/tts/synthesize`
+  route. Lumiverse keeps every speech key.
+- Five engines act: ElevenLabs v3 and v4, Fish Audio S2 and Drama 3, Gemini
+  3.8, Chatterbox-Turbo and Qwen3-TTS. `ENGINE_LIST` in `src/frontend.ts` says
   what each can do, and `docs/engines.md` has the same table.
+- A model that cannot act is not used: nothing is spoken through it, and
+  `noTagsWhy` says which model to pick. Other providers are not listed.
 - The engine is found from the connection's provider and model by
   `engineOf`. Chatterbox runs behind an OpenAI-style connection, so it is
   found by name. **What this connection runs** in Settings overrides it.

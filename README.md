@@ -10,7 +10,7 @@ Lumiverse can already read a reply aloud. Auto Foley makes it a performance:
 - An optional **Decision model** picks who says each quoted line.
 - It never changes the words of your story. Only the copy sent to the voice gets tags.
 
-It acts with ElevenLabs, Fish Audio, Gemini 3.8, Chatterbox and Qwen3-TTS. Any other TTS connection reads the lines plain. See [Voice engines](docs/engines.md).
+It works only with models that act: ElevenLabs v3 and v4, Fish Audio S2 and Drama 3, Gemini 3.8, Chatterbox-Turbo and Qwen3-TTS. See [Voice engines](docs/engines.md).
 
 ## Install
 

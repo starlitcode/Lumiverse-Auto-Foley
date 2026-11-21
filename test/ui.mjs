@@ -133,26 +133,45 @@ function answer(msg) {
     case 'key_test': return reply({ type: 'key', hasKey: true, ok: true, text: 'The key works.' });
     case 'check_director': return reply({ type: 'check', ok: true, text: 'The Director answered.' });
     case 'check_decisions': return reply({ type: 'check', ok: true, text: 'Ready.' });
+    // The kept audio, as the backend keeps it: by fingerprint.
+    case 'clip_get': { const c = (window.__clips || {})[msg.sig]; return reply(c ? { type: 'clip', found: true, base64: c.base64, mime: c.mime } : { type: 'clip', found: false }); }
+    case 'clip_put': window.__clips = Object.assign(window.__clips || {}, { [msg.sig]: { base64: msg.base64, mime: msg.mime } }); return reply({ type: 'clip_kept', ok: true });
+    case 'clips_state': { const c = window.__clips || {}; return reply({ type: 'clips_state', count: Object.keys(c).length, bytes: Object.values(c).reduce((n, x) => n + x.base64.length * 0.75, 0) }); }
+    case 'clips_clear': window.__clips = {}; return reply({ type: 'clips_state', ok: true, count: 0, bytes: 0 });
     default: return;
   }
 }
 window.__fetch = async (url, init) => {
   const u = String(url);
   const json = (o) => new Response(JSON.stringify(o), { status: 200, headers: { 'Content-Type': 'application/json' } });
-  if (u.includes('/tts-connections?')) return json({ data: [{ id: 't1', name: 'My ElevenLabs', provider: 'elevenlabs', model: 'eleven_v3', voice: 'v0', is_default: true, has_api_key: true }, { id: 't2', name: 'Fish on the side', provider: 'fish_audio', model: 's2.1-pro', has_api_key: true }, { id: 't3', name: 'Box at home', provider: 'openai_tts', api_url: 'http://192.0.2.10:8004/v1', model: 'chatterbox', has_api_key: true }], total: 3 });
+  if (u.includes('/tts-connections?')) return json({ data: [{ id: 't1', name: 'My ElevenLabs', provider: 'elevenlabs', model: 'eleven_v3', voice: 'v0', is_default: true, has_api_key: true }, { id: 't2', name: 'Fish on the side', provider: 'fish_audio', model: 's2.1-pro', has_api_key: true }, { id: 't3', name: 'Box at home', provider: 'openai_tts', api_url: 'http://192.0.2.10:8004/v1', model: 'chatterbox', has_api_key: true }, { id: 't4', name: 'Old flash', provider: 'elevenlabs', model: 'eleven_flash_v2_5', has_api_key: true }, { id: 't5', name: 'Kokoro here', provider: 'kokoro', has_api_key: true }], total: 5 });
   if (u.includes('/models')) return json({ models: [{ id: 's2.1-pro', label: 'Fish S2.1 Pro' }, { id: 'drama-3-preview', label: 'Drama 3 (Preview)' }], provider: 'fish_audio' });
   if (u.includes('/voices')) return json({ voices: [{ id: 'v1', name: 'Hollow Bell', gender: 'female' }, { id: 'v2', name: 'Grit', gender: 'male' }, { id: 'v3', name: 'Lark', gender: 'female' }], provider: 'elevenlabs' });
   if (u.includes('/chats/chat1?messages=false')) return json({ id: 'chat1', name: '', character_id: 'c', metadata: {} });
   if (u.includes('/characters/c')) return json({ id: 'c', name: 'Ysolde Marrow-Kestrel of the Lower Quays' });
   if (u.includes('/settings/voiceSettings')) return json({ key: 'voiceSettings', value: { ttsEnabled: true, ttsAutoPlay: true, ttsConnectionId: 't1' } });
   if (u.includes('/messages')) return json({ data: [{ id: 'm1', name: 'Ysolde Marrow-Kestrel of the Lower Quays', is_user: false, content: 'text', swipe_id: 0 }], total: 1 });
-  if (u.includes('/tts/synthesize')) { window.__synth = (window.__synth || []).concat(JSON.parse(init.body)); return new Response(new Blob([new Uint8Array(64)], { type: 'audio/mpeg' }), { status: 200 }); }
+  if (u.includes('/tts/synthesize')) { window.__synth = (window.__synth || []).concat(JSON.parse(init.body)); return new Response(window.__wav ? window.__makeWav(window.__wav[0], window.__wav[1]) : new Blob([new Uint8Array(64)], { type: 'audio/mpeg' }), { status: 200 }); }
   return new Response('{}', { status: 404 });
 };
+// A real WAV: some seconds of quiet, then some seconds of a tone, so the
+// panel can read where the voice is.
+window.__makeWav = (quiet, loud) => {
+  const rate = 8000, n = Math.round((quiet + loud) * rate);
+  const buf = new ArrayBuffer(44 + n * 2), v = new DataView(buf);
+  const ascii = (o, t) => { for (let k = 0; k < t.length; k++) v.setUint8(o + k, t.charCodeAt(k)); };
+  ascii(0, 'RIFF'); v.setUint32(4, 36 + n * 2, true); ascii(8, 'WAVE'); ascii(12, 'fmt ');
+  v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true); v.setUint32(24, rate, true);
+  v.setUint32(28, rate * 2, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true); ascii(36, 'data'); v.setUint32(40, n * 2, true);
+  for (let k = 0; k < n; k++) v.setInt16(44 + k * 2, k < quiet * rate ? 0 : Math.round(12000 * Math.sin(k / 3)), true);
+  return new Blob([buf], { type: 'audio/wav' });
+};
 class FakeAudio {
-  constructor() { this.dataset = {}; this.volume = 1; this.paused = true; FakeAudio.all.push(this); }
-  play() { this.paused = false; window.__played = (window.__played || 0) + 1; clearTimeout(this.t); this.t = setTimeout(() => { this.paused = true; this.onended && this.onended(); }, window.__clipMs || 40); return Promise.resolve(); }
-  pause() { this.paused = true; clearTimeout(this.t); }
+  constructor() { this.dataset = {}; this.volume = 1; this.paused = true; this.at = 0; FakeAudio.all.push(this); }
+  get duration() { return (window.__clipMs || 40) / 1000; }
+  get currentTime() { return this.paused ? this.at : this.at + (Date.now() - this.t0) / 1000; }
+  play() { this.paused = false; this.t0 = Date.now(); window.__played = (window.__played || 0) + 1; clearTimeout(this.t); this.t = setTimeout(() => { this.paused = true; this.onended && this.onended(); }, (window.__clipMs || 40) - this.at * 1000); return Promise.resolve(); }
+  pause() { if (!this.paused) this.at = this.currentTime; this.paused = true; clearTimeout(this.t); }
 }
 FakeAudio.all = [];
 window.__Audio = FakeAudio;
@@ -553,18 +572,74 @@ if (section("engines")) {
     await page.waitForTimeout(400);
     check((await first.locator(".af-note", { hasText: "Engine: Fish Audio S2 or Drama 3" }).count()) === 1, size.name + ": picking Fish shows the Fish engine");
     check((await first.locator('label:has-text("Similarity")').count()) === 0, size.name + ": ElevenLabs-only settings are hidden for Fish");
+    const options = await sel.locator("option").allTextContents();
+    check(!options.some((o) => /Kokoro/.test(o)), size.name + ": a provider that cannot act is not listed (" + options.join(" | ") + ")");
+    await sel.selectOption("t4");
+    await page.waitForTimeout(400);
+    check((await first.locator(".af-bad", { hasText: "works only with models that act out tags" }).count()) >= 1, size.name + ": a model with no tags says it cannot be used, and what to pick");
     const m = await page.evaluate(MEASURE, size.touch);
     check(!m.overflow.length, size.name + ": the cast card fits. " + m.overflow.slice(0, 2).join("; "));
     check(!m.small.length, size.name + ": its tap targets are big enough. " + m.small.slice(0, 2).join("; "));
     await page.click('.af-tab[data-tab="settings"]');
     await page.waitForTimeout(300);
-    check((await page.locator('label:has-text("What this connection runs")').count()) === 1, size.name + ": Settings can say what a connection runs");
+    check((await page.locator('label:has-text("What this connection runs")').count()) === 0, size.name + ": an ElevenLabs connection is not asked what it runs");
+    await page.locator('[data-af-row] select').filter({ has: page.locator('option[value="t3"]') }).first().selectOption("t3");
+    await page.waitForTimeout(300);
+    check((await page.locator('label:has-text("What this connection runs")').count()) === 1, size.name + ": an OpenAI-style connection can be named a Chatterbox-Turbo server");
+    check((await page.locator(".af-note", { hasText: "Engine: Chatterbox-Turbo" }).count()) === 1, size.name + ": a server named Chatterbox is found as Chatterbox-Turbo");
     await page.click('.af-tab[data-tab="director"]');
     await page.waitForTimeout(300);
-    check((await page.locator('[data-af-engine-note="eleven_v3"] textarea').count()) === 1, size.name + ": the note for the engine in use can be read and changed");
+    check((await page.locator('[data-af-engine-note="chatterbox_turbo"] textarea').count()) === 1, size.name + ": the note for the engine in use can be read and changed");
     check(!errors.length, size.name + ": no console errors. " + errors.slice(0, 2).join("; "));
     await context.close();
   }
+}
+
+if (section("sync")) {
+  console.log("The words light up with the voice");
+  const { context, page, errors } = await open(THEMES[0], SIZES[1]);
+  // Each clip: 0.8 s of quiet, then 1.6 s of voice.
+  await page.evaluate(() => {
+    window.__wav = [0.8, 1.6];
+    window.__clipMs = 2400;
+  });
+  await page.click('.af-tab[data-tab="stage"]');
+  await page.waitForTimeout(200);
+  await page.click('#mount [data-af-slot="message"]');
+  await page.waitForFunction(() => document.querySelector('[data-af="theater"]') && document.querySelector('[data-af="theater"]').dataset.state === "voice", null, { timeout: 8000 });
+  const t0 = Date.now();
+  const lit = () => page.evaluate(() => [document.querySelectorAll('[data-af="line"] .af-w.af-said').length, document.querySelectorAll('[data-af="line"] .af-w').length]);
+  await page.waitForTimeout(Math.max(0, 450 - (Date.now() - t0)));
+  const early = await lit();
+  check(early[1] > 0 && early[0] === 0, "no word is lit while the clip is still quiet (" + early.join(" of ") + ")");
+  await page.waitForTimeout(Math.max(0, 2250 - (Date.now() - t0)));
+  const late = await lit();
+  check(late[1] > 0 && late[0] === late[1], "every word is lit by the end of the voice (" + late.join(" of ") + ")");
+  check(!errors.length, "no console errors. " + errors.slice(0, 2).join("; "));
+  await context.close();
+}
+
+if (section("kept")) {
+  console.log("Kept audio plays again without being made again");
+  const { context, page, errors } = await open(THEMES[0], SIZES[0]);
+  await page.click('#mount [data-af-slot="message"]');
+  await page.waitForFunction(() => document.querySelector('#mount [data-af-slot="message"]').getAttribute("aria-busy") === null && (window.__synth || []).length > 0, null, { timeout: 8000 });
+  await page.waitForTimeout(300);
+  const made = await page.evaluate(() => (window.__synth || []).length);
+  check(made > 0 && (await page.evaluate(() => Object.keys(window.__clips || {}).length)) === made, "each line made is kept (" + made + ")");
+  await page.click('#mount [data-af-slot="message"]');
+  await page.waitForTimeout(1500);
+  check((await page.evaluate(() => (window.__synth || []).length)) === made, "playing it again makes nothing new");
+  await page.click('.af-tab[data-tab="settings"]');
+  await page.waitForTimeout(300);
+  check((await page.locator('[data-af="kept"]').textContent()).includes("Kept now: " + made), "Settings says how much is kept");
+  await page.locator('[data-af-row="keepAudio"] .af-btn', { hasText: "Clear kept audio" }).click();
+  await page.waitForTimeout(300);
+  check((await page.locator('[data-af="kept"]').textContent()).includes("Nothing is kept"), "Clear kept audio empties it");
+  const m = await page.evaluate(MEASURE, true);
+  check(!m.overflow.length && !m.small.length, "the Keep made audio rows fit on a phone. " + m.overflow.concat(m.small).slice(0, 2).join("; "));
+  check(!errors.length, "no console errors. " + errors.slice(0, 2).join("; "));
+  await context.close();
 }
 
 if (section("taps")) {
