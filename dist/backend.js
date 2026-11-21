@@ -910,7 +910,7 @@ const MAX_TAGS = { subtle: 1, natural: 2, dramatic: 4 };
 // do. The Director is told, so it writes what that engine can read. The panel
 // fits each line again to the engine that speaks it.
 // Only models that act are used. The panel speaks nothing through any other.
-const ENGINE_IDS = ['eleven_v3', 'fish', 'gemini', 'chatterbox_turbo'];
+const ENGINE_IDS = ['eleven_v3', 'fish', 'gemini', 'gemini_31', 'chatterbox_turbo'];
 // What the panel sent, checked. A message directed with no engine named is
 // directed for ElevenLabs v3, which takes every kind of direction.
 function cleanEngine(v) {
@@ -932,7 +932,8 @@ function cleanEngine(v) {
 const ENGINE_NOTES = {
     eleven_v3: 'ElevenLabs v3 acts out any short tag in square brackets. A tag shapes the words right after it, so it goes just before them. It can also perform a [sound of ...] tag inside the line.',
     fish: 'Fish Audio acts out free tags in square brackets, like [barely holding it together] or [whispering]. Put a tag at the start of the sentence it shapes. A tag keeps going until the next one, so when a whisper ends, mark where the voice comes back up. One feeling per sentence works best. Fish can\'t make the sounds of the world, so sounds go in "before" and "after".',
-    gemini: 'Gemini knows only the tags in "tag_list". Use them as written, in square brackets, right where the sound happens, even mid-sentence. How a line is said goes in its "style": a few plain words like "hushed and nervous" or "fast, out of breath". Most lines need no style at all. Leave age, accent and who they are out of it, since the voice already carries those.',
+    gemini: 'Gemini 3.8 knows only the tags in "tag_list", and they\'re all sounds a voice makes or pauses. Use them as written, in square brackets, right where the sound happens, even mid-sentence. How a line is said goes in its "style": a few plain words like "hushed and nervous" or "fast, out of breath". Most lines need no style at all, since Gemini reads the punctuation and the words around them. Leave age, accent and who they are out of it, since the voice already carries those.',
+    gemini_31: 'Gemini 2.5 and 3.1 know only the tags in "tag_list". [sigh], [laughing] and [uhm] are sounds. [whispering], [shouting], [sarcasm], [robotic] and [extremely fast] change the words after them, so put one right before the words it shapes. The pauses are for timing. There\'s no "style" here, so the words and the punctuation carry the rest. Go light: most lines get no tag.',
     chatterbox_turbo: 'Chatterbox knows only the nine tags in "tag_list", and they\'re all sounds a voice makes. Use them as written, in square brackets, and rarely: one in a line at most, and most lines get none. It can\'t take a delivery tag like [quietly], so the punctuation carries the delivery.',
 };
 function engineNote(s, id) {
@@ -975,11 +976,16 @@ const TAG_WORDS = {
     shh: 'shush', shushes: 'shush', shushing: 'shush',
     tuts: 'tsk', tut: 'tsk',
     pff: 'phew', whew: 'phew',
+    sarcastic: 'sarcasm', sarcastically: 'sarcasm',
+    robotically: 'robotic',
+    um: 'uhm', umm: 'uhm', uh: 'uhm', uhh: 'uhm', hesitates: 'uhm', hesitating: 'uhm', hesitantly: 'uhm',
+    rapidly: 'fast',
 };
 const TAG_KNOWN = new Set([
     'argh', 'breath', 'heavy breath', 'exhales', 'cackle', 'cheer', 'chuckle', 'cough', 'cry', 'gasp', 'giggle', 'groan', 'growl',
     'grunt', 'hiss', 'laugh', 'moan', 'pant', 'phew', 'scream', 'shout', 'shriek', 'sigh', 'sneeze', 'snicker', 'snort', 'sob',
-    'throat-clearing', 'tsk', 'whimper', 'whispers', 'yawn', 'short pause', 'long pause', 'clear throat', 'shush', 'sniff',
+    'throat-clearing', 'tsk', 'whimper', 'whispers', 'yawn', 'short pause', 'medium pause', 'long pause', 'clear throat', 'shush', 'sniff',
+    'uhm', 'sarcasm', 'robotic', 'fast',
 ]);
 function tagSound(tag) {
     const t = String(tag || '').toLowerCase().replace(/[^a-z\s-]/g, ' ').replace(/\s+/g, ' ').trim();
@@ -989,6 +995,8 @@ function tagSound(tag) {
         return 'throat';
     if (/\blong pause\b/.test(t))
         return 'long pause';
+    if (/\bmedium pause\b/.test(t))
+        return 'medium pause';
     if (/\b(short pause|pause|beat)\b/.test(t))
         return 'short pause';
     if (/\bheavy breath/.test(t))
@@ -1000,13 +1008,16 @@ function tagSound(tag) {
     }
     return '';
 }
+// The engine's own spelling of a tag, such as laughing for [laughs] on an
+// engine that lists laughing. Empty when the engine has none for it.
 function fitTag(tag, list) {
     const c = tagSound(tag);
     if (!c)
         return '';
-    if (c === 'throat')
-        return list.indexOf('clear throat') >= 0 ? 'clear throat' : list.indexOf('throat-clearing') >= 0 ? 'throat-clearing' : '';
-    return list.indexOf(c) >= 0 ? c : '';
+    for (const x of list)
+        if (tagSound(x) === c)
+            return x;
+    return '';
 }
 // A note on how a line is said, for an engine that takes it beside the line.
 function cleanStyle(v) {

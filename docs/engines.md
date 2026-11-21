@@ -15,9 +15,10 @@
 | ElevenLabs, Eleven v3 or v4 | Any short tag | No | Yes | Yes, with `[sings]` |
 | Fish Audio S2, S2.1 or Drama 3 | Any short tag | No | No | Yes, with `[singing]` |
 | Gemini 3.8 Flash TTS or Flash-Lite TTS | Only its own sound tags | Yes | No | Yes, with a note |
+| Gemini 2.5 or 3.1 TTS | Only its own eleven tags | No | No | No |
 | Chatterbox-Turbo | Only its nine sound tags | No | No | No |
 
-These are not used, since they cannot act: ElevenLabs models older than v3, Fish Audio S1, Gemini models older than 3.8, Chatterbox-Multilingual, Qwen3-TTS, and every other TTS provider. A line for someone on one of them is not spoken. The Stage tab, the Cast tab and **Check my setup** say which model to pick instead.
+These are not used, since they cannot act: ElevenLabs models older than v3, Fish Audio S1, Gemini models older than 2.5, Chatterbox-Multilingual, Qwen3-TTS, and every other TTS provider. A line for someone on one of them is not spoken. The Stage tab, the Cast tab and **Check my setup** say which model to pick instead.
 
 "No" under **Sounds inside a line** means the engine cannot make the sound of a door or rain itself. Its sounds are played as separate sound effects instead. See [Sounds](sounds.md).
 
@@ -58,9 +59,10 @@ Here is what each engine is sent for the quoted line:
 | Eleven v3 | `[exhales] [softly] Home at last.` | None |
 | Fish Audio S2 | `[exhales] [softly] Home at last.` | None |
 | Gemini 3.8 | `<exhales> Home at last.` | `worn out but warm` |
+| Gemini 2.5 or 3.1 | `Home at last.` | None |
 | Chatterbox-Turbo | `Home at last.` | None |
 
-On Gemini and Chatterbox, the Director is given the engine's tag list, so it picks from it. The table shows what is left when it does not. `[softly]` is not a Gemini tag, and `[exhales]` is not one of Chatterbox's nine.
+On Gemini and Chatterbox, the Director is given the engine's tag list, so it picks from it. The table shows what is left when it does not. `[softly]` is not a Gemini tag. `[exhales]` is not one of Chatterbox's nine, and not one of the eleven tags of Gemini 2.5 and 3.1.
 
 On every engine but Eleven v3, the bag is played as a sound effect after the first line.
 
@@ -87,10 +89,23 @@ A person can speak through a connection of their own. Open them in the **Cast** 
 
 ### Gemini
 
+Gemini 3.8:
+
 - Voice tags and notes work with **Gemini 3.8 Flash TTS** and **Gemini 3.8 Flash-Lite TTS**.
-- Gemini knows only vocal sounds as tags, such as `<sigh>`, `<laugh>` and `<short pause>`. Auto Foley writes them in Gemini's angle brackets.
+- Gemini 3.8 knows only vocal sounds and pauses as tags, such as `<sigh>`, `<laugh>` and `<short pause>`. Auto Foley writes them in Gemini's angle brackets.
+- Gemini 3.8 reads its text word for word. A few words in `|pipes|` are said by a second voice in the background, and a word in `/slashes/` is read as a phonetic spelling. Auto Foley takes pipes, angle brackets and slash pairs out of the message first, so only its own tags are read that way.
 - How a line is said goes in its note, such as `hushed and nervous`.
 - With no note, the line uses the speech style saved on the connection in Lumiverse. With none saved there, Lumiverse uses its own: relaxed conversation.
+
+Gemini 2.5 and 3.1:
+
+- These models know eleven tags, in square brackets:
+  - Sounds: `[sigh]`, `[laughing]` and `[uhm]`.
+  - How the words after them are said: `[whispering]`, `[shouting]`, `[sarcasm]`, `[robotic]` and `[extremely fast]`.
+  - Pauses: `[short pause]`, `[medium pause]` and `[long pause]`.
+- Google lists three more, `[scared]`, `[curious]` and `[bored]`, but the voice says those words aloud. Auto Foley never sends them.
+- Lumiverse sends these models the text alone, so a line gets no note on how it is said, and singing is spoken.
+- Google calls these tags a preview, so a tag may not always work.
 
 ### Chatterbox
 

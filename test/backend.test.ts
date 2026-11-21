@@ -485,6 +485,19 @@ describe("directing for each voice engine", () => {
     expect(lines[2].after).toBe("a kettle whistling on a stove");
   });
 
+  test("Gemini 2.5 and 3.1 get their own note, no line notes, and their own spelling of a tag", async () => {
+    const OLD = { id: "gemini_31", label: "Gemini 2.5 or 3.1 TTS", tags: "list", list: ["sigh", "laughing", "uhm", "whispering", "short pause"], style: false, inVoiceSounds: false, sing: false };
+    const h = host({ answers: [answer] });
+    const out = await h.ask(Object.assign({ engine: OLD }, msg));
+    const rules = sent(h).rules;
+    expect(rules.engine).toBe("Gemini 2.5 or 3.1 TTS");
+    expect(rules.line_style).toBe(false);
+    expect(rules.engine_note).toContain("2.5 and 3.1");
+    const lines = out.find((m) => m.type === "script").script.lines;
+    expect(lines[1].text).toBe("[sigh] Not again.");
+    expect(lines[1].style).toBe("");
+  });
+
   test("Fish keeps free tags, gets no line notes, and plays its sounds as effects", async () => {
     const h = host({ answers: [answer] });
     const out = await h.ask(Object.assign({ engine: FISH }, msg));

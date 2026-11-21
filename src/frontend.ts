@@ -61,11 +61,20 @@ interface Engine {
   supported: boolean;
 }
 
-// The vocal sounds Gemini 3.8 lists for its inline tags.
+// The inline tags Google's guide lists for Gemini 3.8 Flash TTS and
+// Flash-Lite TTS. They are sent in angle brackets.
 const GEMINI_TAGS = [
-  'argh', 'breath', 'heavy breath', 'exhales', 'cackle', 'cheer', 'chuckle', 'cough', 'cry', 'gasp', 'giggle', 'groan', 'growl',
-  'grunt', 'hiss', 'laugh', 'moan', 'pant', 'phew', 'scream', 'shout', 'shriek', 'sigh', 'sneeze', 'snicker', 'snort', 'sob',
-  'throat-clearing', 'tsk', 'whimper', 'whispers', 'yawn', 'short pause', 'long pause',
+  'breath', 'heavy breath', 'exhales', 'pant', 'sigh', 'laugh', 'chuckle', 'giggle', 'snicker', 'cackle',
+  'gasp', 'cough', 'sneeze', 'throat-clearing', 'snort', 'sob', 'cry', 'whimper', 'groan', 'yawn',
+  'short pause', 'long pause', 'tsk', 'argh',
+];
+// The markup tags Google's Gemini-TTS page lists for Gemini 2.5 and 3.1, in
+// square brackets. Some are sounds, some change how the words after them are
+// said, and three are pauses. [scared], [curious] and [bored] are left out:
+// the page says those are read aloud as words.
+const GEMINI_OLD_TAGS = [
+  'sigh', 'laughing', 'uhm', 'sarcasm', 'robotic', 'shouting', 'whispering', 'extremely fast',
+  'short pause', 'medium pause', 'long pause',
 ];
 // The nine tags Chatterbox-Turbo knows.
 const CHATTERBOX_TAGS = ['clear throat', 'sigh', 'shush', 'cough', 'groan', 'sniff', 'gasp', 'chuckle', 'laugh'];
@@ -74,6 +83,9 @@ const ENGINE_LIST: Engine[] = [
   { id: 'eleven_v3', label: 'ElevenLabs v3 or v4', tags: 'free', list: [], wrap: '[]', style: false, inVoiceSounds: true, singTag: 'sings', singStyle: false, eleven: true, supported: true },
   { id: 'fish', label: 'Fish Audio S2 or Drama 3', tags: 'free', list: [], wrap: '[]', style: false, inVoiceSounds: false, singTag: 'singing', singStyle: false, eleven: false, supported: true },
   { id: 'gemini', label: 'Gemini 3.8 TTS', tags: 'list', list: GEMINI_TAGS, wrap: '<>', style: true, inVoiceSounds: false, singTag: '', singStyle: true, eleven: false, supported: true },
+  // Lumiverse sends these models the text alone, with no note on how it is
+  // said, so the tags and the punctuation carry it.
+  { id: 'gemini_31', label: 'Gemini 2.5 or 3.1 TTS', tags: 'list', list: GEMINI_OLD_TAGS, wrap: '[]', style: false, inVoiceSounds: false, singTag: '', singStyle: false, eleven: false, supported: true },
   { id: 'chatterbox_turbo', label: 'Chatterbox-Turbo', tags: 'list', list: CHATTERBOX_TAGS, wrap: '[]', style: false, inVoiceSounds: false, singTag: '', singStyle: false, eleven: false, supported: true },
 ];
 // A model that cannot act.
@@ -94,7 +106,11 @@ function engineOf(conn: any, model?: string, chosen?: string): Engine {
   const hay = [m, conn && conn.name, conn && conn.api_url].map((x) => String(x || '').toLowerCase()).join(' ');
   if (provider === 'elevenlabs') return /^eleven_v(3|4)/.test(m) ? ENGINES.eleven_v3 : NO_TAGS;
   if (provider === 'fish_audio') return /^s1$/.test(m) ? NO_TAGS : ENGINES.fish;
-  if (provider === 'google_tts' || provider === 'google_vertex_tts') return /gemini-3\.8-flash(-lite)?-tts/.test(m) ? ENGINES.gemini : NO_TAGS;
+  if (provider === 'google_tts' || provider === 'google_vertex_tts') {
+    if (/gemini-3\.8-flash(-lite)?-tts/.test(m)) return ENGINES.gemini;
+    if (/gemini-(2\.5|3\.1)-[a-z0-9.-]*tts/.test(m)) return ENGINES.gemini_31;
+    return NO_TAGS;
+  }
   if (provider !== 'openai_tts') return NO_TAGS;
   if (chosen === 'chatterbox_turbo') return ENGINES.chatterbox_turbo;
   if (/chatterbox/.test(hay) && !/multilingual|\bmtl\b/.test(hay)) return ENGINES.chatterbox_turbo;
@@ -114,10 +130,10 @@ function noTagsWhy(conn: any, model?: string): string {
   const what = 'Auto Foley works only with models that act out tags. ';
   if (provider === 'elevenlabs') return what + (m || 'This model') + ' does not. Pick Eleven v3 or Eleven v4 on the connection, or for this person in the Cast tab.';
   if (provider === 'fish_audio') return what + 'Fish Audio S1 does not. Pick S2.1 Pro, S2 Pro or Drama 3.';
-  if (provider === 'google_tts' || provider === 'google_vertex_tts') return what + (m || 'This Gemini model') + ' does not. Pick Gemini 3.8 Flash TTS or Gemini 3.8 Flash-Lite TTS.';
+  if (provider === 'google_tts' || provider === 'google_vertex_tts') return what + (m || 'This Gemini model') + ' does not. Pick Gemini 3.8 Flash TTS, Gemini 3.8 Flash-Lite TTS, or a Gemini 2.5 or 3.1 TTS model.';
   if (provider === 'openai_tts' && /multilingual|\bmtl\b/.test(hay)) return what + 'Chatterbox-Multilingual does not. Run Chatterbox-Turbo on your server.';
   if (provider === 'openai_tts') return what + 'This connection is not a Chatterbox-Turbo server. If it is one, pick Chatterbox-Turbo under What this connection runs, in the Settings tab.';
-  return what + 'This connection is not one of them: ElevenLabs, Fish Audio, Gemini 3.8 or Chatterbox-Turbo.';
+  return what + 'This connection is not one of them: ElevenLabs, Fish Audio, Gemini or Chatterbox-Turbo.';
 }
 
 // Turns a tag into the vocal sound it names, so [laughs softly], [laughing]
@@ -154,13 +170,27 @@ const TAG_WORDS: Record<string, string> = {
   shh: 'shush', shushes: 'shush', shushing: 'shush',
   tuts: 'tsk', tut: 'tsk',
   pff: 'phew', whew: 'phew',
+  sarcastic: 'sarcasm', sarcastically: 'sarcasm',
+  robotically: 'robotic',
+  um: 'uhm', umm: 'uhm', uh: 'uhm', uhh: 'uhm', hesitates: 'uhm', hesitating: 'uhm', hesitantly: 'uhm',
+  rapidly: 'fast',
 };
-const TAG_KNOWN = new Set(GEMINI_TAGS.concat(CHATTERBOX_TAGS));
+// Every tag name the table can end in. Each engine's list is written in
+// these words, or in a word the table turns into one of them.
+const TAG_KNOWN = new Set([
+  'argh', 'breath', 'heavy breath', 'exhales', 'cackle', 'cheer', 'chuckle', 'cough', 'cry', 'gasp', 'giggle', 'groan', 'growl',
+  'grunt', 'hiss', 'laugh', 'moan', 'pant', 'phew', 'scream', 'shout', 'shriek', 'sigh', 'sneeze', 'snicker', 'snort', 'sob',
+  'throat-clearing', 'tsk', 'whimper', 'whispers', 'yawn', 'short pause', 'medium pause', 'long pause', 'clear throat', 'shush', 'sniff',
+  'uhm', 'sarcasm', 'robotic', 'fast',
+]);
+// The tags above that change how words are said, rather than making a sound.
+const TAG_MANNER = new Set(['whispers', 'shout', 'sarcasm', 'robotic', 'fast']);
 function tagSound(tag: string): string {
   const t = String(tag || '').toLowerCase().replace(/[^a-z\s-]/g, ' ').replace(/\s+/g, ' ').trim();
   if (!t) return '';
   if (/\b(clears?|clearing)\b.*\bthroat\b|\bthroat[- ]clear/.test(t)) return 'throat';
   if (/\blong pause\b/.test(t)) return 'long pause';
+  if (/\bmedium pause\b/.test(t)) return 'medium pause';
   if (/\b(short pause|pause|beat)\b/.test(t)) return 'short pause';
   if (/\bheavy breath/.test(t)) return 'heavy breath';
   for (const w of t.split(' ')) {
@@ -169,11 +199,13 @@ function tagSound(tag: string): string {
   }
   return '';
 }
+// The engine's own spelling of a tag, such as laughing for [laughs] on an
+// engine that lists laughing. Empty when the engine has none for it.
 function fitTag(tag: string, list: string[]): string {
   const c = tagSound(tag);
   if (!c) return '';
-  if (c === 'throat') return list.indexOf('clear throat') >= 0 ? 'clear throat' : list.indexOf('throat-clearing') >= 0 ? 'throat-clearing' : '';
-  return list.indexOf(c) >= 0 ? c : '';
+  for (const x of list) if (tagSound(x) === c) return x;
+  return '';
 }
 
 // ---- Word timing ----
@@ -267,6 +299,12 @@ function tidy(text: string): string {
 // The words sent for one line, fitted to the engine that speaks it.
 function textFor(line: { text: string; sung?: boolean }, eng: Engine): string {
   let t = String(line.text || '');
+  // Gemini 3.8 reads its text word for word, with three exceptions: a tag in
+  // angle brackets, a word or two in |pipes|, which a second voice says in
+  // the background, and a word in /slashes/, which it reads as a phonetic
+  // spelling. The message's own pipes, angle brackets and slash pairs are
+  // taken out, so only the tags Auto Foley adds are read that way.
+  if (eng.wrap === '<>') t = t.replace(/[<>|]/g, ' ').replace(/\/([^/\n]{1,40})\//g, ' $1 ');
   if (eng.tags === 'none') t = stripTags(t);
   else
     t = tidy(
@@ -4667,7 +4705,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         const isSound = /^sounds? of\b/i.test(inner);
         const kept = eng.tags === 'free' ? (isSound ? eng.inVoiceSounds : true) : eng.tags === 'list' && !isSound && !!fitTag(inner, eng.list);
         // A tag on how a line is said is heard in the words, not as a sound.
-        const heard = kept && (isSound || !!tagSound(inner));
+        const heard = kept && (isSound || (!!tagSound(inner) && !TAG_MANNER.has(tagSound(inner))));
         html += '<span class="af-chip ' + (isSound ? 'af-chip-insound' : 'af-chip-tag') + '" data-af-part="' + weights.length + '">' + esc(inner) + '</span> ';
         weights.push(heard ? (isSound ? 4 : 2) : 0);
       } else {
@@ -5763,7 +5801,7 @@ export function setup(ctx: Ctx, overrides?: any) {
   // ---------- Settings ----------
   let setupChecked = 0;
   function renderSettings() {
-    const a = card('Auto Foley', 'Auto Foley speaks through a TTS connection in Lumiverse, so the key for it stays in Lumiverse. It works with models that act: ElevenLabs, Fish Audio, Gemini 3.8 and Chatterbox-Turbo.');
+    const a = card('Auto Foley', 'Auto Foley speaks through a TTS connection in Lumiverse, so the key for it stays in Lumiverse. It works with models that act: ElevenLabs, Fish Audio, Gemini and Chatterbox-Turbo.');
     a.appendChild(toggle('Auto Foley is on', 'On by default. Off: no buttons on messages, nothing plays, and nothing is sent anywhere.', 'enabled', () => {
       if (!S.enabled) stop();
       syncSlots();
