@@ -115,7 +115,7 @@ Turn on **A floating player** in the Settings tab, under **Look**. A round butto
 - **The top** shows the chat. **More** has **Open the Auto Foley tab** and **Hide the player**.
 - **Now playing** shows who is speaking, with their picture or first letter, which part is playing, and bars that move while a voice plays.
 - **The box under it** shows the line being spoken, or the sound playing.
-- **The buttons**: **Direct it ahead** on the left, then back one part, Play or Pause, the next part, and **Stop** on the right.
+- **The buttons**: **Prepare replies ahead** on the left, a switch that lights up while it is on, then back one part, Play or Pause, the next part, and **Stop** on the right. Turning it on also prepares the latest reply at once.
 - **The bar** under them moves through the part playing. Drag it to go back or forward in that part.
 - **The strip** has a mark for each part of the message: lines, sounds and the cheer. Tap a mark to go to that part.
 - **Latest reply** and **My latest message** choose what Play performs when nothing is playing.

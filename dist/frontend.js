@@ -3344,7 +3344,9 @@ export function setup(ctx, overrides) {
         'background-image:linear-gradient(var(--lumiverse-bg-elevated,rgba(35,30,48,.9)),var(--lumiverse-bg-elevated,rgba(35,30,48,.9)));color:var(--lumiverse-text,rgba(255,255,255,.9));' +
         'box-shadow:var(--lumiverse-shadow-md,0 8px 24px rgba(0,0,0,.4));transition:border-color 260ms cubic-bezier(.2,.7,.3,1),transform 260ms cubic-bezier(.2,.7,.3,1)}' +
         '.af-float:hover{border-color:var(--lumiverse-primary-050,rgba(147,112,219,.5))}' +
-        '.af-float .af-glyph{display:flex;line-height:0}.af-float .af-glyph svg{width:46%;height:46%;min-width:16px;min-height:16px}' +
+        // The symbol fills a layer the size of the button and sits in its middle,
+        // so it is centered whatever size the button is.
+        '.af-float .af-glyph{position:absolute;inset:0;display:grid;place-items:center;line-height:0;pointer-events:none}.af-float .af-glyph svg{width:50%;height:50%;min-width:16px;min-height:16px}' +
         '.af-float[data-af-on="true"] .af-glyph{color:var(--lumiverse-primary-text,var(--lumiverse-primary,#a78bfa))}' +
         '.af-float .af-ring{position:absolute;inset:-1px;width:calc(100% + 2px);height:calc(100% + 2px);pointer-events:none;transform:rotate(-90deg);color:var(--lumiverse-primary,#a78bfa)}' +
         '.af-float .af-ring circle{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-dasharray:289;stroke-dashoffset:289;transition:stroke-dashoffset .4s ease-out}' +
@@ -3384,6 +3386,7 @@ export function setup(ctx, overrides) {
         '.af-pl-tr{position:relative;display:flex;align-items:center;justify-content:center;gap:12px;min-height:52px;padding:0 40px}' +
         '.af-pl-tr .af-pl-side{position:absolute;top:50%;transform:translateY(-50%);width:32px;height:32px;border-radius:9px;background:transparent;color:var(--af-muted)}' +
         '.af-pl-tr .af-pl-side:first-child{left:0}.af-pl-tr .af-pl-side:last-child{right:0}' +
+        '.af-pl-tr .af-pl-side[aria-pressed="true"]{color:var(--af-accent-text);background:var(--af-accent-soft);box-shadow:inset 0 0 0 1px var(--af-accent-line)}' +
         '.af-pl-tr .af-play{width:48px;height:48px;border:0;background:var(--af-accent);color:var(--lumiverse-primary-contrast,#17122a);box-shadow:0 4px 14px var(--af-accent-soft)}' +
         '.af-pl-tr .af-play svg{width:20px;height:20px}' +
         '.af-pl-mix{display:grid;grid-template-columns:1fr 1fr;gap:12px}' +
@@ -3787,7 +3790,7 @@ export function setup(ctx, overrides) {
             '<span class="af-pl-bars" aria-hidden="true"><i></i><i></i><i></i><i></i></span></div>' +
             '<div class="af-pl-said" data-p="said" aria-live="polite"></div>' +
             '<div class="af-pl-tr">' +
-            '<button type="button" class="af-round af-pl-side" data-p="prep" aria-label="Direct it ahead, without playing" title="Direct it ahead, without playing">' + ICON_PREP + '</button>' +
+            '<button type="button" class="af-round af-pl-side" data-p="prep" aria-pressed="false">' + ICON_PREP + '</button>' +
             '<button type="button" class="af-round" data-p="back" aria-label="Back one part" title="Back one part">' + ICON_BACK + '</button>' +
             '<button type="button" class="af-play" data-p="play" aria-label="Play">' + ICON_PLAY + '</button>' +
             '<button type="button" class="af-round" data-p="next" aria-label="Next part" title="Next part">' + ICON_SKIP + '</button>' +
@@ -3814,7 +3817,16 @@ export function setup(ctx, overrides) {
             paintFloat();
         }));
         q('play').addEventListener('click', () => playerPlay());
-        q('prep').addEventListener('click', () => playerPrepare());
+        // Prepare replies ahead, on or off. Turned on, the latest reply is
+        // directed now too, so Play starts at once.
+        q('prep').addEventListener('click', () => {
+            set({ prepareAhead: !S.prepareAhead });
+            paintFloat();
+            if (S.prepareAhead && !show && !busyMessage)
+                playerPrepare();
+            if (tab === 'settings')
+                renderTab();
+        });
         const seek = q('seek');
         seek.addEventListener('input', () => {
             if (!audio || !(Number(audio.duration) > 0))
@@ -3913,6 +3925,18 @@ export function setup(ctx, overrides) {
         }
         paintFloat();
     }
+    // Text and icons are written only when they change. Writing the same text
+    // again still swaps the node, and on a phone that can show as a flicker.
+    function setText(node, text) {
+        if (node && node.textContent !== text)
+            node.textContent = text;
+    }
+    function setIcon(node, name, svg) {
+        if (!node || node.dataset.icon === name)
+            return;
+        node.dataset.icon = name;
+        node.innerHTML = svg;
+    }
     // What the player shows now. Called whenever the show changes.
     function paintFloat() {
         if (!floatBox)
@@ -3945,9 +3969,9 @@ export function setup(ctx, overrides) {
             face.dataset.k = faceKey;
             face.innerHTML = it && it.kind === 'voice' ? faceHtml(who, name) : it ? ICON_SOUND : ICON;
         }
-        q('who').textContent = name || (busyMessage ? 'Directing the message' : playerWhose === 'mine' ? 'Your latest message' : 'The latest reply');
-        q('cap').textContent = show ? (paused ? 'Paused' : 'Now playing · part ' + (Math.min(show.index, total - 1) + 1) + ' of ' + total) : busyMessage ? 'Getting ready' : 'Ready';
-        q('sub').textContent = chatInfo.kind === 'none' ? 'No chat open' : chatInfo.name || 'This chat';
+        setText(q('who'), name || (busyMessage ? 'Directing the message' : playerWhose === 'mine' ? 'Your latest message' : 'The latest reply'));
+        setText(q('cap'), show ? (paused ? 'Paused' : 'Now playing · part ' + (Math.min(show.index, total - 1) + 1) + ' of ' + total) : busyMessage ? 'Getting ready' : 'Ready');
+        setText(q('sub'), chatInfo.kind === 'none' ? 'No chat open' : chatInfo.name || 'This chat');
         // The bar under Play, for where in the part playing it is. Painted on a
         // short clock while it plays.
         const seek = q('seek');
@@ -3959,14 +3983,20 @@ export function setup(ctx, overrides) {
         if (document.activeElement !== seek)
             seek.value = String(Math.round(at * 1000));
         seek.style.setProperty('--af-fill-to', (at * 100).toFixed(1) + '%');
-        q('at').textContent = has ? mmss(tNow) : '0:00';
-        q('len').textContent = has ? mmss(dur) : '0:00';
-        q('prep').disabled = on || chatInfo.kind === 'none';
+        setText(q('at'), has ? mmss(tNow) : '0:00');
+        setText(q('len'), has ? mmss(dur) : '0:00');
+        const prep = q('prep');
+        const ahead = !!S.prepareAhead;
+        prep.setAttribute('aria-pressed', ahead ? 'true' : 'false');
+        const prepSaid = ahead ? 'Prepare replies ahead is on. Tap to turn it off' : 'Prepare replies ahead is off. Tap to turn it on';
+        if (prep.title !== prepSaid) {
+            prep.title = prepSaid;
+            prep.setAttribute('aria-label', prepSaid);
+        }
         const said = q('said');
         const words = it && it.kind === 'voice' && line ? stripTags(line.text) : it && it.sound ? it.sound : '';
         const text = words || (busyMessage ? 'The Director is reading it.' : phase && !/^(Stopped|Finished)$/.test(phase) ? phase : playerWhose === 'mine' ? 'Press Play to perform your latest message.' : 'Press Play to perform the latest reply.');
-        if (said.textContent !== text)
-            said.textContent = text;
+        setText(said, text);
         if (words)
             said.removeAttribute('data-quiet');
         else
@@ -3975,7 +4005,7 @@ export function setup(ctx, overrides) {
         c.querySelectorAll('[data-w]').forEach((b) => b.setAttribute('aria-pressed', b.dataset.w === playerWhose ? 'true' : 'false'));
         const play = q('play');
         const playing = !!show && !paused;
-        play.innerHTML = playing ? ICON_PAUSE : ICON_PLAY;
+        setIcon(play, playing ? 'pause' : 'play', playing ? ICON_PAUSE : ICON_PLAY);
         play.setAttribute('aria-label', playing ? 'Pause' : show ? 'Go on' : playerWhose === 'mine' ? 'Play my latest message' : 'Play the latest reply');
         play.title = play.getAttribute('aria-label') || '';
         play.disabled = !show && (!!busyMessage || chatInfo.kind === 'none');
@@ -3985,7 +4015,7 @@ export function setup(ctx, overrides) {
         for (const [k, b] of [['vol', 'vv'], ['svol', 'sv']]) {
             const r = q(k);
             r.style.setProperty('--af-fill-to', r.value + '%');
-            q(b).textContent = r.value + '%';
+            setText(q(b), r.value + '%');
         }
         c.querySelectorAll('[data-sw]').forEach((b) => {
             const k = b.dataset.sw;
@@ -4421,7 +4451,7 @@ export function setup(ctx, overrides) {
         const playBtn = q('play');
         const script = currentScript();
         const playing = !!show && !paused;
-        playBtn.innerHTML = playing ? ICON_PAUSE : ICON_PLAY;
+        setIcon(playBtn, playing ? 'pause' : 'play', playing ? ICON_PAUSE : ICON_PLAY);
         playBtn.setAttribute('aria-label', playing ? 'Pause' : 'Play');
         playBtn.title = playing ? 'Pause' : 'Play';
         playBtn.disabled = !show && !script;
@@ -4431,7 +4461,7 @@ export function setup(ctx, overrides) {
         q('redo').disabled = !(show || lastMeta.messageId) || !!busyMessage;
         const cur = show ? show.items[Math.min(show.index, show.items.length - 1)] : null;
         q('again').disabled = !cur || cur.kind === 'applause';
-        q('again').lastElementChild.textContent = cur && cur.kind === 'sound' ? 'Make this sound again' : 'Make this line again';
+        setText(q('again').lastElementChild, cur && cur.kind === 'sound' ? 'Make this sound again' : 'Make this line again');
         paintParts(q('parts'), script);
         const used = q('used');
         const sc0 = currentScript();
@@ -4439,7 +4469,7 @@ export function setup(ctx, overrides) {
         used.hidden = !n;
         if (n) {
             const word = (x) => (sc0.counted === false ? 'about ' : '') + x.toLocaleString();
-            used.textContent = 'The Director read ' + word(n) + ' tokens for this message and wrote ' + word(Number(sc0.back) || 0) + '.' + (Number(sc0.cost) > 0 ? ' It cost ' + money(Number(sc0.cost)) + '.' : '');
+            setText(used, 'The Director read ' + word(n) + ' tokens for this message and wrote ' + word(Number(sc0.back) || 0) + '.' + (Number(sc0.cost) > 0 ? ' It cost ' + money(Number(sc0.cost)) + '.' : ''));
         }
         stageRefs.retryRow.hidden = !(lastFailed && !show && !busyMessage);
         const title = q('title');
@@ -4453,21 +4483,21 @@ export function setup(ctx, overrides) {
             scene.innerHTML = inScene.length ? '<span class="af-note" style="padding:0;background:none">In this scene:</span>' + inScene.map((n) => '<span>' + esc(n) + '</span>').join('') : '';
         }
         if (busyMessage) {
-            title.textContent = 'Getting ready';
-            sub.textContent = phase;
+            setText(title, 'Getting ready');
+            setText(sub, phase);
         }
         else if (show) {
             const secs = Math.round((Date.now() - show.startedAt) / 1000);
-            title.textContent = show.script.author ? show.script.author + '’s message' : 'This message';
+            setText(title, show.script.author ? show.script.author + '’s message' : 'This message');
             const w = show.waiting.get(show.index);
             const said = w
                 ? 'The voice service is busy. Trying again in ' + Math.max(0, Math.ceil((w.until - Date.now()) / 1000)) + ' s (wait ' + w.n + ' of ' + S.rateWaits + ')'
                 : phase || 'Playing';
-            sub.textContent = said + ' · part ' + Math.min(show.index + 1, show.items.length) + ' of ' + show.items.length + ' · ' + secs + ' s';
+            setText(sub, said + ' · part ' + Math.min(show.index + 1, show.items.length) + ' of ' + show.items.length + ' · ' + secs + ' s');
         }
         else {
-            title.textContent = script ? (script.author ? script.author + '’s message' : 'This message') : 'Nothing playing';
-            sub.textContent = phase || (script ? 'Ready. Press Play.' : chatInfo.kind === 'none' ? 'Open a chat, then press the Auto Foley button on a message.' : 'Press the Auto Foley button on a message.');
+            setText(title, script ? (script.author ? script.author + '’s message' : 'This message') : 'Nothing playing');
+            setText(sub, phase || (script ? 'Ready. Press Play.' : chatInfo.kind === 'none' ? 'Open a chat, then press the Auto Foley button on a message.' : 'Press the Auto Foley button on a message.'));
         }
     }
     // A cost with no currency symbol, since nothing here knows the currency.

@@ -609,6 +609,34 @@ describe("sounds by link", () => {
   });
 });
 
+describe("each account keeps its own", () => {
+  test("settings, cast, sounds, kept audio, the key and directed messages never cross accounts", async () => {
+    const good = JSON.stringify({ lines: [{ i: 0, speaker: "Narrator", text: "Brin waved." }], new_speakers: [] });
+    const h = host({ answers: [good, good] });
+    await h.ask({ type: "save", settings: { strength: "dramatic", cast: [{ name: "Brin" }] } }, "alice");
+    await h.ask({ type: "sound_link", url: "https://sounds.example.org/bell.mp3", name: "a bell" }, "alice");
+    await h.ask({ type: "clip_put", sig: "abc123def", mime: "audio/mpeg", base64: Buffer.from("abcdef").toString("base64") }, "alice");
+    await h.ask({ type: "key_save", key: "sk_" + "a".repeat(40) }, "alice");
+    await h.ask({ type: "direct", chatId: "c1", messageId: "m1", swipeId: 0, name: "Brin", text: "Brin waved." }, "alice");
+    const alice = (await h.ask({ type: "load" }, "alice")).find((m) => m.type === "state");
+    expect(alice.settings.strength).toBe("dramatic");
+    expect(alice.settings.cast.some((c: any) => c.name === "Brin")).toBe(true);
+    expect(alice.sounds.length).toBe(1);
+    expect(alice.hasKey).toBe(true);
+    const bob = await h.ask({ type: "load" }, "bob");
+    const state = bob.find((m) => m.type === "state");
+    expect(state.settings.strength).toBe("natural");
+    expect(state.settings.cast.some((c: any) => c.name === "Brin")).toBe(false);
+    expect(state.sounds.length).toBe(0);
+    expect(state.hasKey).toBe(false);
+    expect((await h.ask({ type: "clip_get", sig: "abc123def" }, "bob")).find((m) => m.type === "clip").found).toBe(false);
+    await h.ask({ type: "direct", chatId: "c1", messageId: "m1", swipeId: 0, name: "Brin", text: "Brin waved." }, "bob");
+    // Bob's message is directed for Bob, not taken from Alice's copy.
+    expect(h.calls.generate.length).toBe(2);
+    expect(h.sent.filter((x) => x.msg.type === "script").every((x) => x.userId === "alice" || x.userId === "bob")).toBe(true);
+  });
+});
+
 describe("cast pictures", () => {
   test("only a small image in a data address is kept", async () => {
     const h = host();

@@ -613,6 +613,17 @@ if (section("player")) {
       await page.evaluate(() => window.__widget.querySelector('[data-p="play"]').click());
       await page.waitForTimeout(600);
       check((await page.evaluate(() => (window.__sent || []).filter((m) => m.type === "direct").length)) > before, where + ": Play performs the latest reply");
+      const prep = await page.evaluate(async () => {
+        const b = window.__widget.querySelector('[data-p="prep"]');
+        const was = b.getAttribute("aria-pressed");
+        b.click();
+        await new Promise((r) => setTimeout(r, 30));
+        const mid = b.getAttribute("aria-pressed");
+        b.click();
+        await new Promise((r) => setTimeout(r, 30));
+        return [was, mid, b.getAttribute("aria-pressed")];
+      });
+      check(prep[0] !== prep[1] && prep[2] === prep[0], where + ": Prepare replies ahead switches over and back again from the player (" + prep.join() + ")");
       const chip = await page.evaluate(async () => {
         const b = window.__widget.querySelector('[data-sw="soundsOn"]');
         const was = b.checked;
@@ -763,6 +774,18 @@ if (section("steady")) {
         if (now[1] != null && (Math.abs(now[0] - at[0]) > 1 || Math.abs(now[1] - at[1]) > 1)) moved++;
       }
       check(moved === 0, where + ": the drawer does not scroll and Now playing does not move as lines change (" + moved + " moves)");
+      const redrawn = await page.evaluate(async () => {
+        const now = document.querySelector('[data-af="theater"]').closest(".af-card");
+        let n = 0;
+        const mo = new MutationObserver((list) => {
+          for (const m of list) if (m.type === "childList" && m.target.closest && !m.target.closest('[data-af="line"],[data-af="who"],[data-af="cue"],[data-af="sub"]')) n++;
+        });
+        mo.observe(now, { childList: true, subtree: true });
+        await new Promise((r) => setTimeout(r, 1000));
+        mo.disconnect();
+        return n;
+      });
+      check(redrawn <= 3, where + ": Now playing is not drawn again while a part plays (" + redrawn + " times in 1 s)");
       check(!errors.length, where + ": no console errors. " + errors.slice(0, 2).join("; "));
       await context.close();
     }
@@ -1051,6 +1074,42 @@ if (section("setup check")) {
   });
   check(changes.length <= 2 && changes[changes.length - 1] !== "0", "the answers appear together, not one by one (" + changes.join(" > ") + ")");
   await context.close();
+}
+
+if (section("widget steady")) {
+  console.log("The round button and the open player stay still");
+  for (const zoom of [0.85, 1, 1.25]) {
+    const { context, page } = await open(THEMES[0], SIZES[0], zoom);
+    await page.click('.af-tab[data-tab="settings"]');
+    await page.waitForTimeout(200);
+    await page.evaluate(() => document.querySelector('[data-af-row="widgetOn"] .af-box').click());
+    await page.waitForTimeout(300);
+    const off = await page.evaluate(() => {
+      const b = window.__widget.querySelector(".af-float").getBoundingClientRect();
+      const g = window.__widget.querySelector(".af-float .af-glyph svg").getBoundingClientRect();
+      return Math.max(Math.abs(b.left + b.width / 2 - (g.left + g.width / 2)), Math.abs(b.top + b.height / 2 - (g.top + g.height / 2)));
+    });
+    check(off < 0.75, "zoom " + zoom + ": the symbol is in the middle of the round button (" + off.toFixed(2) + " px off)");
+    // While a message plays, the open player changes only what changed.
+    await page.evaluate(() => (window.__clipMs = 3000));
+    await page.evaluate(() => window.__widget.querySelector(".af-float").click());
+    await page.waitForTimeout(450);
+    await page.evaluate(() => window.__widget.querySelector('[data-p="play"]').click());
+    await page.waitForTimeout(900);
+    const redrawn = await page.evaluate(async () => {
+      const card = window.__widget.querySelector(".af-pl");
+      let n = 0;
+      const mo = new MutationObserver((list) => {
+        for (const m of list) if (m.type === "childList" && (m.removedNodes.length || m.addedNodes.length)) n++;
+      });
+      mo.observe(card, { childList: true, subtree: true });
+      await new Promise((r) => setTimeout(r, 1500));
+      mo.disconnect();
+      return n;
+    });
+    check(redrawn <= 2, "zoom " + zoom + ": nothing in the player is drawn again while a part plays (" + redrawn + " times in 1.5 s)");
+    await context.close();
+  }
 }
 
 if (section("taps")) {
