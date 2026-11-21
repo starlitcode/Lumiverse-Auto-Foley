@@ -131,6 +131,7 @@ function answer(msg) {
     case 'list_connections': return reply({ type: 'connections', list: window.__llmList || [{ id: 'l1', name: 'Fast helper with a very long connection name for testing', model: 'maker/tiny-fast-model' }] });
     case 'list_decision_connections': return reply({ type: 'decision_connections', list: window.__decList || [{ id: 'd1', name: 'Quick', model: 'fast-judge', isDefault: true, hasKey: true }], state: 'ok' });
     case 'key_test': return reply({ type: 'key', hasKey: true, ok: true, text: 'The key works.' });
+    case 'key_save': return reply({ type: 'key', which: msg.which || 'eleven', hasKey: true, ok: true, text: 'The key works.' });
     case 'reset_check': return reply({ type: 'reset_check', already: window.__already || [] });
     case 'reset': return reply({ type: 'reset', ok: true, settings: window.__settings, sounds: window.__sounds, hasKey: true });
     case 'check_director': return reply({ type: 'check', ok: true, text: 'The Director answered.' });
@@ -1204,6 +1205,50 @@ if (section("decision line")) {
     });
     check(kind, size.name + ": the Log has a switch for What the Decision model answered");
     check(!errors.length, size.name + ": no page errors. " + errors.slice(0, 2).join(" | "));
+    await context.close();
+  }
+}
+
+if (section("freesound")) {
+  console.log("Sounds come from Freesound or ElevenLabs, and a found sound shows its credit");
+  for (const size of SIZES) {
+    const { context, page, errors } = await open(THEMES[0], size);
+    const where = size.name;
+    await page.evaluate(() => window.__teardown());
+    await page.evaluate(() => {
+      window.__sounds = window.__sounds.concat([{ id: "f1", name: "a door creaking open", triggers: [], source: "found", mime: "audio/mpeg", bytes: 30000, added: 3, uses: 2, credit: { title: "old door creak", by: "tinbox", license: "CC BY", page: "https://freesound.org/people/tinbox/sounds/12/", fsId: 12, seen: [12] } }]);
+      document.getElementById("drawer").innerHTML = "";
+      window.__teardown = window.__setup(window.__ctx, { fetch: window.__fetch, Audio: window.__Audio });
+    });
+    await page.waitForTimeout(300);
+    await page.click('.af-tab[data-tab="sounds"]');
+    await page.waitForTimeout(400);
+    const got = await page.evaluate(() => {
+      const cards = Array.from(document.querySelectorAll("[data-af-key]")).map((c) => c.getAttribute("data-af-key"));
+      const labels = Array.from(document.querySelectorAll(".af label")).map((x) => x.textContent.trim());
+      const row = Array.from(document.querySelectorAll(".af-sound")).find((r) => /a door creaking open/.test(r.textContent));
+      const link = row && row.querySelector(".af-credit a");
+      const again = row && Array.from(row.querySelectorAll("button")).find((b) => b.textContent.trim() === "Find another");
+      const vw = document.documentElement.clientWidth;
+      const wide = Array.from(document.querySelectorAll(".af-page *")).filter((e) => e.getBoundingClientRect().right > vw + 0.5).length;
+      return { cards, from: labels.indexOf("Where they come from") >= 0, lic: labels.indexOf("Freesound licenses") >= 0, credit: row ? (row.querySelector(".af-credit") || {}).textContent : "", href: link ? link.getAttribute("href") : "", rel: link ? link.getAttribute("rel") : "", again: !!again, wide };
+    });
+    check(got.cards.join() === "freesound,eleven", where + ": a key card for Freesound, then one for ElevenLabs (" + got.cards.join() + ")");
+    check(got.from && got.lic, where + ": Where they come from and Freesound licenses sit under Get new sounds");
+    check(got.credit === "From Freesound: old door creak by tinbox, CC BY" && got.href === "https://freesound.org/people/tinbox/sounds/12/" && /noopener/.test(got.rel), where + ": a found sound credits its maker, with a link to its page (" + got.credit + ")");
+    check(got.again, where + ": a found sound has Find another");
+    check(got.wide === 0, where + ": nothing runs off the side (" + got.wide + ")");
+    const key = await page.evaluate(async () => {
+      window.__sent = [];
+      const c = document.querySelector('[data-af-key="freesound"]');
+      c.querySelector("input").value = "fs_try";
+      Array.from(c.querySelectorAll("button")).find((b) => b.textContent.trim() === "Save").click();
+      await new Promise((r) => setTimeout(r, 200));
+      const m = (window.__sent || []).find((x) => x.type === "key_save");
+      return { which: m && m.which, said: c.querySelector(".af-status").textContent };
+    });
+    check(key.which === "freesound" && /works/.test(key.said), where + ": Save on the Freesound card saves the Freesound key (" + JSON.stringify(key) + ")");
+    check(!errors.length, where + ": no page errors. " + errors.slice(0, 2).join(" | "));
     await context.close();
   }
 }

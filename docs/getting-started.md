@@ -24,7 +24,7 @@
 4. The Director marks each line with voice tags and sounds.
 5. Auto Foley checks that no words changed. A line with changed words is read as written.
 6. Each line is fitted to the speaker's engine and spoken through their connection, with their voice.
-7. Sounds play from your library, or are made by ElevenLabs sound effects.
+7. Sounds play from your library, or are found on Freesound or made by ElevenLabs. See [Sounds](sounds.md#where-new-sounds-come-from).
 
 The Stage tab shows each step, with a time that counts up while it waits.
 
@@ -156,7 +156,7 @@ With **Keep made audio** on, in the Settings tab:
 - **Voice credits** for every line spoken, the same as Lumiverse's own TTS. A local engine, such as Chatterbox, costs nothing.
 - **One call to the Director** for each message. A fast, low-cost model works well. A message played again uses the copy already directed, and asks nothing.
 - **One call to the Decision model** for each message, when it is on.
-- **ElevenLabs credits for each new sound effect**, when sounds are made as effects. A sound is saved after it is made, so the same sound is free the next time.
+- **Nothing for a sound found on Freesound.** ElevenLabs credits for each sound it makes. A new sound is saved, so the same sound is free the next time.
 
 ## The Log
 

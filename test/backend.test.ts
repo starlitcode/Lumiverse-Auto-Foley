@@ -642,6 +642,78 @@ describe("Start again", () => {
   });
 });
 
+describe("Freesound", () => {
+  const clip = new Uint8Array(400).fill(7);
+  const results = [
+    { id: 11, name: "door_nc.wav", username: "nightowl", license: "http://creativecommons.org/licenses/by-nc/4.0/", url: "https://freesound.org/people/nightowl/sounds/11/", previews: { "preview-hq-mp3": "https://cdn.freesound.org/previews/0/11_hq.mp3" } },
+    { id: 12, name: "old door creak", username: "tinbox", license: "Attribution", url: "https://freesound.org/people/tinbox/sounds/12/", previews: { "preview-hq-mp3": "https://cdn.freesound.org/previews/0/12_hq.mp3" } },
+    { id: 13, name: "door creak 2", username: "quill", license: "Creative Commons 0", url: "https://freesound.org/people/quill/sounds/13/", previews: { "preview-hq-mp3": "https://cdn.freesound.org/previews/0/13_hq.mp3" } },
+  ];
+  const fsCors = (url: string) => {
+    if (url.startsWith("https://freesound.org/apiv2/search/")) return { status: 200, body: JSON.stringify({ results }) };
+    if (url.startsWith("https://cdn.freesound.org/")) return { status: 200, body: Buffer.from(clip).toString("base64"), encoding: "base64" };
+    return { status: 404, body: "" };
+  };
+
+  test("a sound is found, kept with its credit, and the key goes only to freesound.org", async () => {
+    const h = host({ cors: fsCors });
+    await h.ask({ type: "key_save", which: "freesound", key: "fs_key_123" });
+    const got = (await h.ask({ type: "sound", description: "an old door creaking open" })).find((m) => m.type === "sound");
+    expect(got.base64).toBeTruthy();
+    expect(got.credit.by).toBe("nightowl");
+    expect(got.credit.license).toBe("CC BY-NC");
+    const list = (await h.ask({ type: "load" })).find((m) => m.type === "state").sounds;
+    expect(list[0].source).toBe("found");
+    expect(list[0].credit.page).toBe("https://freesound.org/people/nightowl/sounds/11/");
+    const search = h.calls.cors.find((c) => c.url.startsWith("https://freesound.org/apiv2/search/") && c.url.includes("&filter="));
+    expect(search.url).toContain("query=old%20door%20creaking%20open");
+    expect(search.init.headers.Authorization).toBe("Token fs_key_123");
+    for (const c of h.calls.cors) if (!c.url.startsWith("https://freesound.org/")) expect(JSON.stringify(c.init)).not.toContain("fs_key_123");
+    expect(h.calls.cors.some((c) => c.url.includes("elevenlabs"))).toBe(false);
+  });
+
+  test("the license setting is followed", async () => {
+    const h = host({ cors: fsCors });
+    await h.ask({ type: "key_save", which: "freesound", key: "fs_key_123" });
+    await h.ask({ type: "save", settings: { freesoundLicense: "cc0" } });
+    const got = (await h.ask({ type: "sound", description: "an old door creaking open" })).find((m) => m.type === "sound");
+    expect(got.credit.by).toBe("quill");
+    expect(got.credit.license).toBe("CC0");
+  });
+
+  test("Find another picks the next sound and keeps the same library entry", async () => {
+    const h = host({ cors: fsCors });
+    await h.ask({ type: "key_save", which: "freesound", key: "fs_key_123" });
+    await h.ask({ type: "sound", description: "an old door creaking open" });
+    const id = (await h.ask({ type: "load" })).find((m) => m.type === "state").sounds[0].id;
+    const again = (await h.ask({ type: "sound_again", id })).find((m) => m.type === "sound");
+    expect(again.credit.by).toBe("tinbox");
+    const list = (await h.ask({ type: "load" })).find((m) => m.type === "state").sounds;
+    expect(list.length).toBe(1);
+    expect(list[0].id).toBe(id);
+  });
+
+  test("with no Freesound key, ElevenLabs is asked, and with Freesound only it is not", async () => {
+    const mp3 = new Uint8Array(400).fill(3);
+    const h = host({ cors: () => ({ status: 200, body: Buffer.from(mp3).toString("base64"), encoding: "base64" }) });
+    await h.ask({ type: "key_save", key: "sk_test_123" });
+    const got = (await h.ask({ type: "sound", description: "rain on a tin roof" })).find((m) => m.type === "sound");
+    expect(got.base64).toBeTruthy();
+    expect(h.calls.cors.some((c) => c.url.includes("sound-generation"))).toBe(true);
+    await h.ask({ type: "save", settings: { soundFrom: "freesound" } });
+    const none = (await h.ask({ type: "sound", description: "wind in tall grass" })).find((m) => m.type === "sound");
+    expect(none.error).toContain("Save a Freesound key in the Sounds tab");
+  });
+
+  test("a refused key and a full day are said in plain words", async () => {
+    const h = host({ cors: () => ({ status: 401, body: JSON.stringify({ detail: "Invalid token" }) }) });
+    const saved = (await h.ask({ type: "key_save", which: "freesound", key: "fs_bad" })).find((m) => m.type === "key");
+    expect(saved.ok).toBe(false);
+    expect(saved.text).toContain("Freesound refused the key");
+    expect(h.box.freesoundTrouble(429, "")).toContain("2000 a day");
+  });
+});
+
 describe("each account keeps its own", () => {
   test("settings, cast, sounds, kept audio, the key and directed messages never cross accounts", async () => {
     const good = JSON.stringify({ lines: [{ i: 0, speaker: "Narrator", text: "Brin waved." }], new_speakers: [] });

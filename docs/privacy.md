@@ -4,7 +4,7 @@
 
 - Your messages are sent to the Director's connection and, when it is on, to your Decision connection. Both are connections you set up in Lumiverse.
 - Spoken lines go to your TTS engine through your TTS connection in Lumiverse.
-- Sound descriptions go to ElevenLabs only when a new sound effect is made.
+- The key words of a sound description go to Freesound when a new sound is searched for. A description goes to ElevenLabs only when a new sound is made there.
 - Your settings, cast and sound library are kept in Lumiverse, under your account. With **Keep made audio** on, so are the lines it spoke and the directed messages.
 
 ## What is sent, and where
@@ -14,8 +14,10 @@
 | The message, split into lines, and your cast with its notes | The Director's connection | Each message performed or prepared, while the Director is on |
 | The message lines, and up to 12 cast names with the start of their notes | Your Decision connection | Each message, while the Decision model is on |
 | Each line, with the tags its engine reads, and a note on how it is said for Gemini | Your TTS engine, through your Lumiverse TTS connection | Each line spoken |
-| A short sound description | `api.elevenlabs.io`, with your sound effects key | Each new sound effect made |
-| A key test | `api.elevenlabs.io` | When you save or test the key |
+| The key words of a sound description | `freesound.org`, with your Freesound key | Each new sound searched for |
+| A request for the sound's preview, with no key | Freesound, at the preview's address | Each new sound found |
+| A short sound description | `api.elevenlabs.io`, with your ElevenLabs key | Each new sound made |
+| A key test | `freesound.org` or `api.elevenlabs.io` | When you save or test that key |
 
 A sound you added by link is played by your browser from that address, so that site sees the request, as with any link you open.
 
@@ -45,7 +47,7 @@ With **Save the performance to the message** on, the finished audio is saved to 
 | --- | --- |
 | Generation | Asking the Director, listing your connections for **Which connection**, and reading the thinking Prefix and Suffix saved on them |
 | Decision models | Asking the Decision model, and listing your Decision connections |
-| CORS proxy | Making sound effects with ElevenLabs, and testing the key |
+| CORS proxy | Finding sounds on Freesound, making them with ElevenLabs, and testing the keys |
 | UI panels | The floating player, when you turn it on in the Settings tab |
 
 Refusing **UI panels** stops only the floating player. Refusing **CORS proxy** stops only new sound effects. Refusing **Decision models** turns the Decision model off. Refusing **Generation** turns the Director off, and messages are read as written.

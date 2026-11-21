@@ -5,14 +5,17 @@
 - **Lumiverse's own routes, as you.** The panel runs in your Lumiverse page. It lists your TTS connections and their voices, reads the message you perform, speaks lines through your TTS connections, and, when you turn it on, saves the finished audio to the message. These are the same routes Lumiverse's own TTS uses.
 - **Generation.** It asks the Director, through a connection you pick.
 - **Decision models.** It asks the Decision model, through a connection you pick.
-- **One outside host:** `api.elevenlabs.io`, through Lumiverse's CORS proxy, for sound effects and for testing the key. Auto Foley calls no other host.
+- **Two outside services**, through Lumiverse's CORS proxy, for sound effects and for testing their keys:
+  - Freesound: searches go to `freesound.org`, with your Freesound key. Previews are downloaded from Freesound's own addresses, with no key.
+  - ElevenLabs: `api.elevenlabs.io`, with your ElevenLabs key.
+  - Auto Foley calls no other host.
 - **Sounds you add by link.** Your browser plays them from the address you gave, as with any link you open. Auto Foley only keeps the link.
 
 ## What it keeps
 
 - Settings, the cast with any pictures you picked, and the sound library, in `spindle.userStorage`, under your account.
 - With **Keep made audio** on, the lines it spoke and the last 40 directed messages, in the same place. **Clear kept audio** deletes them.
-- The sound effects key, in Lumiverse's secure enclave, under your account. It is never sent back to the panel, never put in settings, and only sent to `api.elevenlabs.io`.
+- The Freesound and ElevenLabs keys, in Lumiverse's secure enclave, under your account. Neither is ever sent back to the panel or put in settings. The Freesound key is only sent to `freesound.org`, and the ElevenLabs key only to `api.elevenlabs.io`.
 
 ## How to check it
 

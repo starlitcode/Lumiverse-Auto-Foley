@@ -136,9 +136,17 @@ Two skills are available. Load them before starting work.
   by connection id. A person can speak through a connection of their own.
 - The note sent with each engine is in `ENGINE_NOTES` in the backend, and can
   be changed on the Director tab.
-- Sound effects have no Lumiverse route, so they need an ElevenLabs key of
-  the extension's own. It lives in `spindle.enclave` under `api.elevenlabs.io`,
-  is only sent to that host, and never goes back to the panel.
+- Sound effects have no Lumiverse route. A new one is found on Freesound or
+  made by ElevenLabs, each with a key of the reader's own. The keys live in
+  `spindle.enclave` under `freesound.org` and `api.elevenlabs.io`. Each is
+  only sent to its own host, and neither goes back to the panel. A Freesound
+  preview is downloaded with no key.
+- A sound from Freesound keeps its credit: its name, who made it, its
+  license and its page. The credit is shown wherever the sound is, since
+  most licenses ask for it. The Freesound API is free for non-commercial
+  use.
+- Auto Foley is not built around ElevenLabs. Docs and panel text name every
+  place a sound or a voice can come from.
 
 ## The Director
 

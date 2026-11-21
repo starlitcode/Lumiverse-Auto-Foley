@@ -441,6 +441,14 @@ function faceHtml(m: { picture?: string } | null, name: string): string {
   return pic ? '<img src="' + pic + '" alt="">' : esc(firstLetter(name));
 }
 
+// The credit for a sound found on Freesound: its name, linked to its page,
+// who made it, and its license. Most licenses ask for this credit.
+function creditHtml(c: { title: string; by: string; license: string; page: string }): string {
+  const page = /^https:\/\/freesound\.org\//.test(String(c.page || '')) ? c.page : '';
+  const name = page ? '<a href="' + esc(page) + '" target="_blank" rel="noopener noreferrer">' + esc(c.title) + '</a>' : esc(c.title);
+  return '<span class="af-note af-credit">From Freesound: ' + name + ' by ' + esc(c.by) + (c.license ? ', ' + esc(c.license) : '') + '</span>';
+}
+
 // A name for the service a connection speaks through, for messages.
 function serviceName(conn: any): string {
   const p = String((conn && conn.provider) || '').toLowerCase();
@@ -884,6 +892,7 @@ button.af-chip-sound svg { width: 12px; height: 12px; flex: none; color: var(--a
 .af-sound-main { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .af-sound-name { font-size: 12.5px; font-weight: 600; overflow-wrap: anywhere; }
 .af-sound-meta { color: var(--af-muted); font-size: 11px; }
+.af-credit { display: block; font-size: 11px; overflow-wrap: anywhere; }
 
 .af-checks { display: flex; flex-direction: column; gap: 6px; margin: 0; padding: 0; list-style: none; }
 .af-checks li { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 8px; font-size: 12px; }
@@ -1045,6 +1054,8 @@ const DEFAULTS: any = {
   decisionConnection: '',
   decisionSure: 50,
   makeSounds: true,
+  soundFrom: 'both',
+  freesoundLicense: 'any',
   soundSeconds: 0,
   autoplayDelay: 0,
   extraThinkTags: [],
@@ -1216,7 +1227,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       return out;
     }
     if (S.directorOn && S.soundsOn && S.soundStyle !== 'effects' && !eng.inVoiceSounds)
-      out.push('This engine cannot make sounds inside a line. Its sounds are played as separate sound effects instead, which need the sound effects key in the Sounds tab or sounds you upload there.');
+      out.push('This engine cannot make sounds inside a line. Its sounds are played as separate sound effects instead, which come from Freesound, ElevenLabs or your own uploads, in the Sounds tab.');
     return out;
   }
 
@@ -1533,7 +1544,9 @@ export function setup(ctx: Ctx, overrides?: any) {
   // The player
   // ---------------------------------------------------------------------------
 
-  type Item = { kind: 'voice' | 'sound' | 'applause'; line: Line; sound?: string; at: number };
+  // credit: who made a sound found on Freesound, shown while it plays.
+  type Credit = { title: string; by: string; license: string; page: string };
+  type Item = { kind: 'voice' | 'sound' | 'applause'; line: Line; sound?: string; at: number; credit?: Credit };
   interface Show {
     script: Script;
     messageId: string;
@@ -1775,14 +1788,15 @@ export function setup(ctx: Ctx, overrides?: any) {
     });
   }
 
-  async function makeSoundClip(description: string): Promise<{ blob?: Blob | string; why?: string }> {
+  async function makeSoundClip(description: string): Promise<{ blob?: Blob | string; why?: string; credit?: Credit }> {
     try {
       const r = await rpc({ type: 'sound', description }, 45000);
       // A sound kept as a link is played from that address.
       if (r && r.url) return { blob: String(r.url) };
       if (r && r.base64) {
-        if (r.made) log('Made a new sound: ' + description + '. It is saved in the Sounds tab.', '', 'sound');
-        return { blob: base64ToBlob(r.base64, r.mime) };
+        const credit = r.credit && typeof r.credit === 'object' ? (r.credit as Credit) : undefined;
+        if (r.made) log((credit ? 'Found a new sound on Freesound: ' + description + ', “' + credit.title + '” by ' + credit.by + '.' : 'Made a new sound: ' + description + '.') + ' It is saved in the Sounds tab.', '', 'sound');
+        return { blob: base64ToBlob(r.base64, r.mime), credit };
       }
       return { why: (r && r.error) || 'No sound came back for "' + description + '".' };
     } catch (e: any) {
@@ -1803,7 +1817,17 @@ export function setup(ctx: Ctx, overrides?: any) {
             })
           : it.kind === 'applause'
             ? makeApplauseClip()
-            : makeSoundClip(it.sound || '');
+            : makeSoundClip(it.sound || '').then((r) => {
+                // The credit shows under the sound while it plays.
+                if (r && r.credit) {
+                  it.credit = r.credit;
+                  if (show === sh && sh.index === k) {
+                    stageRefs.theaterItem = '';
+                    paintStage();
+                  }
+                }
+                return r;
+              });
       sh.clips.set(k, p);
       if (it.kind === 'voice')
         p.then((r) => {
@@ -4387,7 +4411,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       const it = show ? show.items[Math.min(show.index, show.items.length - 1)] : null;
       if (!it || !show) return;
       if (it.kind === 'voice') lineAgain(show.script, it.line);
-      else if (it.kind === 'sound' && it.sound) soundAgain(it.sound, '');
+      else if (it.kind === 'sound' && it.sound) soundAgain(it.sound, '', !!it.credit);
     }, '', ICON_REDO);
     againPart.setAttribute('data-af', 'again');
     const directAgain = button('Direct again', () => {
@@ -4543,9 +4567,16 @@ export function setup(ctx: Ctx, overrides?: any) {
 
   // A new take of a sound effect made by ElevenLabs. It replaces the old one
   // in the library, so every message that uses it gets the new take.
-  async function soundAgain(description: string, id: string) {
-    if (!(await askSure('Make this sound again', 'A new take of “' + description + '” replaces the one in your library. It costs ElevenLabs credits.', 'Make it again'))) return;
-    log('Making the sound again: ' + description + '.', '', 'sound');
+  // A new take of a sound: made again by ElevenLabs, or, for a sound found
+  // on Freesound, the next result found in its place.
+  async function soundAgain(description: string, id: string, found?: boolean) {
+    if (found) {
+      if (!(await askSure('Find another sound', 'The next sound Freesound finds for “' + description + '” replaces this one in your library. It costs nothing.', 'Find another'))) return;
+      log('Finding another sound: ' + description + '.', '', 'sound');
+    } else {
+      if (!(await askSure('Make this sound again', 'A new take of “' + description + '” replaces the one in your library. It costs ElevenLabs credits.', 'Make it again'))) return;
+      log('Making the sound again: ' + description + '.', '', 'sound');
+    }
     try {
       const got = await rpc(id ? { type: 'sound_again', id } : { type: 'sound_again', description }, 60000);
       if (got && got.base64) previewBlob(base64ToBlob(got.base64, got.mime), S.soundVolume);
@@ -4689,7 +4720,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       return;
     }
     if (it.kind === 'sound' || it.kind === 'applause') {
-      cue.innerHTML = '<span class="af-cue">' + ICON_SOUND + '<span>' + esc(it.kind === 'applause' ? 'The audience cheers' : it.sound || '') + '</span></span>';
+      cue.innerHTML = '<span class="af-cue">' + ICON_SOUND + '<span>' + esc(it.kind === 'applause' ? 'The audience cheers' : it.sound || '') + '</span></span>' + (it.credit ? creditHtml(it.credit) : '');
       return;
     }
     const line = it.line;
@@ -5628,38 +5659,61 @@ export function setup(ctx: Ctx, overrides?: any) {
   // ---------- Sounds ----------
   let soundFilter = '';
   let keyText = '';
+  let fsKeyText = '';
 
-  function renderSounds() {
-    const k = card('ElevenLabs key for sound effects', 'Only needed when sounds are made as Sound effects. Lumiverse has no route for ElevenLabs sound effects, so this one feature needs a key here. It is kept in Lumiverse’s secure storage and only sent to api.elevenlabs.io. Sounds in the voice need no key.');
+  // A key card for one of the two places a new sound comes from. The key is
+  // saved and tested in the backend, and never comes back to the panel.
+  function keyCard(which: 'freesound' | 'eleven'): HTMLElement {
+    const fs = which === 'freesound';
+    const service = fs ? 'Freesound' : 'ElevenLabs';
+    const k = fs
+      ? card('Freesound key', 'Free, for non-commercial use. Freesound has thousands of recorded sounds, made by its users. The key is kept in Lumiverse’s secure storage and only sent to freesound.org.')
+      : card('ElevenLabs key', 'Only needed to make new sounds with ElevenLabs, which costs credits. The key is kept in Lumiverse’s secure storage and only sent to api.elevenlabs.io. Sounds in the voice need no key.');
+    k.setAttribute('data-af-key', which);
+    const has = () => (fs ? hasFsKey : hasKey);
     const kid = rid('key');
     const kf = el('<div class="af-col"></div>');
-    kf.appendChild(labelRow('Key for api.elevenlabs.io', 'Make a key in ElevenLabs with the Sound Effects permission, paste it here and press Save. It is tested at once. The panel never shows it again.', kid));
+    kf.appendChild(
+      labelRow(
+        'Key for ' + (fs ? 'freesound.org' : 'api.elevenlabs.io'),
+        fs
+          ? 'Sign in at freesound.org, open freesound.org/apiv2/apply, make a key, and paste its Client secret/Api key here. It is tested at once.'
+          : 'Make a key in ElevenLabs with the Sound Effects permission, paste it here and press Save. It is tested at once. The panel never shows it again.',
+        kid,
+      ),
+    );
     const kin = el('<input type="password" class="af-field" id="' + kid + '" autocomplete="off" spellcheck="false">') as HTMLInputElement;
-    kin.placeholder = hasKey ? 'A key is saved' : 'Paste your ElevenLabs key';
+    kin.placeholder = has() ? 'A key is saved' : 'Paste your ' + service + ' key';
     kf.appendChild(kin);
     k.appendChild(kf);
     const kst = el('<p class="af-status"></p>');
-    kst.textContent = keyText || (hasKey ? 'A key is saved.' : 'No key is saved. Sound effects come only from your own uploads.');
+    const said = fs ? fsKeyText : keyText;
+    kst.textContent = said || (has() ? 'A key is saved.' : 'No key is saved.');
     const krow = el('<div class="af-row"></div>');
     const doKey = async (msg: any, busyWords: string) => {
       kst.textContent = busyWords;
       kst.dataset.kind = '';
       try {
-        const r = await rpc(msg, 40000);
-        hasKey = !!(r && r.hasKey);
-        keyText = (r && r.text) || '';
-        kst.textContent = keyText;
+        const r = await rpc(Object.assign({ which }, msg), 40000);
+        if (fs) {
+          hasFsKey = !!(r && r.hasKey);
+          fsKeyText = (r && r.text) || '';
+        } else {
+          hasKey = !!(r && r.hasKey);
+          keyText = (r && r.text) || '';
+        }
+        kst.textContent = (r && r.text) || '';
         kst.dataset.kind = r && r.ok === false ? 'bad' : r && r.ok ? 'good' : '';
-        kin.placeholder = hasKey ? 'A key is saved' : 'Paste your ElevenLabs key';
-        forget.disabled = !hasKey;
-        testB.disabled = !hasKey;
+        kin.placeholder = has() ? 'A key is saved' : 'Paste your ' + service + ' key';
+        forget.disabled = !has();
+        testB.disabled = !has();
         // A key test says how it went in a Lumiverse notification too, since
         // it can take a few seconds and the reader may have moved on.
-        if (msg.type !== 'key_forget' && r && typeof r.ok === 'boolean') notify(r.ok ? 'success' : 'warning', r.ok ? 'Your ElevenLabs sound effects key works.' : 'The sound effects key did not work: ' + keyText);
+        if (msg.type !== 'key_forget' && r && typeof r.ok === 'boolean') notify(r.ok ? 'success' : 'warning', r.ok ? 'Your ' + service + ' key works.' : 'The ' + service + ' key did not work: ' + ((r && r.text) || ''));
       } catch (e: any) {
         kst.textContent = String((e && e.message) || 'The backend did not answer.');
         kst.dataset.kind = 'bad';
-        if (msg.type !== 'key_forget') notify('warning', 'The sound effects key could not be tested: the backend did not answer.');
+        if (msg.type !== 'key_forget') notify('warning', 'The ' + service + ' key could not be tested: the backend did not answer.');
       }
     };
     krow.appendChild(
@@ -5676,27 +5730,44 @@ export function setup(ctx: Ctx, overrides?: any) {
     );
     const testB = button('Test', () => doKey({ type: 'key_test' }, 'Testing the key…'));
     const forget = button('Forget', () => doKey({ type: 'key_forget' }, 'Removing the key…'), 'af-danger');
-    testB.disabled = !hasKey;
-    forget.disabled = !hasKey;
+    testB.disabled = !has();
+    forget.disabled = !has();
     krow.appendChild(testB);
     krow.appendChild(forget);
     k.appendChild(krow);
     k.appendChild(kst);
-    k.appendChild(
-      toggle('Make new sounds with ElevenLabs', 'On by default. Off: only sounds already in your library are played, and no credits are spent on sounds.', 'makeSounds', undefined, () => [
-        select('Sound length', [
+    return k;
+  }
+
+  function renderSounds() {
+    const src = card('New sounds', 'A sound your library does not have is found on Freesound or made by ElevenLabs. Each needs a key of your own, below. Every new sound is saved to your library, so it is free the next time.');
+    src.appendChild(
+      toggle('Get new sounds', 'On by default. Off: only sounds already in your library are played.', 'makeSounds', undefined, () => [
+        select('Where they come from', [
+          { id: 'both', label: 'Freesound first, then ElevenLabs' },
+          { id: 'freesound', label: 'Freesound only' },
+          { id: 'eleven', label: 'ElevenLabs only' },
+        ], S.soundFrom || 'both', (v) => set({ soundFrom: v }), 'Freesound first by default. It is free. ElevenLabs costs credits, and is asked only when Freesound has nothing or no key is saved for it.'),
+        select('Freesound licenses', [
+          { id: 'any', label: 'All three' },
+          { id: 'free', label: 'CC0 and CC BY, for any use' },
+          { id: 'cc0', label: 'CC0 only, no credit needed' },
+        ], S.freesoundLicense || 'any', (v) => set({ freesoundLicense: v }), 'All three by default. CC BY-NC is for non-commercial use only. Every license but CC0 asks for credit, which the library shows.'),
+        select('ElevenLabs sound length', [
           { id: '0', label: 'Let ElevenLabs choose' },
           { id: '1', label: '1 second' },
           { id: '2', label: '2 seconds' },
           { id: '3', label: '3 seconds' },
           { id: '5', label: '5 seconds' },
           { id: '10', label: '10 seconds' },
-        ], String(S.soundSeconds || 0), (v) => set({ soundSeconds: Number(v) }), 'How long a new sound is. Let ElevenLabs choose is the default. Longer sounds cost more credits.'),
+        ], String(S.soundSeconds || 0), (v) => set({ soundSeconds: Number(v) }), 'How long a made sound is. Let ElevenLabs choose is the default. Longer sounds cost more credits.'),
       ]),
     );
-    page.appendChild(k);
+    page.appendChild(src);
+    page.appendChild(keyCard('freesound'));
+    page.appendChild(keyCard('eleven'));
 
-    const lib = card('Your sound library', 'Every sound made is saved here, so the same sound is free the next time. Your own clips are used first. Trigger words make a clip play whenever a sound description holds one of them.', '<span class="af-pill">' + sounds.length + '</span>');
+    const lib = card('Your sound library', 'Every sound found or made is saved here, so the same sound is free the next time. Your own clips are used first. Trigger words make a clip play whenever a sound description holds one of them.', '<span class="af-pill">' + sounds.length + '</span>');
     const urow = el('<div class="af-row"></div>');
     const ust = el('<p class="af-status"></p>');
     urow.appendChild(
@@ -5770,7 +5841,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       const f = soundFilter.trim().toLowerCase();
       const shown = sounds.filter((s) => !f || s.name.toLowerCase().indexOf(f) >= 0 || (s.triggers || []).some((t: string) => t.indexOf(f) >= 0)).slice().reverse();
       if (!shown.length) {
-        listBox.appendChild(el('<div class="af-empty">' + (sounds.length ? 'No sound matches.' : 'No sounds yet. Sounds made as effects are saved here, and you can upload your own.') + '</div>'));
+        listBox.appendChild(el('<div class="af-empty">' + (sounds.length ? 'No sound matches.' : 'No sounds yet. Sounds found or made as effects are saved here, and you can upload your own.') + '</div>'));
         return;
       }
       for (const s of shown.slice(0, 200)) listBox.appendChild(soundRow(s));
@@ -5787,14 +5858,15 @@ export function setup(ctx: Ctx, overrides?: any) {
     const r = el(
       '<div class="af-sound"><button type="button" class="af-round" title="Play" aria-label="Play">' + ICON_PLAY + '</button>' +
         '<div class="af-sound-main"><div class="af-sound-name"></div><div class="af-sound-meta">' +
-        (s.source === 'upload' ? 'Yours' : s.source === 'link' ? 'A link' : 'Made by ElevenLabs') + ' · ' +
+        (s.source === 'upload' ? 'Yours' : s.source === 'link' ? 'A link' : s.source === 'found' ? 'Found on Freesound' : 'Made by ElevenLabs') + ' · ' +
         (s.source === 'link' ? '' : Math.max(1, Math.round((s.bytes || 0) / 1024)) + ' KB · ') + 'played ' + (s.uses || 0) + ' times</div>' +
+        (s.source === 'found' && s.credit ? creditHtml(s.credit) : '') +
         '<input type="text" class="af-field" placeholder="Trigger words, with commas"></div>' +
-        (s.source === 'made' ? '<button type="button" class="af-btn" data-again>Make it again</button>' : '') +
+        (s.source === 'made' ? '<button type="button" class="af-btn" data-again>Make it again</button>' : s.source === 'found' ? '<button type="button" class="af-btn" data-again>Find another</button>' : '') +
         '<button type="button" class="af-btn af-danger">Delete</button></div>',
     );
     const again = r.querySelector('[data-again]') as HTMLElement | null;
-    if (again) again.addEventListener('click', () => soundAgain(s.name, s.id));
+    if (again) again.addEventListener('click', () => soundAgain(s.name, s.id, s.source === 'found'));
     (r.querySelector('.af-sound-name') as HTMLElement).textContent = s.name;
     const trig = r.querySelector('input') as HTMLInputElement;
     trig.setAttribute('aria-label', 'Trigger words for ' + s.name);
@@ -5822,7 +5894,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       }
     });
     (r.querySelector('.af-danger') as HTMLElement).addEventListener('click', async () => {
-      if (!(await askSure('Delete this sound', '“' + s.name + '” is deleted from your library. ' + (s.source === 'upload' ? 'Upload it again to get it back.' : s.source === 'link' ? 'Add the link again to get it back.' : 'If it is needed again, a new one is made, which costs ElevenLabs credits.'), 'Delete', true))) return;
+      if (!(await askSure('Delete this sound', '“' + s.name + '” is deleted from your library. ' + (s.source === 'upload' ? 'Upload it again to get it back.' : s.source === 'link' ? 'Add the link again to get it back.' : s.source === 'found' ? 'If it is needed again, Freesound is searched again.' : 'If it is needed again, a new one is made, which costs ElevenLabs credits.'), 'Delete', true))) return;
       try {
         const res = await rpc({ type: 'sound_delete', id: s.id }, 15000);
         if (res && Array.isArray(res.sounds)) sounds = res.sounds;
@@ -5998,7 +6070,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     );
     page.appendChild(r);
 
-    const c = card('Check my setup', 'Checks your TTS connection, the Director, the Decision model and the sounds key. It speaks nothing, so it spends no voice credits.');
+    const c = card('Check my setup', 'Checks your TTS connection, the Director, the Decision model and the sound keys. It speaks nothing, so it spends no voice credits.');
     const list = el('<ul class="af-checks"></ul>');
     // The answers are gathered first and shown together, so the list and
     // the cards under it change once, not once for every check. The last
@@ -6051,13 +6123,21 @@ export function setup(ctx: Ctx, overrides?: any) {
         }
       } else add(null, 'The Decision model is off.');
       if (S.soundsOn && S.soundStyle !== 'voice' && S.makeSounds) {
-        try {
-          const res = await rpc({ type: 'key_test' }, 40000);
-          add(!!(res && res.ok), res && res.ok ? 'Sound effects: ' + res.text : 'Sound effects: ' + ((res && res.text) || 'the key could not be checked.') + ' Your uploads still play.');
-        } catch (e: any) {
-          add(false, 'The sound effects key could not be checked: ' + String((e && e.message) || ''));
+        // Each place new sounds come from is checked. With both, a missing
+        // key is not a fault while the other one works.
+        const wants: ('freesound' | 'eleven')[] = S.soundFrom === 'freesound' ? ['freesound'] : S.soundFrom === 'eleven' ? ['eleven'] : ['freesound', 'eleven'];
+        for (const which of wants) {
+          const service = which === 'freesound' ? 'Freesound' : 'ElevenLabs';
+          try {
+            const res = await rpc({ type: 'key_test', which }, 40000);
+            const none = !!res && res.text === 'No key is saved.';
+            if (none && wants.length > 1) add(null, service + ' sounds: no key is saved, so it is not used.');
+            else add(!!(res && res.ok), service + ' sounds: ' + (none ? 'no key is saved. Save one in the Sounds tab. Your uploads still play.' : (res && res.text) || 'the key could not be checked.'));
+          } catch (e: any) {
+            add(false, 'The ' + service + ' key could not be checked: ' + String((e && e.message) || ''));
+          }
         }
-      } else add(null, !S.soundsOn ? 'Sounds are off.' : S.soundStyle === 'voice' ? 'Sounds are made in the voice, so no sound effects key is needed.' : 'Making new sounds is off. Your uploads still play.');
+      } else add(null, !S.soundsOn ? 'Sounds are off.' : S.soundStyle === 'voice' ? 'Sounds are made in the voice, so no sound key is needed.' : 'Getting new sounds is off. Your library still plays.');
       if (ask === setupChecked) {
         const fresh = document.createDocumentFragment();
         for (const f of found) {
@@ -6436,7 +6516,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     const where = ' Grant it to Auto Foley in Lumiverse, under Extensions.';
     if (S.directorOn && !has('generation')) out.push('The Generation permission is refused, so the Director cannot be asked and messages are read as written.' + where);
     if (S.decisionsOn && !has('decisions')) out.push('The Decision models permission is refused, so the Decision model cannot be asked.' + where);
-    if (S.soundsOn && S.makeSounds && !has('cors_proxy')) out.push('The CORS proxy permission is refused, so new sound effects cannot be made. Sounds already in your library still play.' + where);
+    if (S.soundsOn && S.makeSounds && !has('cors_proxy')) out.push('The CORS proxy permission is refused, so new sound effects cannot be found or made. Sounds already in your library still play.' + where);
     if (S.widgetOn && !has('ui_panels')) out.push('The UI panels permission is refused, so the floating player cannot be shown.' + where);
     return out;
   }
@@ -6630,7 +6710,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       const conn = activeConnection();
       lines.push('tts connection: ' + (conn ? 'found, provider ' + (conn.provider || 'not set') + ', model ' + (conn.model || 'not set') + ', engine ' + engineFor(conn, conn.model).id + ', key ' + (conn.has_api_key === false ? 'MISSING' : 'saved') : ttsWhy || 'none picked'));
       if (conn && voiceCache[conn.id]) lines.push('voices on it: ' + voiceCache[conn.id].voices.length);
-      lines.push('sound effects key: ' + (hasKey ? 'saved' : 'none') + ', library: ' + sounds.length + ' sounds');
+      lines.push('sound keys: freesound ' + (hasFsKey ? 'saved' : 'none') + ', elevenlabs ' + (hasKey ? 'saved' : 'none') + ', from: ' + (S.soundFrom || 'both') + ', library: ' + sounds.length + ' sounds');
       lines.push('cast (' + (S.cast || []).length + '):');
       ((S.cast || []) as Member[]).forEach((m, k) => {
         const role = roles[k].role;
