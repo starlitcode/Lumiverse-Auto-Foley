@@ -753,8 +753,6 @@ textarea.af-tall { min-height: 260px; }
 .af-now-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1 1 140px; }
 .af-now-title { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .af-now-sub { color: var(--af-muted); font-size: 12px; line-height: 1.4; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; min-height: 2.8em; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-.af-progress { height: 4px; border-radius: 999px; background: var(--af-fill); overflow: hidden; }
-.af-progress > div { height: 100%; width: 0; background: var(--af-accent); transition: width .3s linear; }
 .af-scene { display: flex; flex-wrap: wrap; gap: 6px; }
 .af-scene span { font-size: 11.5px; padding: 2px 8px; border-radius: 999px; background: var(--af-second); color: var(--af-text); }
 
@@ -764,22 +762,15 @@ textarea.af-tall { min-height: 260px; }
 .af-swatch { width: 8px; height: 8px; border-radius: 50%; background: var(--af-accent); flex: none; }
 .af-swatch-sound { background: var(--af-sound); }
 
-.af-script { display: flex; flex-direction: column; gap: 6px; max-height: 360px; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; padding-right: 2px; }
-.af-line { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 8px; align-items: start; padding: 8px; border: 1px solid transparent; border-radius: var(--af-r-sm); transition: background-color .6s ease, border-color .6s ease; }
-.af-line[data-now="true"] { background: var(--af-accent-faint); border-color: var(--af-accent-soft); }
-.af-line[data-done="true"] { opacity: .72; }
-.af-line-again { display: grid; place-items: center; width: 32px; height: 32px; border: 1px solid transparent; border-radius: 8px; background: transparent; color: var(--af-muted); cursor: pointer; }
-.af-line-again svg { width: 15px; height: 15px; }
-@media (hover: hover) { .af-line-again:hover { background: var(--af-second); color: var(--af-text); } }
-.af-line-sound { display: inline-flex; align-items: center; gap: 4px; flex-wrap: wrap; }
-.af-line-sound .af-line-again { width: 32px; height: 32px; }
-.af-line-go { display: grid; place-items: center; width: 32px; height: 32px; border: 1px solid var(--af-line); border-radius: 8px; background: transparent; color: var(--af-muted); font: inherit; font-size: 11px; font-weight: 700; cursor: pointer; font-variant-numeric: tabular-nums; }
-@media (hover: hover) { .af-line-go:hover { background: var(--af-second); color: var(--af-text); } }
-.af-line-body { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
-.af-line-who { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 11.5px; font-weight: 700; color: var(--af-accent-text); }
-.af-line-who[data-kind="narration"] { color: var(--af-muted); }
-.af-line-text { overflow-wrap: anywhere; }
-.af-line-note { color: var(--af-muted); font-size: 11px; }
+.af-parts { display: flex; align-items: center; gap: 3px; width: 100%; min-height: 32px; }
+.af-parts:empty { display: none; }
+.af-parts button { flex: 1 1 0; min-width: 4px; height: 32px; padding: 13px 0; border: 0; border-radius: 0; background: transparent; cursor: pointer; }
+.af-parts button i { display: block; width: 100%; height: 6px; border-radius: 3px; background: var(--af-line-hover); transition: height .2s ease, background-color .2s ease; }
+.af-parts button[data-k="sound"] i, .af-parts button[data-k="applause"] i { background: var(--af-sound-soft); }
+.af-parts button[data-done] i { background: var(--af-accent-soft); }
+.af-parts button[data-k="sound"][data-done] i, .af-parts button[data-k="applause"][data-done] i { background: var(--af-sound); }
+.af-parts button[aria-current="true"] i { height: 10px; background: var(--af-accent); }
+.af-parts button:focus-visible { outline: none; box-shadow: inset 0 0 0 2px var(--af-accent); border-radius: 6px; }
 .af-chip { display: inline-flex; align-items: center; gap: 4px; margin: 0 2px; padding: 0 7px; border-radius: 999px; font-size: 11px; font-weight: 600; line-height: 19px; vertical-align: 1px; white-space: nowrap; }
 .af-chip-tag { background: var(--af-accent-soft); color: var(--af-text); }
 .af-chip-insound { background: var(--af-sound-soft); color: var(--af-text); box-shadow: inset 0 0 0 1px var(--af-sound); white-space: normal; }
@@ -924,7 +915,6 @@ const DEFAULTS = {
     soundSeconds: 0,
     autoplayDelay: 0,
     extraThinkTags: [],
-    followScript: true,
     applauseOn: false,
     applauseForAi: true,
     applauseForUser: false,
@@ -1039,6 +1029,23 @@ export function setup(ctx, overrides) {
     function set(patch) {
         Object.assign(S, patch);
         save();
+    }
+    // Lumiverse's own auto-play reads a new reply too. Said under Autoplay, the
+    // switch it clashes with.
+    function bothAutoplayWarning() {
+        const box = el('<div class="af-col"></div>');
+        const paint = () => {
+            box.innerHTML = '';
+            if (hostVoice && hostVoice.ttsEnabled && hostVoice.ttsAutoPlay)
+                box.appendChild(notice('warn', 'Lumiverse’s own Auto-play responses is on too, so new replies would be read twice. Turn it off in Lumiverse’s Settings, on the Voice tab.'));
+            box.hidden = !box.childElementCount;
+        };
+        paint();
+        loadHostVoice().then(() => {
+            if (box.isConnected)
+                paint();
+        });
+        return [box];
     }
     // The heading a TTS connection is listed under: its service.
     function engineGroup(c) {
@@ -4116,19 +4123,40 @@ export function setup(ctx, overrides) {
             page.appendChild(guideCard());
         const now = card('Now playing');
         now.insertAdjacentHTML('beforeend', '<div class="af-transport">' +
+            '<button type="button" class="af-round" data-af="back" aria-label="Back one part" title="Back one part">' + ICON_BACK + '</button>' +
             '<button type="button" class="af-play" data-af="play" aria-label="Play">' + ICON_PLAY + '</button>' +
+            '<button type="button" class="af-round" data-af="skip" aria-label="Next part" title="Next part">' + ICON_SKIP + '</button>' +
             '<button type="button" class="af-round" data-af="stop" aria-label="Stop" title="Stop">' + ICON_STOP + '</button>' +
-            '<button type="button" class="af-round" data-af="skip" aria-label="Skip to the next part" title="Skip to the next part">' + ICON_SKIP + '</button>' +
-            '<button type="button" class="af-round" data-af="redo" aria-label="Direct again" title="Direct again">' + ICON_REDO + '</button>' +
             '<div class="af-now-text"><div class="af-now-title" data-af="title"></div><div class="af-now-sub" data-af="sub"></div></div></div>' +
             '<div class="af-theater" data-af="theater"><div class="af-theater-who" data-af="who"></div><div class="af-theater-line" data-af="line"></div><div class="af-theater-cue" data-af="cue"></div></div>' +
-            '<div class="af-progress"><div data-af="bar"></div></div>' +
+            '<div class="af-parts" data-af="parts" role="group" aria-label="The parts of the message"></div>' +
             '<div class="af-scene" data-af="scene"></div>');
+        // A new take of the part playing, or of the whole message.
+        const againRow = el('<div class="af-row" data-af="againrow"></div>');
+        const againPart = button('Make this part again', () => {
+            const it = show ? show.items[Math.min(show.index, show.items.length - 1)] : null;
+            if (!it || !show)
+                return;
+            if (it.kind === 'voice')
+                lineAgain(show.script, it.line);
+            else if (it.kind === 'sound' && it.sound)
+                soundAgain(it.sound, '');
+        }, '', ICON_REDO);
+        againPart.setAttribute('data-af', 'again');
+        const directAgain = button('Direct again', () => {
+            const id = (show && show.messageId) || lastMeta.messageId;
+            if (id)
+                perform(id, true);
+        }, '', ICON_REDO);
+        directAgain.setAttribute('data-af', 'redo');
+        againRow.appendChild(againPart);
+        againRow.appendChild(directAgain);
         const retryRow = el('<div class="af-row" data-af="retryrow"></div>');
         retryRow.appendChild(button('Try the failed parts again', () => {
             if (lastFailed)
                 startShow(lastFailed.script, lastFailed.meta, 0, lastFailed.items);
         }, 'af-primary', ICON_REDO));
+        now.appendChild(againRow);
         now.appendChild(retryRow);
         page.appendChild(now);
         const q = (k) => now.querySelector('[data-af="' + k + '"]');
@@ -4139,10 +4167,22 @@ export function setup(ctx, overrides) {
             stop('Stopped');
         });
         q('skip').addEventListener('click', () => skip());
-        q('redo').addEventListener('click', () => {
-            const id = (show && show.messageId) || lastMeta.messageId;
-            if (id)
-                perform(id, true);
+        q('back').addEventListener('click', () => back());
+        q('parts').addEventListener('click', (e) => {
+            const b = e.target && e.target.closest ? e.target.closest('[data-at]') : null;
+            if (!b)
+                return;
+            const k = Number(b.dataset.at);
+            if (show)
+                jumpTo(k);
+            else {
+                const sc = currentScript();
+                if (!sc)
+                    return;
+                const items = buildItems(sc);
+                if (items[k])
+                    startShow(sc, lastMeta, items[k].at);
+            }
         });
         const mix = card('Mixer', 'How loud the voices and the sounds are, apart from each other. Mute is for this page only.');
         const mixer = el('<div class="af-mixer"></div>');
@@ -4150,11 +4190,6 @@ export function setup(ctx, overrides) {
         mixer.appendChild(strip('Sounds', 'sound', 'soundVolume'));
         mix.appendChild(mixer);
         page.appendChild(mix);
-        const sc = card('Script', 'Each line as the Director marked it. Voice tags are purple, sounds are orange. Press a number to play from that line, or a sound to hear it.');
-        const list = el('<div class="af-script"></div>');
-        sc.appendChild(list);
-        sc.appendChild(toggle('Follow along in the script', 'On by default. While a message plays, the script scrolls to keep the line being spoken in view.', 'followScript'));
-        page.appendChild(sc);
         const lg = card('Log', 'What happened, newest last. Anything that went wrong says why here.', '<button type="button" class="af-btn" data-af="copy">Copy</button><button type="button" class="af-btn af-danger" data-af="clear">Clear the log</button>');
         lg.querySelector('[data-af="clear"]').addEventListener('click', () => {
             logLines.length = 0;
@@ -4172,8 +4207,7 @@ export function setup(ctx, overrides) {
                 notify('warning', 'The log could not be copied. Your browser did not allow it.');
             }
         });
-        stageRefs = { now, q, list, logBox, retryRow, theaterItem: -1 };
-        paintScript();
+        stageRefs = { now, q, logBox, retryRow, theaterItem: -1 };
         paintStage();
         paintLog();
         paintTheater();
@@ -4217,52 +4251,6 @@ export function setup(ctx, overrides) {
     }
     function currentScript() {
         return (show && show.script) || lastScript;
-    }
-    function paintScript() {
-        if (!stageRefs)
-            return;
-        const list = stageRefs.list;
-        const script = currentScript();
-        list.innerHTML = '';
-        if (!script) {
-            list.appendChild(el('<div class="af-empty">No message yet. Press the boom microphone on a message, and its script appears here.</div>'));
-            return;
-        }
-        if (!script.lines.length) {
-            list.appendChild(el('<div class="af-empty">This message has nothing to read aloud.</div>'));
-            return;
-        }
-        for (const line of script.lines) {
-            const who = line.kind === 'narration' ? 'Narrator' : line.speaker;
-            const soundBtn = (s) => s
-                ? '<span class="af-line-sound"><button type="button" class="af-chip af-chip-sound" data-sound="' + esc(s) + '" title="Play this sound">' + ICON_SOUND + '<span>' + esc(s) + '</span></button>' +
-                    '<button type="button" class="af-line-again" data-sound-again="' + esc(s) + '" title="Make this sound again" aria-label="Make this sound again: ' + esc(s) + '">' + ICON_REDO + '</button></span>'
-                : '';
-            const row = el('<div class="af-line" data-i="' + line.i + '"><button type="button" class="af-line-go" title="Play from this line" aria-label="Play from line ' + (line.i + 1) + '">' + (line.i + 1) + '</button>' +
-                '<div class="af-line-body"><div class="af-line-who" data-kind="' + esc(line.kind) + '">' + esc(who) + (line.big ? ' <span class="af-chip af-chip-tag">big moment</span>' : '') + '</div>' +
-                (line.before ? '<div>' + soundBtn(line.before) + '</div>' : '') +
-                '<div class="af-line-text">' + lineHtml(line.text) + '</div>' +
-                (line.after ? '<div>' + soundBtn(line.after) + '</div>' : '') +
-                (line.note ? '<div class="af-line-note">' + esc(line.note) + '</div>' : '') +
-                '</div><button type="button" class="af-line-again" data-line-again title="Make this line again" aria-label="Make line ' + (line.i + 1) + ' again">' + ICON_REDO + '</button></div>');
-            row.querySelector('[data-line-again]').addEventListener('click', () => lineAgain(script, line));
-            row.querySelectorAll('[data-sound-again]').forEach((b) => b.addEventListener('click', () => soundAgain(b.dataset.soundAgain || '', '')));
-            row.querySelector('.af-line-go').addEventListener('click', () => {
-                if (script && lastMeta.messageId)
-                    startShow(script, lastMeta, line.i);
-            });
-            row.querySelectorAll('[data-sound]').forEach((b) => {
-                b.addEventListener('click', async () => {
-                    const d = b.dataset.sound || '';
-                    const got = await makeSoundClip(d);
-                    if (got.blob)
-                        previewBlob(got.blob, S.soundVolume);
-                    else
-                        log(got.why || 'The sound could not be played.', 'bad');
-                });
-            });
-            list.appendChild(row);
-        }
     }
     // A new take of one line, for someone who does not like how it came out.
     // The kept take is let go, and the line is spoken again on its own.
@@ -4333,11 +4321,15 @@ export function setup(ctx, overrides) {
         playBtn.disabled = !show && !script;
         q('stop').disabled = !show && !busyMessage;
         q('skip').disabled = !show;
+        q('back').disabled = !show;
         q('redo').disabled = !(show || lastMeta.messageId) || !!busyMessage;
+        const cur = show ? show.items[Math.min(show.index, show.items.length - 1)] : null;
+        q('again').disabled = !cur || cur.kind === 'applause';
+        q('again').lastElementChild.textContent = cur && cur.kind === 'sound' ? 'Make this sound again' : 'Make this line again';
+        paintParts(q('parts'), script);
         stageRefs.retryRow.hidden = !(lastFailed && !show && !busyMessage);
         const title = q('title');
         const sub = q('sub');
-        const bar = q('bar');
         const scene = q('scene');
         const sc = currentScript();
         const inScene = sc && Array.isArray(sc.inScene) ? sc.inScene : [];
@@ -4349,10 +4341,8 @@ export function setup(ctx, overrides) {
         if (busyMessage) {
             title.textContent = 'Getting ready';
             sub.textContent = phase;
-            bar.style.width = '0%';
         }
         else if (show) {
-            const it = show.items[Math.min(show.index, show.items.length - 1)];
             const secs = Math.round((Date.now() - show.startedAt) / 1000);
             title.textContent = show.script.author ? show.script.author + '’s message' : 'This message';
             const w = show.waiting.get(show.index);
@@ -4360,48 +4350,38 @@ export function setup(ctx, overrides) {
                 ? 'The voice service is busy. Trying again in ' + Math.max(0, Math.ceil((w.until - Date.now()) / 1000)) + ' s (wait ' + w.n + ' of ' + S.rateWaits + ')'
                 : phase || 'Playing';
             sub.textContent = said + ' · part ' + Math.min(show.index + 1, show.items.length) + ' of ' + show.items.length + ' · ' + secs + ' s';
-            bar.style.width = Math.round((show.index / show.items.length) * 100) + '%';
-            paintNow(it ? it.at : -1, show.index);
         }
         else {
             title.textContent = script ? (script.author ? script.author + '’s message' : 'This message') : 'Nothing playing';
             sub.textContent = phase || (script ? 'Ready. Press Play.' : chatInfo.kind === 'none' ? 'Open a chat, then press the boom microphone on a message.' : 'Press the boom microphone on a message.');
-            bar.style.width = /^Finished/.test(phase) ? '100%' : '0%';
-            paintNow(-1, -1);
         }
     }
-    // The line being spoken now, and the lines already spoken.
-    let followed = -1;
-    function paintNow(lineIndex, itemIndex) {
-        if (!stageRefs)
-            return;
-        stageRefs.list.querySelectorAll('.af-line').forEach((row) => {
-            const i = Number(row.dataset.i);
-            const isNow = i === lineIndex;
-            if ((row.dataset.now === 'true') !== isNow)
-                row.dataset.now = isNow ? 'true' : 'false';
-            const done = !!show && itemIndex >= 0 && i < lineIndex;
-            if ((row.dataset.done === 'true') !== done)
-                row.dataset.done = done ? 'true' : 'false';
-            // Only the script's own box scrolls to the line. The drawer is left
-            // where it is, so the rest of the tab does not move under the reader.
-            if (isNow && followed !== i && S.followScript && drawerOpen()) {
-                followed = i;
-                const box = stageRefs.list;
-                const top = row.offsetTop - box.offsetTop;
-                const want = top < box.scrollTop ? top : top + row.offsetHeight > box.scrollTop + box.clientHeight ? top + row.offsetHeight - box.clientHeight : box.scrollTop;
-                if (want !== box.scrollTop) {
-                    try {
-                        box.scrollTo({ top: want, behavior: calm() ? 'auto' : 'smooth' });
-                    }
-                    catch (_) {
-                        box.scrollTop = want;
-                    }
-                }
-            }
+    // One mark for each part of the message: lines, sounds and the cheer. The
+    // part playing is wider, and the parts played are filled. A tap goes there.
+    let partsFor = null;
+    function paintParts(box, script) {
+        const items = show ? show.items : script ? buildItems(script) : [];
+        const key = show || script;
+        if (partsFor !== key || box.childElementCount !== items.length) {
+            partsFor = key;
+            box.innerHTML = items
+                .map((x, k) => '<button type="button" data-at="' + k + '" data-k="' + x.kind + '" aria-label="Part ' + (k + 1) +
+                (x.kind === 'voice' ? ', ' + esc(x.line.kind === 'narration' ? 'Narrator' : x.line.speaker) : x.kind === 'applause' ? ', the audience' : ', a sound') +
+                '" title="' + esc(x.kind === 'voice' ? stripTags(x.line.text).slice(0, 80) : x.kind === 'applause' ? 'The audience cheers' : x.sound || '') + '"><i></i></button>')
+                .join('');
+        }
+        const at = show ? show.index : -1;
+        box.querySelectorAll('[data-at]').forEach((b) => {
+            const k = Number(b.dataset.at);
+            if (at >= 0 && k < at)
+                b.setAttribute('data-done', '');
+            else
+                b.removeAttribute('data-done');
+            if (k === at)
+                b.setAttribute('aria-current', 'true');
+            else
+                b.removeAttribute('aria-current');
         });
-        if (lineIndex < 0)
-            followed = -1;
     }
     // ---- the subtitles ----
     // The part playing now, drawn large: who speaks, and their line with each
@@ -5407,8 +5387,6 @@ export function setup(ctx, overrides) {
                 for (const w of engineWarnings(eng, conn, conn.model))
                     connBox.appendChild(notice(eng.supported ? 'warn' : 'bad', w));
             }
-            if (bothAutoplay())
-                connBox.appendChild(notice('warn', 'Lumiverse’s own Auto-play responses is on too, so new replies would be read twice. Turn it off in Lumiverse’s Settings, on the Voice tab.'));
         };
         drawConn();
         Promise.all([loadTtsConnections(), loadHostVoice()]).then(() => {
@@ -5433,7 +5411,7 @@ export function setup(ctx, overrides) {
         btns.appendChild(toggle('In the Extras menu', 'On by default. Adds Perform the latest reply to the Extras menu of the message box, and Stop Auto Foley while something plays.', 'extrasMenu', () => syncExtras()));
         page.appendChild(btns);
         const p = card('Playing');
-        p.appendChild(toggle('Autoplay new replies', 'Off by default. Each new reply is performed as soon as it finishes.', 'autoplay', () => renderTab(), () => [
+        p.appendChild(toggle('Autoplay new replies', 'Off by default. Each new reply is performed as soon as it finishes.', 'autoplay', undefined, () => [
             select('Wait before autoplay', [
                 { id: '0', label: 'Play at once' },
                 { id: '3', label: '3 seconds' },
@@ -5441,9 +5419,9 @@ export function setup(ctx, overrides) {
                 { id: '10', label: '10 seconds' },
                 { id: '20', label: '20 seconds' },
             ], String(S.autoplayDelay || 0), (v) => set({ autoplayDelay: Number(v) }), 'Play at once by default. Gives another extension time to change a reply first, such as Auto Refine. A reply changed while it plays starts again with the new text either way.'),
-        ]));
+            toggle('Read your own messages', 'Off by default. Your own messages are performed too, in your persona’s voice. The button on a message always works.', 'readOwnMessages'),
+        ].concat(bothAutoplayWarning())));
         p.appendChild(toggle('Prepare replies ahead', 'Off by default. With Autoplay off, each new reply is directed in the background, so pressing Play starts at once. It costs a Director call for every reply, played or not.', 'prepareAhead'));
-        p.appendChild(toggle('Read your own messages', 'Off by default. With Autoplay on, your own messages are performed too, in your persona’s voice. The button on a message always works.', 'readOwnMessages'));
         p.appendChild(segmented('Narration', [
             { id: 'read', label: 'Read aloud' },
             { id: 'sounds', label: 'Sounds only' },
@@ -5451,7 +5429,7 @@ export function setup(ctx, overrides) {
         ], S.narration, (v) => set({ narration: v }), 'What happens to text outside quotes. Read aloud uses the Narrator’s voice, and is the default. Sounds only plays the sounds of what happens with no narrator. Skip leaves narration out.'));
         p.appendChild(toggle('Save the performance to the message', 'Off by default. After a message plays through, its audio is saved to the message, and Lumiverse’s own player plays it again for free. It uses storage on the server.', 'saveAudio'));
         p.appendChild(keptAudioBox());
-        p.appendChild(toggle('Reduce motion', 'Off by default. On, nothing in Auto Foley moves or fades. Your device’s own reduce motion setting does the same.', 'reduceMotion', () => renderTab()));
+        p.appendChild(toggle('Reduce motion', 'Off by default. On, nothing in Auto Foley moves or fades. Your device’s own reduce motion setting does the same.', 'reduceMotion'));
         page.appendChild(p);
         page.appendChild(audienceCard());
         page.appendChild(lookCard());

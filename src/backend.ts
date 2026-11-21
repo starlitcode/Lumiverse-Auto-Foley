@@ -105,8 +105,6 @@ interface Settings {
   askNotes: Record<string, string>;
   // A second connection to ask when the Director still refuses or fails.
   // The look and the floating button, which follow the account like every
-  // other setting.
-  followScript: boolean;
   // The audience: a cheer after a performance, for the AI's characters, for
   // you, or both, and when.
   applauseOn: boolean;
@@ -213,7 +211,6 @@ const DEFAULT_SETTINGS: Settings = {
   rateWaits: 2,
   askNote: true,
   askNotes: {},
-  followScript: true,
   applauseOn: false,
   applauseForAi: true,
   applauseForUser: false,
@@ -494,7 +491,6 @@ function cleanSettings(raw: any): Settings {
     rateWaits: Math.round(num(r.rateWaits, 0, 5, d.rateWaits)),
     askNote: bool(r.askNote, d.askNote),
     askNotes: cleanNotes(r.askNotes),
-    followScript: bool(r.followScript, d.followScript),
     applauseOn: bool(r.applauseOn, d.applauseOn),
     applauseForAi: bool(r.applauseForAi, d.applauseForAi),
     applauseForUser: bool(r.applauseForUser, d.applauseForUser),

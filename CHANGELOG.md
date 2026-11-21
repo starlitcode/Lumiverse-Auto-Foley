@@ -16,7 +16,7 @@
 - **Sounds in the voice.** With Eleven v3 or v4, the Director can put a `[sound of ...]` tag inside a spoken line, and ElevenLabs performs the sound with the speech. Suggested by a Discord user.
 - **Sound effects and a sound library.** Separate sounds before or after a line, made by ElevenLabs with a key saved in the Sounds tab. Every sound made is saved, so the same sound is free the next time. Your own uploads are used first.
 - **The Decision model.** An optional Decision connection picks who says each quoted line, and checks which lines describe a sound.
-- **The Stage tab.** Play, pause, stop, skip, and Direct again, with the script, a mixer for voices and sounds, and a Log.
+- **The Stage tab.** Now playing shows who speaks and the line, word by word, with Back, Play, Next, Stop, a mark for each part of the message to tap, **Make this part again** and **Direct again**. A mixer for voices and sounds, and a Log.
 - **A button on each message** to perform it, and **Autoplay new replies**.
 - **Edited replies are directed again.** A reply changed after it was directed, such as one Auto Refine rewrote, is directed again, and one playing starts again with the new text. **Wait before autoplay** gives another extension time to change a reply first.
 - **Debug info**, on the Settings tab. Build a report to paste into a bug report. People in the cast are named by their role, and no message text is included.
@@ -35,5 +35,8 @@
 - **Speakers found from the text.** A speech verb, a name and a colon, script-style lines, an action in the same paragraph, the same speaker going on, and two people taking turns. The Director is told who it is, or who it likely is.
 - **Only sounds the text shows**, on by default. A sound the text around it gives no sign of is left out.
 - **Send the prompt as** system, user or assistant, and **the Decision model's questions** can be changed, with **Back to built-in**.
+- **Make it again.** **Make this part again** in Now playing makes a new take of the line or sound playing, and **Make it again** in the sound library replaces a made sound. Both ask first, since they cost credits.
+- **Warnings for refused permissions**, at the top of every tab, saying what each one stops.
+- **Perform my latest message**, in the Extras menu.
 - **Cast groups.** Sort the cast on the Cast tab into groups you name, open and close.
 - **A floating player.** A round button over the chat opens a small player, with the line being spoken, a strip of every part of the message, the volumes, quick switches, and who is voiced.

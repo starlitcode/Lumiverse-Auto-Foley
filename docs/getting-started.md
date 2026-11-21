@@ -13,7 +13,7 @@
 2. **Pick the model.** On the connection, choose one that acts: Eleven v3 or v4, Fish Audio S2.1 Pro or Drama 3, or Gemini 3.8 Flash TTS. You can also pick a model for each person later, in the Cast tab. Only models that act are offered there.
 3. **Open the Foley tab** in the drawer. Go to **Settings** and check that **TTS connection** shows yours. The line under it says what its engine can do.
 4. **Press Check my setup** on the Settings tab. It says what is ready and what is missing. It speaks nothing, so it spends no voice credits.
-5. **Perform a message.** Press the boom microphone button on any message. The first time, the Director reads it, and the Stage tab shows the script.
+5. **Perform a message.** Press the boom microphone button on any message. The first time, the Director reads it, and the Stage tab shows each part as it plays.
 6. **Give voices.** Open the **Cast** tab. Everyone who spoke is there now. Pick a voice for each, and press **Hear a sample**.
 
 ## What happens when you press the button

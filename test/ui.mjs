@@ -384,11 +384,9 @@ if (section("perform")) {
   await btn.click();
   await page.waitForTimeout(150);
   check((await page.evaluate(() => window.__sent.some((m) => m.type === "direct" && m.messageId === "m1" && m.chatId === "chat1"))), "the message is sent to be directed, with its chat");
-  check((await page.locator(".af-line").count()) === 3, "the script shows every line");
-  check((await page.locator(".af-chip-tag").count()) >= 2, "voice tags are drawn as chips");
-  check((await page.locator(".af-script .af-chip-insound").count()) === 1, "a sound in the voice is drawn as a sound chip");
-  check((await page.locator("button.af-chip-sound").count()) === 1, "a separate sound effect is a button");
-  check((await page.locator(".af-line-note").count()) === 1, "a line read as written says why");
+  check((await page.locator('[data-af="parts"] [data-at]').count()) >= 3, "Now playing has a mark for each part of the message");
+  check((await page.locator('[data-af="parts"] [data-k="sound"]').count()) === 1, "a separate sound effect has a mark of its own");
+  check((await page.locator(".af-script, .af-line").count()) === 0, "there is no script list beside Now playing");
   await page.waitForTimeout(700);
   const synth = await page.evaluate(() => window.__synth || []);
   check(synth.length >= 2, "lines are spoken through Lumiverse's TTS route (" + synth.length + ")");
@@ -464,7 +462,7 @@ if (section("perform")) {
   await page.waitForTimeout(500);
   await page.click('.af-tab[data-tab="stage"]');
   await page.waitForTimeout(250);
-  await page.click(".af-line-go >> nth=0");
+  await page.click('[data-af="parts"] [data-at] >> nth=0');
   await page.waitForTimeout(500);
   const s2 = await page.evaluate(() => window.__synth || []);
   check(!s2.some((b) => /set the cup down/.test(b.text)), "narration is not spoken when it is skipped");
@@ -829,6 +827,55 @@ if (section("one connection")) {
   check(opts.length === 1 && opts[0].includes("My ElevenLabs"), "the only connection is named once (" + opts.join(" | ") + ")");
   check(!errors.length, "no console errors. " + errors.slice(0, 2).join("; "));
   await context.close();
+}
+
+if (section("switch rows")) {
+  console.log("Rows under a switch open in place, over several frames");
+  const { context, page } = await open(THEMES[0], SIZES[1]);
+  await page.click('.af-tab[data-tab="settings"]');
+  await page.waitForTimeout(250);
+  await page.evaluate(() => {
+    window.__row = document.querySelector('[data-af-row="autoplay"]');
+    window.__row.querySelector(".af-box").click();
+  });
+  const mid = await page.evaluate(async () => {
+    await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+    const sub = window.__row.querySelector(".af-sub");
+    return { same: window.__row.isConnected, h: sub.getBoundingClientRect().height, hidden: sub.hidden };
+  });
+  await page.waitForTimeout(500);
+  const end = await page.evaluate(() => window.__row.querySelector(".af-sub").getBoundingClientRect().height);
+  check(mid.same, "the tab is not drawn again when Autoplay changes");
+  check(!mid.hidden && mid.h > 0 && mid.h < end, "Wait before autoplay opens over several frames (" + mid.h.toFixed(1) + " of " + end.toFixed(1) + " px)");
+  await context.close();
+}
+
+if (section("stage buttons")) {
+  console.log("Back, next and the part marks in Now playing");
+  for (const size of SIZES) {
+    const { context, page, errors } = await open(THEMES[0], size);
+    await page.click('.af-tab[data-tab="stage"]');
+    await page.waitForTimeout(200);
+    await page.evaluate(() => (window.__clipMs = 1500));
+    await page.click('#mount [data-af-slot="message"]');
+    await page.waitForTimeout(600);
+    const at = () => page.evaluate(() => { const b = document.querySelector('[data-af="parts"] [aria-current="true"]'); return b ? Number(b.dataset.at) : -1; });
+    await page.click('[data-af="skip"]');
+    await page.waitForTimeout(300);
+    const a1 = await at();
+    await page.click('[data-af="back"]');
+    await page.waitForTimeout(300);
+    const a2 = await at();
+    check(a1 === 1 && a2 === 0, size.name + ": Next goes forward one part and Back goes back one (" + a1 + ", " + a2 + ")");
+    await page.click('[data-af="parts"] [data-at="2"]');
+    await page.waitForTimeout(300);
+    check((await at()) === 2, size.name + ": a tap on a mark goes to that part");
+    check((await page.locator('[data-af="again"]').isEnabled()), size.name + ": Make this part again is ready while a part plays");
+    const m = await page.evaluate(MEASURE, size.touch);
+    check(!m.overflow.length && !m.small.length, size.name + ": Now playing fits and its buttons are big enough. " + m.overflow.concat(m.small).slice(0, 3).join("; "));
+    check(!errors.length, size.name + ": no console errors. " + errors.slice(0, 2).join("; "));
+    await context.close();
+  }
 }
 
 if (section("taps")) {
