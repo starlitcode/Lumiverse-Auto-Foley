@@ -21,7 +21,7 @@
 - **Edited replies are directed again.** A reply changed after it was directed, such as one Auto Refine rewrote, is directed again, and one playing starts again with the new text. **Wait before autoplay** gives another extension time to change a reply first.
 - **Debug info**, on the Settings tab. Build a report to paste into a bug report. People in the cast are named by their role, and no message text is included.
 - **Thinking is never read aloud.** The same nine thinking formats as Auto Retry and Auto Refine are taken out of a message before it is read, with **Extra thinking tag names** for more.
-- **Check my setup**, on the Settings tab. It checks the connection and its engine, the Director, the Decision model and the sounds key. It speaks nothing, so it spends no voice credits.
+- **Check my setup**, on the Settings tab. It checks the connection and its engine, the Director, the Decision model and the sound keys. It speaks nothing, so it spends no voice credits.
 - **Asking again.** A busy provider is waited out, and a Director answer that is empty, refused, in the wrong shape or with changed words is asked for again, with a note that says what went wrong. The notes can be changed on the Director tab.
 - **Thinking, samplers and a time limit for the Director**, on the Director tab.
 - **Buttons.** A button on every message, one in the chat's row of controls, and entries in the Extras menu, each with its own switch.

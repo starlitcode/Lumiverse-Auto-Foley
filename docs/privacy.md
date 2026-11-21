@@ -28,10 +28,10 @@ Earlier messages in the chat are not sent anywhere.
 All of this is kept by Lumiverse, under your account, with `spindle.userStorage`:
 
 - Your settings and your cast, with any pictures you picked for it, made small on your device first.
-- Your sound library: made sounds and uploads.
+- Your sound library: sounds found on Freesound, with their credit, sounds made by ElevenLabs, your uploads, and your links.
 - With **Keep made audio** on, which it is by default: each spoken line, up to the size you pick, and the last 40 directed messages, with their text. **Clear kept audio** deletes them, and **Do not keep it** stops it.
 
-Your sound effects key is kept in Lumiverse's secure storage, under your account.
+Your Freesound and ElevenLabs keys are kept in Lumiverse's secure storage, under your account.
 
 **Debug info** builds its report on your device. Nothing in it is sent anywhere until you paste it.
 
