@@ -23,7 +23,7 @@ describe("version", () => {
   });
 
   test("the changelog has an entry for it", () => {
-    expect(read("CHANGELOG.md")).toMatch(new RegExp("\\n## " + manifest.replace(/\./g, "\\.") + " "));
+    expect(read("CHANGELOG.md")).toMatch(new RegExp("\\n## " + manifest.replace(/\./g, "\\.") + "\\s"));
   });
 });
 
