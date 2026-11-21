@@ -1003,6 +1003,9 @@ const DEFAULTS: any = {
   engines: {},
   engineNotes: {},
   folders: [],
+  promptRole: 'system',
+  decisionQuestions: {},
+  soundCheck: true,
   skipOn: true,
   skipPatterns: '',
   speechMarks: 'auto',
@@ -1079,6 +1082,7 @@ export function setup(ctx: Ctx, overrides?: any) {
   let builtInNotes: Record<string, string> = {};
   let builtInEngineNotes: Record<string, string> = {};
   let builtInSkips = '';
+  let builtInQuestions: Record<string, string> = {};
   let sounds: any[] = [];
   let hasKey = false;
   let hostHasDecisions = true;
@@ -4839,6 +4843,7 @@ export function setup(ctx: Ctx, overrides?: any) {
               paintWarn();
             }, 'In the voice is the default: a [sound of ...] tag inside a spoken line. Only Eleven v3 and v4 can perform it. Other engines play sound effects instead: separate clips from your library, or made with the key in the Sounds tab. Both lets the Director choose.'),
             toggle('Intimate sounds', 'Off by default. Lets the Director add the sounds of sex scenes between adults, such as kissing, skin, wet sounds or a bed creaking.', 'intimateOn'),
+            toggle('Only sounds the text shows', 'On by default. A sound is left out when no word of it is in its line or the lines beside it. The Log says how many.', 'soundCheck'),
           ]),
         );
         rows.push(warnBox);
@@ -4999,12 +5004,43 @@ export function setup(ctx: Ctx, overrides?: any) {
             },
           );
         }
-        return [box];
+        const qs: { id: string; label: string; help: string }[] = [
+          { id: 'who', label: 'The question about who speaks', help: 'Asked for each quoted line the text does not name a speaker for. {n} is the line’s number.' },
+          { id: 'sound', label: 'The question about sounds', help: 'Asked for each narration line, while Sounds is on. {n} is the line’s number.' },
+        ];
+        const fields = qs.map((q) => {
+          const cur = S.decisionQuestions && S.decisionQuestions[q.id] ? S.decisionQuestions[q.id] : builtInQuestions[q.id] || '';
+          const f = area(q.label, cur, (v) => {
+            const next = Object.assign({}, S.decisionQuestions || {});
+            if (!v.trim() || v.trim() === String(builtInQuestions[q.id] || '').trim()) delete next[q.id];
+            else next[q.id] = v;
+            set({ decisionQuestions: next });
+          }, { rows: 3, help: q.help });
+          f.setAttribute('data-af-question', q.id);
+          f.appendChild(
+            button('Back to built-in', async () => {
+              if (!(await askSure('Back to the built-in question', 'Your wording of “' + q.label + '” is replaced by the built-in one. There is no undo.', 'Use the built-in question'))) return;
+              const next = Object.assign({}, S.decisionQuestions || {});
+              delete next[q.id];
+              set({ decisionQuestions: next });
+              (f.querySelector('textarea') as HTMLTextAreaElement).value = builtInQuestions[q.id] || '';
+            }),
+          );
+          return f;
+        });
+        return [box].concat(fields);
       }),
     );
     page.appendChild(dec);
 
     const pr = card('The Director’s prompt', 'Everything the Director is told, in full. You can change any of it. The message, your cast and your switches are sent with it as JSON, and the answer has to be JSON in the shape the end of the prompt asks for.');
+    pr.appendChild(
+      segmented('Send it as', [
+        { id: 'system', label: 'System' },
+        { id: 'user', label: 'User' },
+        { id: 'assistant', label: 'Assistant' },
+      ], S.promptRole || 'system', (v) => set({ promptRole: v }), 'System by default. Some models follow a prompt better as a user message. The message itself is always sent as user.'),
+    );
     const ta = el('<textarea class="af-field af-mono af-tall" spellcheck="false" aria-label="The Director’s prompt"></textarea>') as HTMLTextAreaElement;
     ta.value = S.prompt || builtInPrompt;
     pr.appendChild(ta);
@@ -5430,7 +5466,7 @@ export function setup(ctx: Ctx, overrides?: any) {
   ]);
   // The setting keys each part covers. Which parts are ticked are settings
   // too, but they are never carried in a file or put back by a reset.
-  const NOT_SETTINGS = ['cast', 'folders', 'prompt', 'askNotes', 'engineNotes', 'exportParts', 'importParts', 'resetParts', 'guideSeen'];
+  const NOT_SETTINGS = ['cast', 'folders', 'prompt', 'promptRole', 'askNotes', 'engineNotes', 'decisionQuestions', 'exportParts', 'importParts', 'resetParts', 'guideSeen'];
   const settingKeys = () => Object.keys(DEFAULTS).filter((k) => NOT_SETTINGS.indexOf(k) < 0);
   let transferSaid = '';
   let transferKind = '';
@@ -5478,6 +5514,8 @@ export function setup(ctx: Ctx, overrides?: any) {
           body.prompt = S.prompt || '';
           body.askNotes = JSON.parse(JSON.stringify(S.askNotes || {}));
           body.engineNotes = JSON.parse(JSON.stringify(S.engineNotes || {}));
+          body.decisionQuestions = JSON.parse(JSON.stringify(S.decisionQuestions || {}));
+          body.promptRole = S.promptRole || 'system';
         }
         if (parts.indexOf('cast') >= 0) {
           body.cast = JSON.parse(JSON.stringify(S.cast || []));
@@ -5600,6 +5638,8 @@ export function setup(ctx: Ctx, overrides?: any) {
       S.prompt = body.prompt;
       if (body.askNotes && typeof body.askNotes === 'object') S.askNotes = body.askNotes;
       if (body.engineNotes && typeof body.engineNotes === 'object') S.engineNotes = body.engineNotes;
+      if (body.decisionQuestions && typeof body.decisionQuestions === 'object') S.decisionQuestions = body.decisionQuestions;
+      if (typeof body.promptRole === 'string') S.promptRole = body.promptRole;
       took.push('the Director’s prompt and notes');
     }
     if (want.indexOf('cast') >= 0 && Array.isArray(body.cast)) {
@@ -5988,6 +6028,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       builtInNotes = r.builtInNotes && typeof r.builtInNotes === 'object' ? r.builtInNotes : {};
       builtInEngineNotes = r.builtInEngineNotes && typeof r.builtInEngineNotes === 'object' ? r.builtInEngineNotes : {};
       builtInSkips = typeof r.builtInSkips === 'string' ? r.builtInSkips : '';
+      builtInQuestions = r.builtInQuestions && typeof r.builtInQuestions === 'object' ? r.builtInQuestions : {};
       hostHasDecisions = r.decisions !== false;
       backendVersion = String(r.version || '');
       keepLocal();

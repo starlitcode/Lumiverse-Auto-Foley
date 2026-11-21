@@ -595,6 +595,53 @@ describe("cast folders", () => {
   });
 });
 
+describe("sounds that make sense where they are", () => {
+  const msg = { type: "direct", chatId: "c1", messageId: "m6", swipeId: 0, name: "Pell Darrow", text: 'Pell slammed the cellar door. "Stay put." She sat by the window.' };
+  const answer = JSON.stringify({
+    lines: [
+      { i: 0, speaker: "Narrator", text: "Pell slammed the cellar door.", after: "a heavy wooden door slamming shut" },
+      { i: 1, speaker: "Pell Darrow", text: "Stay put." },
+      { i: 2, speaker: "Narrator", text: "She sat by the window.", after: "thunder rolling over the hills" },
+    ],
+    new_speakers: [],
+  });
+
+  test("a sound the text shows is kept, and one it does not is left out, with a Log line", async () => {
+    const h = host({ answers: [answer] });
+    await h.ask({ type: "save", settings: { soundStyle: "effects" } });
+    const script = (await h.ask(msg)).find((m) => m.type === "script").script;
+    expect(script.lines[0].after).toBe("a heavy wooden door slamming shut");
+    expect(script.lines[2].after).toBe("");
+    expect(script.log.join(" ")).toContain("1 sound was left out");
+  });
+
+  test("with the check off, every sound is kept", async () => {
+    const h = host({ answers: [answer] });
+    await h.ask({ type: "save", settings: { soundStyle: "effects", soundCheck: false } });
+    const script = (await h.ask(msg)).find((m) => m.type === "script").script;
+    expect(script.lines[2].after).toBe("thunder rolling over the hills");
+  });
+});
+
+describe("the prompt's role and the Decision questions", () => {
+  const msg = { type: "direct", chatId: "c1", messageId: "m7", swipeId: 0, name: "Pell Darrow", text: '"Ready." Pell nodded.' };
+  test("the prompt is sent as the role picked", async () => {
+    const h = host({ answers: [""] });
+    await h.ask({ type: "save", settings: { promptRole: "user" } });
+    await h.ask(msg);
+    expect(h.calls.generate[0].messages[0].role).toBe("user");
+  });
+
+  test("a question the reader wrote is asked, with the line number filled in", async () => {
+    let seen: any = null;
+    const h = host({ answers: [""], decide: (input: any) => { seen = input; return {}; } });
+    await h.ask({ type: "save", settings: { decisionsOn: true, cast: [{ name: "Pell Darrow" }, { name: "Odile" }], decisionQuestions: { who: "Who speaks quote {n}?" } } });
+    await h.ask(msg);
+    const q = Object.values(seen.questions).find((x: any) => x.type === "choice") as any;
+    expect(q.instructions).toBe("Who speaks quote 0?");
+  });
+});
+
 describe("the Decision model", () => {
   const msg = { type: "direct", chatId: "c1", messageId: "m2", swipeId: 0, name: "Mara Vell", text: 'Mara looked at Tobin. "Go." "No," he said.' };
   const setup = async (h: Host) => {

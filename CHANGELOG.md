@@ -33,5 +33,7 @@
 - **Leave out trackers and status blocks.** Tables, status lines, emoji markers, folded blocks and bars are not read. The patterns can be changed in the Settings tab, with **Use defaults**.
 - **How speech is marked.** Guillemets, low quotes, corner brackets and dash dialogue are read as speech, with single quotes, or plain text with *asterisk* actions, as choices.
 - **Speakers found from the text.** A speech verb, a name and a colon, script-style lines, an action in the same paragraph, the same speaker going on, and two people taking turns. The Director is told who it is, or who it likely is.
+- **Only sounds the text shows**, on by default. A sound the text around it gives no sign of is left out.
+- **Send the prompt as** system, user or assistant, and **the Decision model's questions** can be changed, with **Back to built-in**.
 - **Cast folders.** Sort the cast on the Cast tab into folders you name, open and close.
 - **A floating player.** A round button over the chat opens a small player, with the line being spoken, a strip of every part of the message, the volumes, quick switches, and who is voiced.

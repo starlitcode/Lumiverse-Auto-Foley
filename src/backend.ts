@@ -154,6 +154,12 @@ interface Settings {
   engineNotes: Record<string, string>;
   // How much made audio to keep in the account, in MB. 0 keeps none.
   keepAudio: number;
+  // Who the Director's prompt is sent as: system, user or assistant.
+  promptRole: string;
+  // The reader's own wording of the Decision model's questions, by name.
+  decisionQuestions: Record<string, string>;
+  // Leave out a sound the text around it does not show.
+  soundCheck: boolean;
   cast: CastMember[];
   // Folders that sort the cast on the Cast tab. Only for the panel: they
   // change nothing about how anyone sounds.
@@ -198,6 +204,9 @@ const DEFAULT_SETTINGS: Settings = {
   engines: {},
   engineNotes: {},
   keepAudio: 100,
+  promptRole: 'system',
+  decisionQuestions: {},
+  soundCheck: true,
   skipOn: true,
   skipPatterns: '',
   speechMarks: 'auto',
@@ -377,6 +386,26 @@ function cleanNotes(v: any): Record<string, string> {
   return out;
 }
 
+// The questions the Decision model is asked. {n} is the number of the line.
+// Shown in the Director tab, where they can be changed, with a way back.
+const DECISION_QUESTIONS: Record<string, string> = {
+  who: 'In `passage`, who says the quoted line #{n}? Use the narration around it and the flow of the conversation.',
+  sound: 'Line #{n} of `passage` describes a sound a listener in the scene would hear, such as an object being moved, set down or broken, a door, footsteps, weather, or bodies moving.',
+};
+
+function cleanQuestions(v: any): Record<string, string> {
+  const out: Record<string, string> = {};
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return out;
+  for (const k of Object.keys(DECISION_QUESTIONS)) if (typeof v[k] === 'string' && v[k].trim()) out[k] = v[k].slice(0, 1000);
+  return out;
+}
+
+function question(s: Settings, k: string, n: number): string {
+  const own = s.decisionQuestions && s.decisionQuestions[k] ? s.decisionQuestions[k] : '';
+  const text = own || DECISION_QUESTIONS[k] || '';
+  return text.indexOf('{n}') >= 0 ? text.split('{n}').join(String(n)) : text + ' (line #' + n + ')';
+}
+
 function cleanEngineChoices(v: any): Record<string, string> {
   const out: Record<string, string> = {};
   if (!v || typeof v !== 'object' || Array.isArray(v)) return out;
@@ -457,6 +486,9 @@ function cleanSettings(raw: any): Settings {
     debugConsole: bool(r.debugConsole, d.debugConsole),
     engines: cleanEngineChoices(r.engines),
     engineNotes: cleanEngineNotes(r.engineNotes),
+    promptRole: pick(r.promptRole, ['system', 'user', 'assistant'] as const, 'system'),
+    decisionQuestions: cleanQuestions(r.decisionQuestions),
+    soundCheck: bool(r.soundCheck, d.soundCheck),
     skipOn: bool(r.skipOn, d.skipOn),
     skipPatterns: str(r.skipPatterns, 8000),
     speechMarks: pick(r.speechMarks, ['auto', 'single', 'plain'] as const, 'auto'),
@@ -1484,6 +1516,54 @@ function applyDirection(
   return { lines, newSpeakers, log };
 }
 
+// ---- Sounds that make sense where they are ----
+// A sound is kept when the text around it shows it: a word of the sound's
+// description, or a word that starts the same way, is in the line or the line
+// on either side. "a door slamming upstairs" is kept beside "slammed the
+// door", and a sound the text gives no sign of is left out. A line the
+// Decision model said describes a sound keeps its sound too.
+const SOUND_FILLER = new Set(
+  ('sound sounds noise noises someone something somebody distant nearby close softly loudly gently quietly heavy light small large ' +
+    'slow fast quick sharp dull faint loud soft wooden metal glass stone with from into onto against over under across through ' +
+    'the and some their his her its them they that this there back down away around').split(' '),
+);
+function soundWords(text: string): string[] {
+  return (String(text || '').toLowerCase().match(/\p{L}{4,}/gu) || []).filter((w) => !SOUND_FILLER.has(w));
+}
+function shown(desc: string, around: string): boolean {
+  const want = soundWords(desc);
+  if (!want.length) return true;
+  const have = soundWords(around);
+  // Two words match when they are the same, when one starts with the other
+  // (door, doors), or when they share their first five letters (slamming,
+  // slammed).
+  const near = (a: string, b: string) => a === b || a.startsWith(b) || b.startsWith(a) || (a.length >= 5 && b.length >= 5 && a.slice(0, 5) === b.slice(0, 5));
+  return want.some((w) => have.some((h) => near(w, h)));
+}
+
+function checkSounds(lines: DirectedLine[], segs: Segment[], hints: Record<number, number>): number {
+  let dropped = 0;
+  for (const l of lines) {
+    const around = [segs[l.i - 1], segs[l.i], segs[l.i + 1]].filter(Boolean).map((g) => g.text).join(' ');
+    const sure = (hints[l.i] || 0) >= SURE;
+    for (const side of ['before', 'after'] as const) {
+      if (l[side] && !sure && !shown(l[side], around)) {
+        l[side] = '';
+        dropped++;
+      }
+    }
+    if (l.inSounds.length && !sure) {
+      const keep = l.inSounds.filter((x) => shown(x.replace(/^sounds? of\s+/i, ''), around));
+      if (keep.length !== l.inSounds.length) {
+        for (const x of l.inSounds) if (keep.indexOf(x) < 0) l.text = l.text.split('[' + x + ']').join(' ').replace(/[ \t]+/g, ' ').replace(/\s+([,.!?…;:])/g, '$1').trim();
+        dropped += l.inSounds.length - keep.length;
+        l.inSounds = keep;
+      }
+    }
+  }
+  return dropped;
+}
+
 // What went wrong with a call to the Director, in plain words.
 function generationTrouble(e: any): string {
   const raw = String((e && e.message) || e || '').slice(0, 300);
@@ -2068,7 +2148,7 @@ async function askDecisions(
     for (const g of speech.slice(0, 40)) {
       questions['who_' + g.i] = {
         type: 'choice',
-        instructions: 'In `passage`, who says the quoted line #' + g.i + '? Use the narration around it and the flow of the conversation.',
+        instructions: question(s, 'who', g.i),
         criteria: criteria,
       };
     }
@@ -2077,7 +2157,7 @@ async function askDecisions(
     for (const g of segs.filter((x) => x.kind === 'narration').slice(0, 40)) {
       questions['sound_' + g.i] = {
         type: 'noul',
-        instructions: 'Line #' + g.i + ' of `passage` describes a sound a listener in the scene would hear, such as an object being moved, set down or broken, a door, footsteps, weather, or bodies moving.',
+        instructions: question(s, 'sound', g.i),
       };
     }
   }
@@ -2228,6 +2308,7 @@ function settingsSig(s: Settings): string {
       s.directorOn, s.directorConnection, s.strength, s.tagsOn, s.breathsOn, s.soundsOn, s.soundStyle, s.narration,
       s.intimateOn, s.findSpeakers, s.bigMoments, s.prompt, s.decisionsOn, s.decisionConnection, s.extraThinkTags,
       s.thinkingMode, s.thinkingEffort, s.samplers, s.engineNotes, s.skipOn, s.skipPatterns, s.speechMarks,
+      s.promptRole, s.decisionQuestions, s.soundCheck,
       s.cast.map((c) => [c.name, c.aliases, c.note, c.muted]),
     ]),
   );
@@ -2418,7 +2499,7 @@ async function askDirector(userId: string | undefined, s: Settings, payload: any
     let failed = '';
     try {
       const messages: any[] = [
-        { role: 'system', content: s.prompt.trim() || BUILT_IN_PROMPT },
+        { role: s.promptRole || 'system', content: s.prompt.trim() || BUILT_IN_PROMPT },
         { role: 'user', content: JSON.stringify(payload) },
       ];
       if (note) messages.push({ role: 'user', content: note });
@@ -2640,6 +2721,10 @@ async function direct(userId: string | undefined, p: any): Promise<Script> {
   const done = applyDirection(segs, answer, s.cast, author, fixed, rules);
   script.lines = done.lines;
   script.log.push(...done.log);
+  if (answer && s.soundCheck) {
+    const dropped = checkSounds(done.lines, segs, hints);
+    if (dropped) script.log.push(dropped + (dropped === 1 ? ' sound was' : ' sounds were') + ' left out, since the text around ' + (dropped === 1 ? 'it' : 'them') + ' does not show ' + (dropped === 1 ? 'it.' : 'them.'));
+  }
   script.directed = !!answer;
   if (answer) {
     const tagged = done.lines.filter((l) => l.tags.length).length;
@@ -3053,7 +3138,7 @@ async function onPanel(p: any, userId: string | undefined) {
         try {
           hasKey = !!(spindle.enclave && typeof spindle.enclave.has === 'function' && (await spindle.enclave.has(KEY_NAME, userId)));
         } catch (_) {}
-        answer({ type: 'state', settings, sounds, hasKey, builtInPrompt: BUILT_IN_PROMPT, builtInNotes: ASK_NOTES, builtInEngineNotes: ENGINE_NOTES, builtInSkips: BUILT_IN_SKIPS, version: VERSION, decisions: hasDecisions() });
+        answer({ type: 'state', settings, sounds, hasKey, builtInPrompt: BUILT_IN_PROMPT, builtInNotes: ASK_NOTES, builtInEngineNotes: ENGINE_NOTES, builtInSkips: BUILT_IN_SKIPS, builtInQuestions: DECISION_QUESTIONS, version: VERSION, decisions: hasDecisions() });
         return;
       }
       case 'save': {
@@ -3287,13 +3372,15 @@ async function onPanel(p: any, userId: string | undefined) {
         const s = await loadSettings(userId);
         const fresh = cleanSettings({});
         if (parts.indexOf('settings') >= 0) {
-          const keep = { cast: s.cast, folders: s.folders, prompt: s.prompt, askNotes: s.askNotes, engineNotes: s.engineNotes, exportParts: s.exportParts, importParts: s.importParts, resetParts: s.resetParts };
+          const keep = { cast: s.cast, folders: s.folders, prompt: s.prompt, promptRole: s.promptRole, askNotes: s.askNotes, engineNotes: s.engineNotes, decisionQuestions: s.decisionQuestions, exportParts: s.exportParts, importParts: s.importParts, resetParts: s.resetParts };
           Object.assign(s, fresh, keep);
         }
         if (parts.indexOf('prompt') >= 0) {
           s.prompt = '';
           s.askNotes = {};
           s.engineNotes = {};
+          s.decisionQuestions = {};
+          s.promptRole = 'system';
         }
         if (parts.indexOf('cast') >= 0) {
           s.cast = fresh.cast;

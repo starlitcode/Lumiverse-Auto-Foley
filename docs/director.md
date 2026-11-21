@@ -70,7 +70,7 @@ All on the Director tab:
 - **How much acting.** Subtle, Natural or Dramatic. At most 1, 2 or 4 tags in a line.
 - **Voice tags.** Delivery and emotion.
 - **Breaths, sighs and laughs.** Sounds a voice makes. Off takes them out of every line.
-- **Sounds**, and under it **How sounds are made** and **Intimate sounds**. See [Sounds](sounds.md).
+- **Sounds**, and under it **How sounds are made**, **Intimate sounds** and **Only sounds the text shows**. See [Sounds](sounds.md).
 - **Find new speakers.** Someone new who speaks is added to the cast. See [The cast](cast.md).
 - **Big moments.** The Director can mark an emotional peak. On ElevenLabs, that line gets a looser voice: one step toward Creative on Eleven v3, or 0.25 lower stability on Eleven v4. The audience can cheer on it.
 
@@ -115,10 +115,15 @@ With **Use a Decision model** on:
 - With sounds on, it gives the chance that each narration line describes a sound. The Director is told these chances.
 - If it cannot be asked, the Log says why, and the Director does the whole job. The reasons it gives: no Decision connection, none set as the default, the one picked is gone, no key saved, the permission refused, or a Lumiverse too old to have Decision connections.
 
+### Its questions
+
+The two questions the Decision model is asked are in the Director tab, under **Use a Decision model**. You can change them. `{n}` is the number of the line asked about. **Back to built-in** puts a question back, and asks first.
+
 ## The prompt
 
 The Director tab shows the whole prompt. You can change any of it.
 
+- **Send it as** sends the prompt as the system message, the default, or as a user or assistant message. Some models follow a prompt better as a user message. The message itself is always sent as user.
 - **Back to the built-in prompt** puts the built-in one back. It asks first, since there is no undo.
 - The message and the cast are always sent with it, as JSON. Your prompt should say what to do with them, and ask for the same JSON answer.
 - The answer has to be JSON in this shape, or the message is read as written:

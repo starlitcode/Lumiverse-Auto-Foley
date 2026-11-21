@@ -32,6 +32,15 @@ What is kept in a sound tag:
 
 When **Narration** is set to **Sounds only** or **Skip**, narration is not spoken. Sounds in the voice then go on speech lines only.
 
+## Only sounds the text shows
+
+**Only sounds the text shows**, under **Sounds** in the Director tab, is on by default.
+
+- A sound is kept when a word of it is in its line, or in the line before or after. A word counts when it is the same, or starts the same way, such as `slammed` for `slamming`.
+- A sound the text gives no sign of is left out. The Log says how many were left out.
+- A line the Decision model said describes a sound keeps its sound.
+- Turn it off to keep every sound the Director adds.
+
 ## The ElevenLabs key for sound effects
 
 Lumiverse has no route for ElevenLabs sound effects, so this one feature needs a key of its own.
