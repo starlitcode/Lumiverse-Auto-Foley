@@ -944,6 +944,27 @@ html[data-af-still] [class*="af-"], html[data-af-still] [class*="af-"]::before, 
   [class*="af-"], [class*="af-"]::before, [class*="af-"]::after { animation: none !important; transition: none !important; }
 }
 `;
+// A short mark of some text, so a change to it can be noticed. Auto Retry and
+// Auto Refine work out their marks the same way.
+function markText(text) {
+    let h = 0x811c9dc5;
+    for (let i = 0; i < text.length; i++) {
+        h ^= text.charCodeAt(i);
+        // The usual FNV multiply, written as shifts so it stays in 32 bits.
+        h = (h + ((h << 1) + (h << 4) + (h << 7) + (h << 8) + (h << 24))) >>> 0;
+    }
+    return h.toString(36);
+}
+const MOVED_DEFAULTS = [];
+// What a reader is marked with once told about a row: the setting and a mark
+// of its old value. A row added later is still told.
+const movedRowMark = (m) => m.key + ':' + markText(JSON.stringify(m.was));
+// The rows this reader is on: not answered yet, and still on the old value.
+// Anyone who set their own value is not told, since nothing of theirs moved.
+function movedFor(cfg, seen, list) {
+    const told = String(seen || '').split(' ');
+    return list.filter((m) => told.indexOf(movedRowMark(m)) < 0 && JSON.stringify(cfg[m.key]) === JSON.stringify(m.was));
+}
 const DEFAULTS = {
     enabled: true,
     ttsConnection: '',
@@ -983,6 +1004,8 @@ const DEFAULTS = {
     engineNotes: {},
     groups: [],
     logShow: {},
+    builtInSeen: '',
+    movedSeen: '',
     promptRole: 'system',
     engineNoteRole: 'rules',
     askNoteRole: 'user',
@@ -3345,6 +3368,8 @@ export function setup(ctx, overrides) {
         stageRefs = null;
         for (const w of permissionWarnings())
             page.appendChild(notice('bad', w));
+        for (const n of changeNotices())
+            page.appendChild(n);
         try {
             if (tab === 'stage')
                 renderStage();
@@ -6242,7 +6267,7 @@ export function setup(ctx, overrides) {
     ]);
     // The setting keys each part covers. Which parts are ticked are settings
     // too, but they are never carried in a file or put back by a reset.
-    const NOT_SETTINGS = ['cast', 'groups', 'prompt', 'promptRole', 'engineNoteRole', 'askNoteRole', 'askNotes', 'engineNotes', 'decisionQuestions', 'exportParts', 'importParts', 'resetParts', 'guideSeen'];
+    const NOT_SETTINGS = ['cast', 'groups', 'prompt', 'promptRole', 'engineNoteRole', 'askNoteRole', 'askNotes', 'engineNotes', 'decisionQuestions', 'exportParts', 'importParts', 'resetParts', 'guideSeen', 'builtInSeen', 'movedSeen'];
     const settingKeys = () => Object.keys(DEFAULTS).filter((k) => NOT_SETTINGS.indexOf(k) < 0);
     let transferSaid = '';
     let transferKind = '';
@@ -6579,6 +6604,75 @@ export function setup(ctx, overrides) {
         granted = got.slice();
         if (JSON.stringify(granted) !== was && alive)
             renderTab();
+    }
+    // A mark of every built-in text the panel can show: the prompt, the notes,
+    // the Decision questions and the patterns to leave out.
+    function builtInMark() {
+        const flat = (o) => JSON.stringify(Object.keys(o || {}).sort().map((k) => [k, o[k]]));
+        return markText([builtInPrompt, flat(builtInNotes), flat(builtInEngineNotes), flat(builtInQuestions), builtInSkips].join('\u0003'));
+    }
+    // The built-in texts this reader has their own version of. Someone on the
+    // built-in text already has any new wording, so is not told.
+    function ownBuiltIns() {
+        const out = [];
+        const some = (o) => !!o && Object.keys(o).length > 0;
+        if (S.prompt)
+            out.push('the Director’s prompt');
+        if (some(S.engineNotes))
+            out.push('the notes for each voice engine');
+        if (some(S.askNotes))
+            out.push('the notes for asking again');
+        if (some(S.decisionQuestions))
+            out.push('the Decision model’s questions');
+        if (S.skipPatterns)
+            out.push('the patterns to leave out');
+        return out;
+    }
+    // Said on every tab: a default that changed while this reader was on it,
+    // and built-in text that changed while they have their own version.
+    function changeNotices() {
+        const out = [];
+        if (!accountAnswered)
+            return out;
+        const moved = movedFor(S, S.movedSeen || '', MOVED_DEFAULTS);
+        if (moved.length) {
+            const n = notice('warn', (moved.length === 1
+                ? 'A default setting has changed in this update, and you were on the old one. '
+                : 'Some default settings have changed in this update, and you were on the old ones. ') +
+                moved.map((m) => m.label + ': ' + m.why).join(' ') +
+                ' Yours is still the old value until you take the new one.');
+            n.setAttribute('data-af-moved', '');
+            const row = el('<div class="af-row"></div>');
+            const answered = () => [S.movedSeen || ''].concat(moved.map(movedRowMark)).join(' ').trim();
+            row.appendChild(button('Take it', () => {
+                const next = { movedSeen: answered() };
+                for (const m of moved)
+                    next[m.key] = DEFAULTS[m.key];
+                set(next);
+                renderTab();
+            }, 'af-primary'));
+            row.appendChild(button('Keep mine', () => {
+                set({ movedSeen: answered() });
+                renderTab();
+            }));
+            n.appendChild(row);
+            out.push(n);
+        }
+        const mark = builtInMark();
+        const own = ownBuiltIns();
+        if (S.builtInSeen && S.builtInSeen !== mark && own.length) {
+            const n = notice('warn', 'The built-in text has changed in this update. You have your own version of ' + own.join(', ') +
+                '. Yours is untouched. To take the new wording, press Back to built-in on it, or Use defaults for the patterns.');
+            n.setAttribute('data-af-builtin-moved', '');
+            const row = el('<div class="af-row"></div>');
+            row.appendChild(button('Got it', () => {
+                set({ builtInSeen: mark });
+                renderTab();
+            }));
+            n.appendChild(row);
+            out.push(n);
+        }
+        return out;
     }
     function permissionWarnings() {
         if (!granted || !S.enabled)
@@ -6946,6 +7040,17 @@ export function setup(ctx, overrides) {
         builtInQuestions = r.builtInQuestions && typeof r.builtInQuestions === 'object' ? r.builtInQuestions : {};
         hostHasDecisions = r.decisions !== false;
         backendVersion = String(r.version || '');
+        // A new account starts on every default and every built-in text as they
+        // are now, so nothing has changed for it. Someone with no text of their
+        // own already has any new wording, so is marked as told too.
+        const told = {};
+        if (r.fresh && !S.movedSeen && MOVED_DEFAULTS.length)
+            told.movedSeen = MOVED_DEFAULTS.map(movedRowMark).join(' ');
+        const mark = builtInMark();
+        if (S.builtInSeen !== mark && (!S.builtInSeen || !ownBuiltIns().length))
+            told.builtInSeen = mark;
+        if (Object.keys(told).length)
+            set(told);
         keepLocal();
         renderTab();
         syncSlots();
@@ -6991,7 +7096,7 @@ export function setup(ctx, overrides) {
         catch (_) { }
     };
 }
-export const __testing = { looksLikeDate, voicedFrames, wordWeight, partTimes, engineOf, fitTag, tagSound, textFor, styleFor, stripTags, stabilityFor, ENGINES };
+export const __testing = { markText, movedFor, movedRowMark, MOVED_DEFAULTS, looksLikeDate, voicedFrames, wordWeight, partTimes, engineOf, fitTag, tagSound, textFor, styleFor, stripTags, stabilityFor, ENGINES };
 // The built-in cheer: "Cheering and clapping crowd 1" by freesound_community,
 // a free sound from Pixabay (pixabay.com/sound-effects/people-cheering-and-clapping-crowd-1-5995/),
 // made mono at 64 kbps so it stays small. assets/applause.mp3 is the same

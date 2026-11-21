@@ -138,7 +138,9 @@ The two questions the Decision model is asked are in the Director tab, under **U
 The Director tab shows the whole prompt. You can change any of it.
 
 - **Send it as** sends the prompt as the system message, the default, or as a user or assistant message. Some models follow a prompt better as a user message. The message itself is always sent as user.
-- **Back to the built-in prompt** puts the built-in one back. It asks first, since there is no undo.
+- **Back to the built-in prompt** puts the built-in one back. It asks first, since there is no undo. When the prompt is already the built-in one, it says so and changes nothing.
+- When an update changes the built-in prompt, notes, questions or patterns, and you have your own version of one, a notice on every tab says so. Your version is not changed. **Got it** hides the notice. On the built-in text, you get the new wording with no notice.
+- When an update changes a default setting you were on, a notice says what changed and why. **Take it** moves you to the new default. **Keep mine** leaves your value.
 - The message and the cast are always sent with it, as JSON. Your prompt should say what to do with them, and ask for the same JSON answer.
 - The answer has to be JSON in this shape, or the message is read as written:
 

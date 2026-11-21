@@ -714,6 +714,18 @@ describe("Freesound", () => {
   });
 });
 
+describe("what an account has been told", () => {
+  test("a new account is marked fresh until something is saved, and the marks are kept", async () => {
+    const h = host();
+    expect((await h.ask({ type: "load" })).find((m) => m.type === "state").fresh).toBe(true);
+    await h.ask({ type: "save", settings: { builtInSeen: "k3x9q", movedSeen: "keepAudio:1ab2 <b>" } });
+    const st = (await h.ask({ type: "load" })).find((m) => m.type === "state");
+    expect(st.fresh).toBe(false);
+    expect(st.settings.builtInSeen).toBe("k3x9q");
+    expect(st.settings.movedSeen).toBe("keepAudio:1ab2 b");
+  });
+});
+
 describe("each account keeps its own", () => {
   test("settings, cast, sounds, kept audio, the key and directed messages never cross accounts", async () => {
     const good = JSON.stringify({ lines: [{ i: 0, speaker: "Narrator", text: "Brin waved." }], new_speakers: [] });

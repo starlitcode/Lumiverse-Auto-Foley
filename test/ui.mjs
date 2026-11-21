@@ -1253,6 +1253,40 @@ if (section("freesound")) {
   }
 }
 
+if (section("reminders")) {
+  console.log("A change to the built-in text is said once, to someone with their own version");
+  for (const size of SIZES) {
+    const { context, page, errors } = await open(THEMES[0], size);
+    const where = size.name;
+    const restart = (own) => page.evaluate((mine) => {
+      window.__teardown();
+      Object.assign(window.__settings, { builtInSeen: "oldmark", prompt: mine });
+      document.getElementById("drawer").innerHTML = "";
+      window.__teardown = window.__setup(window.__ctx, { fetch: window.__fetch, Audio: window.__Audio });
+    }, own);
+    await restart("Direct it my way.");
+    await page.waitForTimeout(300);
+    const shown = await page.evaluate(() => {
+      const n = document.querySelector("[data-af-builtin-moved]");
+      return n ? n.textContent : "";
+    });
+    check(/You have your own version of the Director’s prompt\. Yours is untouched\./.test(shown), where + ": someone with their own prompt is told the built-in text changed (" + shown.slice(0, 80) + ")");
+    const after = await page.evaluate(async () => {
+      const n = document.querySelector("[data-af-builtin-moved]");
+      Array.from(n.querySelectorAll("button")).find((b) => b.textContent.trim() === "Got it").click();
+      await new Promise((r) => setTimeout(r, 1500));
+      return { gone: !document.querySelector("[data-af-builtin-moved]"), seen: window.__settings.builtInSeen };
+    });
+    check(after.gone && after.seen && after.seen !== "oldmark", where + ": Got it hides it and keeps the new mark in the account (" + JSON.stringify(after) + ")");
+    await restart("");
+    await page.waitForTimeout(1500);
+    const quiet = await page.evaluate(() => ({ shown: !!document.querySelector("[data-af-builtin-moved]"), seen: window.__settings.builtInSeen }));
+    check(!quiet.shown && quiet.seen !== "oldmark", where + ": someone on the built-in text is not told, and is marked as told (" + JSON.stringify(quiet) + ")");
+    check(!errors.length, where + ": no page errors. " + errors.slice(0, 2).join(" | "));
+    await context.close();
+  }
+}
+
 if (section("switch rows")) {
   console.log("Rows under a switch open in place, over several frames");
   const { context, page } = await open(THEMES[0], SIZES[1]);

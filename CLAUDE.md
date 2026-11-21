@@ -102,6 +102,13 @@ Two skills are available. Load them before starting work.
   that check fail, then put `dist` back.
 - `test/host-calls.test.ts` needs a `try {` within 60 lines above every
   `spindle.x.y(` call. Keep comments above the `try`, not between it and the call.
+- The built-in prompt, notes, Decision questions and patterns carry a mark
+  worked out from their text (`builtInMark`). Changing that text tells every
+  user with their own version that it has changed, so do it on purpose.
+- Any other default that changes after it was released goes in
+  `MOVED_DEFAULTS`. A user still on the old one is then told, and can take
+  the new one. A setting added in the version being written has no old
+  value, so it is not listed.
 - `test/repo.test.ts` holds the checks on the whole repository: versions,
   permissions, docs links and the writing rules.
 

@@ -15,7 +15,7 @@
 - **A voice for someone the AI added.** The first time they speak, they get one of your connection's voices that nobody else in the cast uses.
 - **Sounds in the voice.** With Eleven v3 or v4, the Director can put a `[sound of ...]` tag inside a spoken line, and ElevenLabs performs the sound with the speech. Suggested by a Discord user.
 - **Sound effects and a sound library.** Separate sounds before or after a line, with every voice engine. A new sound is found on Freesound, which is free, or made by ElevenLabs, each with a key of your own saved in the Sounds tab. A sound from Freesound shows its credit, and **Find another** swaps it for the next result. Every new sound is saved, so the same sound is free the next time. Your own uploads are used first.
-- **The Decision model.** An optional Decision connection picks who says each quoted line, and checks which lines describe a sound.
+- **The Decision model.** An optional Decision connection picks who says each quoted line, and checks which lines describe a sound. **How sure it must be**, 50% by default, sets when an answer is used. The Log lists every answer, how sure it was, and whether it was used.
 - **The Stage tab.** Now playing shows who speaks and the line, word by word, with Back, Play, Next, Stop, a mark for each part of the message to tap, **Make this part again** and **Direct again**. A line read as written says why under it. A mixer for voices and sounds, and a Log.
 - **A button on each message** to perform it, and **Autoplay new replies**.
 - **Edited replies are directed again.** A reply changed after it was directed, such as one Auto Refine rewrote, is directed again, and one playing starts again with the new text. **Wait before autoplay** gives another extension time to change a reply first.
@@ -38,6 +38,8 @@
 - **Send the prompt as** system, user or assistant, and **the Decision model's questions** can be changed, with **Back to built-in**.
 - **Make it again.** **Make this part again** in Now playing makes a new take of the line or sound playing, and **Make it again** in the sound library replaces a made sound. Both ask first, since they cost credits.
 - **Warnings for refused permissions**, at the top of every tab, saying what each one stops.
+- **Notices when a built-in text or a default changes.** Someone with their own version of a built-in prompt, note, question or pattern is told when an update changes it. Someone on a default that changes is told, and can take it or keep theirs.
+- **Buttons that would change nothing say so.** **Back to built-in**, **Use defaults** and **Start again** say when something is already at its default, and ask nothing.
 - **Perform my latest message**, in the Extras menu.
 - **Tokens for each message**, in Now playing: how many the Director read and wrote, and the cost when the provider sends one.
 - **Send the notes as**, for the notes for each engine and the notes sent when asking again.

@@ -200,3 +200,25 @@ describe("the chat's title", () => {
     expect(looksLikeDate("Winter of 1999")).toBe(false);
   });
 });
+
+describe("defaults that change after a release", () => {
+  const { movedFor, movedRowMark, MOVED_DEFAULTS, markText } = __testing as any;
+  const row = { key: "keepAudio", was: 100, label: "Keep made audio", why: "the new default keeps more." };
+  test("only a reader still on the old value, who has not answered, is told", () => {
+    expect(movedFor({ keepAudio: 100 }, "", [row]).length).toBe(1);
+    expect(movedFor({ keepAudio: 250 }, "", [row]).length).toBe(0);
+    expect(movedFor({ keepAudio: 100 }, movedRowMark(row), [row]).length).toBe(0);
+  });
+  test("a row with another old value is told again", () => {
+    const later = Object.assign({}, row, { was: 250 });
+    expect(movedFor({ keepAudio: 250 }, movedRowMark(row), [row, later]).length).toBe(1);
+  });
+  test("marks are short and change with the text", () => {
+    expect(markText("abc")).toBe(markText("abc"));
+    expect(markText("abc")).not.toBe(markText("abd"));
+  });
+  test("every row names a real setting", () => {
+    for (const m of MOVED_DEFAULTS) expect(typeof m.label).toBe("string");
+  });
+});
+

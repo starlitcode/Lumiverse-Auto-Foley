@@ -167,6 +167,10 @@ interface Settings {
   keepAudio: number;
   // The kinds of Log line switched off, by kind. Every kind shows by default.
   logShow: Record<string, boolean>;
+  // What this account has been told about: a mark of the built-in prompt,
+  // notes and patterns it last saw, and the moved defaults it answered.
+  builtInSeen: string;
+  movedSeen: string;
   // Who the Director's prompt is sent as: system, user or assistant.
   promptRole: string;
   // Where the note for the engine goes: inside the rules, or as its own
@@ -225,6 +229,8 @@ const DEFAULT_SETTINGS: Settings = {
   engineNotes: {},
   keepAudio: 100,
   logShow: {},
+  builtInSeen: '',
+  movedSeen: '',
   promptRole: 'system',
   engineNoteRole: 'rules',
   askNoteRole: 'user',
@@ -528,6 +534,8 @@ function cleanSettings(raw: any): Settings {
     engines: cleanEngineChoices(r.engines),
     engineNotes: cleanEngineNotes(r.engineNotes),
     logShow: cleanLogShow(r.logShow),
+    builtInSeen: str(r.builtInSeen, 40).replace(/[^a-z0-9]/g, ''),
+    movedSeen: str(r.movedSeen, 2000).replace(/[^a-zA-Z0-9: ]/g, ''),
     promptRole: pick(r.promptRole, ['system', 'user', 'assistant'] as const, 'system'),
     engineNoteRole: pick(r.engineNoteRole, ['rules', 'system', 'user', 'assistant'] as const, 'rules'),
     askNoteRole: pick(r.askNoteRole, ['system', 'user', 'assistant'] as const, 'user'),
@@ -3516,11 +3524,14 @@ async function onPanel(p: any, userId: string | undefined) {
   try {
     switch (type) {
       case 'load': {
+        // fresh: nothing is saved for this account yet. A new install starts
+        // on every default as it is now, so no moved default is about it.
+        const fresh = !(await readJson(SETTINGS_FILE, userId));
         const settings = await loadSettings(userId);
         const sounds = await loadSounds(userId);
         const hasKey = await hasKeyFor(userId, KEY_NAME);
         const hasFsKey = await hasKeyFor(userId, FS_KEY_NAME);
-        answer({ type: 'state', settings, sounds, hasKey, hasFsKey, builtInPrompt: BUILT_IN_PROMPT, builtInNotes: ASK_NOTES, builtInEngineNotes: ENGINE_NOTES, builtInSkips: BUILT_IN_SKIPS, builtInQuestions: DECISION_QUESTIONS, version: VERSION, decisions: hasDecisions() });
+        answer({ type: 'state', settings, sounds, hasKey, hasFsKey, fresh, builtInPrompt: BUILT_IN_PROMPT, builtInNotes: ASK_NOTES, builtInEngineNotes: ENGINE_NOTES, builtInSkips: BUILT_IN_SKIPS, builtInQuestions: DECISION_QUESTIONS, version: VERSION, decisions: hasDecisions() });
         return;
       }
       case 'save': {
@@ -3815,7 +3826,7 @@ async function onPanel(p: any, userId: string | undefined) {
         const parts: string[] = Array.isArray(p.parts) ? p.parts.filter((x: any) => RESET_PARTS.indexOf(x) >= 0) : [];
         const s = await loadSettings(userId);
         const fresh = cleanSettings({});
-        const NOT = ['cast', 'groups', 'prompt', 'promptRole', 'engineNoteRole', 'askNoteRole', 'askNotes', 'engineNotes', 'decisionQuestions', 'exportParts', 'importParts', 'resetParts', 'guideSeen'];
+        const NOT = ['cast', 'groups', 'prompt', 'promptRole', 'engineNoteRole', 'askNoteRole', 'askNotes', 'engineNotes', 'decisionQuestions', 'exportParts', 'importParts', 'resetParts', 'guideSeen', 'builtInSeen', 'movedSeen'];
         const strip = (x: any) => {
           const o: any = {};
           for (const k of Object.keys(x).sort()) if (NOT.indexOf(k) < 0) o[k] = x[k];
@@ -3847,7 +3858,7 @@ async function onPanel(p: any, userId: string | undefined) {
         const s = await loadSettings(userId);
         const fresh = cleanSettings({});
         if (parts.indexOf('settings') >= 0) {
-          const keep = { cast: s.cast, groups: s.groups, prompt: s.prompt, promptRole: s.promptRole, engineNoteRole: s.engineNoteRole, askNoteRole: s.askNoteRole, askNotes: s.askNotes, engineNotes: s.engineNotes, decisionQuestions: s.decisionQuestions, exportParts: s.exportParts, importParts: s.importParts, resetParts: s.resetParts };
+          const keep = { cast: s.cast, groups: s.groups, prompt: s.prompt, promptRole: s.promptRole, engineNoteRole: s.engineNoteRole, askNoteRole: s.askNoteRole, askNotes: s.askNotes, engineNotes: s.engineNotes, decisionQuestions: s.decisionQuestions, exportParts: s.exportParts, importParts: s.importParts, resetParts: s.resetParts, builtInSeen: s.builtInSeen, movedSeen: s.movedSeen };
           Object.assign(s, fresh, keep);
         }
         if (parts.indexOf('prompt') >= 0) {
