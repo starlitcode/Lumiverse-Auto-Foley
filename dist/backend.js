@@ -2738,12 +2738,15 @@ async function cors(url, opts) {
 // One sound for a description: from the library when one fits, otherwise
 // made by ElevenLabs and added to the library, so the same sound is free the
 // next time.
-async function soundFor(userId, description) {
+// A sound for a description: from the library, or made with ElevenLabs. With
+// again set to a library id, a new take is made for that sound and replaces
+// it, keeping its name and trigger words.
+async function soundFor(userId, description, again) {
     const desc = cleanSound(description);
     if (!desc)
         return { error: 'No sound description.' };
     const list = await loadSounds(userId);
-    const hit = matchSound(list, desc);
+    const hit = again ? null : matchSound(list, desc);
     if (hit) {
         try {
             const bytes = await spindle.userStorage.readBinary('sounds/' + hit.id, userId);
@@ -2805,6 +2808,20 @@ async function soundFor(userId, description) {
     const bytes = fromBase64(b64);
     if (bytes.length < 64)
         return { error: 'ElevenLabs sent back an empty sound.' };
+    const old = again ? list.find((x) => x.id === again) : null;
+    if (old) {
+        try {
+            await spindle.userStorage.writeBinary('sounds/' + old.id, bytes, userId);
+            old.bytes = bytes.length;
+            old.mime = 'audio/mpeg';
+            old.added = Date.now();
+            await saveSounds(userId, list);
+        }
+        catch (e) {
+            return { error: 'The new take could not be saved: ' + String((e && e.message) || e).slice(0, 200) };
+        }
+        return { id: old.id, base64: b64, mime: old.mime, name: old.name, made: true };
+    }
     const entry = {
         id: 's' + newId(),
         name: desc,
@@ -2952,6 +2969,21 @@ async function onPanel(p, userId) {
                     answer({ type: 'sounds', sounds: await loadSounds(userId) });
                 return;
             }
+            case 'sound_again': {
+                // A new take of a made sound, for someone who does not like it.
+                const id = str(p.id, 64).replace(/[^a-z0-9_-]/gi, '');
+                const list = await loadSounds(userId);
+                // From the script, a sound is named by its description instead.
+                const e = id ? list.find((x) => x.id === id) : matchSound(list, cleanSound(p.description));
+                if (!e)
+                    return answer({ type: 'sound', error: 'That sound is no longer in the library.' });
+                if (e.source !== 'made')
+                    return answer({ type: 'sound', error: 'Only a sound made by ElevenLabs can be made again. Upload a new file for one of yours.' });
+                const got = await soundFor(userId, e.name, e.id);
+                answer(Object.assign({ type: 'sound' }, got));
+                answer({ type: 'sounds', sounds: await loadSounds(userId) });
+                return;
+            }
             case 'sound_play': {
                 const id = str(p.id, 64).replace(/[^a-z0-9_-]/gi, '');
                 const list = await loadSounds(userId);
@@ -3025,6 +3057,17 @@ async function onPanel(p, userId) {
                 const ok = await saveClips(userId, list);
                 await dropClips(userId, gone);
                 return answer({ type: 'clip_kept', ok });
+            }
+            case 'clip_drop': {
+                // One kept line is let go, so it is made again the next time.
+                const sig = str(p.sig, 40);
+                const list = await loadClips(userId);
+                const gone = list.filter((x) => x.sig === sig);
+                if (!gone.length)
+                    return answer({ type: 'clip_dropped', ok: true });
+                await dropClips(userId, gone);
+                const ok = await saveClips(userId, list.filter((x) => x.sig !== sig));
+                return answer({ type: 'clip_dropped', ok });
             }
             case 'clips_state': {
                 const list = await loadClips(userId);

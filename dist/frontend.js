@@ -765,9 +765,14 @@ textarea.af-tall { min-height: 260px; }
 .af-swatch-sound { background: var(--af-sound); }
 
 .af-script { display: flex; flex-direction: column; gap: 6px; max-height: 360px; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; padding-right: 2px; }
-.af-line { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 8px; align-items: start; padding: 8px; border: 1px solid transparent; border-radius: var(--af-r-sm); transition: background-color .6s ease, border-color .6s ease; }
+.af-line { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 8px; align-items: start; padding: 8px; border: 1px solid transparent; border-radius: var(--af-r-sm); transition: background-color .6s ease, border-color .6s ease; }
 .af-line[data-now="true"] { background: var(--af-accent-faint); border-color: var(--af-accent-soft); }
 .af-line[data-done="true"] { opacity: .72; }
+.af-line-again { display: grid; place-items: center; width: 32px; height: 32px; border: 1px solid transparent; border-radius: 8px; background: transparent; color: var(--af-muted); cursor: pointer; }
+.af-line-again svg { width: 15px; height: 15px; }
+@media (hover: hover) { .af-line-again:hover { background: var(--af-second); color: var(--af-text); } }
+.af-line-sound { display: inline-flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.af-line-sound .af-line-again { width: 32px; height: 32px; }
 .af-line-go { display: grid; place-items: center; width: 32px; height: 32px; border: 1px solid var(--af-line); border-radius: 8px; background: transparent; color: var(--af-muted); font: inherit; font-size: 11px; font-weight: 700; cursor: pointer; font-variant-numeric: tabular-nums; }
 @media (hover: hover) { .af-line-go:hover { background: var(--af-second); color: var(--af-text); } }
 .af-line-body { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
@@ -1457,7 +1462,9 @@ export function setup(ctx, overrides) {
         }
         return { blob: base64ToBlob(APPLAUSE_MP3, 'audio/mpeg') };
     }
-    async function makeVoiceClip(line, signal, onWait) {
+    // What is sent to speak a line, and the fingerprint its kept audio is
+    // found by. Someone the AI added gets a voice first.
+    async function voiceRequest(line) {
         const isNarr = line.kind === 'narration';
         const m = isNarr ? narratorMember() : memberFor(line.speaker);
         const conn = connOf(m);
@@ -1496,10 +1503,19 @@ export function setup(ctx, overrides) {
             body.voice = pick.voice;
         if (pick.model)
             body.model = pick.model;
+        const sig = fingerprint(JSON.stringify([conn.id, conn.model || '', conn.voice || '', body]));
+        return { body, sig, conn };
+    }
+    async function makeVoiceClip(line, signal, onWait) {
+        const req = await voiceRequest(line);
+        if (!req.body)
+            return { why: req.why };
+        const body = req.body;
+        const conn = req.conn;
         const who = serviceName(conn);
         // A line made before with everything the same is played from the audio
         // kept in the account, and nothing is spent.
-        const sig = S.keepAudio ? fingerprint(JSON.stringify([conn.id, conn.model || '', conn.voice || '', body])) : '';
+        const sig = S.keepAudio ? req.sig || '' : '';
         if (sig) {
             try {
                 // Kept short: a backend that does not answer must not hold up the line.
@@ -2577,6 +2593,7 @@ export function setup(ctx, overrides) {
                     drawer.root.appendChild(root);
                 readChat();
                 renderTab();
+                readGranted();
             }));
         }
     }
@@ -3199,6 +3216,8 @@ export function setup(ctx, overrides) {
             page.style.minHeight = page.offsetHeight + 'px';
         page.innerHTML = '';
         stageRefs = null;
+        for (const w of permissionWarnings())
+            page.appendChild(notice('bad', w));
         try {
             if (tab === 'stage')
                 renderStage();
@@ -4010,6 +4029,18 @@ export function setup(ctx, overrides) {
             stop();
             pressBar();
         });
+        extra('auto-foley-mine', 'Perform my latest message', on, async () => {
+            stop();
+            const id = await latestId(true);
+            if (id)
+                perform(id);
+            else {
+                phase = 'You have no message in this chat to perform.';
+                log(phase);
+                if (!drawerOpen())
+                    notify('info', 'Auto Foley found no message of yours in this chat to perform.');
+            }
+        });
         extra('auto-foley-stop', 'Stop Auto Foley', on && (!!show || !!busyMessage), () => {
             if (busyMessage)
                 busyMessage = '';
@@ -4182,14 +4213,19 @@ export function setup(ctx, overrides) {
         }
         for (const line of script.lines) {
             const who = line.kind === 'narration' ? 'Narrator' : line.speaker;
-            const soundBtn = (s) => (s ? '<button type="button" class="af-chip af-chip-sound" data-sound="' + esc(s) + '" title="Play this sound">' + ICON_SOUND + '<span>' + esc(s) + '</span></button>' : '');
+            const soundBtn = (s) => s
+                ? '<span class="af-line-sound"><button type="button" class="af-chip af-chip-sound" data-sound="' + esc(s) + '" title="Play this sound">' + ICON_SOUND + '<span>' + esc(s) + '</span></button>' +
+                    '<button type="button" class="af-line-again" data-sound-again="' + esc(s) + '" title="Make this sound again" aria-label="Make this sound again: ' + esc(s) + '">' + ICON_REDO + '</button></span>'
+                : '';
             const row = el('<div class="af-line" data-i="' + line.i + '"><button type="button" class="af-line-go" title="Play from this line" aria-label="Play from line ' + (line.i + 1) + '">' + (line.i + 1) + '</button>' +
                 '<div class="af-line-body"><div class="af-line-who" data-kind="' + esc(line.kind) + '">' + esc(who) + (line.big ? ' <span class="af-chip af-chip-tag">big moment</span>' : '') + '</div>' +
                 (line.before ? '<div>' + soundBtn(line.before) + '</div>' : '') +
                 '<div class="af-line-text">' + lineHtml(line.text) + '</div>' +
                 (line.after ? '<div>' + soundBtn(line.after) + '</div>' : '') +
                 (line.note ? '<div class="af-line-note">' + esc(line.note) + '</div>' : '') +
-                '</div></div>');
+                '</div><button type="button" class="af-line-again" data-line-again title="Make this line again" aria-label="Make line ' + (line.i + 1) + ' again">' + ICON_REDO + '</button></div>');
+            row.querySelector('[data-line-again]').addEventListener('click', () => lineAgain(script, line));
+            row.querySelectorAll('[data-sound-again]').forEach((b) => b.addEventListener('click', () => soundAgain(b.dataset.soundAgain || '', '')));
             row.querySelector('.af-line-go').addEventListener('click', () => {
                 if (script && lastMeta.messageId)
                     startShow(script, lastMeta, line.i);
@@ -4206,6 +4242,42 @@ export function setup(ctx, overrides) {
             });
             list.appendChild(row);
         }
+    }
+    // A new take of one line, for someone who does not like how it came out.
+    // The kept take is let go, and the line is spoken again on its own.
+    async function lineAgain(script, line) {
+        if (!(await askSure('Make line ' + (line.i + 1) + ' again', 'A new take of this line is made and played. It costs voice credits, the same as the first take.', 'Make it again')))
+            return;
+        const req = await voiceRequest(line);
+        if (!req.body) {
+            log(req.why || 'This line could not be made again.', 'bad');
+            return;
+        }
+        try {
+            await rpc({ type: 'clip_drop', sig: req.sig }, 15000);
+        }
+        catch (_) { }
+        log('Making line ' + (line.i + 1) + ' again.');
+        startShow(script, lastMeta, line.i, [{ kind: 'voice', line, at: line.i }]);
+    }
+    // A new take of a sound effect made by ElevenLabs. It replaces the old one
+    // in the library, so every message that uses it gets the new take.
+    async function soundAgain(description, id) {
+        if (!(await askSure('Make this sound again', 'A new take of “' + description + '” replaces the one in your library. It costs ElevenLabs credits.', 'Make it again')))
+            return;
+        log('Making the sound again: ' + description + '.');
+        try {
+            const got = await rpc(id ? { type: 'sound_again', id } : { type: 'sound_again', description }, 60000);
+            if (got && got.base64)
+                previewBlob(base64ToBlob(got.base64, got.mime), S.soundVolume);
+            else
+                log((got && got.error) || 'The sound could not be made again.', 'bad');
+        }
+        catch (e) {
+            log('The sound could not be made again: ' + String((e && e.message) || 'the backend did not answer.'), 'bad');
+        }
+        if (tab === 'sounds')
+            renderTab();
     }
     let preview = null;
     function previewBlob(blob, volume) {
@@ -5228,7 +5300,11 @@ export function setup(ctx, overrides) {
             '<div class="af-sound-main"><div class="af-sound-name"></div><div class="af-sound-meta">' + (s.source === 'upload' ? 'Yours' : 'Made by ElevenLabs') + ' · ' +
             Math.max(1, Math.round((s.bytes || 0) / 1024)) + ' KB · played ' + (s.uses || 0) + ' times</div>' +
             '<input type="text" class="af-field" placeholder="Trigger words, with commas"></div>' +
+            (s.source === 'upload' ? '' : '<button type="button" class="af-btn" data-again>Make it again</button>') +
             '<button type="button" class="af-btn af-danger">Delete</button></div>');
+        const again = r.querySelector('[data-again]');
+        if (again)
+            again.addEventListener('click', () => soundAgain(s.name, s.id));
         r.querySelector('.af-sound-name').textContent = s.name;
         const trig = r.querySelector('input');
         trig.setAttribute('aria-label', 'Trigger words for ' + s.name);
@@ -5257,6 +5333,8 @@ export function setup(ctx, overrides) {
             }
         });
         r.querySelector('.af-danger').addEventListener('click', async () => {
+            if (!(await askSure('Delete this sound', '“' + s.name + '” is deleted from your library. ' + (s.source === 'upload' ? 'Upload it again to get it back.' : 'If it is needed again, a new one is made, which costs ElevenLabs credits.'), 'Delete', true)))
+                return;
             try {
                 const res = await rpc({ type: 'sound_delete', id: s.id }, 15000);
                 if (res && Array.isArray(res.sounds))
@@ -5791,6 +5869,43 @@ export function setup(ctx, overrides) {
                 box.appendChild(notice('warn', 'This pattern is not used: ' + b + '.'));
         }, () => { });
     }
+    // ---- Permissions ----
+    // Which of Auto Foley's permissions Lumiverse has granted, read when the
+    // panel opens. A refused one that something switched on needs is said at
+    // the top of every tab, with what it stops.
+    let granted = null;
+    async function readGranted() {
+        let got = null;
+        try {
+            if (ctx.permissions && typeof ctx.permissions.getGranted === 'function')
+                got = await ctx.permissions.getGranted();
+        }
+        catch (_) {
+            got = null;
+        }
+        if (!Array.isArray(got))
+            return;
+        const was = JSON.stringify(granted);
+        granted = got.slice();
+        if (JSON.stringify(granted) !== was && alive)
+            renderTab();
+    }
+    function permissionWarnings() {
+        if (!granted || !S.enabled)
+            return [];
+        const has = (p) => granted.indexOf(p) >= 0;
+        const out = [];
+        const where = ' Grant it to Auto Foley in Lumiverse, under Extensions.';
+        if (S.directorOn && !has('generation'))
+            out.push('The Generation permission is refused, so the Director cannot be asked and messages are read as written.' + where);
+        if (S.decisionsOn && !has('decisions'))
+            out.push('The Decision models permission is refused, so the Decision model cannot be asked.' + where);
+        if (S.soundsOn && S.makeSounds && !has('cors_proxy'))
+            out.push('The CORS proxy permission is refused, so new sound effects cannot be made. Sounds already in your library still play.' + where);
+        if (S.widgetOn && !has('ui_panels'))
+            out.push('The UI panels permission is refused, so the floating player cannot be shown.' + where);
+        return out;
+    }
     // Asks before something is put back or deleted. Lumiverse's own dialog is
     // used, and the browser's when that is missing.
     async function askSure(title, message, confirmLabel, danger) {
@@ -5971,7 +6086,7 @@ export function setup(ctx, overrides) {
                 lines.push('permissions: not reported by this build');
             else {
                 lines.push('permissions:');
-                for (const p of ['generation', 'decisions', 'cors_proxy'])
+                for (const p of ['generation', 'decisions', 'cors_proxy', 'ui_panels'])
                     lines.push('  ' + p + ' = ' + (granted.indexOf(p) >= 0 ? 'granted' : 'MISSING'));
             }
             try {
