@@ -3,7 +3,7 @@
 ## In short
 
 - Auto Foley speaks through a TTS connection you made in Lumiverse. The key for it stays in Lumiverse.
-- Auto Foley works only with models that act. Five engines have them: ElevenLabs, Fish Audio, Gemini, Chatterbox and Qwen3-TTS.
+- Auto Foley works only with models that act. Four engines have them: ElevenLabs, Fish Audio, Gemini and Chatterbox.
 - Each engine reads acting directions its own way. Auto Foley tells the Director which engine it writes for.
 - Before a line is sent, it is fitted to the engine that speaks it. A tag the engine cannot read is taken out, so it is never read aloud.
 - A model that cannot act is not used. Auto Foley says which model to pick instead.
@@ -16,9 +16,8 @@
 | Fish Audio S2, S2.1 or Drama 3 | Any short tag | No | No | Yes, with `[singing]` |
 | Gemini 3.8 Flash TTS or Flash-Lite TTS | Only its own sound tags | Yes | No | Yes, with a note |
 | Chatterbox-Turbo | Only its nine sound tags | No | No | No |
-| Qwen3-TTS | No, it takes a note instead | Yes | No | Yes, with a note |
 
-These are not used, since they cannot act: ElevenLabs models older than v3, Fish Audio S1, Gemini models older than 3.8, Chatterbox-Multilingual, and every other TTS provider. A line for someone on one of them is not spoken. The Stage tab, the Cast tab and **Check my setup** say which model to pick instead.
+These are not used, since they cannot act: ElevenLabs models older than v3, Fish Audio S1, Gemini models older than 3.8, Chatterbox-Multilingual, Qwen3-TTS, and every other TTS provider. A line for someone on one of them is not spoken. The Stage tab, the Cast tab and **Check my setup** say which model to pick instead.
 
 "No" under **Sounds inside a line** means the engine cannot make the sound of a door or rain itself. Its sounds are played as separate sound effects instead. See [Sounds](sounds.md).
 
@@ -40,10 +39,9 @@ Each line goes to Lumiverse's own TTS route, with:
 - The person's voice and model on that connection.
 - For ElevenLabs: stability, similarity, style and speed from the Cast tab.
 - For Gemini 3.8: the line's note, as the speech style.
-- For Qwen3-TTS: the line's note, as the instruction.
-- For Fish Audio, Chatterbox and Qwen3-TTS: the speed, when it is not 1.
+- For Fish Audio and Chatterbox: the speed, when it is not 1.
 
-A line with no note uses the speech style or instruction saved on the connection in Lumiverse.
+A line with no note uses the speech style saved on the connection in Lumiverse.
 
 ## An example
 
@@ -61,7 +59,6 @@ Here is what each engine is sent for the quoted line:
 | Fish Audio S2 | `[exhales] [softly] Home at last.` | None |
 | Gemini 3.8 | `<exhales> Home at last.` | `worn out but warm` |
 | Chatterbox-Turbo | `Home at last.` | None |
-| Qwen3-TTS | `Home at last.` | `worn out but warm` |
 
 On Gemini and Chatterbox, the Director is given the engine's tag list, so it picks from it. The table shows what is left when it does not. `[softly]` is not a Gemini tag, and `[exhales]` is not one of Chatterbox's nine.
 
@@ -107,12 +104,6 @@ Chatterbox runs on your own computer, through a server such as Chatterbox-TTS-Se
 
 - Chatterbox-Turbo knows nine tags: `[clear throat]`, `[sigh]`, `[shush]`, `[cough]`, `[groan]`, `[sniff]`, `[gasp]`, `[chuckle]` and `[laugh]`. It reads English only.
 - Chatterbox-Multilingual takes no tags, so Auto Foley does not use it. A connection with "multilingual" in its name is taken to run it.
-
-### Qwen3-TTS
-
-- Add a TTS connection with the **Qwen3-TTS Server** provider in Lumiverse.
-- Qwen takes no tags. How a line is said goes in its note, sent as the instruction.
-- A cloned voice ignores the instruction. Only Qwen's built-in speakers follow it.
 
 ## When something cannot be done
 

@@ -38,8 +38,9 @@ const ELEVEN_MODELS: { id: string; label: string }[] = [
 // - tags "free": any short tag is kept.
 // - tags "list": only the tags the engine knows are kept, and are written in
 //   its own brackets.
-// - tags "none": every tag is taken out, or the voice reads it aloud. Only
-//   Qwen3-TTS, which takes a note on how each line is said instead.
+// - tags "none": every tag is taken out, or the voice reads it aloud. No
+//   engine Auto Foley uses is like this, but a person's line can still be
+//   fitted to one in a test.
 // style: the engine takes a few plain words on how a line is said, sent
 // beside the line rather than inside it.
 // inVoiceSounds: the engine can perform a [sound of ...] tag in the voice.
@@ -74,13 +75,12 @@ const ENGINE_LIST: Engine[] = [
   { id: 'fish', label: 'Fish Audio S2 or Drama 3', tags: 'free', list: [], wrap: '[]', style: false, inVoiceSounds: false, singTag: 'singing', singStyle: false, eleven: false, supported: true },
   { id: 'gemini', label: 'Gemini 3.8 TTS', tags: 'list', list: GEMINI_TAGS, wrap: '<>', style: true, inVoiceSounds: false, singTag: '', singStyle: true, eleven: false, supported: true },
   { id: 'chatterbox_turbo', label: 'Chatterbox-Turbo', tags: 'list', list: CHATTERBOX_TAGS, wrap: '[]', style: false, inVoiceSounds: false, singTag: '', singStyle: false, eleven: false, supported: true },
-  { id: 'qwen', label: 'Qwen3-TTS', tags: 'none', list: [], wrap: '[]', style: true, inVoiceSounds: false, singTag: '', singStyle: true, eleven: false, supported: true },
 ];
 // A model that cannot act.
 const NO_TAGS: Engine = { id: 'none', label: 'A model with no tags', tags: 'none', list: [], wrap: '[]', style: false, inVoiceSounds: false, singTag: '', singStyle: false, eleven: false, supported: false };
 // The providers Auto Foley lists. Chatterbox runs behind an OpenAI-style
 // connection.
-const USABLE_PROVIDERS = ['elevenlabs', 'fish_audio', 'google_tts', 'google_vertex_tts', 'qwen3_tts_server', 'openai_tts'];
+const USABLE_PROVIDERS = ['elevenlabs', 'fish_audio', 'google_tts', 'google_vertex_tts', 'openai_tts'];
 const ENGINES: Record<string, Engine> = {};
 for (const e of ENGINE_LIST) ENGINES[e.id] = e;
 
@@ -95,7 +95,6 @@ function engineOf(conn: any, model?: string, chosen?: string): Engine {
   if (provider === 'elevenlabs') return /^eleven_v(3|4)/.test(m) ? ENGINES.eleven_v3 : NO_TAGS;
   if (provider === 'fish_audio') return /^s1$/.test(m) ? NO_TAGS : ENGINES.fish;
   if (provider === 'google_tts' || provider === 'google_vertex_tts') return /gemini-3\.8-flash(-lite)?-tts/.test(m) ? ENGINES.gemini : NO_TAGS;
-  if (provider === 'qwen3_tts_server') return ENGINES.qwen;
   if (provider !== 'openai_tts') return NO_TAGS;
   if (chosen === 'chatterbox_turbo') return ENGINES.chatterbox_turbo;
   if (/chatterbox/.test(hay) && !/multilingual|\bmtl\b/.test(hay)) return ENGINES.chatterbox_turbo;
@@ -118,7 +117,7 @@ function noTagsWhy(conn: any, model?: string): string {
   if (provider === 'google_tts' || provider === 'google_vertex_tts') return what + (m || 'This Gemini model') + ' does not. Pick Gemini 3.8 Flash TTS or Gemini 3.8 Flash-Lite TTS.';
   if (provider === 'openai_tts' && /multilingual|\bmtl\b/.test(hay)) return what + 'Chatterbox-Multilingual does not. Run Chatterbox-Turbo on your server.';
   if (provider === 'openai_tts') return what + 'This connection is not a Chatterbox-Turbo server. If it is one, pick Chatterbox-Turbo under What this connection runs, in the Settings tab.';
-  return what + 'This connection is not one of them: ElevenLabs, Fish Audio, Gemini 3.8, Chatterbox-Turbo or Qwen3-TTS.';
+  return what + 'This connection is not one of them: ElevenLabs, Fish Audio, Gemini 3.8 or Chatterbox-Turbo.';
 }
 
 // Turns a tag into the vocal sound it names, so [laughs softly], [laughing]
@@ -245,10 +244,10 @@ function partTimes(weights: number[], voiced: boolean[], duration: number): numb
 // What an engine can do, in one short line for the panel.
 function engineAbility(e: Engine): string {
   if (!e.supported) return 'It does not act out tags, so Auto Foley cannot use it.';
-  const tags = e.tags === 'free' ? 'yes' : e.tags === 'list' ? 'only its own ' + e.list.length + ' sound tags' : 'no, it takes a note on how each line is said instead';
+  const tags = e.tags === 'free' ? 'yes' : e.tags === 'list' ? 'only its own ' + e.list.length + ' sound tags' : 'no';
   return (
     'Voice tags: ' + tags + '. ' +
-    (e.style && e.tags !== 'none' ? 'Notes on how a line is said: yes. ' : '') +
+    (e.style ? 'Notes on how a line is said: yes. ' : '') +
     'Sounds inside a line: ' + (e.inVoiceSounds ? 'yes' : 'no') + '. ' +
     'Singing: ' + (e.singTag || e.singStyle ? 'yes' : 'no, sung lines are spoken') + '.'
   );
@@ -399,13 +398,18 @@ async function readTrouble(res: Response, what: string, who = 'the voice service
   return wrap(what + ' failed (' + res.status + ').' + tail);
 }
 
+// Whether a chat's title is the date and time Lumiverse gives a new chat, in
+// any language's format: a year and a time of day.
+function looksLikeDate(t: string): boolean {
+  return /\b(19|20)\d{2}\b/.test(t) && /\b\d{1,2}[:.]\d{2}([:.]\d{2})?\b/.test(t);
+}
+
 // A name for the service a connection speaks through, for messages.
 function serviceName(conn: any): string {
   const p = String((conn && conn.provider) || '').toLowerCase();
   if (p === 'elevenlabs') return 'ElevenLabs';
   if (p === 'fish_audio') return 'Fish Audio';
   if (p === 'google_tts' || p === 'google_vertex_tts') return 'Gemini';
-  if (p === 'qwen3_tts_server') return 'your Qwen3-TTS server';
   const hay = [conn && conn.model, conn && conn.name, conn && conn.api_url].map((x) => String(x || '').toLowerCase()).join(' ');
   if (/chatterbox/.test(hay)) return 'your Chatterbox server';
   return 'the voice service';
@@ -534,6 +538,11 @@ const ICON_STOP = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="tru
 const ICON_SKIP = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6 6.5v11a1 1 0 0 0 1.55.83L15 13.2V17a1 1 0 0 0 2 0V7a1 1 0 0 0-2 0v3.8L7.55 5.67A1 1 0 0 0 6 6.5Z"/></svg>';
 const ICON_REDO = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/></svg>';
 const ICON_SOUND = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 5 6 9H3v6h3l5 4V5Z"/><path d="M15.5 9.5a4 4 0 0 1 0 5"/></svg>';
+const ICON_BACK = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M18 6.5v11a1 1 0 0 1-1.55.83L9 13.2V17a1 1 0 0 1-2 0V7a1 1 0 0 1 2 0v3.8l7.45-5.13A1 1 0 0 1 18 6.5Z"/></svg>';
+const ICON_MORE = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="6" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="18" cy="12" r="1.8"/></svg>';
+const ICON_DOWN = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>';
+const ICON_MIC = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21"/></svg>';
+const ICON_MIC_OFF = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 9.5V6a3 3 0 0 0-5.7-1.3M9 9v2a3 3 0 0 0 4.7 2.5"/><path d="M5.5 11a6.5 6.5 0 0 0 10.6 5M18.5 11a6.4 6.4 0 0 1-.6 2.7M12 17.5V21M4 4l16 16"/></svg>';
 const ICON_CHEVRON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>';
 
 // ---------------------------------------------------------------------------
@@ -760,7 +769,7 @@ textarea.af-tall { min-height: 260px; }
 .af-play:focus-visible, .af-round:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--af-accent-soft), 0 0 8px 0 var(--af-accent-soft); }
 .af-now-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1 1 140px; }
 .af-now-title { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.af-now-sub { color: var(--af-muted); font-size: 12px; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.af-now-sub { color: var(--af-muted); font-size: 12px; line-height: 1.4; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; min-height: 2.8em; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .af-progress { height: 4px; border-radius: 999px; background: var(--af-fill); overflow: hidden; }
 .af-progress > div { height: 100%; width: 0; background: var(--af-accent); transition: width .3s linear; }
 .af-scene { display: flex; flex-wrap: wrap; gap: 6px; }
@@ -772,7 +781,7 @@ textarea.af-tall { min-height: 260px; }
 .af-swatch { width: 8px; height: 8px; border-radius: 50%; background: var(--af-accent); flex: none; }
 .af-swatch-sound { background: var(--af-sound); }
 
-.af-script { display: flex; flex-direction: column; gap: 6px; }
+.af-script { display: flex; flex-direction: column; gap: 6px; max-height: 360px; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; padding-right: 2px; }
 .af-line { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 8px; align-items: start; padding: 8px; border: 1px solid transparent; border-radius: var(--af-r-sm); transition: background-color .6s ease, border-color .6s ease; }
 .af-line[data-now="true"] { background: var(--af-accent-faint); border-color: var(--af-accent-soft); }
 .af-line[data-done="true"] { opacity: .72; }
@@ -1196,7 +1205,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       ttsConnections = all.filter((c: any) => c && c.id && USABLE_PROVIDERS.indexOf(String(c.provider || '').toLowerCase()) >= 0);
       ttsWhy = ttsConnections.length
         ? ''
-        : 'You have no TTS connection Auto Foley can use. Add one for ElevenLabs, Fish Audio, Gemini, Qwen3-TTS or a Chatterbox-Turbo server in Lumiverse, under Connections, in the TTS section.';
+        : 'You have no TTS connection Auto Foley can use. Add one for ElevenLabs, Fish Audio, Gemini or a Chatterbox-Turbo server in Lumiverse, under Connections, in the TTS section.';
     } catch (e) {
       ttsWhy = netTrouble(e, 'Reading your TTS connections');
       ttsConnections = [];
@@ -1337,7 +1346,7 @@ export function setup(ctx: Ctx, overrides?: any) {
   // character or a group. Read from the chat itself, since a temporary chat
   // carries temporary in its metadata.
   type ChatKind = 'none' | 'temporary' | 'chat' | 'unknown';
-  let chatInfo: { id: string; kind: ChatKind; name: string } = { id: '', kind: 'none', name: '' };
+  let chatInfo: { id: string; kind: ChatKind; name: string; title?: string; group?: boolean } = { id: '', kind: 'none', name: '' };
   let chatAsk = 0;
   async function readChat(): Promise<void> {
     const id = activeChatId();
@@ -1358,15 +1367,27 @@ export function setup(ctx: Ctx, overrides?: any) {
       } else {
         const c = await res.json();
         const meta = (c && c.metadata) || {};
-        let name = String((c && c.name) || '').trim();
-        if (!name && c && c.character_id) {
+        // Lumiverse titles a new chat with the date and time it was made.
+        // That title says nothing about who the chat is with, so the
+        // character's name is shown, and the title only when it was changed.
+        const title = String((c && c.name) || '').trim();
+        const own = title && !looksLikeDate(title) ? title : '';
+        const group = meta.group === true || meta.group === 1;
+        const ids: string[] = group && Array.isArray(meta.character_ids) ? meta.character_ids.filter((x: any) => typeof x === 'string' && x) : c && c.character_id ? [String(c.character_id)] : [];
+        const names: string[] = [];
+        for (const cid of ids.slice(0, 3)) {
           try {
-            const cr = await api('/characters/' + encodeURIComponent(c.character_id));
-            if (cr.ok) name = String(((await cr.json()) || {}).name || '');
+            const cr = await api('/characters/' + encodeURIComponent(cid));
+            if (cr.ok) {
+              const n = String(((await cr.json()) || {}).name || '').trim();
+              if (n) names.push(n);
+            }
           } catch (_) {}
         }
         if (ask !== chatAsk) return;
-        chatInfo = { id, kind: meta.temporary === true ? 'temporary' : 'chat', name };
+        const more = ids.length - names.length;
+        const who = names.length ? names.join(names.length === 2 && !more ? ' and ' : ', ') + (more > 0 ? ' and ' + more + ' more' : '') : '';
+        chatInfo = { id, kind: meta.temporary === true ? 'temporary' : 'chat', name: who, title: own, group };
       }
     } catch (_) {
       if (ask !== chatAsk) return;
@@ -1414,6 +1435,8 @@ export function setup(ctx: Ctx, overrides?: any) {
     failed: number[];
     // The voiced 20 ms frames of each voice clip, by part, for the words.
     voiced: Map<number, boolean[]>;
+    // Set by Back, so the loop plays the part it was moved to.
+    jumped?: boolean;
   }
   let show: Show | null = null;
   // The parts of the last message that could not be played, for Try the
@@ -1524,12 +1547,9 @@ export function setup(ctx: Ctx, overrides?: any) {
     } else if (speed !== 1 && provider !== 'google_tts' && provider !== 'google_vertex_tts') {
       params.speed = speed;
     }
-    // Gemini takes it as speech_style and Qwen as instruct. With nothing to
-    // say, the connection's own setting is used.
-    if (style) {
-      if (provider === 'qwen3_tts_server') params.instruct = style;
-      else params.speech_style = style;
-    }
+    // Gemini takes it as its speech style. With nothing to say, the
+    // connection's own speech style is used.
+    if (style) params.speech_style = style;
     const body: any = { connectionId: conn.id, text, parameters: params };
     if (pick.voice) body.voice = pick.voice;
     if (pick.model) body.model = pick.model;
@@ -1754,6 +1774,10 @@ export function setup(ctx: Ctx, overrides?: any) {
       // The cheer is not saved with the message: it is the audience, not
       // the performance.
       if (how === 'ended' && sh.items[at].kind !== 'applause') sh.played.push({ blob: got.blob });
+      if (sh.jumped) {
+        sh.jumped = false;
+        continue;
+      }
       if (sh.index === at) sh.index++;
     }
     if (show === sh) {
@@ -1870,6 +1894,17 @@ export function setup(ctx: Ctx, overrides?: any) {
     }
     paintStage();
     paintButtons();
+  }
+
+  // Back one line, or to the start of this one when it has played a while.
+  function back() {
+    if (!show) return;
+    const t = audio ? Number(audio.currentTime) || 0 : 0;
+    const to = t > 1.5 ? show.index : Math.max(0, show.index - 1);
+    show.index = to;
+    show.jumped = true;
+    paused = false;
+    stopAudio();
   }
 
   function skip() {
@@ -2488,7 +2523,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       shortName: 'Foley',
       headerTitle: 'Auto Foley',
       description: 'Voice acting and sound effects for your TTS',
-      keywords: ['tts', 'voice', 'elevenlabs', 'fish audio', 'gemini', 'chatterbox', 'qwen', 'sound effects', 'audio', 'foley', 'speech', 'narrator'],
+      keywords: ['tts', 'voice', 'elevenlabs', 'fish audio', 'gemini', 'chatterbox', 'sound effects', 'audio', 'foley', 'speech', 'narrator'],
       iconSvg: ICON,
     });
     drawer.root.appendChild(root);
@@ -2606,8 +2641,10 @@ export function setup(ctx: Ctx, overrides?: any) {
           : k === 'unknown'
             ? 'Reading which chat this is…'
             : chatInfo.name
-              ? 'Chat with ' + chatInfo.name + '.'
-              : 'A chat is open.';
+              ? (chatInfo.group ? 'Group chat with ' : 'Chat with ') + chatInfo.name + (chatInfo.title ? ': ' + chatInfo.title : '') + '.'
+              : chatInfo.title
+                ? 'Chat: ' + chatInfo.title + '.'
+                : 'A chat is open.';
   }
 
   // ---- the "?" beside a setting ----
@@ -3102,6 +3139,12 @@ export function setup(ctx: Ctx, overrides?: any) {
     if (!alive) return;
     paintHead();
     hideHint();
+    // A redraw keeps the reader's place: the page holds its height while it
+    // is rebuilt, and the scroll is put back after.
+    const box = root.isConnected ? scrollBoxOf(root) : null;
+    const was = box ? box.scrollTop : 0;
+    const held = page.style.minHeight;
+    if (!held) page.style.minHeight = page.offsetHeight + 'px';
     page.innerHTML = '';
     stageRefs = null;
     try {
@@ -3113,6 +3156,8 @@ export function setup(ctx: Ctx, overrides?: any) {
     } catch (e: any) {
       page.appendChild(notice('bad', 'This tab could not be drawn: ' + String((e && e.message) || e)));
     }
+    if (!held) page.style.minHeight = '';
+    if (box && box.scrollTop !== was) box.scrollTop = was;
   }
 
   // ---------- The look: a pattern behind the panel ----------
@@ -3152,21 +3197,94 @@ export function setup(ctx: Ctx, overrides?: any) {
     '.af-stick{position:sticky;top:0;z-index:4}' +
     '.af-stick .af-tabs{-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px);transition:box-shadow .18s ease}' +
     '.af-stick.af-stuck .af-tabs{box-shadow:var(--lumiverse-shadow-md,0 8px 24px rgba(0,0,0,.4))}' +
-    // The floating button, the same as Auto Refine's: round, drawn in the
-    // theme, with a ring that fills while it is held.
+    // The floating player. Closed, it is a round button with a ring that
+    // fills as a message plays. Open, it is a small card: who is speaking and
+    // the line they are saying, a strip with every part of the message, the
+    // transport, the two volumes, four switches, and who is voiced.
     '.af-float{position:relative;width:100%;height:100%;aspect-ratio:1;display:flex;align-items:center;justify-content:center;padding:0;cursor:pointer;border-radius:50%;' +
     'border:1px solid var(--lumiverse-border-hover,rgba(147,112,219,.25));background-color:var(--lumiverse-card-bg-solid,rgb(24,20,34));' +
     'background-image:linear-gradient(var(--lumiverse-bg-elevated,rgba(35,30,48,.9)),var(--lumiverse-bg-elevated,rgba(35,30,48,.9)));color:var(--lumiverse-text,rgba(255,255,255,.9));' +
-    'box-shadow:var(--lumiverse-shadow-md,0 8px 24px rgba(0,0,0,.4));transition:border-color 260ms cubic-bezier(.2,.7,.3,1),box-shadow 260ms cubic-bezier(.2,.7,.3,1),transform 260ms cubic-bezier(.2,.7,.3,1)}' +
+    'box-shadow:var(--lumiverse-shadow-md,0 8px 24px rgba(0,0,0,.4));transition:border-color 260ms cubic-bezier(.2,.7,.3,1),transform 260ms cubic-bezier(.2,.7,.3,1)}' +
     '.af-float:hover{border-color:var(--lumiverse-primary-050,rgba(147,112,219,.5))}' +
-    '.af-float[data-af-on="true"]{border-color:var(--lumiverse-primary-050,rgba(147,112,219,.5));background-image:linear-gradient(var(--lumiverse-primary-020,rgba(147,112,219,.2)),var(--lumiverse-primary-020,rgba(147,112,219,.2))),linear-gradient(var(--lumiverse-bg-elevated,rgba(35,30,48,.9)),var(--lumiverse-bg-elevated,rgba(35,30,48,.9)))}' +
     '.af-float .af-glyph{display:flex;line-height:0}.af-float .af-glyph svg{width:46%;height:46%;min-width:16px;min-height:16px}' +
-    '.af-float .af-hold{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;transform:rotate(-90deg);opacity:0;color:var(--lumiverse-primary,rgba(147,112,219,.9));transition:opacity 200ms ease-out}' +
-    '.af-float .af-hold circle{stroke-dasharray:295.3;stroke-dashoffset:295.3;transition:stroke-dashoffset 160ms ease-out}' +
-    '.af-float[data-af-holding] .af-hold{opacity:1;transition:opacity 90ms linear 150ms}' +
-    '.af-float[data-af-holding] .af-hold circle{stroke-dashoffset:0;transition:stroke-dashoffset 430ms linear}' +
+    '.af-float[data-af-on="true"] .af-glyph{color:var(--lumiverse-primary-text,var(--lumiverse-primary,#a78bfa))}' +
+    '.af-float .af-ring{position:absolute;inset:-1px;width:calc(100% + 2px);height:calc(100% + 2px);pointer-events:none;transform:rotate(-90deg);color:var(--lumiverse-primary,#a78bfa)}' +
+    '.af-float .af-ring circle{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-dasharray:289;stroke-dashoffset:289;transition:stroke-dashoffset .4s ease-out}' +
     '@media (prefers-reduced-motion: no-preference){html:not([data-af-still]) .af-float:active{transform:scale(.94)}}' +
-    '@media (prefers-reduced-motion: reduce){.af-float,.af-float .af-hold{transition:none}}' +
+    '@media (prefers-reduced-motion: reduce){.af-float,.af-float .af-ring circle{transition:none}}' +
+    'html[data-af-still] .af-float .af-ring circle{transition:none}' +
+    '.af-pl{--pa:var(--lumiverse-primary,#a78bfa);--pa-text:var(--lumiverse-primary-text,var(--pa));--pa-on:var(--lumiverse-primary-contrast,#17122a);' +
+    '--pa-soft:var(--lumiverse-primary-015,rgba(147,112,219,.15));--pa-line:var(--lumiverse-primary-050,rgba(147,112,219,.5));--pw:var(--lumiverse-warning,#f59e0b);' +
+    '--pt:var(--lumiverse-text,rgba(255,255,255,.92));--pm:var(--lumiverse-text-muted,rgba(255,255,255,.65));--pl:var(--lumiverse-border,rgba(255,255,255,.08));' +
+    '--ph:var(--lumiverse-border-hover,rgba(255,255,255,.18));--pf:var(--lumiverse-fill-subtle,rgba(255,255,255,.03));' +
+    'box-sizing:border-box;width:100%;display:flex;flex-direction:column;gap:10px;padding:12px;overflow:hidden;color:var(--pt);font:13px/1.4 var(--lumiverse-font-family,system-ui,sans-serif);' +
+    'border:1px solid var(--ph);border-radius:var(--lumiverse-radius-lg,16px);background-color:var(--lumiverse-card-bg-solid,#1a1526);' +
+    'background-image:radial-gradient(120% 70% at 100% 0,var(--pa-soft),transparent 60%),linear-gradient(var(--lumiverse-bg-elevated,#1f1a2e),var(--lumiverse-bg-elevated,#1f1a2e));' +
+    'box-shadow:var(--lumiverse-shadow-lg,0 18px 48px rgba(0,0,0,.5));animation:af-pl-in .2s ease-out both}' +
+    '@keyframes af-pl-in{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}' +
+    '.af-pl *{box-sizing:border-box}' +
+    '.af-pl button{appearance:none;-webkit-appearance:none;border:0;background:transparent;color:inherit;font:inherit;padding:0;margin:0;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;transition:background-color .15s,color .15s,box-shadow .15s}' +
+    '.af-pl button svg{width:16px;height:16px;display:block}' +
+    '@media (hover:hover){.af-pl button:not(:disabled):hover{background-color:var(--lumiverse-bg-hover,rgba(255,255,255,.07))}}' +
+    '.af-pl button:disabled{opacity:.35;cursor:default}' +
+    '.af-pl button:focus-visible,.af-pl input:focus-visible{outline:2px solid var(--pa);outline-offset:2px}' +
+    '.af-pl-top{display:flex;align-items:center;gap:10px;min-width:0;cursor:grab;user-select:none;-webkit-user-select:none}' +
+    '.af-pl-face{width:38px;height:38px;border-radius:50%;display:grid;place-items:center;flex-shrink:0;font-size:13px;font-weight:700;letter-spacing:.02em;' +
+    'background:var(--pa-soft);color:var(--pa-text);box-shadow:inset 0 0 0 1.5px var(--pa-line)}' +
+    '.af-pl-face svg{width:18px;height:18px}' +
+    '.af-pl[data-af-state="playing"] .af-pl-face{box-shadow:inset 0 0 0 2px var(--pa)}' +
+    '.af-pl-id{min-width:0;flex:1}' +
+    '.af-pl-id b{display:block;font-size:14px;font-weight:650;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}' +
+    '.af-pl-id small{display:block;font-size:11px;color:var(--pm);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}' +
+    '.af-pl-icon{width:32px;height:32px;border-radius:50%;color:var(--pm)}' +
+    '.af-pl-said{min-height:40px;padding:8px 10px;border-radius:10px;background:var(--pf);border:1px solid var(--pl);font-size:12.5px;line-height:1.45;color:var(--pt);' +
+    'display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;overflow-wrap:anywhere}' +
+    '.af-pl-said[data-quiet]{color:var(--pm)}' +
+    '.af-pl-strip{display:flex;align-items:center;gap:2px;width:100%;height:32px;padding:0 1px}' +
+    '.af-pl-strip button{flex:1 1 0;min-width:3px;height:32px;padding:13px 0!important;border-radius:0!important;background:transparent!important}' +
+    '.af-pl-strip button i{display:block;width:100%;height:6px;border-radius:3px;background:var(--ph)}' +
+    '.af-pl-strip button[data-k="sound"] i,.af-pl-strip button[data-k="applause"] i{background:color-mix(in srgb,var(--pw) 35%,transparent)}' +
+    '.af-pl-strip button[data-done] i{background:var(--pa-line)}' +
+    '.af-pl-strip button[data-k="sound"][data-done] i,.af-pl-strip button[data-k="applause"][data-done] i{background:color-mix(in srgb,var(--pw) 70%,transparent)}' +
+    '.af-pl-strip button[aria-current="true"] i{background:var(--pa);height:10px;border-radius:5px}' +
+    '.af-pl-strip:empty{display:none}' +
+    '.af-pl-tr{display:flex;align-items:center;justify-content:center;gap:14px}' +
+    '.af-pl-tr button{width:36px;height:36px;border-radius:50%;color:var(--pt)}' +
+    '.af-pl-tr .af-pl-play{width:52px;height:52px;color:var(--pa-on);background:var(--pa)!important;box-shadow:0 0 0 5px var(--pa-soft)}' +
+    '.af-pl-tr .af-pl-play svg{width:22px;height:22px}' +
+    '.af-pl-tr .af-pl-stop{color:var(--pm)}' +
+    '.af-pl-whose{display:flex;justify-content:center;gap:4px}' +
+    '.af-pl-whose button{min-height:28px;padding:0 10px;border-radius:999px;font-size:11.5px;color:var(--pm);box-shadow:inset 0 0 0 1px var(--pl)}' +
+    '.af-pl-whose button[aria-pressed="true"]{color:var(--pt);background:var(--pa-soft);box-shadow:inset 0 0 0 1px var(--pa-line)}' +
+    '.af-pl-mix{display:grid;grid-template-columns:1fr 1fr;gap:10px}' +
+    '.af-pl-mix label{display:flex;flex-direction:column;gap:2px;font-size:10.5px;color:var(--pm);min-width:0}' +
+    '.af-pl-mix label>span{display:flex;justify-content:space-between;gap:4px}' +
+    '.af-pl input[type=range].af-pl-range{-webkit-appearance:none;appearance:none;width:100%;min-width:0;height:24px;margin:0;padding:0;border:0;background:transparent;cursor:pointer;--lv:0%;' +
+    '--trk:linear-gradient(to right,var(--pa) 0%,var(--pa) var(--lv),var(--ph) var(--lv),var(--ph) 100%)}' +
+    '.af-pl input[type=range].af-pl-range::-webkit-slider-runnable-track{height:4px;border-radius:3px;background:var(--trk)}' +
+    '.af-pl input[type=range].af-pl-range::-moz-range-track{height:4px;border-radius:3px;background:var(--trk)}' +
+    '.af-pl input[type=range].af-pl-range::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:14px;height:14px;margin-top:-5px;border-radius:50%;border:2px solid var(--lumiverse-bg-elevated,#1f1a2e);background:var(--pa)}' +
+    '.af-pl input[type=range].af-pl-range::-moz-range-thumb{width:14px;height:14px;border-radius:50%;border:2px solid var(--lumiverse-bg-elevated,#1f1a2e);background:var(--pa)}' +
+    '.af-pl-sw{display:grid;grid-template-columns:1fr 1fr;gap:4px 10px}' +
+    '.af-pl-sw button{justify-content:space-between!important;gap:6px;min-height:32px;padding:0 2px!important;border-radius:8px;font-size:12px;color:var(--pt)}' +
+    '.af-pl-sw button b{position:relative;width:30px;height:18px;border-radius:999px;background:var(--ph);transition:background-color .2s}' +
+    '.af-pl-sw button b::after{content:"";position:absolute;top:3px;left:3px;width:12px;height:12px;border-radius:50%;background:var(--pt);transition:transform .25s cubic-bezier(.3,1.4,.5,1)}' +
+    '.af-pl-sw button[aria-pressed="true"] b{background:var(--pa)}' +
+    '.af-pl-sw button[aria-pressed="true"] b::after{transform:translateX(12px);background:var(--pa-on)}' +
+    '.af-pl-fold{display:flex;align-items:center;gap:6px;width:100%;min-height:32px;padding:0 2px!important;font-size:12px;color:var(--pm);justify-content:flex-start!important;border-top:1px solid var(--pl)!important;border-radius:0!important}' +
+    '.af-pl-fold svg{width:14px!important;height:14px!important;margin-left:auto;transition:transform .2s}' +
+    '.af-pl-fold[aria-expanded="true"] svg{transform:rotate(180deg)}' +
+    '.af-pl-cast{display:flex;flex-direction:column;gap:2px;max-height:210px;overflow:auto;overscroll-behavior:contain;scrollbar-width:thin;margin-top:-6px}' +
+    '.af-pl-ch{display:flex;align-items:center;gap:8px;padding:2px 4px;border-radius:8px;min-width:0}' +
+    '.af-pl-ch[aria-current="true"]{background:var(--pa-soft)}' +
+    '.af-pl-ch em{width:24px;height:24px;border-radius:50%;display:grid;place-items:center;font-style:normal;font-size:10px;font-weight:700;background:var(--pf);box-shadow:inset 0 0 0 1px var(--ph);flex-shrink:0}' +
+    '.af-pl-ch>span{flex:1;min-width:0;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}' +
+    '.af-pl-ch[data-off="true"]>span{color:var(--pm)}' +
+    '.af-pl-ch button{width:32px;height:32px;border-radius:50%;color:var(--pm)}' +
+    '.af-pl-ch button[aria-pressed="true"]{color:var(--pa-text)}' +
+    '@media (pointer:coarse){.af-pl-icon,.af-pl-tr button{min-width:40px;min-height:40px}.af-pl-tr .af-pl-play{width:56px;height:56px}.af-pl-whose button,.af-pl-sw button,.af-pl-fold{min-height:36px}.af-pl-ch button{width:36px;height:36px}}' +
+    '@media (prefers-reduced-motion: reduce){.af-pl{animation:none}.af-pl button,.af-pl-fold svg,.af-pl-sw button b,.af-pl-sw button b::after{transition:none}}' +
+    'html[data-af-still] .af-pl{animation:none}html[data-af-still] .af-pl-sw button b,html[data-af-still] .af-pl-sw button b::after{transition:none}' +
     // The subtitles on the Stage.
     '.af-theater{display:flex;flex-direction:column;gap:8px;min-height:112px;padding:14px;border-radius:var(--lumiverse-radius-md,10px);' +
     'border:1px solid var(--lumiverse-border,rgba(147,112,219,.12));background:var(--lumiverse-fill,rgba(0,0,0,.15))}' +
@@ -3253,100 +3371,422 @@ export function setup(ctx: Ctx, overrides?: any) {
     });
   }
 
-  // ---------- The floating button ----------
-  // A round button over the chat, the same as Auto Refine's. A tap performs
-  // the newest reply, or stops what is playing. A press and hold, or a right
-  // click, opens a menu. Lumiverse does the dragging, and the place it is left
-  // in is kept in this browser, since it belongs to this screen.
+  // ---------- The floating player ----------
+  // Closed, a round button over the chat. A tap opens the player: who is
+  // speaking, Play and the buttons around it, the volume, quick switches, and
+  // a level for each voice. Lumiverse does the dragging. Where it is left, and
+  // whether it is open, are kept in this browser, since they belong to this
+  // screen.
   const FLOAT_KEY = 'lv-auto-foley:float:v1';
-  const HOLD_MS = 500;
-  const HOLD_SLOP = 10;
+  const PLAYER_W = 300;
   let widget: any = null;
+  let floatBox: HTMLElement | null = null;
   let floatBtn: HTMLButtonElement | null = null;
   let widgetFailed = false;
   let widgetOff: (() => void) | null = null;
-  let widgetSettle: any = null;
   let widgetSize = 0;
+  let playerOpen = false;
+  let playerWhose: 'reply' | 'mine' = 'reply';
+  let levelsOpen = false;
+  let playerSeen: ResizeObserver | null = null;
 
-  function floatAt(): { x: number; y: number } | null {
+  function floatAt(): { x: number; y: number; open?: boolean; levels?: boolean } | null {
     try {
       const raw = localStorage.getItem(FLOAT_KEY);
       const j = raw ? JSON.parse(raw) : null;
-      if (j && Number.isFinite(j.x) && Number.isFinite(j.y)) return { x: j.x, y: j.y };
+      if (j && Number.isFinite(j.x) && Number.isFinite(j.y)) return j;
     } catch (_) {}
     return null;
+  }
+
+  function keepFloat() {
+    try {
+      const at = widget && typeof widget.getPosition === 'function' ? widget.getPosition() : null;
+      const was = floatAt() || { x: 16, y: 160 };
+      localStorage.setItem(FLOAT_KEY, JSON.stringify({ x: Math.round(at ? at.x : was.x), y: Math.round(at ? at.y : was.y), open: playerOpen, levels: levelsOpen }));
+    } catch (_) {}
   }
 
   function dropWidget() {
     if (widgetOff) widgetOff();
     widgetOff = null;
-    if (widgetSettle) clearTimeout(widgetSettle);
-    widgetSettle = null;
+    if (playerSeen) playerSeen.disconnect();
+    playerSeen = null;
     try {
       if (widget) widget.destroy();
     } catch (_) {}
     widget = null;
+    floatBox = null;
     floatBtn = null;
   }
 
-  function paintFloat() {
-    if (!floatBtn) return;
-    const on = !!show || !!busyMessage;
-    floatBtn.dataset.afOn = on ? 'true' : 'false';
-    const said = on ? 'Stop Auto Foley' : 'Perform the latest reply with Auto Foley';
-    floatBtn.title = said + '. Hold for more.';
-    floatBtn.setAttribute('aria-label', said);
-    const glyph = floatBtn.querySelector('.af-glyph') as HTMLElement;
-    const want = on && !paused ? 'stop' : 'mic';
-    if (glyph && glyph.dataset.icon !== want) {
-      glyph.dataset.icon = want;
-      glyph.innerHTML = want === 'stop' ? ICON_STOP : ICON;
+  // The size the widget takes: the round button, or the card at its height.
+  function fitWidget() {
+    if (!widget || !floatBox) return;
+    const d = widgetSize;
+    // Lumiverse's UI Scale zooms the page, so the screen is this many CSS
+    // pixels wide and tall.
+    let zoom = 1;
+    try {
+      zoom = parseFloat(getComputedStyle(document.documentElement).zoom) || 1;
+    } catch (_) {}
+    const vw = (window.innerWidth || 360) / zoom;
+    const vh = (window.innerHeight || 640) / zoom;
+    let w = d;
+    let h = d;
+    if (playerOpen) {
+      const card = floatBox.querySelector('.af-pl') as HTMLElement | null;
+      w = Math.min(PLAYER_W, vw - 16);
+      // One pixel spare, so a height with a fraction in it does not scroll.
+      h = Math.min(vh - 16, Math.ceil(card ? card.offsetHeight : 320) + 1);
+    }
+    try {
+      widget.setSize(w, h);
+      if (typeof widget.getPosition === 'function' && typeof widget.moveTo === 'function') {
+        const at = widget.getPosition();
+        const x = Math.max(8, Math.min(at.x, vw - w - 8));
+        const y = Math.max(8, Math.min(at.y, vh - h - 8));
+        if (x !== at.x || y !== at.y) widget.moveTo(x, y);
+      }
+    } catch (_) {}
+  }
+
+  function openPlayer(open: boolean) {
+    playerOpen = open;
+    keepFloat();
+    drawFloat();
+  }
+
+  async function latestId(mine: boolean): Promise<string> {
+    const chatId = activeChatId();
+    if (!chatId) return '';
+    try {
+      const res = await api('/chats/' + encodeURIComponent(chatId) + '/messages?tail=true&limit=20');
+      if (!res.ok) return '';
+      const j = await res.json();
+      const list = Array.isArray(j && j.data) ? j.data : [];
+      for (let k = list.length - 1; k >= 0; k--) if (list[k] && !!list[k].is_user === mine) return String(list[k].id);
+    } catch (_) {}
+    return '';
+  }
+
+  // Play in the player: pause or go on when something plays, or perform the
+  // latest reply, or your latest message, when nothing does.
+  async function playerPlay() {
+    if (show) return togglePause();
+    if (busyMessage) return;
+    const id = await latestId(playerWhose === 'mine');
+    if (id) perform(id);
+    else {
+      phase = playerWhose === 'mine' ? 'You have no message in this chat to perform.' : 'There is no reply in this chat to perform.';
+      log(phase);
+      paintFloat();
     }
   }
 
-  async function widgetMenu() {
+  async function playerPrepare() {
+    const id = await latestId(playerWhose === 'mine');
+    if (!id) return;
+    phase = 'Directing it ahead';
+    paintFloat();
+    const got = await getScript(activeChatId(), id, false);
+    phase = got.script ? 'Ready. Press Play.' : got.why || '';
+    if (got.why) log(got.why, 'bad');
+    paintFloat();
+  }
+
+  async function playerMenu(anchor: HTMLElement) {
     if (!ctx.ui || typeof ctx.ui.showContextMenu !== 'function') return;
     let x = 40;
     let y = 40;
     try {
-      const r = floatBtn ? floatBtn.getBoundingClientRect() : null;
-      if (r) {
-        x = Math.round(r.left + r.width / 2);
-        y = Math.round(r.bottom);
-      }
+      const r = anchor.getBoundingClientRect();
+      x = Math.round(r.left + r.width / 2);
+      y = Math.round(r.bottom);
     } catch (_) {}
-    const items: any[] = [];
-    if (show || busyMessage) items.push({ key: 'stop', label: 'Stop' });
-    if (show) items.push({ key: 'pause', label: paused ? 'Play' : 'Pause' });
-    items.push({ key: 'latest', label: 'Perform the latest reply' });
-    items.push({ key: 'divider1', label: '', type: 'divider' });
-    items.push({ key: 'autoplay', label: S.autoplay ? 'Turn Autoplay off' : 'Turn Autoplay on' });
-    items.push({ key: 'open', label: 'Open the Auto Foley tab' });
+    const busy = !!show || !!busyMessage;
     let got: any = null;
     try {
-      got = await ctx.ui.showContextMenu({ position: { x, y }, items });
+      got = await ctx.ui.showContextMenu({
+        position: { x, y },
+        items: [
+          { key: 'prep', label: playerWhose === 'mine' ? 'Direct my latest message ahead' : 'Direct the latest reply ahead', disabled: busy || chatInfo.kind === 'none' },
+          { key: 'divider1', label: '', type: 'divider' },
+          { key: 'open', label: 'Open the Auto Foley tab' },
+          { key: 'hide', label: 'Hide the player' },
+        ],
+      });
     } catch (e: any) {
-      log('The floating button’s menu could not open: ' + String((e && e.message) || e), 'bad');
+      log('The player’s menu could not open: ' + String((e && e.message) || e), 'bad');
       return;
     }
     const key = got && got.selectedKey;
-    if (key === 'stop') {
-      if (busyMessage) busyMessage = '';
-      stop('Stopped');
-    } else if (key === 'pause') togglePause();
-    else if (key === 'latest') {
-      stop();
-      pressBar();
-    } else if (key === 'autoplay') {
-      set({ autoplay: !S.autoplay });
-      // The panel may be closed, so the change is said where it can be seen.
-      notify('info', S.autoplay ? 'Auto Foley Autoplay is on. New replies play as they finish.' : 'Auto Foley Autoplay is off.');
-      if (tab === 'settings') renderTab();
-    } else if (key === 'open') {
+    if (key === 'prep') playerPrepare();
+    else if (key === 'open') {
       try {
         if (drawer) drawer.activate();
       } catch (_) {}
+    } else if (key === 'hide') {
+      set({ widgetOn: false });
+      syncWidget();
+      // Nothing on screen says where it went, so it is said here.
+      notify('info', 'The Auto Foley player is hidden. Turn it on again in the Settings tab, under Look.');
+      if (tab === 'settings') renderTab();
     }
+  }
+
+  // Moves the show to part k, from the strip.
+  function jumpTo(k: number) {
+    if (!show || k < 0 || k >= show.items.length) return;
+    show.index = k;
+    show.jumped = true;
+    paused = false;
+    stopAudio();
+  }
+
+  const initialsOf = (name: string) =>
+    String(name || '')
+      .split(/\s+/)
+      .map((w) => w.charAt(0))
+      .join('')
+      .slice(0, 2)
+      .toUpperCase() || '?';
+
+  function drawFloat() {
+    if (!floatBox) return;
+    floatBox.innerHTML = '';
+    floatBtn = null;
+    if (!playerOpen) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'af-float';
+      b.innerHTML =
+        '<span class="af-glyph">' + ICON + '</span>' +
+        '<svg class="af-ring" viewBox="0 0 100 100" aria-hidden="true" focusable="false"><circle cx="50" cy="50" r="46"/></svg>';
+      b.addEventListener('click', (e: any) => {
+        e.preventDefault();
+        e.stopPropagation();
+        openPlayer(true);
+      });
+      floatBtn = b;
+      floatBox.appendChild(b);
+      paintFloat();
+      fitWidget();
+      return;
+    }
+    const SWITCHES: { key: string; label: string; title: string }[] = [
+      { key: 'autoplay', label: 'Autoplay', title: 'Perform each new reply when it finishes' },
+      { key: 'soundsOn', label: 'Sounds', title: 'Sounds of what happens in the scene' },
+      { key: 'narrate', label: 'Narrator', title: 'Read the text outside quotes aloud' },
+      { key: 'applauseOn', label: 'Applause', title: 'A cheer at the end of a message or a big moment' },
+    ];
+    const c = el(
+      '<div class="af-pl" role="group" aria-label="Auto Foley player">' +
+        '<div class="af-pl-top"><span class="af-pl-face" data-p="face"></span><div class="af-pl-id"><b data-p="who"></b><small data-p="sub"></small></div>' +
+        '<button type="button" class="af-pl-icon" data-p="menu" aria-label="More" title="More">' + ICON_MORE + '</button>' +
+        '<button type="button" class="af-pl-icon" data-p="close" aria-label="Close the player" title="Close the player">' + ICON_DOWN + '</button></div>' +
+        '<div class="af-pl-said" data-p="said" aria-live="polite"></div>' +
+        '<div class="af-pl-strip" data-p="strip" role="group" aria-label="The parts of the message"></div>' +
+        '<div class="af-pl-tr">' +
+          '<button type="button" data-p="back" aria-label="Back one line" title="Back one line">' + ICON_BACK + '</button>' +
+          '<button type="button" class="af-pl-play" data-p="play" aria-label="Play">' + ICON_PLAY + '</button>' +
+          '<button type="button" data-p="next" aria-label="Next line" title="Next line">' + ICON_SKIP + '</button>' +
+          '<button type="button" class="af-pl-stop" data-p="stop" aria-label="Stop" title="Stop">' + ICON_STOP + '</button>' +
+        '</div>' +
+        '<div class="af-pl-whose" role="group" aria-label="What Play performs"><button type="button" data-w="reply">Latest reply</button><button type="button" data-w="mine">My latest message</button></div>' +
+        '<div class="af-pl-mix">' +
+          '<label><span>Voices<b data-p="vv"></b></span><input type="range" class="af-pl-range" data-p="vol" min="0" max="100" step="5" aria-label="Voices volume"></label>' +
+          '<label><span>Sounds<b data-p="sv"></b></span><input type="range" class="af-pl-range" data-p="svol" min="0" max="100" step="5" aria-label="Sounds volume"></label>' +
+        '</div>' +
+        '<div class="af-pl-sw" role="group" aria-label="Quick switches">' +
+          SWITCHES.map((w) => '<button type="button" data-sw="' + w.key + '" title="' + esc(w.title) + '"><span>' + esc(w.label) + '</span><b aria-hidden="true"></b></button>').join('') +
+        '</div>' +
+        '<button type="button" class="af-pl-fold" data-p="fold" aria-expanded="false">Who is voiced' + ICON_DOWN + '</button>' +
+        '<div class="af-pl-cast" data-p="cast" hidden></div>' +
+      '</div>',
+    );
+    const q = (k: string) => c.querySelector('[data-p="' + k + '"]') as HTMLElement;
+    q('close').addEventListener('click', () => openPlayer(false));
+    q('menu').addEventListener('click', () => playerMenu(q('menu')));
+    c.querySelectorAll('[data-w]').forEach((b) =>
+      b.addEventListener('click', () => {
+        playerWhose = (b as HTMLElement).dataset.w === 'mine' ? 'mine' : 'reply';
+        paintFloat();
+      }),
+    );
+    q('play').addEventListener('click', () => playerPlay());
+    q('back').addEventListener('click', () => back());
+    q('next').addEventListener('click', () => skip());
+    q('stop').addEventListener('click', () => {
+      if (busyMessage) busyMessage = '';
+      stop('Stopped');
+    });
+    const vol = q('vol') as HTMLInputElement;
+    vol.value = String(Math.round((Number(S.voiceVolume) || 0) * 100));
+    vol.addEventListener('input', () => {
+      S.voiceVolume = Number(vol.value) / 100;
+      if (audio && audio.dataset && audio.dataset.kind === 'voice') audio.volume = muted.voice ? 0 : S.voiceVolume;
+      paintFloat();
+    });
+    vol.addEventListener('change', () => set({ voiceVolume: Number(vol.value) / 100 }));
+    const svol = q('svol') as HTMLInputElement;
+    svol.value = String(Math.round((Number(S.soundVolume) || 0) * 100));
+    svol.addEventListener('input', () => {
+      S.soundVolume = Number(svol.value) / 100;
+      paintFloat();
+    });
+    svol.addEventListener('change', () => set({ soundVolume: Number(svol.value) / 100 }));
+    c.querySelectorAll('[data-sw]').forEach((b) =>
+      b.addEventListener('click', () => {
+        const k = (b as HTMLElement).dataset.sw as string;
+        if (k === 'narrate') set({ narration: S.narration === 'read' ? 'skip' : 'read' });
+        else set({ [k]: !S[k] });
+        paintFloat();
+        if (tab === 'settings' || tab === 'director') renderTab();
+      }),
+    );
+    q('strip').addEventListener('click', (e: any) => {
+      const b = e.target && e.target.closest ? e.target.closest('[data-at]') : null;
+      if (b) jumpTo(Number(b.dataset.at));
+    });
+    q('fold').addEventListener('click', () => {
+      levelsOpen = !levelsOpen;
+      keepFloat();
+      paintLevels();
+      fitWidget();
+    });
+    floatBox.appendChild(c);
+    paintLevels();
+    paintFloat();
+    fitWidget();
+  }
+
+  // Who is voiced: a switch for each person in the cast, the same as Do not
+  // voice in the Cast tab.
+  function paintLevels() {
+    if (!floatBox) return;
+    const fold = floatBox.querySelector('[data-p="fold"]') as HTMLElement | null;
+    const box = floatBox.querySelector('[data-p="cast"]') as HTMLElement | null;
+    if (!fold || !box) return;
+    fold.setAttribute('aria-expanded', levelsOpen ? 'true' : 'false');
+    box.hidden = !levelsOpen;
+    if (!levelsOpen) return;
+    box.innerHTML = '';
+    const order: Record<string, number> = { narrator: 0, persona: 1, character: 2, npc: 3 };
+    const people = (S.cast as Member[]).slice().sort((a, b) => (order[a.kind] ?? 9) - (order[b.kind] ?? 9));
+    for (const m of people) {
+      const ch = el('<div class="af-pl-ch" data-person="' + esc(m.id) + '"><em>' + esc(initialsOf(m.name)) + '</em><span></span><button type="button"></button></div>');
+      (ch.querySelector('span') as HTMLElement).textContent = m.name;
+      const b = ch.querySelector('button') as HTMLButtonElement;
+      const paintB = () => {
+        ch.dataset.off = m.muted ? 'true' : 'false';
+        b.innerHTML = m.muted ? ICON_MIC_OFF : ICON_MIC;
+        b.setAttribute('aria-pressed', m.muted ? 'false' : 'true');
+        const said = m.muted ? 'Voice ' + m.name + ' again' : 'Do not voice ' + m.name;
+        b.setAttribute('aria-label', said);
+        b.title = said;
+      };
+      paintB();
+      b.addEventListener('click', () => {
+        m.muted = !m.muted;
+        save();
+        paintB();
+        if (tab === 'cast') renderTab();
+      });
+      box.appendChild(ch);
+    }
+    paintFloat();
+  }
+
+  // What the player shows now. Called whenever the show changes.
+  let stripFor: Show | null = null;
+  function paintFloat() {
+    if (!floatBox) return;
+    const on = !!show || !!busyMessage;
+    const state = show ? (paused ? 'paused' : 'playing') : busyMessage ? 'working' : 'idle';
+    const total = show ? show.items.length : 0;
+    const frac = show && total ? Math.min(1, show.index / total) : 0;
+    if (floatBtn) {
+      floatBtn.dataset.afOn = on ? 'true' : 'false';
+      const said = on ? 'Auto Foley is playing. Open the player' : 'Open the Auto Foley player';
+      floatBtn.title = said;
+      floatBtn.setAttribute('aria-label', said);
+      const ring = floatBtn.querySelector('.af-ring circle') as SVGElement | null;
+      if (ring) ring.style.strokeDashoffset = String(Math.round(289 * (1 - (on ? Math.max(frac, 0.02) : 0))));
+    }
+    const c = floatBox.querySelector('.af-pl') as HTMLElement | null;
+    if (!c) return;
+    c.dataset.afState = state;
+    const q = (k: string) => c.querySelector('[data-p="' + k + '"]') as HTMLElement;
+    const it = show ? show.items[Math.min(show.index, show.items.length - 1)] : null;
+    const line = it ? it.line : null;
+    const who = !it ? null : it.kind === 'voice' && line ? (line.kind === 'narration' ? narratorMember() : memberFor(line.speaker)) : null;
+    const name = !it ? '' : it.kind === 'voice' ? (line && line.kind === 'narration' ? 'Narrator' : (line && line.speaker) || '') : it.kind === 'applause' ? 'The audience' : 'A sound';
+    const face = q('face');
+    const faceKey = it ? (it.kind === 'voice' ? 'v:' + name : it.kind) : 'idle';
+    if (face.dataset.k !== faceKey) {
+      face.dataset.k = faceKey;
+      face.innerHTML = it && it.kind === 'voice' ? esc(initialsOf(name)) : it ? ICON_SOUND : ICON;
+    }
+    q('who').textContent = name || (busyMessage ? 'Directing the message' : 'Auto Foley');
+    const chat = chatInfo.kind === 'none' ? 'No chat open' : chatInfo.name || 'This chat';
+    q('sub').textContent = show ? (paused ? 'Paused' : 'Part ' + (Math.min(show.index, total - 1) + 1) + ' of ' + total) + ' · ' + chat : chat;
+    const said = q('said');
+    const words = it && it.kind === 'voice' && line ? stripTags(line.text) : it && it.sound ? it.sound : '';
+    const text = words || (busyMessage ? 'The Director is reading it.' : phase && !/^(Stopped|Finished)$/.test(phase) ? phase : playerWhose === 'mine' ? 'Press Play to perform your latest message.' : 'Press Play to perform the latest reply.');
+    if (said.textContent !== text) said.textContent = text;
+    if (words) said.removeAttribute('data-quiet');
+    else said.setAttribute('data-quiet', '');
+    // The strip has one mark for each part. It is drawn again only for a new
+    // show, and its marks are updated as the show moves.
+    const strip = q('strip');
+    if (stripFor !== show || strip.childElementCount !== total) {
+      stripFor = show;
+      strip.innerHTML = show
+        ? show.items
+            .map(
+              (x, k) =>
+                '<button type="button" data-at="' + k + '" data-k="' + x.kind + '" aria-label="Part ' + (k + 1) +
+                (x.kind === 'voice' ? ', ' + esc(x.line.kind === 'narration' ? 'Narrator' : x.line.speaker) : x.kind === 'applause' ? ', the audience' : ', a sound') +
+                '"><i></i></button>',
+            )
+            .join('')
+        : '';
+    }
+    const sh = show;
+    if (sh)
+      strip.querySelectorAll('[data-at]').forEach((b) => {
+        const k = Number((b as HTMLElement).dataset.at);
+        if (k < sh.index) b.setAttribute('data-done', '');
+        else b.removeAttribute('data-done');
+        if (k === sh.index) b.setAttribute('aria-current', 'true');
+        else b.removeAttribute('aria-current');
+      });
+    c.querySelectorAll('[data-w]').forEach((b) => b.setAttribute('aria-pressed', (b as HTMLElement).dataset.w === playerWhose ? 'true' : 'false'));
+    const play = q('play');
+    const playing = !!show && !paused;
+    play.innerHTML = playing ? ICON_PAUSE : ICON_PLAY;
+    play.setAttribute('aria-label', playing ? 'Pause' : show ? 'Go on' : playerWhose === 'mine' ? 'Play my latest message' : 'Play the latest reply');
+    play.title = play.getAttribute('aria-label') || '';
+    (play as HTMLButtonElement).disabled = !show && (!!busyMessage || chatInfo.kind === 'none');
+    (q('back') as HTMLButtonElement).disabled = !show;
+    (q('next') as HTMLButtonElement).disabled = !show;
+    (q('stop') as HTMLButtonElement).disabled = !on;
+    for (const [k, b] of [['vol', 'vv'], ['svol', 'sv']]) {
+      const r = q(k) as HTMLInputElement;
+      r.style.setProperty('--lv', r.value + '%');
+      q(b).textContent = r.value + '%';
+    }
+    c.querySelectorAll('[data-sw]').forEach((b) => {
+      const k = (b as HTMLElement).dataset.sw as string;
+      const isOn = k === 'narrate' ? S.narration === 'read' : !!S[k];
+      b.setAttribute('aria-pressed', isOn ? 'true' : 'false');
+    });
+    c.querySelectorAll('.af-pl-ch').forEach((ch) => {
+      const now = !!who && (ch as HTMLElement).dataset.person === who.id;
+      if (now) ch.setAttribute('aria-current', 'true');
+      else ch.removeAttribute('aria-current');
+    });
   }
 
   function raiseWidget() {
@@ -3355,92 +3795,45 @@ export function setup(ctx: Ctx, overrides?: any) {
     const vw = window.innerWidth || 360;
     const vh = window.innerHeight || 640;
     const at = floatAt();
+    playerOpen = !!(at && at.open);
+    levelsOpen = !!(at && at.levels);
     const start = at ? { x: Math.max(8, Math.min(at.x, vw - d - 8)), y: Math.max(8, Math.min(at.y, vh - d - 8)) } : { x: 16, y: Math.max(16, Math.min(160, vh - d - 8)) };
     try {
-      widget = ctx.ui.createFloatWidget({ width: d, height: d, initialPosition: start, snapToEdge: true, tooltip: 'Auto Foley', chromeless: true });
+      widget = ctx.ui.createFloatWidget({ width: d, height: d, initialPosition: start, snapToEdge: false, tooltip: 'Auto Foley', chromeless: true });
     } catch (_) {
       widget = null;
       widgetFailed = true;
-      log('The floating button could not be added. Check that Auto Foley has the ui_panels permission, in Lumiverse under Extensions.', 'bad');
+      log('The floating player could not be added. Check that Auto Foley has the ui_panels permission, in Lumiverse under Extensions.', 'bad');
       return;
     }
     widgetFailed = false;
     widgetSize = d;
     try {
       const wroot = widget.root as HTMLElement;
-      wroot.style.cssText = 'width:100%;height:100%;display:flex;align-items:center;justify-content:center';
-      const b = document.createElement('button');
-      b.type = 'button';
-      b.className = 'af-float';
-      b.innerHTML = '<span class="af-glyph"></span><svg class="af-hold" viewBox="0 0 100 100" aria-hidden="true" focusable="false"><circle cx="50" cy="50" r="47" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" vector-effect="non-scaling-stroke"/></svg>';
-      floatBtn = b;
-      paintFloat();
-      // The disarm listens on the window, since Lumiverse captures the pointer
-      // to drag the widget and the button's own pointerup never arrives. A
-      // move of more than a few pixels is a drag, not a hold.
-      let held: any = null;
-      let downAt: { x: number; y: number } | null = null;
-      let menuOpened = false;
-      const disarm = () => {
-        if (held) clearTimeout(held);
-        held = null;
-        downAt = null;
-        b.removeAttribute('data-af-holding');
-      };
-      const onMove = (e: any) => {
-        if (!downAt || !held) return;
-        if (Math.abs((e.clientX || 0) - downAt.x) > HOLD_SLOP || Math.abs((e.clientY || 0) - downAt.y) > HOLD_SLOP) disarm();
-      };
-      const onUp = () => {
-        disarm();
-        if (widgetSettle) clearTimeout(widgetSettle);
-        // Read after the button snaps to the nearest edge.
-        widgetSettle = setTimeout(() => {
-          widgetSettle = null;
-          try {
-            const r = (widget.root as HTMLElement).getBoundingClientRect();
-            if (r.width) localStorage.setItem(FLOAT_KEY, JSON.stringify({ x: Math.round(r.left), y: Math.round(r.top) }));
-          } catch (_) {}
-        }, 400);
-      };
-      window.addEventListener('pointerup', onUp, true);
-      window.addEventListener('pointercancel', onUp, true);
-      window.addEventListener('pointermove', onMove, true);
+      // Only the size is set. The root's other styles are Lumiverse's.
+      wroot.style.width = '100%';
+      wroot.style.height = '100%';
+      const box = document.createElement('div');
+      box.style.cssText = 'width:100%;display:flex;align-items:flex-start;justify-content:center';
+      wroot.appendChild(box);
+      floatBox = box;
+      drawFloat();
+      // The card's height changes as the levels open, so the widget follows.
+      try {
+        playerSeen = new ResizeObserver(() => {
+          if (playerOpen) fitWidget();
+        });
+        playerSeen.observe(box);
+      } catch (_) {
+        playerSeen = null;
+      }
+      const onDrop = () => setTimeout(keepFloat, 50);
+      window.addEventListener('spindle:float-drag-end', onDrop);
+      window.addEventListener('pointerup', onDrop, true);
       widgetOff = () => {
-        window.removeEventListener('pointerup', onUp, true);
-        window.removeEventListener('pointercancel', onUp, true);
-        window.removeEventListener('pointermove', onMove, true);
-        disarm();
+        window.removeEventListener('spindle:float-drag-end', onDrop);
+        window.removeEventListener('pointerup', onDrop, true);
       };
-      b.addEventListener('pointerdown', (e: any) => {
-        menuOpened = false;
-        downAt = { x: e.clientX || 0, y: e.clientY || 0 };
-        if (held) clearTimeout(held);
-        b.setAttribute('data-af-holding', '');
-        held = setTimeout(() => {
-          held = null;
-          menuOpened = true;
-          b.removeAttribute('data-af-holding');
-          widgetMenu();
-        }, HOLD_MS);
-      });
-      b.addEventListener('click', (e: any) => {
-        disarm();
-        if (menuOpened) {
-          menuOpened = false;
-          return;
-        }
-        e.preventDefault();
-        e.stopPropagation();
-        pressBar();
-      });
-      b.addEventListener('contextmenu', (e: any) => {
-        e.preventDefault();
-        disarm();
-        menuOpened = true;
-        widgetMenu();
-      });
-      wroot.appendChild(b);
     } catch (_) {}
   }
 
@@ -3555,14 +3948,14 @@ export function setup(ctx: Ctx, overrides?: any) {
       c.appendChild(under);
     }
     c.appendChild(
-      toggle('A floating button', 'Off by default. A round button over the chat. Tap it to perform the newest reply, or to stop. Hold it, or right-click it, for the menu. Drag it to move it. It needs the ui_panels permission.', 'widgetOn', () => syncWidget(), () => [
+      toggle('A floating player', 'Off by default. A round button over the chat that opens a small player: Play, the lines, the volume and quick switches. Drag it to move it. It needs the UI panels permission.', 'widgetOn', () => syncWidget(), () => [
         slider('How big it is', Number(S.widgetSize) || 44, 28, 96, 2, (v) => v + ' px', (v) => {
           set({ widgetSize: v });
           syncWidget();
         }, 'How wide the button is, in pixels. 44 by default, about a comfortable thumb.'),
       ]),
     );
-    if (S.widgetOn && widgetFailed) c.appendChild(notice('warn', 'The floating button could not be added. Check that Auto Foley has the ui_panels permission, in Lumiverse under Extensions.'));
+    if (S.widgetOn && widgetFailed) c.appendChild(notice('warn', 'The floating player could not be added. Check that Auto Foley has the UI panels permission, in Lumiverse under Extensions.'));
     return c;
   }
 
@@ -3744,6 +4137,8 @@ export function setup(ctx: Ctx, overrides?: any) {
   }
 
   function paintStage() {
+    // The floating player follows the show too, with the panel closed.
+    paintFloat();
     if (!stageRefs || tab !== 'stage') return;
     const q = stageRefs.q;
     const playBtn = q('play') as HTMLButtonElement;
@@ -3801,11 +4196,20 @@ export function setup(ctx: Ctx, overrides?: any) {
       if ((row.dataset.now === 'true') !== isNow) row.dataset.now = isNow ? 'true' : 'false';
       const done = !!show && itemIndex >= 0 && i < lineIndex;
       if ((row.dataset.done === 'true') !== done) row.dataset.done = done ? 'true' : 'false';
+      // Only the script's own box scrolls to the line. The drawer is left
+      // where it is, so the rest of the tab does not move under the reader.
       if (isNow && followed !== i && S.followScript && drawerOpen()) {
         followed = i;
-        try {
-          row.scrollIntoView({ block: 'nearest', behavior: calm() ? 'auto' : 'smooth' });
-        } catch (_) {}
+        const box = stageRefs.list as HTMLElement;
+        const top = row.offsetTop - box.offsetTop;
+        const want = top < box.scrollTop ? top : top + row.offsetHeight > box.scrollTop + box.clientHeight ? top + row.offsetHeight - box.clientHeight : box.scrollTop;
+        if (want !== box.scrollTop) {
+          try {
+            box.scrollTo({ top: want, behavior: calm() ? 'auto' : 'smooth' });
+          } catch (_) {
+            box.scrollTop = want;
+          }
+        }
       }
     });
     if (lineIndex < 0) followed = -1;
@@ -3875,6 +4279,14 @@ export function setup(ctx: Ctx, overrides?: any) {
       }
     }
     lineBox.innerHTML = html;
+    // The box keeps the tallest line of this message, so a short line after a
+    // long one does not pull the rest of the tab up.
+    const th = q('theater') as HTMLElement;
+    const h = th.offsetHeight;
+    if (h > (stageRefs.theaterTall || 0)) {
+      stageRefs.theaterTall = h;
+      th.style.minHeight = h + 'px';
+    }
     stageRefs.weights = weights;
     stageRefs.timed = '';
   }
@@ -4666,7 +5078,7 @@ export function setup(ctx: Ctx, overrides?: any) {
   // ---------- Settings ----------
   let setupChecked = 0;
   function renderSettings() {
-    const a = card('Auto Foley', 'Auto Foley speaks through a TTS connection in Lumiverse, so the key for it stays in Lumiverse. It works with models that act: ElevenLabs, Fish Audio, Gemini 3.8, Chatterbox-Turbo and Qwen3-TTS.');
+    const a = card('Auto Foley', 'Auto Foley speaks through a TTS connection in Lumiverse, so the key for it stays in Lumiverse. It works with models that act: ElevenLabs, Fish Audio, Gemini 3.8 and Chatterbox-Turbo.');
     a.appendChild(toggle('Auto Foley is on', 'On by default. Off: no buttons on messages, nothing plays, and nothing is sent anywhere.', 'enabled', () => {
       if (!S.enabled) stop();
       syncSlots();
@@ -4847,10 +5259,6 @@ export function setup(ctx: Ctx, overrides?: any) {
 
     page.appendChild(transferCard());
     page.appendChild(debugCard());
-
-    const about = card('About');
-    about.appendChild(hint('Auto Foley ' + VERSION + '. Made for adults. <a href="https://github.com/starlitcode/Lumiverse-Auto-Foley#readme" target="_blank" rel="noopener">Help on GitHub</a>.'));
-    page.appendChild(about);
   }
 
   // ---------- Your whole setup ----------
@@ -4860,7 +5268,7 @@ export function setup(ctx: Ctx, overrides?: any) {
   // the other half of the same subject.
   const TRANSFER: { id: string; label: string }[] = [
     { id: 'settings', label: 'Settings' },
-    { id: 'prompt', label: 'The Director’s prompt' },
+    { id: 'prompt', label: 'The Director’s prompt and notes' },
     { id: 'cast', label: 'The cast and their voices' },
   ];
   const RESETS: { id: string; label: string }[] = TRANSFER.concat([
@@ -5449,7 +5857,7 @@ export function setup(ctx: Ctx, overrides?: any) {
   };
 }
 
-export const __testing = { voicedFrames, wordWeight, partTimes, engineOf, fitTag, tagSound, textFor, styleFor, stripTags, stabilityFor, lineHtml, ENGINES };
+export const __testing = { looksLikeDate, voicedFrames, wordWeight, partTimes, engineOf, fitTag, tagSound, textFor, styleFor, stripTags, stabilityFor, lineHtml, ENGINES };
 
 // The built-in cheer: "Cheering and clapping crowd 1" by freesound_community,
 // a free sound from Pixabay (pixabay.com/sound-effects/people-cheering-and-clapping-crowd-1-5995/),

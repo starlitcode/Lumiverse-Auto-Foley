@@ -586,7 +586,7 @@ const MAX_TAGS = { subtle: 1, natural: 2, dramatic: 4 };
 // do. The Director is told, so it writes what that engine can read. The panel
 // fits each line again to the engine that speaks it.
 // Only models that act are used. The panel speaks nothing through any other.
-const ENGINE_IDS = ['eleven_v3', 'fish', 'gemini', 'chatterbox_turbo', 'qwen'];
+const ENGINE_IDS = ['eleven_v3', 'fish', 'gemini', 'chatterbox_turbo'];
 // What the panel sent, checked. A message directed with no engine named is
 // directed for ElevenLabs v3, which takes every kind of direction.
 function cleanEngine(v) {
@@ -610,7 +610,6 @@ const ENGINE_NOTES = {
     fish: 'Fish Audio acts out free tags in square brackets, like [barely holding it together] or [whispering]. Put a tag at the start of the sentence it shapes. A tag keeps going until the next one, so when a whisper ends, mark where the voice comes back up. One feeling per sentence works best. Fish can\'t make the sounds of the world, so sounds go in "before" and "after".',
     gemini: 'Gemini knows only the tags in "tag_list". Use them as written, in square brackets, right where the sound happens, even mid-sentence. How a line is said goes in its "style": a few plain words like "hushed and nervous" or "fast, out of breath". Most lines need no style at all. Leave age, accent and who they are out of it, since the voice already carries those.',
     chatterbox_turbo: 'Chatterbox knows only the nine tags in "tag_list", and they\'re all sounds a voice makes. Use them as written, in square brackets, and rarely: one in a line at most, and most lines get none. It can\'t take a delivery tag like [quietly], so the punctuation carries the delivery.',
-    qwen: 'Qwen takes no tags inside a line. How a line is said goes in its "style" instead: a short plain instruction like "whispered, close to the ear" or "clipped and angry". Leave it empty when the line works plain.',
 };
 function engineNote(s, id) {
     const own = s.engineNotes && typeof s.engineNotes[id] === 'string' ? s.engineNotes[id].trim() : '';

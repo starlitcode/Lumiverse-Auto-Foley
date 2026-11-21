@@ -394,7 +394,6 @@ describe("directing for each voice engine", () => {
   const msg = { type: "direct", chatId: "c1", messageId: "m2", swipeId: 0, name: "Oren Sallow", text: 'Oren leaned on the rail. "Not again." The kettle shrieked behind him.' };
   const sent = (h: Host) => JSON.parse(h.calls.generate[0].messages[1].content);
   const GEMINI = { id: "gemini", label: "Gemini 3.8 TTS", tags: "list", list: ["sigh", "laugh", "gasp", "short pause"], style: true, inVoiceSounds: false, sing: true };
-  const QWEN = { id: "qwen", label: "Qwen3-TTS", tags: "none", list: [], style: true, inVoiceSounds: false, sing: true };
   const FISH = { id: "fish", label: "Fish Audio S2 or Drama 3", tags: "free", list: [], style: false, inVoiceSounds: false, sing: true };
   const answer = JSON.stringify({
     lines: [
@@ -421,18 +420,6 @@ describe("directing for each voice engine", () => {
     expect(lines[2].after).toBe("a kettle whistling on a stove");
   });
 
-  test("Qwen gets no voice tags, and keeps the line notes", async () => {
-    const h = host({ answers: [answer] });
-    const out = await h.ask(Object.assign({ engine: QWEN }, msg));
-    const rules = sent(h).rules;
-    expect(rules.voice_tags).toBe(false);
-    expect(rules.line_style).toBe(true);
-    expect(rules.tag_list).toBeUndefined();
-    const lines = out.find((m) => m.type === "script").script.lines;
-    expect(lines[1].text).toBe("Not again.");
-    expect(lines[1].style).toBe("tired and flat");
-  });
-
   test("Fish keeps free tags, gets no line notes, and plays its sounds as effects", async () => {
     const h = host({ answers: [answer] });
     const out = await h.ask(Object.assign({ engine: FISH }, msg));
@@ -456,7 +443,7 @@ describe("directing for each voice engine", () => {
   test("the same message for another engine is directed again", async () => {
     const h = host({ answers: [answer, answer] });
     await h.ask(Object.assign({ engine: GEMINI }, msg));
-    await h.ask(Object.assign({ engine: QWEN }, msg));
+    await h.ask(Object.assign({ engine: FISH }, msg));
     expect(h.calls.generate.length).toBe(2);
   });
 

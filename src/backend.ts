@@ -756,7 +756,7 @@ interface TagRules {
 // do. The Director is told, so it writes what that engine can read. The panel
 // fits each line again to the engine that speaks it.
 // Only models that act are used. The panel speaks nothing through any other.
-const ENGINE_IDS = ['eleven_v3', 'fish', 'gemini', 'chatterbox_turbo', 'qwen'];
+const ENGINE_IDS = ['eleven_v3', 'fish', 'gemini', 'chatterbox_turbo'];
 
 interface EngineInfo {
   id: string;
@@ -796,8 +796,6 @@ const ENGINE_NOTES: Record<string, string> = {
     'Gemini knows only the tags in "tag_list". Use them as written, in square brackets, right where the sound happens, even mid-sentence. How a line is said goes in its "style": a few plain words like "hushed and nervous" or "fast, out of breath". Most lines need no style at all. Leave age, accent and who they are out of it, since the voice already carries those.',
   chatterbox_turbo:
     'Chatterbox knows only the nine tags in "tag_list", and they\'re all sounds a voice makes. Use them as written, in square brackets, and rarely: one in a line at most, and most lines get none. It can\'t take a delivery tag like [quietly], so the punctuation carries the delivery.',
-  qwen:
-    'Qwen takes no tags inside a line. How a line is said goes in its "style" instead: a short plain instruction like "whispered, close to the ear" or "clipped and angry". Leave it empty when the line works plain.',
 };
 
 function engineNote(s: Settings, id: string): string {

@@ -2,7 +2,7 @@
 
 ## In short
 
-- Auto Foley speaks through a TTS connection in Lumiverse: ElevenLabs, Fish Audio, Gemini, Chatterbox or Qwen3-TTS.
+- Auto Foley speaks through a TTS connection in Lumiverse: ElevenLabs, Fish Audio, Gemini or Chatterbox.
 - It works only with a model that acts. [Voice engines](engines.md) lists them.
 - Give each person in the Cast tab a voice.
 - Press the boom microphone button on a message.
@@ -69,6 +69,21 @@ On the **Settings** tab:
 A message edited after it was directed is directed again. If it was playing, it starts again with the new text, so what you hear matches what is on screen.
 
 Your browser may block sound until you tap the page. Auto Foley then waits, and the Stage tab says so. Press Play, or the button on the message, to start.
+
+## The floating player
+
+Turn on **A floating player** in the Settings tab, under **Look**. A round button sits over the chat. Drag it to move it. Tap it to open the player.
+
+- **The top** shows who is speaking, which part of the message is playing, and the chat.
+- **The box under it** shows the line being spoken, or the sound playing.
+- **The strip** has a mark for each part of the message: lines, sounds and the cheer. Tap a mark to go to that part.
+- **The buttons**: back one line, Play or Pause, the next line, and Stop.
+- **Latest reply** and **My latest message** choose what Play performs when nothing is playing.
+- **Voices** and **Sounds** set the two volumes.
+- **Autoplay**, **Sounds**, **Narrator** and **Applause** turn those settings on or off.
+- **Who is voiced** lists the cast. The microphone beside a name is the same as **Do not voice** in the Cast tab.
+- **More** has **Direct ahead**, **Open the Auto Foley tab** and **Hide the player**.
+- The arrow at the top closes it back to the round button. Where it sits, and whether it is open, are kept in this browser.
 
 ## Playing a message again
 

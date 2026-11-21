@@ -147,7 +147,7 @@ window.__fetch = async (url, init) => {
   if (u.includes('/tts-connections?')) return json({ data: [{ id: 't1', name: 'My ElevenLabs', provider: 'elevenlabs', model: 'eleven_v3', voice: 'v0', is_default: true, has_api_key: true }, { id: 't2', name: 'Fish on the side', provider: 'fish_audio', model: 's2.1-pro', has_api_key: true }, { id: 't3', name: 'Box at home', provider: 'openai_tts', api_url: 'http://192.0.2.10:8004/v1', model: 'chatterbox', has_api_key: true }, { id: 't4', name: 'Old flash', provider: 'elevenlabs', model: 'eleven_flash_v2_5', has_api_key: true }, { id: 't5', name: 'Kokoro here', provider: 'kokoro', has_api_key: true }], total: 5 });
   if (u.includes('/models')) return json({ models: [{ id: 's2.1-pro', label: 'Fish S2.1 Pro' }, { id: 'drama-3-preview', label: 'Drama 3 (Preview)' }], provider: 'fish_audio' });
   if (u.includes('/voices')) return json({ voices: [{ id: 'v1', name: 'Hollow Bell', gender: 'female' }, { id: 'v2', name: 'Grit', gender: 'male' }, { id: 'v3', name: 'Lark', gender: 'female' }], provider: 'elevenlabs' });
-  if (u.includes('/chats/chat1?messages=false')) return json({ id: 'chat1', name: '', character_id: 'c', metadata: {} });
+  if (u.includes('/chats/chat1?messages=false')) return json({ id: 'chat1', name: 'Mar 3, 2026, 4:12:09 PM', character_id: 'c', metadata: {} });
   if (u.includes('/characters/c')) return json({ id: 'c', name: 'Ysolde Marrow-Kestrel of the Lower Quays' });
   if (u.includes('/settings/voiceSettings')) return json({ key: 'voiceSettings', value: { ttsEnabled: true, ttsAutoPlay: true, ttsConnectionId: 't1' } });
   if (u.includes('/messages')) return json({ data: [{ id: 'm1', name: 'Ysolde Marrow-Kestrel of the Lower Quays', is_user: false, content: 'text', swipe_id: 0 }], total: 1 });
@@ -189,11 +189,23 @@ window.__ctx = {
     showConfirm: async () => ({ confirmed: true }),
     showContextMenu: async (o) => { window.__menu = o; return { selectedKey: null }; },
     createFloatWidget: (o) => {
+      // As Lumiverse draws it: a sized, placed surface, with the root the
+      // extension fills inside it.
+      const surface = document.createElement('div');
+      surface.style.cssText = 'position:fixed;z-index:50;left:' + o.initialPosition.x + 'px;top:' + o.initialPosition.y + 'px;width:' + o.width + 'px;height:' + o.height + 'px';
       const r = document.createElement('div');
-      r.style.cssText = 'position:fixed;left:' + o.initialPosition.x + 'px;top:' + o.initialPosition.y + 'px;width:' + o.width + 'px;height:' + o.height + 'px';
-      document.body.appendChild(r);
-      window.__widget = r;
-      return { root: r, destroy() { r.remove(); window.__widgetGone = true; } };
+      r.setAttribute('data-spindle-extension-root', 'auto_foley');
+      surface.appendChild(r);
+      document.body.appendChild(surface);
+      window.__widget = surface;
+      let at = { x: o.initialPosition.x, y: o.initialPosition.y };
+      return {
+        root: r,
+        destroy() { surface.remove(); window.__widgetGone = true; },
+        setSize(w, h) { surface.style.width = w + 'px'; surface.style.height = h + 'px'; },
+        getPosition() { return at; },
+        moveTo(x, y) { at = { x, y }; surface.style.left = x + 'px'; surface.style.top = y + 'px'; },
+      };
     },
   },
   uploads: { pickFile: async () => [] },
@@ -535,10 +547,7 @@ if (section("perform")) {
   check((await page.locator('.af-col:has-text("How solid the boxes are")').count()) > 0, "and How solid the boxes are shows under it");
   await page.evaluate(() => document.querySelector('[data-af-row="widgetOn"] .af-box').click());
   await page.waitForTimeout(250);
-  check(await page.evaluate(() => !!window.__widget && !!window.__widget.querySelector(".af-float")), "the floating button appears");
-  await page.evaluate(() => window.__widget.querySelector(".af-float").dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true })));
-  await page.waitForTimeout(150);
-  check(await page.evaluate(() => !!window.__menu && window.__menu.items.some((i) => i.key === "latest")), "a right click opens its menu");
+  check(await page.evaluate(() => !!window.__widget && !!window.__widget.querySelector(".af-float")), "the floating player appears, closed, as a round button");
 
   console.log("Teardown");
   await page.evaluate(() => window.__teardown());
@@ -554,6 +563,68 @@ if (section("perform")) {
   check(left.counts.backend === 0 && left.counts.listeners === 0, "every listener is gone (" + JSON.stringify(left.counts) + ")");
   check(left.tab && left.deco, "the drawer tab and every button on the page are handed back");
   await context.close();
+}
+
+if (section("player")) {
+  console.log("The floating player");
+  for (const size of SIZES) {
+    for (const zoom of [0.85, 1, 1.25]) {
+      const { context, page, errors } = await open(THEMES[0], size, zoom);
+      const where = size.name + ", zoom " + zoom;
+      await page.click('.af-tab[data-tab="settings"]');
+      await page.waitForTimeout(200);
+      await page.evaluate(() => document.querySelector('[data-af-row="widgetOn"] .af-box').click());
+      await page.waitForTimeout(250);
+      await page.evaluate(() => window.__widget.querySelector(".af-float").click());
+      await page.waitForTimeout(300);
+      check(await page.evaluate(() => !!window.__widget.querySelector(".af-pl")), where + ": a tap opens the player");
+      const fit = await page.evaluate(() => {
+        const w = window.__widget.getBoundingClientRect();
+        const c = window.__widget.querySelector(".af-pl").getBoundingClientRect();
+        return { w: w.width, h: w.height, cw: c.width, ch: c.height, right: w.right, vw: window.innerWidth };
+      });
+      check(fit.h + 0.5 >= fit.ch && fit.right <= fit.vw + 0.5, where + ": the widget holds the whole card and stays on screen (" + JSON.stringify(fit) + ")");
+      if (size.touch) {
+        const small = await page.evaluate(() => Array.from(window.__widget.querySelectorAll("button")).filter((b) => b.getBoundingClientRect().height && b.getBoundingClientRect().height / (parseFloat(getComputedStyle(document.documentElement).zoom) || 1) < 32).map((b) => (b.getAttribute("aria-label") || b.textContent) + " " + Math.round(b.getBoundingClientRect().height)));
+        check(!small.length, where + ": the player's tap targets are at least 32px. " + small.slice(0, 3).join("; "));
+      }
+      const before = await page.evaluate(() => (window.__sent || []).filter((m) => m.type === "direct").length);
+      // Long clips, so the message is still playing when the strip is read.
+      await page.evaluate(() => (window.__clipMs = 4000));
+      await page.evaluate(() => window.__widget.querySelector('[data-p="play"]').click());
+      await page.waitForTimeout(600);
+      check((await page.evaluate(() => (window.__sent || []).filter((m) => m.type === "direct").length)) > before, where + ": Play performs the latest reply");
+      const chip = await page.evaluate(() => {
+        const b = window.__widget.querySelector('[data-sw="soundsOn"]');
+        const was = b.getAttribute("aria-pressed");
+        b.click();
+        return [was, b.getAttribute("aria-pressed")];
+      });
+      check(chip[0] === "true" && chip[1] === "false", where + ": a quick switch turns its setting off and shows it");
+      await page.evaluate(() => window.__widget.querySelector('[data-p="fold"]').click());
+      await page.waitForTimeout(250);
+      const lv = await page.evaluate(() => {
+        const w = window.__widget.getBoundingClientRect();
+        const c = window.__widget.querySelector(".af-pl").getBoundingClientRect();
+        return { n: window.__widget.querySelectorAll(".af-pl-ch").length, fits: w.height + 0.5 >= c.height };
+      });
+      check(lv.n > 0 && lv.fits, where + ": Who is voiced lists the cast, and the widget grows with it (" + JSON.stringify(lv) + ")");
+      const strip = await page.evaluate(() => window.__widget.querySelectorAll('[data-p="strip"] [data-at]').length);
+      check(strip > 0, where + ": the strip has a mark for each part of the message (" + strip + ")");
+      if (zoom === 1 && shots) {
+        await page.evaluate(() => (window.__widget.style.zIndex = "9999"));
+        await page.screenshot({ path: join(shots, "player-" + size.name + ".png") });
+      }
+      await page.evaluate(() => window.__widget.querySelector('[data-p="menu"]').click());
+      await page.waitForTimeout(150);
+      check(await page.evaluate(() => !!window.__menu && ["hide", "open", "prep"].every((k) => window.__menu.items.some((i) => i.key === k))), where + ": More offers Direct ahead, Open the Auto Foley tab and Hide the player");
+      await page.evaluate(() => window.__widget.querySelector('[data-p="close"]').click());
+      await page.waitForTimeout(250);
+      check(await page.evaluate(() => !!window.__widget.querySelector(".af-float") && !window.__widget.querySelector(".af-pl")), where + ": closing it leaves the round button");
+      check(!errors.length, where + ": no console errors. " + errors.slice(0, 2).join("; "));
+      await context.close();
+    }
+  }
 }
 
 if (section("engines")) {
@@ -640,6 +711,42 @@ if (section("kept")) {
   check(!m.overflow.length && !m.small.length, "the Keep made audio rows fit on a phone. " + m.overflow.concat(m.small).slice(0, 2).join("; "));
   check(!errors.length, "no console errors. " + errors.slice(0, 2).join("; "));
   await context.close();
+}
+
+if (section("steady")) {
+  console.log("The Stage stays still while lines play");
+  for (const zoom of [0.85, 1, 1.25]) {
+    for (const size of SIZES) {
+      const { context, page, errors } = await open(THEMES[0], size, zoom);
+      const where = "zoom " + zoom + ", " + size.name;
+      await page.evaluate(() => window.__teardown());
+      await page.evaluate(() => {
+        const d = document.getElementById("drawer");
+        d.innerHTML = "";
+        d.style.height = "520px";
+        d.style.overflowY = "auto";
+        window.__teardown = window.__setup(window.__ctx, { fetch: window.__fetch, Audio: window.__Audio });
+      });
+      await page.waitForTimeout(200);
+      await page.click('.af-tab[data-tab="stage"]');
+      await page.waitForTimeout(200);
+      await page.evaluate(() => (window.__clipMs = 500));
+      await page.click('#mount [data-af-slot="message"]');
+      await page.waitForTimeout(400);
+      await page.evaluate(() => (document.getElementById("drawer").scrollTop = 60));
+      await page.waitForTimeout(100);
+      const at = await page.evaluate(() => [document.getElementById("drawer").scrollTop, document.querySelector('[data-af="theater"]').getBoundingClientRect().top]);
+      let moved = 0;
+      for (let k = 0; k < 8; k++) {
+        await page.waitForTimeout(250);
+        const now = await page.evaluate(() => [document.getElementById("drawer").scrollTop, document.querySelector('[data-af="theater"]') ? document.querySelector('[data-af="theater"]').getBoundingClientRect().top : null]);
+        if (now[1] != null && (Math.abs(now[0] - at[0]) > 1 || Math.abs(now[1] - at[1]) > 1)) moved++;
+      }
+      check(moved === 0, where + ": the drawer does not scroll and Now playing does not move as lines change (" + moved + " moves)");
+      check(!errors.length, where + ": no console errors. " + errors.slice(0, 2).join("; "));
+      await context.close();
+    }
+  }
 }
 
 if (section("taps")) {

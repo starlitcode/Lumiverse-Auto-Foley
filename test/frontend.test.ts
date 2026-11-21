@@ -27,8 +27,8 @@ describe("which engine a connection runs", () => {
     expect(engineOf({ provider: "google_tts" }, "gemini-2.5-pro-preview-tts").supported).toBe(false);
   });
 
-  test("Qwen3-TTS, and Chatterbox found by name on an OpenAI-style connection", () => {
-    expect(engineOf({ provider: "qwen3_tts_server" }, "auto").id).toBe("qwen");
+  test("Chatterbox found by name on an OpenAI-style connection, and other engines not used", () => {
+    expect(engineOf({ provider: "qwen3_tts_server" }, "auto").supported).toBe(false);
     expect(engineOf({ provider: "openai_tts", name: "Local Chatterbox", api_url: "http://localhost:8004/v1" }, "tts-1").id).toBe("chatterbox_turbo");
     expect(engineOf({ provider: "openai_tts", api_url: "http://box:8004/v1" }, "chatterbox-multilingual").supported).toBe(false);
     expect(engineOf({ provider: "openai_tts", api_url: "https://api.openai.com/v1" }, "tts-1").supported).toBe(false);
@@ -77,7 +77,7 @@ describe("fitting a line to its engine", () => {
   });
 
   test("an engine with no tags gets none", () => {
-    expect(textFor(line, ENGINES.qwen)).toBe("Stay down. They are close.");
+    expect(textFor(line, Object.assign({}, ENGINES.fish, { tags: "none" }))).toBe("Stay down. They are close.");
     expect(stripTags("[quietly] Leave it, [sighs] please.")).toBe("Leave it, please.");
   });
 
@@ -87,7 +87,7 @@ describe("fitting a line to its engine", () => {
     expect(textFor(sung, ENGINES.fish)).toBe("[singing] Row, row, row the boat.");
     expect(textFor(sung, ENGINES.chatterbox_turbo)).toBe("Row, row, row the boat.");
     expect(styleFor(sung, ENGINES.gemini)).toBe("singing the words to a simple tune");
-    expect(styleFor({ sung: true, style: "soft and slow" }, ENGINES.qwen)).toBe("singing, soft and slow");
+    expect(styleFor({ sung: true, style: "soft and slow" }, ENGINES.gemini)).toBe("singing, soft and slow");
     expect(styleFor({ style: "soft and slow" }, ENGINES.eleven_v3)).toBe("");
   });
 });
@@ -176,5 +176,16 @@ describe("word timing from the sound", () => {
     expect(wordWeight("tomorrow")).toBe(3);
     expect(wordWeight("stone")).toBe(1);
     expect(wordWeight("...")).toBe(0);
+  });
+});
+
+describe("the chat's title", () => {
+  const { looksLikeDate } = __testing;
+  test("the date Lumiverse gives a new chat is told apart from a title someone wrote", () => {
+    expect(looksLikeDate("Mar 3, 2026, 4:12:09 PM")).toBe(true);
+    expect(looksLikeDate("3 mars 2026, 16:12:09")).toBe(true);
+    expect(looksLikeDate("2026/3/3 16:12")).toBe(true);
+    expect(looksLikeDate("The lighthouse at 9")).toBe(false);
+    expect(looksLikeDate("Winter of 1999")).toBe(false);
   });
 });

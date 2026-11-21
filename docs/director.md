@@ -77,7 +77,7 @@ All on the Director tab:
 ## Singing
 
 - A line someone sings is marked as sung. The Director marks it, and so does a music note in the text, such as ♪. The note is not read.
-- Each engine that can sing is told the line is sung: `[sings]` on Eleven v3, `[singing]` on Fish Audio, and a note on Gemini 3.8 and Qwen3-TTS.
+- Each engine that can sing is told the line is sung: `[sings]` on Eleven v3, `[singing]` on Fish Audio, and a note on Gemini 3.8.
 - On an engine that cannot sing, the line is spoken.
 
 ## Notes for each voice engine

@@ -13,7 +13,7 @@
 | --- | --- | --- |
 | The message, split into lines, and your cast with its notes | The Director's connection | Each message performed or prepared, while the Director is on |
 | The message lines, and up to 12 cast names with the start of their notes | Your Decision connection | Each message, while the Decision model is on |
-| Each line, with the tags its engine reads, and a note on how it is said for Gemini and Qwen3-TTS | Your TTS engine, through your Lumiverse TTS connection | Each line spoken |
+| Each line, with the tags its engine reads, and a note on how it is said for Gemini | Your TTS engine, through your Lumiverse TTS connection | Each line spoken |
 | A short sound description | `api.elevenlabs.io`, with your sound effects key | Each new sound effect made |
 | A key test | `api.elevenlabs.io` | When you save or test the key |
 
@@ -44,9 +44,9 @@ With **Save the performance to the message** on, the finished audio is saved to 
 | Generation | Asking the Director, listing your connections for **Which connection**, and reading the thinking Prefix and Suffix saved on them |
 | Decision models | Asking the Decision model, and listing your Decision connections |
 | CORS proxy | Making sound effects with ElevenLabs, and testing the key |
-| UI panels | The floating button, when you turn it on in the Settings tab |
+| UI panels | The floating player, when you turn it on in the Settings tab |
 
-Refusing **UI panels** stops only the floating button. Refusing **CORS proxy** stops only new sound effects. Refusing **Decision models** turns the Decision model off. Refusing **Generation** turns the Director off, and messages are read as written.
+Refusing **UI panels** stops only the floating player. Refusing **CORS proxy** stops only new sound effects. Refusing **Decision models** turns the Decision model off. Refusing **Generation** turns the Director off, and messages are read as written.
 
 ---
 

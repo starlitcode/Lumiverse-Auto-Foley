@@ -1,8 +1,8 @@
 # Working on Auto Foley
 
 Auto Foley is a Lumiverse extension built on Spindle. It gives voice acting
-and sound effects to Lumiverse's TTS: ElevenLabs, Fish Audio, Gemini,
-Chatterbox and Qwen3-TTS. Its sister extensions are
+and sound effects to Lumiverse's TTS: ElevenLabs, Fish Audio, Gemini and
+Chatterbox. Its sister extensions are
 [Auto Retry](https://github.com/starlitcode/Lumiverse-Auto-Retry) and
 [Auto Refine](https://github.com/starlitcode/Lumiverse-Auto-Refine), and the three are
 kept in step: a fix to something they share, such as how a switch, a field row,
@@ -110,8 +110,8 @@ Two skills are available. Load them before starting work.
 - Auto Foley is only for models that act out tags. It speaks through a TTS
   connection in Lumiverse, with Lumiverse's own `/api/v1/tts/synthesize`
   route. Lumiverse keeps every speech key.
-- Five engines act: ElevenLabs v3 and v4, Fish Audio S2 and Drama 3, Gemini
-  3.8, Chatterbox-Turbo and Qwen3-TTS. `ENGINE_LIST` in `src/frontend.ts` says
+- Four engines act: ElevenLabs v3 and v4, Fish Audio S2 and Drama 3, Gemini
+  3.8 and Chatterbox-Turbo. `ENGINE_LIST` in `src/frontend.ts` says
   what each can do, and `docs/engines.md` has the same table.
 - A model that cannot act is not used: nothing is spoken through it, and
   `noTagsWhy` says which model to pick. Other providers are not listed.
@@ -124,13 +124,12 @@ Two skills are available. Load them before starting work.
   A tag an engine cannot read is taken out, or the voice reads it aloud.
 - The backend's `fitTag` and `TAG_WORDS` match the frontend's. A test checks
   that both fit the same tags the same way. A change goes into both.
-- Gemini 3.8 and Qwen3-TTS take a note on how a line is said, sent as
-  `speech_style` and `instruct`.
+- Gemini 3.8 takes a note on how a line is said, sent as `speech_style`.
 - Only ElevenLabs v3 and v4 make a sound inside a line. On every other engine
   sounds are played as separate effects, and the panel warns while **In the
   voice** is picked.
 - A sung line is marked `[sings]` on Eleven v3, `[singing]` on Fish Audio, and
-  with a note on Gemini 3.8 and Qwen3-TTS. Other engines speak it.
+  with a note on Gemini 3.8. Chatterbox speaks it.
 - A person's voice belongs to a connection: `voices` on a cast member is keyed
   by connection id. A person can speak through a connection of their own.
 - The note sent with each engine is in `ENGINE_NOTES` in the backend, and can
