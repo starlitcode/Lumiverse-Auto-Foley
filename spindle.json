@@ -1,0 +1,17 @@
+{
+  "version": "0.1.0",
+  "name": "Auto Foley",
+  "identifier": "auto_foley",
+  "author": "starlitcode",
+  "github": "https://github.com/starlitcode/Lumiverse-Auto-Foley",
+  "homepage": "https://github.com/starlitcode/Lumiverse-Auto-Foley",
+  "description": "Voice acting and sound effects for ElevenLabs. A second model marks each reply with voice tags and sounds, then your ElevenLabs connection in Lumiverse reads it with a voice for every character, persona and NPC.",
+  "permissions": [
+    "generation",
+    "decisions",
+    "cors_proxy"
+  ],
+  "entry_frontend": "dist/frontend.js",
+  "entry_backend": "dist/backend.js",
+  "minimum_lumiverse_version": "1.2.5"
+}

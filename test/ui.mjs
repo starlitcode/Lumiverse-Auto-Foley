@@ -1,0 +1,482 @@
+// Panel checks that need a real browser.
+//
+// The drawer is drawn with the reader's theme, which this repository has
+// never seen, and on screens from a phone to a laptop. Whether a label is
+// readable, and whether the panel fits, are measurements. These drive the
+// built dist/frontend.js in headless Chromium against a stub of Lumiverse and
+// measure what was painted.
+//
+//   bun run test:ui
+//
+// Playwright is not a dependency of this project: the install path is
+// "Lumiverse clones the repo", and Playwright pulls a few hundred megabytes of
+// browsers. When it is missing, this skips and exits cleanly. CI adds it for
+// this run only, and turns a skip into a failure.
+
+import { readFileSync, existsSync, mkdirSync } from "node:fs";
+import { join } from "node:path";
+import { createRequire } from "node:module";
+
+const root = join(import.meta.dir, "..");
+
+let chromium;
+try {
+  ({ chromium } = await import("playwright"));
+} catch (_) {
+  try {
+    ({ chromium } = createRequire(import.meta.url)("playwright"));
+  } catch (_) {
+    console.log("playwright is not installed, skipping the browser checks.\n  bun add -d playwright && bunx playwright install chromium");
+    process.exit(0);
+  }
+}
+
+const bundle = join(root, "dist", "frontend.js");
+if (!existsSync(bundle)) {
+  console.error("dist/frontend.js is missing. Run `bun run build` first.");
+  process.exit(1);
+}
+const SOURCE = readFileSync(bundle, "utf8").replace(/^export /gm, "") + "\nwindow.__setup = setup;\n";
+
+// Lumiverse's own page-wide rules, from its reset.css and global.css. Every
+// part of the extension sits under these in Lumiverse, so every check does
+// too. A rule here can outrank one of the extension's: its slider rules beat a
+// selector of one class, and phones get a 16px floor on every text box.
+const HOST_CSS = `
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+img,picture,video,canvas,svg{display:block;max-width:100%;-webkit-user-select:none;user-select:none}
+input,button,textarea,select{font:inherit;color:inherit}
+@media screen and (max-width:600px){input,textarea,select{font-size:max(16px,1em)!important}}
+button,a,[role="button"]{-webkit-user-select:none;user-select:none}
+button{cursor:pointer;border:none;background:none}
+a{color:inherit;text-decoration:none}
+ul,ol{list-style:none}
+input[type="range"]{-webkit-appearance:none;appearance:none;min-height:44px;background:transparent;cursor:pointer;touch-action:none}
+input[type="range"]::-webkit-slider-runnable-track{height:4px;border-radius:2px;background:var(--lumiverse-fill-medium,rgba(0,0,0,.15))}
+input[type="range"]::-moz-range-track{height:4px;border-radius:2px;background:var(--lumiverse-fill-medium,rgba(0,0,0,.15));border:none}
+input[type="range"]::-webkit-slider-thumb{-webkit-appearance:none;width:22px;height:22px;border-radius:50%;background:var(--lumiverse-primary,#8c82ff);border:2px solid var(--lumiverse-bg,#1c1826);box-shadow:0 0 0 1px var(--lumiverse-primary-020,rgba(140,130,255,.2)),0 1px 4px rgba(0,0,0,.3);margin-top:-9px;cursor:pointer}
+input[type="range"]::-moz-range-thumb{width:22px;height:22px;border-radius:50%;background:var(--lumiverse-primary,#8c82ff);border:2px solid var(--lumiverse-bg,#1c1826);box-shadow:0 0 0 1px var(--lumiverse-primary-020,rgba(140,130,255,.2)),0 1px 4px rgba(0,0,0,.3);cursor:pointer}
+select{background-color:var(--lumiverse-bg-deep,#0a0812);color:var(--lumiverse-text,rgba(255,255,255,.9))}
+select option{background-color:var(--lumiverse-bg-deep,#0a0812);color:var(--lumiverse-text,rgba(255,255,255,.9))}
+::-webkit-scrollbar{width:6px;height:6px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--lumiverse-primary-020);border-radius:3px}
+:focus-visible{outline:1.5px solid var(--lumiverse-primary-050);outline-offset:2px}
+input:focus-visible,textarea:focus-visible,select:focus-visible,[contenteditable]:focus-visible{outline:none;border-color:var(--lumiverse-primary-050)}
+`;
+
+// The colors Lumiverse's own theme engine writes, dark and light.
+const ENGINE = JSON.parse(readFileSync(join(root, "test", "lumiverse-themes.json"), "utf8"));
+
+// A palette built to break a panel: a light accent and a near-white surface,
+// where a label colored by hand instead of by the theme turns invisible.
+const HOSTILE = `:root{--lumiverse-primary:hsl(55,90%,75%);--lumiverse-primary-text:hsl(55,60%,30%);--lumiverse-primary-contrast:hsl(55,40%,10%);--lumiverse-primary-010:hsla(55,90%,45%,.12);--lumiverse-primary-020:hsla(55,90%,45%,.22);--lumiverse-bg:#fbfaf2;--lumiverse-bg-elevated:#ffffff;--lumiverse-text:#1d1b10;--lumiverse-text-muted:#57543f;--lumiverse-text-dim:#6b6852;--lumiverse-border:rgba(0,0,0,.18);--lumiverse-warning:hsl(30,80%,32%);--lumiverse-warning-015:hsla(30,80%,45%,.15);--lumiverse-danger:hsl(0,70%,38%);--lumiverse-success:hsl(140,60%,28%)}`;
+
+const THEMES = [
+  { name: "dark", css: ENGINE.dark, bg: "var(--lumiverse-bg, #1b1a22)" },
+  { name: "light", css: ENGINE.light, bg: "var(--lumiverse-bg, #f6f5fa)" },
+  { name: "hostile light", css: HOSTILE, bg: "#fbfaf2" },
+];
+
+const SIZES = [
+  { name: "phone", width: 390, height: 844, touch: true },
+  { name: "laptop", width: 1280, height: 800, touch: false },
+];
+
+const TABS = ["stage", "cast", "director", "sounds", "settings"];
+
+// The stub host. It answers the panel's backend messages and Lumiverse's own
+// routes with fixed data, and plays audio with a fake that ends after 40 ms.
+const STUB = `
+window.__log = [];
+window.__errors = [];
+window.addEventListener('error', (e) => window.__errors.push(String(e.message)));
+window.addEventListener('unhandledrejection', (e) => window.__errors.push('rejection: ' + String(e.reason && e.reason.message || e.reason)));
+const listeners = {};
+const backendFns = new Set();
+const styles = [];
+const decorators = [];
+window.__sent = [];
+window.__settings = {
+  enabled: true, ttsConnection: '', autoplay: false, prepareAhead: true, narration: 'read', soundsOn: true, soundStyle: 'both',
+  directorOn: true, decisionsOn: true, strength: 'natural', tagsOn: true, breathsOn: true, findSpeakers: true, bigMoments: true,
+  makeSounds: true, soundSeconds: 0, voiceVolume: 1, soundVolume: 0.8, prompt: '',
+  cast: [
+    { id: 'n', name: 'Narrator', kind: 'narrator', addedBy: 'you', aliases: [], voice: '', voiceName: '', model: '', stability: 0.5, similarity: 0.75, style: 0, speed: 1, note: 'Calm and clear.', gender: 'unknown', muted: false },
+    { id: 'a', name: 'Ysolde Marrow-Kestrel of the Lower Quays', kind: 'character', addedBy: 'chat', aliases: ['Ysolde'], voice: 'v1', voiceName: 'Hollow Bell', model: 'eleven_v3', stability: 0.5, similarity: 0.75, style: 0.2, speed: 1, note: 'Dry and low.', gender: 'female', muted: false },
+    { id: 'b', name: 'Ferryman', kind: 'npc', addedBy: 'ai', aliases: [], voice: '', voiceName: '', model: '', stability: 0.5, similarity: 0.75, style: 0, speed: 1, note: 'slow and gravelly', gender: 'male', muted: false },
+    { id: 'c', name: 'Wyn', kind: 'persona', addedBy: 'chat', aliases: [], voice: '', voiceName: '', model: 'eleven_v4', stability: 0.4, similarity: 0.75, style: 0, speed: 1.1, note: '', gender: 'unknown', muted: false },
+  ],
+};
+const SCRIPT = {
+  key: 'k', messageId: 'm1', author: 'Ysolde Marrow-Kestrel of the Lower Quays', directed: true, added: [],
+  log: ['The Director tagged 2 of 3 lines and added 2 sounds.'],
+  lines: [
+    { i: 0, kind: 'narration', speaker: 'Narrator', text: 'She set the cup down on the long table by the window.', plain: '', tags: [], inSounds: [], big: false, before: '', after: 'a ceramic cup set down on a wooden table', note: '' },
+    { i: 1, kind: 'speech', speaker: 'Ysolde Marrow-Kestrel of the Lower Quays', text: '[flatly] You are late. [sound of a door banging shut upstairs, someone yelling "sorry!"] Again.', plain: '', tags: ['flatly'], inSounds: ['x'], big: true, before: '', after: '', note: '' },
+    { i: 2, kind: 'speech', speaker: 'Ferryman', text: 'The tide does not wait for anyone, and neither does the boat that runs on it.', plain: '', tags: [], inSounds: [], big: false, before: '', after: '', note: 'The Director changed the words of this line, so it is read as written.' },
+  ],
+};
+window.__sounds = [
+  { id: 'u1', name: 'glass shatter on a very long tile floor in the old kitchen', triggers: ['glass'], source: 'upload', mime: 'audio/mpeg', bytes: 40000, added: 1, uses: 3 },
+  { id: 's1', name: 'a ceramic cup set down on a wooden table', triggers: [], source: 'made', mime: 'audio/mpeg', bytes: 12000, added: 2, uses: 1 },
+];
+function answer(msg) {
+  const reply = (m) => setTimeout(() => backendFns.forEach((fn) => fn(Object.assign({ requestId: msg.requestId }, m))), 5);
+  switch (msg.type) {
+    case 'load': return reply({ type: 'state', settings: window.__settings, sounds: window.__sounds, hasKey: true, builtInPrompt: '<the_director>\\nYou direct.\\n</the_director>', version: '0', decisions: true });
+    case 'save': window.__settings = msg.settings; return reply({ type: 'saved', ok: true, settings: msg.settings });
+    case 'direct': return reply({ type: 'script', script: SCRIPT });
+    case 'sound': return reply({ type: 'sound', base64: 'AAAA', mime: 'audio/mpeg' });
+    case 'list_connections': return reply({ type: 'connections', list: [{ id: 'l1', name: 'Fast helper with a very long connection name for testing', model: 'maker/tiny-fast-model' }] });
+    case 'list_decision_connections': return reply({ type: 'decision_connections', list: [{ id: 'd1', name: 'Quick', model: 'fast-judge', isDefault: true, hasKey: true }], state: 'ok' });
+    case 'key_test': return reply({ type: 'key', hasKey: true, ok: true, text: 'The key works.' });
+    case 'check_director': return reply({ type: 'check', ok: true, text: 'The Director answered.' });
+    case 'check_decisions': return reply({ type: 'check', ok: true, text: 'Ready.' });
+    default: return;
+  }
+}
+window.__fetch = async (url, init) => {
+  const u = String(url);
+  const json = (o) => new Response(JSON.stringify(o), { status: 200, headers: { 'Content-Type': 'application/json' } });
+  if (u.includes('/tts-connections?')) return json({ data: [{ id: 't1', name: 'My ElevenLabs', provider: 'elevenlabs', model: 'eleven_v3', voice: 'v0', is_default: true, has_api_key: true }, { id: 't2', name: 'Other', provider: 'openai' }], total: 2 });
+  if (u.includes('/voices')) return json({ voices: [{ id: 'v1', name: 'Hollow Bell', gender: 'female' }, { id: 'v2', name: 'Grit', gender: 'male' }, { id: 'v3', name: 'Lark', gender: 'female' }], provider: 'elevenlabs' });
+  if (u.includes('/messages')) return json({ data: [{ id: 'm1', name: 'Ysolde Marrow-Kestrel of the Lower Quays', is_user: false, content: 'text', swipe_id: 0 }], total: 1 });
+  if (u.includes('/tts/synthesize')) { window.__synth = (window.__synth || []).concat(JSON.parse(init.body)); return new Response(new Blob([new Uint8Array(64)], { type: 'audio/mpeg' }), { status: 200 }); }
+  return new Response('{}', { status: 404 });
+};
+class FakeAudio {
+  constructor() { this.dataset = {}; this.volume = 1; this.paused = true; FakeAudio.all.push(this); }
+  play() { this.paused = false; window.__played = (window.__played || 0) + 1; clearTimeout(this.t); this.t = setTimeout(() => { this.paused = true; this.onended && this.onended(); }, 40); return Promise.resolve(); }
+  pause() { this.paused = true; clearTimeout(this.t); }
+}
+FakeAudio.all = [];
+window.__Audio = FakeAudio;
+window.__ctx = {
+  dom: {
+    addStyle(css) { const s = document.createElement('style'); s.textContent = css; document.head.appendChild(s); styles.push(s); return () => s.remove(); },
+    cleanup() {},
+  },
+  ui: {
+    registerDrawerTab(spec) {
+      window.__tabSpec = spec;
+      const r = document.getElementById('drawer');
+      return { root: r, setBadge() {}, activate() {}, destroy() { window.__tabDestroyed = true; }, onActivate() { return () => {}; } };
+    },
+    registerDomDecorator(spec) {
+      const mount = document.getElementById('mount');
+      const holder = document.createElement('span');
+      mount.appendChild(holder);
+      const undo = spec.render(holder, { scope: 'message:m1:actions' });
+      decorators.push(undo);
+      return () => { window.__decoratorGone = true; if (typeof undo === 'function') undo(); };
+    },
+    showConfirm: async () => ({ confirmed: true }),
+  },
+  uploads: { pickFile: async () => [] },
+  permissions: { getGranted: async () => ['generation', 'decisions'] },
+  events: { on(name, fn) { (listeners[name] = listeners[name] || []).push(fn); return () => { listeners[name] = listeners[name].filter((f) => f !== fn); }; } },
+  sendToBackend(msg) { window.__sent.push(msg); answer(msg); },
+  onBackendMessage(fn) { backendFns.add(fn); return () => backendFns.delete(fn); },
+  getActiveChat() { return { chatId: 'chat1', characterId: 'c' }; },
+};
+window.__counts = () => ({ backend: backendFns.size, listeners: Object.values(listeners).reduce((n, l) => n + l.length, 0) });
+window.__emit = (name, p) => (listeners[name] || []).forEach((fn) => fn(p));
+`;
+
+// A message row as Lumiverse draws it: the host's own buttons, with an empty
+// mount point among them.
+function pageHtml(theme) {
+  return `<!doctype html><html><head><meta name="viewport" content="width=device-width, initial-scale=1"><style>${HOST_CSS}</style><style>${theme.css}</style>
+<style>body{background:${theme.bg};color:var(--lumiverse-text);font-family:system-ui,sans-serif;font-size:14px}
+.hostbtn{display:inline-grid;place-items:center;width:30px;height:30px;color:var(--lumiverse-text-muted)} .hostbtn svg{width:16px;height:16px}
+#row{display:flex;gap:4px;padding:8px}</style></head>
+<body><div id="row"><button class="hostbtn _actionBtn_ab12c_3"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16v16H4z"/></svg></button><span id="mount" data-spindle-mount="message_actions" style="display:contents"></span></div>
+<div id="drawer" style="background:var(--lumiverse-bg)"></div></body></html>`;
+}
+
+let failures = 0;
+let checks = 0;
+function check(ok, what) {
+  checks++;
+  if (!ok) {
+    failures++;
+    console.log("  FAIL " + what);
+  }
+}
+const only = process.env.UI_ONLY || "";
+const section = (name) => !only || name.toLowerCase().includes(only.toLowerCase());
+
+const shots = process.env.UI_SHOTS || "";
+if (shots) mkdirSync(shots, { recursive: true });
+
+const browser = await chromium.launch();
+
+async function open(theme, size, zoom = 1) {
+  const context = await browser.newContext({
+    viewport: { width: size.width, height: size.height },
+    hasTouch: size.touch,
+    isMobile: size.touch,
+    deviceScaleFactor: 1,
+  });
+  const page = await context.newPage();
+  const errors = [];
+  page.on("console", (m) => {
+    if (m.type() === "error") errors.push(m.text());
+  });
+  page.on("pageerror", (e) => errors.push(String(e.message)));
+  await page.setContent(pageHtml(theme));
+  if (zoom !== 1) await page.evaluate((z) => (document.documentElement.style.zoom = String(z)), zoom);
+  await page.addScriptTag({ content: STUB });
+  await page.addScriptTag({ content: SOURCE });
+  await page.evaluate(() => {
+    window.__teardown = window.__setup(window.__ctx, { fetch: window.__fetch, Audio: window.__Audio });
+  });
+  await page.waitForTimeout(120);
+  return { context, page, errors };
+}
+
+async function showTab(page, id) {
+  await page.click(`.af-tab[data-tab="${id}"]`);
+  await page.waitForTimeout(320);
+  // Every closed row opens, so its contents are measured too.
+  await page.evaluate(() => document.querySelectorAll('.af-person-head[aria-expanded="false"]').forEach((b) => b.click()));
+  await page.waitForTimeout(350);
+}
+
+// What is drawn: overflow past the side, tap targets, and contrast measured
+// against the nearest painted surface behind each piece of text.
+const MEASURE = (touch) => {
+  const out = { overflow: [], small: [], contrast: [] };
+  const af = document.querySelector('.af');
+  const box = af.getBoundingClientRect();
+  if (document.documentElement.scrollWidth > window.innerWidth + 1) out.overflow.push('page scrolls sideways: ' + document.documentElement.scrollWidth + ' > ' + window.innerWidth);
+  const parse = (c) => {
+    const m = c.match(/rgba?\(([^)]+)\)/);
+    if (!m) return null;
+    const p = m[1].split(/[ ,/]+/).filter(Boolean).map(Number);
+    return { r: p[0], g: p[1], b: p[2], a: p.length > 3 ? p[3] : 1 };
+  };
+  const over = (top, under) => ({ r: top.r * top.a + under.r * (1 - top.a), g: top.g * top.a + under.g * (1 - top.a), b: top.b * top.a + under.b * (1 - top.a), a: 1 });
+  const lum = (c) => {
+    const f = (v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); };
+    return 0.2126 * f(c.r) + 0.7152 * f(c.g) + 0.0722 * f(c.b);
+  };
+  const behind = (el) => {
+    const layers = [];
+    for (let n = el; n; n = n.parentElement) {
+      const c = parse(getComputedStyle(n).backgroundColor);
+      if (c && c.a > 0) layers.push(c);
+      if (c && c.a >= 1) break;
+    }
+    let base = parse(getComputedStyle(document.body).backgroundColor) || { r: 255, g: 255, b: 255, a: 1 };
+    if (base.a < 1) base = over(base, { r: 255, g: 255, b: 255, a: 1 });
+    for (let k = layers.length - 1; k >= 0; k--) base = over(layers[k], base);
+    return base;
+  };
+  for (const el of af.querySelectorAll('*')) {
+    const r = el.getBoundingClientRect();
+    if (!r.width || !r.height) continue;
+    const cs = getComputedStyle(el);
+    if (cs.visibility === 'hidden' || Number(cs.opacity) === 0) continue;
+    if (el.closest('.af-sub') && el.closest('.af-sub').hidden) continue;
+    const name = (el.className && String(el.className)) || el.tagName;
+    if (r.right > box.right + 1.5 || r.left < box.left - 1.5) out.overflow.push(name + ' runs off the side (' + Math.round(r.left) + '..' + Math.round(r.right) + ' in ' + Math.round(box.left) + '..' + Math.round(box.right) + ')');
+    const tappable = el.matches('button, select, input:not([type=checkbox]), .af-switch');
+    if (touch && tappable && r.height < 32) out.small.push(name + ' is ' + Math.round(r.height) + 'px tall');
+    const ownText = Array.prototype.some.call(el.childNodes, (n) => n.nodeType === 3 && n.textContent.trim());
+    if (!ownText) continue;
+    const fg = parse(cs.color);
+    if (!fg) continue;
+    const bg = behind(el);
+    const col = over(fg, bg);
+    const L1 = lum(col), L2 = lum(bg);
+    const ratio = (Math.max(L1, L2) + 0.05) / (Math.min(L1, L2) + 0.05);
+    const disabled = el.closest('button:disabled');
+    const floor = disabled ? 1.5 : 3;
+    if (ratio < floor) out.contrast.push(name + ' "' + el.textContent.trim().slice(0, 30) + '" is ' + ratio.toFixed(2) + ':1');
+  }
+  return out;
+};
+
+if (section("layout")) {
+  console.log("Every tab, at phone and laptop widths, on dark, light and a hostile theme");
+  for (const theme of THEMES) {
+    for (const size of SIZES) {
+      const { context, page, errors } = await open(theme, size);
+      // A message is performed first, so the Stage has a script to measure.
+      await page.click("#mount .af-msg-btn");
+      await page.waitForTimeout(900);
+      for (const id of TABS) {
+        await showTab(page, id);
+        const m = await page.evaluate(MEASURE, size.touch);
+        const where = theme.name + ", " + size.name + ", " + id;
+        check(!m.overflow.length, where + ": nothing runs off the side. " + m.overflow.slice(0, 3).join("; "));
+        check(!m.small.length, where + ": tap targets are at least 32px. " + m.small.slice(0, 3).join("; "));
+        check(!m.contrast.length, where + ": text is readable. " + m.contrast.slice(0, 3).join("; "));
+        if (shots && theme.name !== "hostile light") await page.screenshot({ path: join(shots, `${theme.name}-${size.name}-${id}.png`), fullPage: true });
+      }
+      check(!errors.length, theme.name + ", " + size.name + ": no console errors. " + errors.slice(0, 2).join("; "));
+      await context.close();
+    }
+  }
+}
+
+if (section("scale")) {
+  console.log("UI Scale at 85%, 100% and 125%");
+  for (const zoom of [0.85, 1, 1.25]) {
+    for (const size of SIZES) {
+      const { context, page } = await open(THEMES[0], size, zoom);
+      for (const id of TABS) {
+        await showTab(page, id);
+        const m = await page.evaluate(MEASURE, false);
+        check(!m.overflow.length, "zoom " + zoom + ", " + size.name + ", " + id + ": nothing runs off the side. " + m.overflow.slice(0, 2).join("; "));
+      }
+      await context.close();
+    }
+  }
+}
+
+if (section("perform")) {
+  console.log("Performing a message from its button");
+  const { context, page, errors } = await open(THEMES[0], SIZES[1]);
+  const btn = page.locator("#mount .af-msg-btn");
+  check((await btn.count()) === 1, "the message gets one Auto Foley button");
+  check((await btn.getAttribute("class")).includes("_actionBtn_ab12c_3"), "the button wears the host button's class");
+  check((await page.evaluate(() => document.querySelector("#mount .af-msg-btn svg").getAttribute("width"))) === "16", "its icon is the host icon's size");
+  await btn.click();
+  await page.waitForTimeout(150);
+  check((await page.evaluate(() => window.__sent.some((m) => m.type === "direct" && m.messageId === "m1" && m.chatId === "chat1"))), "the message is sent to be directed, with its chat");
+  check((await page.locator(".af-line").count()) === 3, "the script shows every line");
+  check((await page.locator(".af-chip-tag").count()) >= 2, "voice tags are drawn as chips");
+  check((await page.locator(".af-chip-insound").count()) === 1, "a sound in the voice is drawn as a sound chip");
+  check((await page.locator("button.af-chip-sound").count()) === 1, "a separate sound effect is a button");
+  check((await page.locator(".af-line-note").count()) === 1, "a line read as written says why");
+  await page.waitForTimeout(700);
+  const synth = await page.evaluate(() => window.__synth || []);
+  check(synth.length >= 2, "lines are spoken through Lumiverse's TTS route (" + synth.length + ")");
+  const ys = synth.find((b) => /You are late/.test(b.text));
+  check(ys && ys.voice === "v1" && ys.model === "eleven_v3" && ys.connectionId === "t1", "a line goes out with its speaker's voice, model and the ElevenLabs connection");
+  check(ys && ys.text.includes("[flatly]") && ys.text.includes("[sound of"), "a v3 line keeps its tags");
+  check(ys && ys.parameters.stability === 0, "a big moment on v3 steps stability down from Natural to Creative");
+  const ferry = synth.find((b) => /tide/.test(b.text));
+  check(ferry && ferry.voice && ferry.voice !== "v1", "someone the AI added gets a voice nobody else uses (" + (ferry && ferry.voice) + ")");
+  const played = await page.evaluate(() => window.__played || 0);
+  check(played >= 4, "every part plays, voices and sounds (" + played + ")");
+  check((await page.locator('[data-af="sub"]').textContent()).includes("Finished") || (await page.locator('[data-af="title"]').textContent()).length > 0, "the status line says where it is");
+  await btn.click();
+  await page.waitForTimeout(80);
+  check((await btn.getAttribute("data-af-busy")) === "true", "the button shows the message is playing");
+  await btn.click();
+  await page.waitForTimeout(80);
+  check((await btn.getAttribute("data-af-busy")) === "false", "pressing it again stops it");
+  check(!errors.length, "no console errors while performing. " + errors.slice(0, 2).join("; "));
+
+  console.log("A message edited while it plays");
+  await btn.click();
+  await page.waitForTimeout(120);
+  const directsBefore = await page.evaluate(() => window.__sent.filter((m) => m.type === "direct").length);
+  await page.evaluate(() => window.__emit("MESSAGE_EDITED", { chatId: "chat1", message: { id: "m1", content: "A rewritten reply." } }));
+  await page.waitForTimeout(30);
+  check((await btn.getAttribute("data-af-busy")) === "true", "it starts again at once");
+  await page.waitForTimeout(170);
+  const directsAfter = await page.evaluate(() => window.__sent.filter((m) => m.type === "direct").length);
+  check(directsAfter === directsBefore + 1, "an edit to the playing message directs it again (" + directsBefore + " then " + directsAfter + ")");
+  await page.evaluate(() => window.__emit("MESSAGE_EDITED", { chatId: "chat1", message: { id: "m9", content: "x" } }));
+  await page.waitForTimeout(100);
+  check((await page.evaluate(() => window.__sent.filter((m) => m.type === "direct").length)) === directsAfter, "an edit to a message it never read does nothing");
+  await page.waitForTimeout(900);
+
+  console.log("Narration skipped, and a muted speaker");
+  await page.evaluate(() => {
+    window.__synth = [];
+  });
+  await page.click('.af-tab[data-tab="settings"]');
+  await page.waitForTimeout(250);
+  await page.click('.af-seg button[data-v="skip"]');
+  await page.waitForTimeout(500);
+  await page.click('.af-tab[data-tab="stage"]');
+  await page.waitForTimeout(250);
+  await page.click(".af-line-go >> nth=0");
+  await page.waitForTimeout(500);
+  const s2 = await page.evaluate(() => window.__synth || []);
+  check(!s2.some((b) => /set the cup down/.test(b.text)), "narration is not spoken when it is skipped");
+
+  console.log("Switches open and close what sits under them");
+  await page.click('.af-tab[data-tab="director"]');
+  await page.waitForTimeout(250);
+  const subOf = () => page.evaluate(() => {
+    const sw = Array.from(document.querySelectorAll('.af-switch')).find((l) => l.querySelector('b').textContent === 'Sounds');
+    const box = sw && sw.parentElement.querySelector('.af-sub');
+    return box ? { hidden: box.hidden, h: box.getBoundingClientRect().height } : null;
+  });
+  const before = await subOf();
+  check(before && !before.hidden && before.h > 20, "the rows under Sounds show while it is on");
+  await page.evaluate(() => Array.from(document.querySelectorAll('.af-switch')).find((l) => l.querySelector('b').textContent === 'Sounds').click());
+  await page.waitForTimeout(90);
+  const mid = await subOf();
+  check(mid && !mid.hidden && mid.h > 0 && mid.h < before.h, "they close over several frames (" + (mid && Math.round(mid.h)) + "px part way)");
+  await page.waitForTimeout(300);
+  const after = await subOf();
+  check(after && after.hidden, "and are hidden once closed");
+
+  console.log("Debug info");
+  await page.click('.af-tab[data-tab="settings"]');
+  await page.waitForTimeout(250);
+  await page.locator('.af-btn:has-text("Build preview")').click();
+  await page.waitForTimeout(150);
+  const report = await page.locator('textarea[aria-label="Debug info"]').inputValue();
+  check(report.startsWith("Auto Foley v"), "the report says which version it is from");
+  check(report.includes("cors_proxy = MISSING"), "a missing permission is named");
+  check(!/Ysolde|Ferryman|Wyn/.test(report), "no cast name is in the report");
+  check(report.includes("[npc 1] now has the voice"), "a Log line that names someone uses their role instead");
+  check(!report.includes("You are late"), "no message text is in the report");
+  await page.locator('.af-check:has-text("The last script") input').uncheck();
+  await page.locator('.af-btn:has-text("Build preview")').click();
+  await page.waitForTimeout(150);
+  check(!(await page.locator('textarea[aria-label="Debug info"]').inputValue()).includes("recent activity"), "an unticked part is left out");
+
+  console.log("Teardown");
+  await page.evaluate(() => window.__teardown());
+  const left = await page.evaluate(() => ({
+    root: !!document.querySelector(".af"),
+    btn: !!document.querySelector(".af-msg-btn"),
+    counts: window.__counts(),
+    tab: !!window.__tabDestroyed,
+    deco: !!window.__decoratorGone,
+    style: Array.from(document.querySelectorAll("style")).some((s) => s.textContent.includes(".af-tabs")),
+  }));
+  check(!left.root && !left.btn && !left.style, "nothing of the panel is left on the page");
+  check(left.counts.backend === 0 && left.counts.listeners === 0, "every listener is gone (" + JSON.stringify(left.counts) + ")");
+  check(left.tab && left.deco, "the drawer tab and the message buttons are handed back");
+  await context.close();
+}
+
+if (section("reduce")) {
+  console.log("Reduce motion");
+  const { context, page } = await open(THEMES[0], SIZES[1]);
+  await page.evaluate(() => {
+    window.__settings.reduceMotion = true;
+  });
+  await page.evaluate(() => window.__teardown());
+  await page.evaluate(() => {
+    document.getElementById("drawer").innerHTML = "";
+    window.__teardown = window.__setup(window.__ctx, { fetch: window.__fetch, Audio: window.__Audio });
+  });
+  await page.waitForTimeout(150);
+  await page.click('.af-tab[data-tab="director"]');
+  await page.waitForTimeout(50);
+  await page.evaluate(() => Array.from(document.querySelectorAll('.af-switch')).find((l) => l.querySelector('b').textContent === 'Sounds').click());
+  await page.waitForTimeout(20);
+  const hidden = await page.evaluate(() => {
+    const sw = Array.from(document.querySelectorAll('.af-switch')).find((l) => l.querySelector('b').textContent === 'Sounds');
+    return sw.parentElement.querySelector('.af-sub').hidden;
+  });
+  check(hidden, "with reduce motion on, a switch closes its rows at once");
+  check((await page.evaluate(() => document.querySelector(".af").dataset.calm)) === "true", "the panel is marked calm");
+  await context.close();
+}
+
+await browser.close();
+console.log(`\n${checks - failures} of ${checks} checks passed.`);
+if (failures) process.exit(1);
