@@ -524,9 +524,8 @@ function rateWait(attempt, err) {
 // ---------------------------------------------------------------------------
 // Icons
 // ---------------------------------------------------------------------------
-// A boom microphone, the long-pole microphone a film crew holds over a scene
-// to record dialogue and foley, with the sound it picks up.
-const ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5.6" y="-0.2" width="5.6" height="13" rx="2.8" transform="rotate(-45 8.4 6.3)"/><path d="M9.1 11.6l4-4"/><path d="M13.2 13.1 21.6 21.5"/><path d="M2.2 13.6a7 7 0 0 0 5.2 5.2"/><path d="M1.4 18a10.4 10.4 0 0 0 4.6 4.6"/></svg>';
+// A speech bubble with three sound bars in it: a voice, performed.
+const ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6.5 3h11A2.5 2.5 0 0 1 20 5.5v8a2.5 2.5 0 0 1-2.5 2.5H11l-4.5 4v-4A2.5 2.5 0 0 1 4 13.5v-8A2.5 2.5 0 0 1 6.5 3Z"/><path d="M9 8v3.5M12 6.5v6.5M15 8.5v2.5"/></svg>';
 const ICON_PLAY = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5.5v13a1 1 0 0 0 1.5.86l10.5-6.5a1 1 0 0 0 0-1.72L9.5 4.64A1 1 0 0 0 8 5.5Z"/></svg>';
 const ICON_PAUSE = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6.5" y="5" width="4" height="14" rx="1"/><rect x="13.5" y="5" width="4" height="14" rx="1"/></svg>';
 const ICON_STOP = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="1.5"/></svg>';
@@ -4268,7 +4267,7 @@ export function setup(ctx, overrides) {
         const c = card('Start here');
         c.appendChild(el('<ol class="af-steps">' +
             '<li>Open the <b>Settings</b> tab and press <b>Check my setup</b>. It says what is ready and what is missing.</li>' +
-            '<li>In a chat, find the boom microphone ' + ICON + ' in the row of buttons on any message. Press it to perform that message. Press it again to stop.</li>' +
+            '<li>In a chat, find the Auto Foley button ' + ICON + ' in the row of buttons on any message. Press it to perform that message. Press it again to stop.</li>' +
             '<li>The same button sits in the chat’s own row of buttons, by the message box. It performs the newest reply.</li>' +
             '<li>Open the <b>Cast</b> tab and pick a voice for each person. <b>Hear a sample</b> plays one line.</li>' +
             '<li>Turn on <b>Autoplay new replies</b> in Settings to hear each reply as it finishes.</li>' +
@@ -4414,7 +4413,7 @@ export function setup(ctx, overrides) {
         }
         else {
             title.textContent = script ? (script.author ? script.author + '’s message' : 'This message') : 'Nothing playing';
-            sub.textContent = phase || (script ? 'Ready. Press Play.' : chatInfo.kind === 'none' ? 'Open a chat, then press the boom microphone on a message.' : 'Press the boom microphone on a message.');
+            sub.textContent = phase || (script ? 'Ready. Press Play.' : chatInfo.kind === 'none' ? 'Open a chat, then press the Auto Foley button on a message.' : 'Press the Auto Foley button on a message.');
         }
     }
     // A cost with no currency symbol, since nothing here knows the currency.
@@ -5600,8 +5599,12 @@ export function setup(ctx, overrides) {
             }
         };
         drawConn();
+        // Drawn from what is already known, and drawn again only if the fresh
+        // list differs, so the tab does not change in front of the reader.
+        const connSig = () => JSON.stringify([ttsConnections.map((c) => [c.id, c.name, c.model, c.provider]), hostVoice && hostVoice.ttsConnectionId, ttsWhy]);
+        const drawnWith = connSig();
         Promise.all([loadTtsConnections(), loadHostVoice()]).then(() => {
-            if (connBox.isConnected)
+            if (connBox.isConnected && connSig() !== drawnWith)
                 drawConn();
         });
         a.appendChild(connBox);
@@ -5612,11 +5615,11 @@ export function setup(ctx, overrides) {
                 '<li><b>Auto-play responses</b> should be off while Auto Foley’s Autoplay is on, or each reply is read twice.</li>' +
                 '<li><b>Connection</b> is the one Auto Foley uses, unless you pick another above.</li>' +
                 '<li><b>Speed</b>, <b>Volume</b>, the separate narrator voice and Speech detection are Lumiverse’s own. Auto Foley uses the Cast tab and the Mixer instead.</li>' +
-                '<li>Lumiverse’s own play button on a message still reads it the plain way. The boom microphone is Auto Foley’s.</li>' +
+                '<li>Lumiverse’s own play button on a message still reads it the plain way. The speech bubble with sound bars is Auto Foley’s.</li>' +
                 '</ul>'));
         }));
         page.appendChild(a);
-        const btns = card('Buttons', 'Where the boom microphone appears.');
+        const btns = card('Buttons', 'Where the Auto Foley button appears.');
         btns.appendChild(toggle('A button on every message', 'On by default. One tap performs that message, an older one or the greeting too. It sits in each message\u2019s own row of buttons, in the space Lumiverse leaves for extensions.', 'messageButton', () => syncSlots()));
         btns.appendChild(toggle('A button in the chat\u2019s row of controls', 'On by default. One tap performs the newest reply. It goes in Lumiverse\u2019s own row of chat buttons, in the place the app leaves there for extensions.', 'barButton', () => syncSlots()));
         btns.appendChild(toggle('In the Extras menu', 'On by default. Adds Perform the latest reply to the Extras menu of the message box, and Stop Auto Foley while something plays.', 'extrasMenu', () => syncExtras()));
@@ -5986,6 +5989,8 @@ export function setup(ctx, overrides) {
         transferKind = 'good';
         return 'Imported ' + took.join(', ') + '.';
     }
+    // How much made audio is kept, as last read, so the row is drawn with it.
+    let keptState = null;
     // Keep made audio: how much, how much is kept now, and a way to clear it.
     function keptAudioBox() {
         const box = el('<div class="af-col" data-af-row="keepAudio"></div>');
@@ -6009,6 +6014,7 @@ export function setup(ctx, overrides) {
                 const r = await rpc({ type: 'clips_clear' }, 60000);
                 if (r && r.error)
                     log(r.error, 'bad');
+                keptState = r;
                 showKept(r);
             }
             catch (_) {
@@ -6020,8 +6026,6 @@ export function setup(ctx, overrides) {
         row.appendChild(clear);
         box.appendChild(row);
         const showKept = (r) => {
-            if (!said.isConnected)
-                return;
             const n = Number(r && r.count) || 0;
             const mb = (Number(r && r.bytes) || 0) / (1024 * 1024);
             said.textContent = n ? 'Kept now: ' + n + (n === 1 ? ' line, ' : ' lines, ') + (mb < 0.1 ? 'under 0.1' : mb.toFixed(1)) + ' MB.' : 'Nothing is kept yet.';
@@ -6029,7 +6033,13 @@ export function setup(ctx, overrides) {
         };
         const paintKept = () => {
             row.hidden = !S.keepAudio;
-            rpc({ type: 'clips_state' }, 15000).then(showKept, () => { });
+            if (keptState)
+                showKept(keptState);
+            rpc({ type: 'clips_state' }, 15000).then((r) => {
+                keptState = r;
+                if (said.isConnected)
+                    showKept(r);
+            }, () => { });
         };
         paintKept();
         return box;
@@ -6393,10 +6403,33 @@ export function setup(ctx, overrides) {
     syncExtras();
     readChat();
     lastChat = activeChatId();
+    // The lists the tabs draw are read once at the start, so a tab is drawn
+    // whole the first time it opens rather than filled in a moment later.
+    const startSig = () => JSON.stringify([ttsConnections.map((c) => c.id), hostVoice && hostVoice.ttsConnectionId]);
+    const startedWith = startSig();
     Promise.all([loadTtsConnections(), loadHostVoice()]).then(() => {
-        if (tab === 'settings' || tab === 'cast')
+        if ((tab === 'settings' || tab === 'cast') && startSig() !== startedWith)
             renderTab();
     });
+    rpc({ type: 'list_connections' }, 15000).then((r) => {
+        if (llmConnections)
+            return;
+        llmConnections = (r && r.list) || [];
+        llmWhy = (r && r.why) || '';
+        if (tab === 'director')
+            renderTab();
+    }, () => { });
+    rpc({ type: 'list_decision_connections' }, 15000).then((r) => {
+        if (decisionList)
+            return;
+        decisionList = (r && r.list) || [];
+        decisionWhy = (r && r.why) || (r && r.state === 'none' ? 'You have no Decision connections yet.' : '');
+        if (tab === 'director' && S.decisionsOn)
+            renderTab();
+    }, () => { });
+    rpc({ type: 'clips_state' }, 15000).then((r) => {
+        keptState = r;
+    }, () => { });
     rpc({ type: 'load' }, 20000).then((r) => {
         if (!alive || !r || r.type !== 'state')
             return;

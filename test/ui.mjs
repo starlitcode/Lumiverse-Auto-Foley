@@ -997,6 +997,32 @@ if (section("sound link")) {
   }
 }
 
+if (section("tab flicker")) {
+  console.log("Switching tabs draws each tab once");
+  for (const size of SIZES) {
+    const { context, page } = await open(THEMES[0], size);
+    await page.waitForTimeout(400);
+    for (const id of ["settings", "director", "cast", "sounds", "stage", "settings", "director"]) {
+      const changes = await page.evaluate(async (id) => {
+        document.querySelector('.af-tab[data-tab="' + id + '"]').click();
+        const pg = document.querySelector('[data-af="page"]');
+        const seen = [];
+        const t0 = performance.now();
+        let last = "";
+        while (performance.now() - t0 < 700) {
+          const snap = pg.offsetHeight + ":" + pg.textContent.length;
+          if (snap !== last) seen.push(Math.round(performance.now() - t0) + "ms " + snap);
+          last = snap;
+          await new Promise((r) => requestAnimationFrame(r));
+        }
+        return seen;
+      }, id);
+      check(changes.length === 1, size.name + ", " + id + ": the tab is drawn once, with no change after (" + changes.join(", ") + ")");
+    }
+    await context.close();
+  }
+}
+
 if (section("taps")) {
   console.log("A tap on a ?, and the tab bar when the tab changes");
   {

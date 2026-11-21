@@ -44,5 +44,6 @@
 - **What the Log shows**: a switch for each kind of Log line.
 - **A picture for each person**, optional, shown in Now playing and the player. With none, the first letter of the name is shown.
 - **Add a sound by link**, in the sound library. It is played from that address.
+- **A new symbol**: a speech bubble with sound bars in it, on the drawer tab and on every Auto Foley button.
 - **Cast groups.** Sort the cast on the Cast tab into groups you name, open and close.
 - **A floating player.** A round button over the chat opens a small player, with the line being spoken, a strip of every part of the message, the volumes, quick switches, and who is voiced.

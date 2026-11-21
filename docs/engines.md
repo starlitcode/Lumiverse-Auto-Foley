@@ -27,7 +27,7 @@ A sung line on an engine that cannot sing is spoken.
 
 1. You pick the connection in the **Settings** tab, under **TTS connection**.
 2. Auto Foley finds the engine from the connection's provider and model. The line under the box says what that engine can do.
-3. When you press the boom microphone, the Director is told the engine and gets its rules: whether it may add tags, which tags the engine knows, and whether a line can carry a note on how it is said.
+3. When you press the Auto Foley button, the Director is told the engine and gets its rules: whether it may add tags, which tags the engine knows, and whether a line can carry a note on how it is said.
 4. The Director also gets a short note on how that engine reads tags. You can read and change it in the **Director** tab, under **Notes for each voice engine**.
 5. Each line is fitted to the engine of the person who says it, and sent to Lumiverse to be spoken.
 
