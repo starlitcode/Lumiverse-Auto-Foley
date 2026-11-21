@@ -791,6 +791,17 @@ button.af-chip-sound svg { width: 12px; height: 12px; flex: none; color: var(--a
 
 /* The Cast */
 .af-person { padding: 0; gap: 0; }
+.af-folder { display: flex; flex-direction: column; gap: 10px; }
+.af-folder-head { display: flex; align-items: center; gap: 6px; min-height: 44px; padding: 3px 6px 3px 4px; border: 1px solid var(--af-line); border-radius: var(--af-r-md); background: var(--af-fill-subtle); }
+.af-folder-toggle { flex: 1 1 auto; min-width: 0; display: flex; align-items: center; gap: 8px; min-height: 36px; padding: 0 6px; border: 0; border-radius: var(--af-r-sm); background: transparent; color: var(--af-text); font: inherit; font-weight: 600; text-align: left; cursor: pointer; }
+.af-folder-toggle > span:nth-child(2) { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.af-folder-toggle .af-chev { display: grid; place-items: center; width: 18px; height: 18px; color: var(--af-muted); transition: transform var(--af-fast); }
+.af-folder-toggle .af-chev svg { width: 14px; height: 14px; }
+.af-folder[data-open="true"] .af-folder-toggle .af-chev { transform: rotate(90deg); }
+.af-folder-count { flex: none; color: var(--af-muted); font-weight: 400; font-size: 12px; }
+.af-folder-name { flex: 1 1 auto; min-width: 0; }
+.af-folder-body > div { display: flex; flex-direction: column; gap: 12px; padding: 2px 0 2px 12px; margin-left: 10px; border-left: 2px solid var(--af-line); }
+.af-folder-empty { margin: 0; color: var(--af-muted); font-size: 12.5px; }
 .af-person-head { display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; align-items: center; gap: 8px; width: 100%; min-height: 48px; padding: 8px 10px; border: 0; border-radius: var(--af-r-md); background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
 @media (hover: hover) { .af-person-head:hover { background: var(--af-accent-faint); } }
 .af-person-head:focus-visible { outline: none; box-shadow: inset 0 0 0 2px var(--af-accent-soft); }
@@ -916,6 +927,7 @@ const DEFAULTS = {
     applauseWhen: 'message',
     engines: {},
     engineNotes: {},
+    folders: [],
     keepAudio: 100,
     applauseSound: '',
     applauseSeconds: 5,
@@ -939,7 +951,7 @@ const DEFAULTS = {
     guideSeen: false,
     exportParts: ['settings', 'prompt', 'cast'],
     importParts: ['settings', 'prompt', 'cast'],
-    resetParts: ['settings', 'prompt', 'cast', 'sounds', 'key'],
+    resetParts: ['settings', 'prompt', 'cast', 'sounds', 'audio', 'key'],
     cast: [],
 };
 // ---------------------------------------------------------------------------
@@ -4434,12 +4446,14 @@ export function setup(ctx, overrides) {
     const openPeople = new Set();
     const KIND_LABEL = { narrator: 'Narrator', character: 'Character', persona: 'Persona', npc: 'NPC' };
     const ADDED_LABEL = { ai: 'Added by AI', found: 'Found in the text' };
+    const folders = () => (Array.isArray(S.folders) ? S.folders : []);
+    let renamingFolder = '';
     function renderCast() {
         const top = card('Cast', 'Everyone who speaks gets their own voice: your personas, the characters and the NPCs. People join when they write a message, when the text names them speaking, when the Director finds them, or when you add them. Tap a person to open their settings.');
         const row = el('<div class="af-row"></div>');
         row.appendChild(button('Add someone', () => {
             const m = {
-                id: rid('c'), name: 'New person', kind: 'npc', addedBy: 'you', aliases: [], voice: '', voiceName: '', model: '', connection: '', voices: {},
+                id: rid('c'), name: 'New person', kind: 'npc', addedBy: 'you', aliases: [], voice: '', voiceName: '', model: '', connection: '', voices: {}, folder: '',
                 stability: 0.5, similarity: 0.75, style: 0, speed: 1, note: '', gender: 'unknown', muted: false,
             };
             S.cast.push(m);
@@ -4447,15 +4461,106 @@ export function setup(ctx, overrides) {
             save();
             renderTab();
         }, 'af-primary'));
+        row.appendChild(button('New folder', () => {
+            const f = { id: rid('f'), name: 'New folder', open: true };
+            S.folders = folders().concat([f]);
+            renamingFolder = f.id;
+            save();
+            renderTab();
+        }));
         top.appendChild(row);
+        top.appendChild(hint('Folders sort the cast on this tab, such as one for each story. Pick a person’s folder in their settings.'));
         const conn = activeConnection();
         if (!conn)
             top.appendChild(notice('warn', ttsWhy || 'Pick your TTS connection in the Settings tab to choose voices.'));
         page.appendChild(top);
         const order = { narrator: 0, persona: 1, character: 2, npc: 3 };
         const people = S.cast.slice().sort((a, b) => (order[a.kind] ?? 9) - (order[b.kind] ?? 9));
+        const known = new Set(folders().map((f) => f.id));
+        for (const f of folders())
+            page.appendChild(folderSection(f, people.filter((m) => m.folder === f.id), conn));
         for (const m of people)
-            page.appendChild(personCard(m, conn));
+            if (!m.folder || !known.has(m.folder))
+                page.appendChild(personCard(m, conn));
+    }
+    function folderSection(f, people, conn) {
+        const sec = el('<section class="af-folder" data-folder="' + esc(f.id) + '" data-open="' + (f.open ? 'true' : 'false') + '"><div class="af-folder-head"></div><div class="af-sub af-folder-body"' + (f.open ? '' : ' hidden') + '><div></div></div></section>');
+        const head = sec.querySelector('.af-folder-head');
+        const body = sec.querySelector('.af-folder-body');
+        const inner = body.firstElementChild;
+        const count = people.length === 1 ? '1 person' : people.length + ' people';
+        if (renamingFolder === f.id) {
+            const input = el('<input type="text" class="af-field af-folder-name" maxlength="60" aria-label="Folder name">');
+            input.value = f.name;
+            const done = () => {
+                if (renamingFolder !== f.id)
+                    return;
+                renamingFolder = '';
+                f.name = input.value.trim().slice(0, 60) || f.name;
+                S.folders = folders().slice();
+                save();
+                renderTab();
+            };
+            input.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter')
+                    done();
+                if (e.key === 'Escape') {
+                    renamingFolder = '';
+                    renderTab();
+                }
+            });
+            input.addEventListener('blur', done);
+            head.appendChild(input);
+            head.appendChild(button('Save', done, 'af-primary'));
+            setTimeout(() => {
+                try {
+                    input.focus();
+                    input.select();
+                }
+                catch (_) { }
+            }, 0);
+        }
+        else {
+            const toggle = el('<button type="button" class="af-folder-toggle" aria-expanded="' + (f.open ? 'true' : 'false') + '"><span class="af-chev">' + ICON_CHEVRON + '</span><span></span><span class="af-folder-count"></span></button>');
+            toggle.children[1].textContent = f.name;
+            toggle.children[2].textContent = count;
+            toggle.addEventListener('click', () => {
+                f.open = !f.open;
+                S.folders = folders().slice();
+                save();
+                sec.dataset.open = f.open ? 'true' : 'false';
+                toggle.setAttribute('aria-expanded', f.open ? 'true' : 'false');
+                if (f.open && !inner.childElementCount)
+                    fillFolder();
+                reveal(body, f.open);
+            });
+            head.appendChild(toggle);
+            head.appendChild(button('Rename', () => {
+                renamingFolder = f.id;
+                renderTab();
+            }));
+            head.appendChild(button('Delete', async () => {
+                const ok = await askSure('Delete the folder ' + f.name, 'The folder is deleted. ' + (people.length ? 'The ' + count + ' in it stay in the cast, outside any folder.' : 'It is empty.'), 'Delete', true);
+                if (!ok)
+                    return;
+                S.folders = folders().filter((x) => x.id !== f.id);
+                for (const m of S.cast)
+                    if (m.folder === f.id)
+                        m.folder = '';
+                save();
+                renderTab();
+            }, 'af-danger'));
+        }
+        const fillFolder = () => {
+            inner.innerHTML = '';
+            if (!people.length)
+                inner.appendChild(el('<p class="af-folder-empty">Nobody is in this folder yet. Open a person and pick it under Folder.</p>'));
+            for (const m of people)
+                inner.appendChild(personCard(m, conn));
+        };
+        if (f.open)
+            fillFolder();
+        return sec;
     }
     function personCard(m, conn) {
         const open = openPeople.has(m.id);
@@ -4526,6 +4631,13 @@ export function setup(ctx, overrides) {
                 save();
             }, 'Used only when someone new has no voice yet: they get a voice of this type that nobody else uses.'));
             inner.appendChild(g1);
+        }
+        if (folders().length) {
+            inner.appendChild(select('Folder', [{ id: '', label: 'No folder' }].concat(folders().map((f) => ({ id: f.id, label: f.name }))), m.folder || '', (v) => {
+                m.folder = v;
+                save();
+                renderTab();
+            }, 'Which folder they are in on this tab. It changes nothing about how they sound.'));
         }
         // The connection, voice and model, and the voice settings that engine
         // has. Drawn again when the connection or the model changes, since each
@@ -5321,7 +5433,7 @@ export function setup(ctx, overrides) {
     ]);
     // The setting keys each part covers. Which parts are ticked are settings
     // too, but they are never carried in a file or put back by a reset.
-    const NOT_SETTINGS = ['cast', 'prompt', 'exportParts', 'importParts', 'resetParts', 'guideSeen'];
+    const NOT_SETTINGS = ['cast', 'folders', 'prompt', 'askNotes', 'engineNotes', 'exportParts', 'importParts', 'resetParts', 'guideSeen'];
     const settingKeys = () => Object.keys(DEFAULTS).filter((k) => NOT_SETTINGS.indexOf(k) < 0);
     let transferSaid = '';
     let transferKind = '';
@@ -5364,10 +5476,15 @@ export function setup(ctx, overrides) {
                 for (const k of settingKeys())
                     body.settings[k] = S[k];
             }
-            if (parts.indexOf('prompt') >= 0)
+            if (parts.indexOf('prompt') >= 0) {
                 body.prompt = S.prompt || '';
-            if (parts.indexOf('cast') >= 0)
+                body.askNotes = JSON.parse(JSON.stringify(S.askNotes || {}));
+                body.engineNotes = JSON.parse(JSON.stringify(S.engineNotes || {}));
+            }
+            if (parts.indexOf('cast') >= 0) {
                 body.cast = JSON.parse(JSON.stringify(S.cast || []));
+                body.folders = JSON.parse(JSON.stringify(S.folders || []));
+            }
             let ok = false;
             try {
                 const blob = new Blob([JSON.stringify(body, null, 2)], { type: 'application/json' });
@@ -5484,10 +5601,15 @@ export function setup(ctx, overrides) {
         }
         if (want.indexOf('prompt') >= 0 && typeof body.prompt === 'string') {
             S.prompt = body.prompt;
-            took.push('the Director’s prompt');
+            if (body.askNotes && typeof body.askNotes === 'object')
+                S.askNotes = body.askNotes;
+            if (body.engineNotes && typeof body.engineNotes === 'object')
+                S.engineNotes = body.engineNotes;
+            took.push('the Director’s prompt and notes');
         }
         if (want.indexOf('cast') >= 0 && Array.isArray(body.cast)) {
             S.cast = body.cast;
+            S.folders = Array.isArray(body.folders) ? body.folders : [];
             took.push('the cast');
         }
         if (!took.length) {

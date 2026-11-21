@@ -30,4 +30,5 @@
 - **A description for every setting**, behind a ? button beside it.
 - **The look.** A pattern behind the panel and how solid the boxes are, the same as Auto Refine's. The tab bar stays at the top while you scroll.
 - **Expand** for every long text box, and **Clear the log** on the Stage tab.
+- **Cast folders.** Sort the cast on the Cast tab into folders you name, open and close.
 - **A floating player.** A round button over the chat opens a small player, with the line being spoken, a strip of every part of the message, the volumes, quick switches, and who is voiced.

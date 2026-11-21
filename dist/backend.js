@@ -73,6 +73,7 @@ const DEFAULT_SETTINGS = {
     importParts: ['settings', 'prompt', 'cast'],
     resetParts: ['settings', 'prompt', 'cast', 'sounds', 'audio', 'key'],
     cast: [],
+    folders: [],
 };
 const NARRATOR_ID = 'narrator';
 function narrator() {
@@ -87,6 +88,7 @@ function narrator() {
         model: '',
         connection: '',
         voices: {},
+        folder: '',
         stability: 0.5,
         similarity: 0.75,
         style: 0,
@@ -112,6 +114,7 @@ function pick(v, allowed, dflt) {
     return allowed.indexOf(v) >= 0 ? v : dflt;
 }
 const MAX_CAST = 80;
+const MAX_FOLDERS = 30;
 // A person's voice on each connection. Kept for at most 20 connections.
 function cleanVoices(v) {
     const out = {};
@@ -146,6 +149,7 @@ function cleanMember(m) {
         model: str(m.model, 64),
         connection: str(m.connection, 80),
         voices: cleanVoices(m.voices),
+        folder: str(m.folder, 64),
         stability: num(m.stability, 0, 1, base.stability),
         similarity: num(m.similarity, 0, 1, base.similarity),
         style: num(m.style, 0, 1, base.style),
@@ -255,6 +259,22 @@ function cleanSettings(raw) {
     }
     if (!cast.some((c) => c.kind === 'narrator'))
         cast.unshift(narrator());
+    const folders = [];
+    if (Array.isArray(r.folders)) {
+        for (const f of r.folders) {
+            const id = str(f && f.id, 64);
+            const name = str(f && f.name, 60).trim();
+            if (!id || !name || folders.some((x) => x.id === id))
+                continue;
+            folders.push({ id, name, open: bool(f.open, true) });
+            if (folders.length >= MAX_FOLDERS)
+                break;
+        }
+    }
+    // A person in a folder that is gone is in no folder.
+    for (const c of cast)
+        if (c.folder && !folders.some((f) => f.id === c.folder))
+            c.folder = '';
     return {
         enabled: bool(r.enabled, d.enabled),
         ttsConnection: str(r.ttsConnection, 80),
@@ -316,6 +336,7 @@ function cleanSettings(raw) {
         importParts: partList(r.importParts, TRANSFER_PARTS, d.importParts),
         resetParts: partList(r.resetParts, RESET_PARTS, d.resetParts),
         cast: cast,
+        folders: folders,
     };
 }
 // An id that works over plain http too. crypto.randomUUID is missing outside
@@ -2765,7 +2786,7 @@ async function onPanel(p, userId) {
                 const s = await loadSettings(userId);
                 const fresh = cleanSettings({});
                 if (parts.indexOf('settings') >= 0) {
-                    const keep = { cast: s.cast, prompt: s.prompt, askNotes: s.askNotes, engineNotes: s.engineNotes, exportParts: s.exportParts, importParts: s.importParts, resetParts: s.resetParts };
+                    const keep = { cast: s.cast, folders: s.folders, prompt: s.prompt, askNotes: s.askNotes, engineNotes: s.engineNotes, exportParts: s.exportParts, importParts: s.importParts, resetParts: s.resetParts };
                     Object.assign(s, fresh, keep);
                 }
                 if (parts.indexOf('prompt') >= 0) {
@@ -2773,8 +2794,10 @@ async function onPanel(p, userId) {
                     s.askNotes = {};
                     s.engineNotes = {};
                 }
-                if (parts.indexOf('cast') >= 0)
+                if (parts.indexOf('cast') >= 0) {
                     s.cast = fresh.cast;
+                    s.folders = [];
+                }
                 let ok = await saveSettings(userId, s);
                 if (parts.indexOf('sounds') >= 0) {
                     const list = await loadSounds(userId);

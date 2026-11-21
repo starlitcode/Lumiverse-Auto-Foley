@@ -749,6 +749,42 @@ if (section("steady")) {
   }
 }
 
+if (section("folders")) {
+  console.log("Folders in the Cast tab");
+  for (const size of SIZES) {
+    const { context, page, errors } = await open(THEMES[0], size);
+    const where = size.name;
+    await page.click('.af-tab[data-tab="cast"]');
+    await page.waitForTimeout(250);
+    await page.locator('.af-btn', { hasText: "New folder" }).click();
+    await page.waitForTimeout(200);
+    const input = page.locator('.af-folder input[aria-label="Folder name"]');
+    check((await input.count()) === 1, where + ": a new folder opens with its name ready to type");
+    await input.fill("Harbor town");
+    await input.press("Enter");
+    await page.waitForTimeout(250);
+    check((await page.locator(".af-folder-toggle", { hasText: "Harbor town" }).count()) === 1, where + ": the folder takes its name");
+    // Move the first person who is not in a folder into it.
+    await page.locator(".af-page > .af-person .af-person-head").first().click();
+    await page.waitForTimeout(350);
+    const sel = page.locator('.af-page > .af-person .af-col:has(label:text-is("Folder")) select').first();
+    await sel.selectOption({ label: "Harbor town" });
+    await page.waitForTimeout(300);
+    check((await page.locator(".af-folder .af-person").count()) === 1, where + ": a person moves into the folder");
+    check((await page.locator(".af-folder-count").textContent()).includes("1 person"), where + ": the folder says how many are in it");
+    await page.locator(".af-folder-toggle").click();
+    await page.waitForTimeout(400);
+    check(await page.evaluate(() => document.querySelector(".af-folder-body").hidden), where + ": a tap closes the folder");
+    const m = await page.evaluate(MEASURE, size.touch);
+    check(!m.overflow.length && !m.small.length, where + ": the folder row fits and its buttons are big enough. " + m.overflow.concat(m.small).slice(0, 3).join("; "));
+    await page.locator(".af-folder-head .af-btn", { hasText: "Delete" }).click();
+    await page.waitForTimeout(300);
+    check((await page.locator(".af-folder").count()) === 0 && (await page.locator(".af-page > .af-person").count()) >= 4, where + ": deleting the folder keeps its people in the cast");
+    check(!errors.length, where + ": no console errors. " + errors.slice(0, 2).join("; "));
+    await context.close();
+  }
+}
+
 if (section("taps")) {
   console.log("A tap on a ?, and the tab bar when the tab changes");
   {

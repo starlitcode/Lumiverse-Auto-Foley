@@ -524,6 +524,26 @@ describe("keeping made audio", () => {
   });
 });
 
+describe("cast folders", () => {
+  test("folders are kept, and a person in a folder that is gone is in none", async () => {
+    const h = host();
+    await h.ask({ type: "save", settings: { folders: [{ id: "f1", name: "Harbor town", open: false }, { id: "", name: "No id" }], cast: [{ name: "Pell", folder: "f1" }, { name: "Odessa", folder: "f9" }] } });
+    const saved = JSON.parse(h.files.get("u1/settings.json"));
+    expect(saved.folders).toEqual([{ id: "f1", name: "Harbor town", open: false }]);
+    expect(saved.cast.find((c: any) => c.name === "Pell").folder).toBe("f1");
+    expect(saved.cast.find((c: any) => c.name === "Odessa").folder).toBe("");
+  });
+
+  test("Start again on the cast takes the folders too, and on settings keeps them", async () => {
+    const h = host();
+    await h.ask({ type: "save", settings: { folders: [{ id: "f1", name: "Harbor town", open: true }], cast: [{ name: "Pell", folder: "f1" }] } });
+    await h.ask({ type: "reset", parts: ["settings"] });
+    expect(JSON.parse(h.files.get("u1/settings.json")).folders.length).toBe(1);
+    await h.ask({ type: "reset", parts: ["cast"] });
+    expect(JSON.parse(h.files.get("u1/settings.json")).folders).toEqual([]);
+  });
+});
+
 describe("the Decision model", () => {
   const msg = { type: "direct", chatId: "c1", messageId: "m2", swipeId: 0, name: "Mara Vell", text: 'Mara looked at Tobin. "Go." "No," he said.' };
   const setup = async (h: Host) => {
