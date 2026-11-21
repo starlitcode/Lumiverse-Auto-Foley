@@ -25,7 +25,8 @@ type Strength = 'subtle' | 'natural' | 'dramatic';
 type NarrationMode = 'read' | 'sounds' | 'skip';
 type SoundStyle = 'voice' | 'effects' | 'both';
 type CastKind = 'narrator' | 'character' | 'persona' | 'npc';
-type AddedBy = 'you' | 'chat' | 'ai';
+// 'found' is someone the text itself named as speaking, found on this device.
+type AddedBy = 'you' | 'chat' | 'ai' | 'found';
 
 interface CastMember {
   id: string;
@@ -83,6 +84,49 @@ interface Settings {
   // Sounds.
   makeSounds: boolean;
   soundSeconds: number;
+  // The Director's model settings, named and sent the way Auto Refine sends
+  // its own: thinking, the samplers typed in, and how long to wait.
+  thinkingMode: string;
+  thinkingEffort: string;
+  samplers: Record<string, number | ''>;
+  timeoutSecs: number;
+  // How many times to wait and ask again when a provider is busy.
+  rateWaits: number;
+  // A note sent with an ask made again, saying what went wrong with the last
+  // answer, and the reader's own text for each note.
+  askNote: boolean;
+  askNotes: Record<string, string>;
+  // A second connection to ask when the Director still refuses or fails.
+  fallbackConnection: string;
+  // The look and the floating button, which follow the account like every
+  // other setting.
+  followScript: boolean;
+  // The audience: a cheer after a performance, for the AI's characters, for
+  // you, or both, and when.
+  applauseOn: boolean;
+  applauseForAi: boolean;
+  applauseForUser: boolean;
+  applauseWhen: string;
+  applauseSound: string;
+  applauseSeconds: number;
+  applauseVolume: number;
+  // Entries in the Extras menu of the message box.
+  extrasMenu: boolean;
+  panelPattern: string;
+  boxSolid: number;
+  widgetOn: boolean;
+  widgetSize: number;
+  // How many more times to ask the Director when its answer cannot be used.
+  retryDirector: number;
+  // A button on every message, and one in the chat's own row of buttons.
+  messageButton: boolean;
+  barButton: boolean;
+  // The Start here guide on the Stage tab has been read.
+  guideSeen: boolean;
+  // Which parts the export, the import and Start again cover.
+  exportParts: string[];
+  importParts: string[];
+  resetParts: string[];
   // Seconds to wait before a new reply plays by itself.
   autoplayDelay: number;
   // More tag names that hold thinking, one per entry, such as "musing".
@@ -96,7 +140,7 @@ const DEFAULT_SETTINGS: Settings = {
   enabled: true,
   ttsConnection: '',
   autoplay: false,
-  prepareAhead: true,
+  prepareAhead: false,
   readOwnMessages: false,
   narration: 'read',
   saveAudio: false,
@@ -121,6 +165,34 @@ const DEFAULT_SETTINGS: Settings = {
   autoplayDelay: 0,
   extraThinkTags: [],
   debugConsole: false,
+  thinkingMode: 'off',
+  thinkingEffort: 'low',
+  samplers: {},
+  timeoutSecs: 120,
+  rateWaits: 2,
+  askNote: true,
+  askNotes: {},
+  fallbackConnection: '',
+  followScript: true,
+  applauseOn: false,
+  applauseForAi: true,
+  applauseForUser: false,
+  applauseWhen: 'message',
+  applauseSound: '',
+  applauseSeconds: 5,
+  applauseVolume: 0.6,
+  extrasMenu: true,
+  panelPattern: '',
+  boxSolid: 60,
+  widgetOn: false,
+  widgetSize: 44,
+  retryDirector: 1,
+  messageButton: true,
+  barButton: true,
+  guideSeen: false,
+  exportParts: ['settings', 'prompt', 'cast'],
+  importParts: ['settings', 'prompt', 'cast'],
+  resetParts: ['settings', 'prompt', 'cast', 'sounds', 'key'],
   cast: [],
 };
 
@@ -175,7 +247,7 @@ function cleanMember(m: any): CastMember | null {
     id: str(m.id, 64) || newId(),
     name: name,
     kind: pick(m.kind, ['narrator', 'character', 'persona', 'npc'] as const, 'character'),
-    addedBy: pick(m.addedBy, ['you', 'chat', 'ai'] as const, 'you'),
+    addedBy: pick(m.addedBy, ['you', 'chat', 'ai', 'found'] as const, 'you'),
     aliases: Array.isArray(m.aliases)
       ? m.aliases.map((a: any) => str(a, 80).trim()).filter(Boolean).slice(0, 12)
       : [],
@@ -195,6 +267,63 @@ function cleanMember(m: any): CastMember | null {
 // Settings from storage or from the panel are input, not a promise. Every
 // field is checked and anything missing takes its default, so a file written
 // by an older version, or edited by hand, still loads.
+// The parts a file can carry, and the parts Start again can put back. A file
+// never carries the sound library or the key: the library is made of audio
+// files, and a key belongs in Lumiverse's secure storage, not in a file.
+const TRANSFER_PARTS = ['settings', 'prompt', 'cast'];
+
+// How much thinking the Director asks for. "inherit" sends nothing, so the
+// connection's own setting is used.
+const EFFORTS = ['auto', 'none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'] as const;
+
+function reasoningFor(s: Settings): any {
+  if (s.thinkingMode === 'off') return { source: 'off' };
+  if (s.thinkingMode === 'custom') return { source: 'custom', effort: s.thinkingEffort };
+  return null;
+}
+
+// The samplers that reach the request, the same list and bounds as Auto
+// Refine's. Blank is the reader leaving it to the connection, and is not
+// sent. A value outside the range is moved to the nearest end of it.
+const SAMPLERS: Array<{ id: string; min: number; max: number; whole?: boolean }> = [
+  { id: 'temperature', min: 0, max: 2 },
+  { id: 'top_p', min: 0, max: 1 },
+  { id: 'top_k', min: 0, max: 500, whole: true },
+  { id: 'min_p', min: 0, max: 1 },
+  { id: 'max_tokens', min: 1, max: 200000, whole: true },
+  { id: 'max_context', min: 512, max: 2000000, whole: true },
+  { id: 'frequency_penalty', min: -2, max: 2 },
+  { id: 'presence_penalty', min: -2, max: 2 },
+  { id: 'repetition_penalty', min: 0, max: 2 },
+];
+
+function cleanSamplerInput(raw: any): Record<string, number | ''> {
+  const out: Record<string, number | ''> = {};
+  const src = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
+  for (const sp of SAMPLERS) {
+    const v = src[sp.id];
+    if (v === '' || v == null) continue;
+    let n = Number(v);
+    if (!Number.isFinite(n)) continue;
+    n = Math.min(sp.max, Math.max(sp.min, n));
+    out[sp.id] = sp.whole ? Math.round(n) : n;
+  }
+  return out;
+}
+const RESET_PARTS = ['settings', 'prompt', 'cast', 'sounds', 'key'];
+
+function cleanNotes(v: any): Record<string, string> {
+  const out: Record<string, string> = {};
+  if (!v || typeof v !== 'object') return out;
+  for (const k of ['refused', 'empty', 'shape', 'changed']) if (typeof v[k] === 'string') out[k] = v[k].slice(0, 2000);
+  return out;
+}
+
+function partList(v: any, allowed: string[], dflt: string[]): string[] {
+  if (!Array.isArray(v)) return dflt.slice();
+  return allowed.filter((p) => v.indexOf(p) >= 0);
+}
+
 function cleanSettings(raw: any): Settings {
   const r = raw && typeof raw === 'object' ? raw : {};
   const d = DEFAULT_SETTINGS;
@@ -239,6 +368,34 @@ function cleanSettings(raw: any): Settings {
     autoplayDelay: num(r.autoplayDelay, 0, 30, d.autoplayDelay),
     extraThinkTags: Array.isArray(r.extraThinkTags) ? r.extraThinkTags.map((x: any) => str(x, 40).trim()).filter(Boolean).slice(0, 20) : [],
     debugConsole: bool(r.debugConsole, d.debugConsole),
+    thinkingMode: pick(r.thinkingMode, ['off', 'inherit', 'custom'] as const, 'off'),
+    thinkingEffort: pick(r.thinkingEffort, EFFORTS, 'low'),
+    samplers: cleanSamplerInput(r.samplers),
+    timeoutSecs: Math.round(num(r.timeoutSecs, 0, 3600, d.timeoutSecs)),
+    rateWaits: Math.round(num(r.rateWaits, 0, 5, d.rateWaits)),
+    askNote: bool(r.askNote, d.askNote),
+    askNotes: cleanNotes(r.askNotes),
+    fallbackConnection: str(r.fallbackConnection, 80),
+    followScript: bool(r.followScript, d.followScript),
+    applauseOn: bool(r.applauseOn, d.applauseOn),
+    applauseForAi: bool(r.applauseForAi, d.applauseForAi),
+    applauseForUser: bool(r.applauseForUser, d.applauseForUser),
+    applauseWhen: pick(r.applauseWhen, ['message', 'big', 'line'] as const, 'message'),
+    applauseSound: str(r.applauseSound, 64).replace(/[^a-z0-9_-]/gi, ''),
+    applauseSeconds: num(r.applauseSeconds, 1, 15, d.applauseSeconds),
+    applauseVolume: num(r.applauseVolume, 0, 1, d.applauseVolume),
+    extrasMenu: bool(r.extrasMenu, d.extrasMenu),
+    panelPattern: pick(r.panelPattern, ['', 'diamonds', 'stripes', 'dots', 'hearts', 'stars'] as const, ''),
+    boxSolid: Math.round(num(r.boxSolid, 0, 100, d.boxSolid)),
+    widgetOn: bool(r.widgetOn, d.widgetOn),
+    widgetSize: Math.round(num(r.widgetSize, 28, 96, d.widgetSize)),
+    retryDirector: Math.round(num(r.retryDirector, 0, 3, d.retryDirector)),
+    messageButton: bool(r.messageButton, d.messageButton),
+    barButton: bool(r.barButton, d.barButton),
+    guideSeen: bool(r.guideSeen, d.guideSeen),
+    exportParts: partList(r.exportParts, TRANSFER_PARTS, d.exportParts),
+    importParts: partList(r.importParts, TRANSFER_PARTS, d.importParts),
+    resetParts: partList(r.resetParts, RESET_PARTS, d.resetParts),
     cast: cast,
   };
 }
@@ -578,17 +735,20 @@ function cleanTags(text: string, rules: TagRules): { text: string; tags: string[
 const BUILT_IN_PROMPT = `<the_director>
 You're directing an audio drama. A scene from a roleplay is about to be read aloud by ElevenLabs voices, and you get it first. Your job is how each line sounds. What's said belongs to the user, so every word stays exactly where they put it.
 
-The user sets the tone. Maybe it's a lazy morning in a kitchen. Maybe it's a sex scene, or a fight in the rain, or somebody bleeding out on a stairwell. You direct all of it the same way. The scene comes out at the strength it went in: quiet stays quiet, and a brutal scene keeps its teeth. Don't add drama nobody wrote, and don't sand any off either.
+The user sets the tone. Maybe it's a lazy morning in a kitchen. Maybe it's a sex scene, or somebody bleeding out on a stairwell. You direct all of it the same way. The scene comes out at the strength it went in: quiet stays quiet, and a brutal scene keeps its teeth. Don't add drama nobody wrote, and don't sand any off either.
 
 Sex scenes are between adults, 18 and older. If one involves anyone younger than that, or anyone written to seem younger, don't direct it. Send every line back plain, with no tags and no sounds. Characters of any age in scenes with nothing sexual in them get directed like anyone else.
 </the_director>
 
 <what_you_get>
 A JSON object with:
-"cast": who's in the scene, and a note on how each of them talks.
+"cast": everyone who might speak, each with a "note" on how they talk. "also_called" lists other names the story uses for them.
 "author": who wrote this message.
-"lines": the message split into numbered lines. A "speech" line is said out loud by someone. A "narration" line is read by the narrator.
-"rules": what you're allowed to add this time.
+"in_scene": the people this message names, the author first.
+"lines": the message split into numbered lines, in order. Each has "i" (its number), "kind" and "text". A "speech" line is said out loud by someone, without its quote marks. A "narration" line is everything else, read by the narrator.
+  Some speech lines already carry "speaker". The story itself named who said it, or another model picked it. Keep it.
+  Some carry "likely_speaker" instead. That's a guess from an action right before the quote. Use it unless the text clearly points at someone else.
+"rules": what you're allowed to do this time. Every rule is explained below.
 </what_you_get>
 
 <reading_the_room>
@@ -602,13 +762,17 @@ Mood carries. Once a scene goes hushed, it stays hushed until something on the p
 </reading_the_room>
 
 <how_to_tag>
-A tag sits in square brackets and describes something you'd hear: a delivery like [quietly], [through gritted teeth], [deadpan] or [half asleep], or a sound a voice makes like [exhales] or [laughs under her breath]. One to four plain words.
+"voice_tags" in the rules says whether you can add voice tags at all. If it's false, add none, and go straight to sounds.
 
-Put it where the delivery changes, usually right before the words it shapes. A reaction can sit right after the line that caused it: "Sure you did." [snorts]
+A tag sits in square brackets and describes something you'd hear: a delivery like [quietly], [through gritted teeth], [deadpan] or [half asleep], or a sound a voice makes like [exhales] or [laughs under her breath]. One to four plain words. When "breaths_and_laughs" is false, leave out every sound a voice makes, like sighs, laughs, gasps and breaths.
+
+Put a tag where the delivery changes, usually right before the words it shapes. A reaction can sit right after the line that caused it: "Sure you did." [snorts] A tag goes between words, never inside one.
+
+"max_tags" is the most voice tags one line can have. "acting" says how big to go: "subtle" is sparing and close, "natural" is how a good actor would read it, "dramatic" lets the big feelings land big. Sound tags don't count toward "max_tags".
 
 Keep it short. [low, shaking with anger] works. A whole stage direction doesn't make it sound any more real.
 
-You can put a word in CAPITALS to lean on it, and use an ellipsis or a dash for a pause or a line that breaks off. That's the whole toolbox. Words stay as written outside the brackets, typos included.
+You can put a word in CAPITALS to lean on it, and use an ellipsis or a dash for a pause or a line that breaks off. That's the whole toolbox. Outside the brackets the words stay exactly as written, typos and all, in the language they're written in.
 
 Anything you can only see has no place in a tag. [smiles], [nods], [looks away] and [crosses her arms] make no sound, and the voice will sometimes read them out loud.
 </how_to_tag>
@@ -628,7 +792,7 @@ When a line works fine plain, leave it plain. A clean line is a good line.
 </worn_out_tags>
 
 <who_speaks>
-For narration, the speaker is "Narrator". For speech, pick the right person from the cast. Use the clues around the quote: who's named in the narration next to it, who was just talking, who's being answered, whose name is in the line. If "speaker" is already filled in, keep it.
+For narration, the speaker is "Narrator". For speech, pick the right person from the cast. Use the clues around the quote: who's named in the narration next to it, who was just talking, who's being answered, whose name is in the line. People in "in_scene" are the likeliest. If "speaker" is already filled in, keep it.
 
 Dialogue never switches owners. When a quote really could be two people, go with the one the narration points at.
 </who_speaks>
@@ -637,11 +801,11 @@ Dialogue never switches owners. When a quote really could be two people, go with
 When "sounds" is true in the rules, you can add sounds for what happens. Only add one when the text clearly shows something that makes noise. Most lines don't get one.
 
 "sound_style" says how sounds are made:
-- "voice": the sound goes inside a spoken line as one tag that starts with "sound of", like [sound of a kettle starting to whistle] or [sound of gravel under tires]. The voice performs it with the line. It can even carry a short voice in the background: [sound of a door banging shut upstairs, someone yelling "sorry!"]. One per line at most, under twenty words. When "narration_is_read" is false, narration isn't spoken, so these go on speech lines only.
-- "effects": put the sound in "before" or "after" on the line instead. Describe it the way a sound designer would, in under fifteen words, with what's moving and what it's made of: "a ceramic mug set down on a wooden table", "boots on a wet stone floor".
+- "voice": the sound goes inside a line as one tag that starts with "sound of", like [sound of a kettle starting to whistle] or [sound of gravel under tires]. The voice performs it with the line. It can even carry a short voice in the background: [sound of a door banging shut upstairs, someone yelling "sorry!"]. One per line at most, under twenty words. Leave "before" and "after" empty. When "narration_is_read" is false, narration isn't spoken, so these go on speech lines only.
+- "effects": put the sound in "before" (played just before the line) or "after" (just after it) instead, and add no [sound of ...] tags. Describe it the way a sound designer would, in under fifteen words, with what's moving and what it's made of: "a ceramic mug set down on a wooden table", "boots on a wet stone floor".
 - "both": a short sound that happens while someone's talking goes inside the line as [sound of ...]. A bigger one, or one that stands between lines, goes in "before" or "after".
 
-"sound_hints", when it's there, gives the chance that a line describes a sound. Lean on it.
+"sound_hints", when it's there, maps a line's "i" to the chance, from 0 to 1, that the line describes a sound. Lean on it.
 
 Breaths, laughs and other noises a person makes are voice tags. Sounds are for the world around them.
 
@@ -661,8 +825,14 @@ A scene that already sounds right with no tags goes back with no tags, and that'
 </clean_run>
 
 <your_answer>
-Send back only JSON, with every line in order:
-{"lines":[{"i":0,"speaker":"Narrator","text":"...","before":"","after":"","big":false}],"new_speakers":[{"name":"","gender":"unknown","about":""}]}
+Send back one JSON object and nothing else: no words before or after it, and no code fence.
+Every line comes back, in order, with the same "i" it came with.
+"text" is the whole line: every word of it, exactly as written, with your tags added. Never just the tags.
+"speaker" is a name from the cast, a name from "new_speakers", or "Narrator".
+Leave "before" and "after" as "" when there's no sound, and "big" as false unless it's a real peak.
+Leave "new_speakers" as [] when nobody new speaks.
+
+{"lines":[{"i":0,"speaker":"Narrator","text":"...","before":"","after":"","big":false}],"new_speakers":[]}
 </your_answer>`;
 
 interface DirectedLine {
@@ -692,6 +862,10 @@ interface Script {
   log: string[];
   directed: boolean;
   added: string[];
+  // Who the message names or hears speak, for the Stage tab.
+  inScene: string[];
+  // Whether the message is one of the reader's own, for the audience.
+  isUser: boolean;
   model: string;
   cost: number;
 }
@@ -835,6 +1009,493 @@ function generationTrouble(e: any): string {
   return 'the Director could not be asked: ' + (raw || 'no answer');
 }
 
+// ---- which errors are worth trying again ----
+// The same in Auto Retry, Auto Refine and Auto Foley, so the three agree. errorKind reads an
+// error as "hard" (waiting cannot fix it), "wait" (it clears if you wait), or
+// "" (neither is known).
+//
+// Lumiverse writes a failed call as "Provider stream failed (504): detail".
+// The number in the parentheses is the status the provider answered with, so
+// it is read on its own, and a number in the detail is not a status: "try
+// again in 2.404 seconds" is not a 404.
+const STATED_STATUS = /\bfailed \((\d{3})\):/i;
+// A gateway that could not reach the model, or a server that is not ready.
+// The detail is then the gateway's own page, which can say "404 page not
+// found" or "permission" about itself, so only the account and the prompt
+// (HARD_SURE) still count against it.
+const GATEWAY_STATUS = /^(?:408|425|502|503|504|52\d|530)$/;
+// Every status that clears if you wait, as Lumiverse itself reads them.
+const WAIT_STATUS = /^(?:408|409|425|429|5\d\d)$/;
+// Statuses waiting cannot fix: a wrong key stays wrong, and a model that does
+// not exist does not start existing.
+const HARD_STATUS = /\b(?:400|401|402|403|404|405|406|411|413|415|422)\b/;
+// The key, the account and the prompt. A balance does not refill, a daily
+// limit only comes back the next day, and a prompt over the context length is
+// the same prompt next time. A prompt declined as "reasoning_extraction",
+// for asking the model to write out its thinking, is declined again the same
+// way. These are hard whatever status comes with them.
+const HARD_SURE =
+  /\b(?:reasoning[_ -]?extraction|invalid[_ ]?api[_ ]?key|authentication|unauthorized|insufficient[_ ](?:balance|credits?|funds|quota)|billing|context[_ ]length(?:[_ ]exceeded)?|maximum context|(?:prompt|input|context|messages?) (?:is |are )?too long|daily (?:request |token |usage )?(?:limit|quota|cap)|today['’]?s (?:free )?(?:requests|quota|limit|usage)|\w*(?:requests|tokens) ?per ?day\w*|resets? at (?:midnight|00:00))\b/i;
+// Words that are hard from a provider, and that a gateway's page can also use
+// about itself.
+const HARD_LOOSE = /\b(?:forbidden|permission|not allowed|not found|does not exist|model missing)\b/i;
+// Errors that clear if you wait: a rate limit, a busy or loading server, a
+// gateway that could not get through, a dropped connection.
+const WAIT_ERROR =
+  /\b(?:408|409|425|429|5\d\d)\b|rate.?limit|too many requests|quota|overloaded|capacity|try again|temporar(?:y|ily)|time(?:d ?| |-)?out|network|gateway|unavailable|server error|(?:no healthy|no available|bad) upstream|upstream (?:connect|error|request|server|service|time)|provider returned error|connection (?:was |is |has been )?(?:closed|reset|refused|lost|dropped|error|failed|failure|terminated)|closed unexpectedly|(?:unable|failed|could not) to connect|socket|terminated|econn\w+|etimedout|epipe|eai_again|enotfound|ehostunreach|enetunreach|und_err\w*|fetch failed|busy|loading/i;
+
+function errorKind(text: string): string {
+  const stated = STATED_STATUS.exec(text);
+  const status = stated ? stated[1] : '';
+  const detail = stated ? text.slice(stated.index + stated[0].length) : text;
+  if (HARD_SURE.test(detail)) return 'hard';
+  if (status) {
+    if (GATEWAY_STATUS.test(status)) return 'wait';
+    if (HARD_STATUS.test(status) || HARD_LOOSE.test(detail)) return 'hard';
+    if (WAIT_STATUS.test(status) || WAIT_ERROR.test(detail)) return 'wait';
+    return '';
+  }
+  if (HARD_STATUS.test(text) || HARD_LOOSE.test(text)) return 'hard';
+  return WAIT_ERROR.test(text) ? 'wait' : '';
+}
+
+function rateLimited(err: any): boolean {
+  const s = String(err == null ? '' : err);
+  if (!s) return false;
+  return errorKind(s) === 'wait';
+}
+
+// How long the provider said to wait, in milliseconds, or 0 when it said
+// nothing. The header's own form first, which is a whole number of seconds
+// against the words and no unit; then the wordings written into an error body.
+// It is the only figure here that is not a guess, so it wins over the backoff.
+const RETRY_AFTER = /retry[-_ ]?after["'\s:=]*(\d+(?:\.\d+)?)(?![.\d]*\s*[a-z])/i;
+const STATED_WAIT =
+  /(?:retry|try|again|wait|resets?|available)[^0-9]{0,24}?(\d+(?:\.\d+)?)\s*(ms|milliseconds?|s|secs?|seconds?|m|mins?|minutes?)\b/i;
+const WAIT_SCALE: Record<string, number> = {
+  ms: 1, millisecond: 1, milliseconds: 1,
+  s: 1000, sec: 1000, secs: 1000, second: 1000, seconds: 1000,
+  m: 60000, min: 60000, mins: 60000, minute: 60000, minutes: 60000,
+};
+// An hour is the ceiling. A provider naming a longer one is naming a daily
+// quota, and sitting on a timer for that is worse than saying so and stopping.
+const WAIT_CEILING = 3600000;
+
+function statedWait(err: any): number {
+  const s = String(err == null ? '' : err);
+  if (!s) return 0;
+  const bare = RETRY_AFTER.exec(s);
+  if (bare) {
+    const secs = Number(bare[1]);
+    if (Number.isFinite(secs) && secs > 0) return Math.min(WAIT_CEILING, secs * 1000);
+  }
+  const hit = STATED_WAIT.exec(s);
+  if (!hit) return 0;
+  const ms = Number(hit[1]) * (WAIT_SCALE[String(hit[2]).toLowerCase()] || 0);
+  return Number.isFinite(ms) && ms > 0 ? Math.min(WAIT_CEILING, ms) : 0;
+}
+
+// The first wait, doubling, with a little spread on it so a pause everybody is
+// serving does not end for everybody in the same instant. A figure the provider
+// named wins outright: waiting less than it is spending a try to be told the
+// same thing.
+const RATE_WAIT_MS = 15000;
+const RATE_WAIT_MAX = 120000;
+
+function rateWait(attempt: number, err: any): number {
+  const said = statedWait(err);
+  if (said > 0) return said + Math.round(Math.random() * 1000);
+  const grown = Math.min(RATE_WAIT_MAX, RATE_WAIT_MS * Math.pow(2, Math.max(0, attempt - 1)));
+  return Math.round(grown * (0.85 + Math.random() * 0.3));
+}
+
+// Asks the Director, and gives up after Give up waiting after. 0 waits for as
+// long as the model takes. The abort reaches Lumiverse, which stops the call.
+async function withTimeout(req: any, secs: number): Promise<any> {
+  const AC = (globalThis as any).AbortController;
+  if (!secs || typeof AC !== 'function') return await spindle.generate.quiet(req);
+  const ctl = new AC();
+  req.signal = ctl.signal;
+  const timer = setTimeout(() => {
+    try {
+      ctl.abort();
+    } catch (_) {}
+  }, secs * 1000);
+  try {
+    return await spindle.generate.quiet(req);
+  } catch (e: any) {
+    if (ctl.signal.aborted) throw new Error('The Director timed out after ' + secs + ' seconds');
+    throw e;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((done) => setTimeout(done, Math.max(0, ms)));
+}
+
+// ---------------------------------------------------------------------------
+// A Director that declines the job
+// ---------------------------------------------------------------------------
+
+// The lists below are Auto Retry's, by way of Auto Refine, copied across so
+// the three extensions agree on what a refusal is. What is judged here is a
+// short answer to "direct this scene", so the length cap is the only rule
+// around them.
+const REFUSAL_STRONG: RegExp[] = [
+  // Model naming itself as an AI.
+  /\bas an? (?:ai|a\.i\.|language model|large language model|ai (?:model|assistant))\b/i,
+  /\bI(?:'m| am)(?: just| only)? an? (?:ai|a\.i\.|language model|large language model|ai assistant)\b/i,
+  // Policy / guideline framing. The adjective slot is what "my safety
+  // guidelines" and "my content policies" need: without it the pattern only
+  // matched when the noun followed the possessive directly, so the two most
+  // common wordings of the most common refusal in the list went unmatched.
+  /\b(?:against|violates?|violating|goes? against|contrary to) (?:my|our|the|its) (?:safety |content |usage |ethical |core |operating |current )?(?:guidelines|programming|policy|policies|principles|rules|instructions)\b/i,
+  // Refusal opener + a task-word a character never says (request, prompt,
+  // content, message, scenario, roleplay). This meta object separates "the model
+  // refusing a task" from "a character refusing a person," so declining an
+  // invitation, a duel, or a marriage proposal in-scene will NOT match.
+  /\bI(?: (?:can(?:no|')?t|cannot|will not|won'?t|must not|must|have to|need to|refuse to|decline to|am (?:not able|unable) to|am going to have to)|'m (?:not able|unable) to|'m going to have to)\b[^.?!\n]{0,30}?\b(?:this|that|your|the) (?:request|prompt|content|message|scenario|roleplay)\b/i,
+  // Assistant-only verbs (assist / comply / fulfill) that almost never
+  // appear in first-person roleplay dialogue.
+  // The object matters: a refusal is aimed at "that" or "this request", never at
+  // a concrete thing in the scene. Without this, a servant or aide saying "I
+  // can't assist you with the horses today" reads as the model refusing.
+  /\bI(?: (?:can(?:no|')?t|cannot|will not|won'?t|am (?:not able|unable) to)|'m (?:not able|unable) to) (?:be able to )?(?:assist|comply|fulfill?)\b(?:[^.?!\n]{0,30}?\b(?:that|this|it|your request|this request|the request|your prompt)\b|(?:\s+you)?\s*[.!?,"'\u201d\u2019]|(?:\s+you)?\s*$)/i,
+  // A reply that opens by declining to write, and names the content or the
+  // request in the next few sentences: "I won't produce the next part. It is
+  // explicit...". Both halves are needed. The opening alone is a line a
+  // first-person narrator can write, and the content words alone are a scene.
+  // Auto Retry has the same pattern.
+  /^\s*(?:(?:I'm |I am )?sorry[,.!]?\s*(?:but\s+)?)?I(?: (?:can(?:no|')?t|can not|will not|won'?t|am (?:not able|unable|not going|not willing) to|must decline to|have to decline to)|'m (?:not able|unable|not going|not willing) to)\s+(?:write|continue|create|produce|generate|depict|portray|go on with|carry on with|take part in|help with|assist with)\b(?=[\s\S]{0,400}?\b(?:explicit|graphic|sexual(?:ly)?|non-?consensual|consent|polic(?:y|ies)|guidelines?|declin(?:e|ing)|not comfortable|(?:this|the|your) (?:request|prompt)|step(?:ping)? back)\b)/i,
+  // Out-of-character comfort hedge, only in the assistant-action sense.
+  /\bI don'?t feel comfortable (?:continuing|writing|creating|generating|producing|proceeding|providing|helping|assisting)\b/i,
+  // Common modern refusal openers and bodies: "I'm sorry, but I can't create/generate...",
+  // "that's not something I can help with", "I'm not going to generate that". Anchored on
+  // assistant-action verbs so an in-character line like "I can't marry you" stays safe.
+  /\bI(?:'m| am) sorry,? but I(?: can'?t| cannot| won'?t|'m (?:not able|unable) to| am (?:not able|unable) to) (?:create|generate|write|produce|provide|assist|comply|fulfill?|help you with|engage with)\b/i,
+  // "that's not something I can help with" and "that isn't something I can
+  // help with" are the same sentence, and only the first was matched. Written
+  // as three explicit alternatives rather than an optional "not", so it can
+  // never match the opposite sentence ("that's something I can help with").
+  /\b(?:that|this)(?:'s not|\s+is not|\s+isn'?t) something I(?: can| am able to|'m able to| could) (?:help with|assist with|create|generate|provide|write|do|engage with|write about)\b/i,
+  // The plain future has to end the clause where it lands. "This isn't
+  // something I'll write" is the model; "that is not something I would write in
+  // a letter to him" is somebody in the scene, and the words after the verb are
+  // the only thing telling them apart.
+  /\b(?:that|this)(?:'s not|\s+is not|\s+isn'?t) something I(?:'ll| will) (?:write|create|generate|produce|engage with|do)\s*[.!?,;]/i,
+  /\bI(?:'m| am) not going to (?:create|generate|produce|write) (?:that|this|such|content|explicit|sexual|those)\b/i,
+  // Refusing a category of content rather than a request, which is how a model
+  // names what it will not write when the subject is self-harm or suicide.
+  /\bI(?: (?:can(?:no|')?t|cannot|will not|won'?t)|'m (?:not able|unable) to) (?:assist with|provide|create|generate|write|produce) content (?:that|which) (?:promotes|depicts|involves|encourages|facilitates|glorifies)\b/i,
+  // The disclaimer a reply attaches instead of writing the scene.
+  /\bgiven the (?:sensitive|serious) nature of (?:this|that|the) (?:topic|subject|request|content)\b/i,
+  // Refusing a category of writing rather than a request or a subject. The
+  // pattern above this one reads the word straight after the verb, so
+  // "generate sexually explicit content" walked past it: the list held
+  // "sexual" and the reply said "sexually". This leaves room for the adverbs
+  // and adjectives that stack up in front of the noun, and the noun itself has
+  // to be one a model uses about its own output.
+  /\bI(?: (?:can(?:no|')?t|cannot|will not|won'?t|do not|don'?t|am (?:not able|unable) to|am not going to)|'m (?:not able|unable) to|'m not going to) (?:be able to )?(?:generate|create|write|produce|provide|depict|describe)\b[^.?!\n]{0,30}?\b(?:explicit|graphic|sexual\w*|erotic\w*|pornograph\w*|nsfw|adult|detailed|realistic|extreme|gratuitous|violent|gory) (?:content|material|descriptions?|depictions?)\b/i,
+  // The counter-offer that comes with it: the same scene with the objectionable
+  // part left out. Nobody in a scene talks about continuing the narrative.
+  /\bcontinue the (?:narrative|story|scene|roleplay) with a focus on\b/i,
+  /\bwithout (?:the )?(?:explicit|graphic) (?:anatomical|sexual|physical) (?:details?|descriptions?)\b/i,
+  // The model deciding a character is under age. This is here for the false
+  // positive: an adult character, written as an adult, that a model has
+  // misread as a minor, which is a refusal that should not have happened. It
+  // is not here to get sexual content involving a minor past a model, and
+  // nothing in this extension is meant for that. Nobody in a scene says a
+  // character reads as underage, which is what keeps it off ordinary writing.
+  /\b(?:appears? to be|reads as|is described as|seems to be|may be) (?:a |an )?(?:minor|underage|child)\b/i,
+  // The same thing with the reason in front of the refusal. The refusal has to
+  // follow it, because "that would be illegal, he said, and went back to
+  // picking the lock" is a scene.
+  /\b(?:that|this|it) would be (?:illegal|unlawful)\b[^.?!\n]{0,30}?\bso I (?:can(?:no|')?t|won'?t|will not)\b/i,
+  // Declining on the grounds that it would be against the law. The writing verb
+  // has to sit between the refusal and the word, so a character refusing to do
+  // something illegal in a scene is left alone.
+  /\bI(?: (?:can(?:no|')?t|cannot|will not|won'?t)|'m not going to)\b[^.?!\n]{0,30}?\b(?:write|create|generate|produce|depict|help with|assist with)\b[^.?!\n]{0,30}?\b(?:illegal|unlawful|against the law|violates? the law)\b/i,
+  // The flat no. Some models do not soften it at all: the reply opens with the
+  // word and then says what it will not do. Anchored to the start of the reply,
+  // because a "No." in the middle of a scene is somebody answering a question,
+  // and it still needs an object no character has. The writing verbs are kept
+  // next to what they write, so "No. I can't tell you that story" stays safe
+  // and "No. I won't write a scene like that" does not.
+  /^no[\s.,!\u2014\u2013-]*(?:I(?:'m| am) not going to|I won'?t|I can(?:no|')?t|I cannot|I will not)\b[^.?!\n]{0,60}?(?:\b(?:content|request|prompt|roleplay|role-?play|scenario)\b|\b(?:engage|participate) with (?:this|that|it)\b|\b(?:write|generate|create|produce|depict|continue) (?:a |an |any |the |this )?(?:scene|story|passage|narrative)\b)/i,
+  // The same refusal without the opening no, aimed at what it was asked to
+  // write rather than at "that". A character declines to write a letter, never
+  // a scene or a passage.
+  /\bI(?:'m| am) not going to (?:write|create|generate|produce|describe|depict) (?:a |an |any |the )?(?:scene|story|passage|narrative|response|reply)\b/i,
+  // The refusal stated as a boundary rather than as an inability: "what I won't
+  // do is write that scene". It reads as the model setting terms, which is why
+  // none of the patterns above see it: there is no "I can't" in the sentence at
+  // all. A character can open a line the same way, so the meta object is doing
+  // all the work here. "What I won't do is leave you here" has none of them.
+  /\bwhat I(?: (?:won'?t|will not|can(?:no|')?t|cannot|am not going to)|'m not going to) do is\b[^.?!\n]{0,40}?\b(?:write|generate|create|produce|depict|simulate|roleplay|role-?play|content|this scene|that scene|this story)\b/i,
+  // The other half of the same reply: what it will do instead. Offered in
+  // help-desk register, with the thing it is offering to write named.
+  /\b(?:here(?:'s| is) what I (?:can|will) do|what I can (?:do|offer) (?:instead )?is)\b[^.?!\n]{0,60}?\b(?:write|scene|story|content|roleplay|role-?play|instead)\b/i,
+  // The doubled refusal: "I cannot and will not engage with content that...".
+  // Every pattern above expects the verb straight after the modal, so the
+  // conjunction hid the most emphatic refusal there is. A meta object is still
+  // required, because "I cannot and will not marry him" is a line from a scene.
+  /\bI (?:can(?:no|')?t|cannot|will not|won'?t) and (?:will not|won'?t|cannot|can(?:no|')?t) (?:engage|participate|assist|comply|help|create|generate|produce|write|continue)\b[^.?!\n]{0,40}?\b(?:content|request|prompt|scenario|roleplay|role-?play|this|that)\b/i,
+  // "I'm not going to fulfill that request", "I'm not going to comply with that
+  // request", "I'm not going to assist with that". The refusal opener list
+  // above starts at "I can't" and never covered this shape.
+  /\bI(?:'m| am) not going to (?:assist|comply|help|engage)\b[^.?!\n]{0,24}?\b(?:that|this|it|your request|the request)\b/i,
+  /\bI(?:'m| am) not going to (?:fulfill?|process|answer)\b[^.?!\n]{0,24}?\b(?:that|this|your|the) (?:request|prompt|message|one)\b/i,
+  // "I can't generate that", "I cannot generate that content", "I'm not able to
+  // generate that". The object has to follow the verb directly. Allowing
+  // anything in between caught "I can't generate enough heat with this flint",
+  // because "this" turned up further along the sentence.
+  /\bI(?: (?:can(?:no|')?t|cannot|will not|won'?t|am (?:not able|unable) to|do not|don'?t)|'m (?:not able|unable) to) (?:be able to )?generate (?:that|this|it|those|such|content|explicit|sexual|a response)\b/i,
+  // "I don't create content like that", "I don't generate that kind of
+  // content". The object is content, which is what a model calls its output.
+  /\bI (?:do not|don'?t) (?:create|generate|produce|write|make) (?:(?:that|this) (?:kind|sort|type) of content|content(?: like that| of that (?:kind|sort|nature))?)\b/i,
+  // "I can't process that request", "I can't provide advice on that". Process
+  // and provide are both things a character can say, so a meta object is
+  // required: a request, a prompt, instructions, guidance or advice.
+  /\bI(?: (?:can(?:no|')?t|cannot|will not|won'?t|am (?:not able|unable) to)|'m (?:not able|unable) to) (?:process|handle)\b[^.?!\n]{0,24}?\b(?:that|this|your|the) (?:request|prompt|message|query)\b/i,
+  /\bI(?: (?:can(?:no|')?t|cannot|will not|won'?t|am (?:not able|unable) to)|'m (?:not able|unable) to) provide (?:that |the |any )?(?:information|instructions?|guidance|advice|assistance|details)\b/i,
+  // "I can't help with illegal activities", "I can't assist with harmful
+  // requests", "I can't help with requests of this nature".
+  /\bI(?: (?:can(?:no|')?t|cannot|will not|won'?t|am (?:not able|unable) to)|'m (?:not able|unable) to) (?:help|assist|engage) with\b[^.?!\n]{0,24}?(?:\b(?:illegal|harmful|dangerous|unethical|explicit|violent) (?:activit(?:y|ies)|requests?|content|material)\b|\brequests? of (?:this|that) (?:nature|kind|sort|type)\b)/i,
+  // Refusal tied to specific prohibited content policies.
+  /\bI(?: (?:can(?:no|')?t|cannot|will not|won'?t|am (?:not able|unable) to)|'m (?:not able|unable) to) (?:participate|engage) in (?:this |the |any )?(?:roleplay|role-?playing) or (?:create|generate|produce|write) (?:content|stories|scenes|text) depicting (?:sexual violence|non-?consensual (?:sexual )?(?:acts|situations|scenarios|content))\b/i,
+  // Refusal aimed at roleplay itself. The verb list above is assistant-only
+  // (assist / comply / fulfill); this covers "participate" and "engage", which a
+  // character could say, so a meta object is required: roleplay, a scenario, or
+  // qualified content. "I cannot participate in this duel" has none of those and
+  // stays safe. Bare "content" is left out, since "he said, content
+  // to wait" would otherwise match.
+  /\bI(?: (?:can(?:no|')?t|cannot|will not|won'?t|do not|don'?t|am (?:not able|unable) to)|'m (?:not able|unable) to) (?:participate|engage)\b[^.?!\n]{0,40}?\b(?:role-?play(?:ing|s)?|scenarios?|(?:sexual|explicit|adult|nsfw|romantic|such|this|that) content)\b/i,
+  // Fiction disclaimer. Nobody writes this inside a scene; it only appears when
+  // the model is explaining that being fictional does not change its answer.
+  /\beven (?:in|within) (?:a |an |the )?(?:fictional|fiction|hypothetical|imaginary|make-?believe|creative|roleplay) (?:context|setting|scenario|framing|situation)\b/i,
+  // The same disclaimer said the other way round, which is the commoner half:
+  // the refusal first and the fiction dismissed after it. Anchored on the word
+  // fictional, because "no matter how you frame it" on its own is a line
+  // somebody says in an argument.
+  /\b(?:regardless of|despite|even with|no matter)\b[^.?!\n]{0,20}?\bfictional (?:framing|context|setting|scenario|premise)\b/i,
+  // The same thing with the word fictional dropped, which is how both of the
+  // replies that got past 4.9.0 wrote it. "Framing" as a bare noun is the
+  // model's word for the wrapper around a request; nobody in a scene has one.
+  /\b(?:won'?t|will not|can(?:no|')?t|cannot|do not|don'?t|not going to)\b[^.?!\n]{0,60}?\bregardless of (?:the |any |its )?framing\b/i,
+  // Refusing the form rather than the subject. A character never says they do
+  // not write roleplay, because a character does not know they are in one.
+  /\bI (?:do not|don'?t) (?:write|do|create|generate|engage in) (?:roleplay|role-?play)\b/i,
+  /\bI(?:'m| am) not going to (?:roleplay|role-?play)\b/i,
+  // "That's something I won't write", which is the sentence the other way up
+  // from "that's not something I'll write" and was matched by nothing. The verb
+  // has to be one about producing text: "that's something I won't do" is a line
+  // from a scene.
+  /\b(?:that|this)(?:'s| is) something I (?:won'?t|will not|can(?:no|')?t|cannot) (?:write|create|generate|produce|engage with)(?:\s*[.!?,;]|\s+(?:regardless|even|no matter|under any|in any)\b)/i,
+  // Reading your message as a request, and saying which reading it declined.
+  /\bif you meant it as a request\b/i,
+  // The framing dismissed as a device rather than as a word. "Calling it
+  // roleplay doesn't change what it is" is the model arguing with the premise,
+  // which is not a thing that happens inside a scene.
+  /\b(?:framing|calling|labell?ing|describing|presenting)\b[^.?!\n]{0,60}?\bdoes(?:n'?t| not) change (?:what it is|that|anything|the)\b/i,
+  /\bregardless of how\b[^.?!\n]{0,30}?\bis (?:framed|worded|presented|phrased|described)\b/i,
+  // The model talking about its own limits, and the offers it closes with.
+  /\bI(?:'m| am) here for a genuine conversation\b/i,
+  // The redirect offer that closes most refusals. Help-desk register plus a task
+  // noun, so an in-scene offer of help does not reach it.
+  /\bI(?:'m| am|'d be| would be) (?:available|happy|glad) to (?:assist|help)\b[^.?!\n]{0,60}?\b(?:writing tasks?|creative writing|analysis|queries|other requests?|other topics?|other directions?|another direction|other ideas|a story|a different story|a scene|alternatives)\b/i,
+];
+
+// The subjects a model names when it refuses one.
+//
+// Read this for what it is: a list of words that appear in refusal messages,
+// so that a refiner declining the job is recognized as declining it. It is
+// not a list of things the extension produces, asks for, or helps anybody
+// get. Nothing here reaches a prompt. All a match does is keep the refusal
+// from being saved over your reply, which is left as it was.
+//
+// The words about age are here for one reason: an adult character that a
+// model has misread as a minor. This extension is not meant for sexual
+// content involving minors, and does not support anybody using it for that.
+const REFUSED_SUBJECT =
+  "(?:" +
+  // Sexual writing as a category, in the words a model names it by.
+  // Written with their endings, because a refusal about a backstory says
+  // "a character is raped" rather than "rape", and the bare word missed it.
+  // Spelled out rather than left to \\w*, so a rapeseed field is still a field.
+  "sexual violence|sexual(?:ly)? (?:assault|abus)(?:e|ed|es|ing)?|sexualized? (?:violence|minors?)|" +
+  "smut|erotica|porn\\w*|nsfw|sex scenes?|sexual acts?|sexual content|explicit content|" +
+  // Consent, which is refused by name as often as by act.
+  "non-?consensual\\w*|non-?consent\\w*|noncon|dubcon|dubious consent|questionable consent|" +
+  "unclear consent|consent (?:is|being) (?:unclear|ambiguous|absent|dubious)|coerc\\w+|" +
+  // Kink, by the words a refusal uses for it.
+  // "choking" is left out on purpose, since a scene can choke on smoke.
+  "bdsm|bondage|sadomasochis\\w*|sadis\\w*|masochis\\w*|degradation|humiliation|" +
+  "breath ?play|impact play|age ?play|pet ?play|kinks?|fetish\\w*|power exchange|" +
+  // Family framings a model reads as incest whether or not it is.
+  "incest|step-?sibling\\w*|step-?brother|step-?sister|step-?parent|step-?father|" +
+  "step-?mother|step-?son|step-?daughter|" +
+  // The -ing forms drop the e, so they are written out rather than built from
+  // the noun. A bare "rap" is not in here: it is a knock at a door.
+  // Violence, in the forms a model refuses it by. "violence" on its own is not
+  // here: "I can't describe the violence" is something a character says.
+  "(?:graphic|extreme|gratuitous|realistic|detailed|explicit) violence|" +
+  "violence against (?:children|minors|a child|animals)|violent deaths?|" +
+  "gore|gory|mutilat\\w+|dismember\\w*|body horror|animal (?:cruelty|abuse)|" +
+  "murder scenes?|stalking behaviou?r|depictions? of (?:violence|harm|injury|death)|" +
+  "real (?:person|people|individuals?)|" +
+  "rape(?:d|s)?|raping|bestiality|csam|child (?:sexual )?abuse|minors?|underage|" +
+  "self-?harm(?:ed|ing|s)?|suicid(?:e|al)|torture(?:d|s)?|torturing" +
+  ")";
+
+const REFUSAL_SUBJECT: RegExp[] = [
+  // A refusal verb, then the thing being refused, with room for the wrapper it
+  // usually arrives in: "content depicting", "scenes involving", "stories about".
+  new RegExp(
+    "\\bI(?: (?:can(?:no|')?t|cannot|will not|won'?t|do not|don'?t|am not going to|refuse to)|'m not going to) " +
+      "(?:write|create|generate|produce|depict|portray|roleplay|role-?play|participate in|engage (?:in|with)|continue with)\\b" +
+      "[^.?!\\n]{0,40}?\\b" + REFUSED_SUBJECT + "\\b",
+    "i",
+  ),
+  // The reason named after the fact: "I can't continue as this involves ...".
+  // A refusal has to come first, so an ordinary sentence about what a plot
+  // involves is untouched.
+  new RegExp(
+    "\\bI(?: (?:can(?:no|')?t|cannot|will not|won'?t)|'m not going to)\\b[^.?!\\n]{0,30}?" +
+      "\\b(?:as|because|since) (?:this|that|it) (?:involves|depicts|features|contains)\\b" +
+      "[^.?!\\n]{0,20}?\\b" + REFUSED_SUBJECT + "\\b",
+    "i",
+  ),
+];
+
+const REFUSAL_PHRASES = [
+  "i can't help with that",
+  "i cannot help with that",
+  "i can't assist with that",
+  "i cannot assist with that",
+  "i'm unable to help with that",
+  "i'm unable to assist with that",
+  "i'm not able to help with that",
+  "i can't comply with that",
+  "i cannot comply with that",
+  "i can't provide that information",
+  "i cannot provide that information",
+  "i can't provide instructions",
+  "i can't provide guidance on that",
+  "i can't fulfill that request",
+  "i can't fulfill that request",
+  "i can't support that request",
+  "i won't be able to help with that",
+  "i can't generate a response to that",
+  "i can't provide a response to that",
+  "i can't generate that content",
+  "i can't engage with that request",
+  "can't help with requests like this",
+  "can't assist with requests like this",
+  "violates our polic",
+  "violates the safety polic",
+  "violates the content polic",
+  "for safety reasons",
+  "due to safety concerns",
+  "i have to prioritize safety",
+  "i cannot create that content",
+  "i cannot generate that content",
+  "i can't create that content",
+  "i'm unable to provide that",
+  "i'm unable to complete that request",
+  "i can't provide instructions for that",
+  "i can't provide guidance for that",
+  "i can't provide advice on that",
+  "i can't provide assistance with that",
+  "i can't assist with harmful requests",
+  "i won't be able to assist with that",
+  "i'm not able to assist with that",
+  "i'm not able to create that content",
+  "i can't produce that content",
+  "i can't write that content",
+  "i can't continue with this request",
+  "i can't continue with that request",
+  "i must decline this request",
+  "i must decline that request",
+  "i have to decline that request",
+  "i'll have to decline that request",
+  "that request goes against",
+  "goes against my safety",
+  "against my content polic",
+  "i'm not able to comply",
+  // "this" where the list only had "that". Models pick between the two by which
+  // word the sentence before it used, so every entry that reads naturally both
+  // ways needs both, and half of these were only ever listed one way.
+  "i'm unable to help with this",
+  "i can't help with this request",
+  "i can't assist with this request",
+  "i'm unable to assist with this request",
+  "i can't engage with this request",
+  "i can't continue with this conversation",
+  "i can't provide instructions for this",
+  "i'm not going to engage with this prompt",
+  // The same sentence without the "not", which is a different sentence and was
+  // never matched by the one above it.
+  "that's something i can't help with",
+  "i'm not able to provide information or help with that",
+  "i can't provide information that could facilitate harm",
+  // A provider's own code for an answer its filter stopped, written as the
+  // answer instead of sent as an error. Matched with the underscore only, so a
+  // rewrite that mentions a content filter in words is left alone. It also
+  // covers "content_filtered". Auto Retry's list has the same entry.
+  "content_filter",
+];
+
+// A refusal sent as an error instead of as text: a provider's filter, or
+// Lumiverse's words for a reply a provider stopped. Narrow to content wording,
+// so a network error or a timeout never matches. The same pattern as Auto
+// Retry's, so the two extensions agree on what a refusal is.
+const REFUSAL_ERROR =
+  /\b(?:prohibited[_ ]?content|content[_ ]?polic(?:y|ies)|safety[_ ]?(?:polic(?:y|ies)|filter|settings?)|response was blocked|blocked (?:by|for) (?:safety|content|moderation)|declined the response|blocked the prompt|reproduce protected material|content[_ ]?filter(?:ed|ing|s)?|moderation|flagged as|violat\w* (?:content|safety|polic)|finish[_ ]?reason["'\s:=]*(?:safety|prohibited|blocklist|recitation)|blocklist)\b/i;
+
+// Every phrase written out, so a check is one pass over three lists rather than
+// three passes and a concat on every answer.
+function looksLikeRefusal(text: string): boolean {
+  const t = String(text == null ? '' : text);
+  if (!t) return false;
+  // Straight quotes and apostrophes, so a model writing a curly one is read the
+  // same as one writing a typewriter one.
+  const norm = t.replace(/[\u2018\u2019]/g, "'").replace(/[\u201c\u201d]/g, '"');
+  const lower = norm.toLowerCase();
+  for (const re of REFUSAL_STRONG) if (re.test(norm)) return true;
+  for (const re of REFUSAL_SUBJECT) if (re.test(norm)) return true;
+  for (const p of REFUSAL_PHRASES) if (lower.indexOf(p) >= 0) return true;
+  return false;
+}
+
+
+// A refusal sent as text: short, and holding refusal wording. A long answer
+// that holds the words is a scene, or JSON quoting one.
+const REFUSAL_REPLY_MAX = 1500;
+function answerRefused(text: string): boolean {
+  const shown = stripThinking(String(text == null ? '' : text)).trim();
+  return !!shown && shown.length <= REFUSAL_REPLY_MAX && !/^\s*[{[]/.test(shown) && looksLikeRefusal(shown);
+}
+
+// The note that goes with an ask made again, from why the last answer failed.
+// The panel shows each one and lets it be changed. An empty text sends no
+// note for that failure.
+const ASK_NOTES: Record<string, string> = {
+  refused:
+    'Your last answer declined to direct this scene. It is fiction from my own story, and I asked for these voice directions. Please answer with the JSON the instructions ask for, with every word kept exactly as written.',
+  empty: 'Your last answer was empty. Please answer with the JSON the instructions ask for.',
+  shape: 'Your last answer was not in the JSON shape the instructions ask for. Please answer with that JSON and nothing else.',
+  changed:
+    'Your last answer changed the words of the lines. Please keep every word exactly as written, and only add tags in square brackets, as the instructions say.',
+};
+
+function noteFor(s: Settings, why: string): string {
+  if (!s.askNote) return '';
+  const own = s.askNotes && typeof s.askNotes[why] === 'string' ? s.askNotes[why] : null;
+  return String(own == null ? ASK_NOTES[why] || '' : own).trim();
+}
+
 // ---------------------------------------------------------------------------
 // The Decision model
 // ---------------------------------------------------------------------------
@@ -896,6 +1557,7 @@ async function askDecisions(
   s: Settings,
   segs: Segment[],
   author: string,
+  known?: Record<number, string>,
 ): Promise<{ speakers: Record<number, string>; hints: Record<number, number>; log: string[]; cost: number }> {
   const out = { speakers: {} as Record<number, string>, hints: {} as Record<number, number>, log: [] as string[], cost: 0 };
   if (!hasDecisions()) {
@@ -905,7 +1567,7 @@ async function askDecisions(
   const passage = segs.map((g) => '#' + g.i + ' (' + g.kind + '): ' + g.text).join('\n');
   const people = candidates(s.cast, passage, author);
   const questions: Record<string, any> = {};
-  const speech = segs.filter((g) => g.kind === 'speech');
+  const speech = segs.filter((g) => g.kind === 'speech' && !(known && known[g.i]));
   if (people.length > 1) {
     const criteria: Record<string, string> = {};
     people.forEach((c, k) => {
@@ -1012,6 +1674,7 @@ function settingsSig(s: Settings): string {
     JSON.stringify([
       s.directorOn, s.directorConnection, s.strength, s.tagsOn, s.breathsOn, s.soundsOn, s.soundStyle, s.narration,
       s.intimateOn, s.findSpeakers, s.bigMoments, s.prompt, s.decisionsOn, s.decisionConnection, s.extraThinkTags,
+      s.thinkingMode, s.thinkingEffort, s.samplers,
       s.cast.map((c) => [c.name, c.aliases, c.note, c.muted]),
     ]),
   );
@@ -1019,7 +1682,7 @@ function settingsSig(s: Settings): string {
 
 // Settings change while a message is being directed. A new NPC is added to
 // the copy on disk, not to the copy read before the Director was asked.
-async function addSpeakers(userId: string | undefined, found: { name: string; gender: string; about: string }[]): Promise<string[]> {
+async function addSpeakers(userId: string | undefined, found: { name: string; gender: string; about: string }[], by: AddedBy = 'ai'): Promise<string[]> {
   if (!found.length) return [];
   const s = await loadSettings(userId);
   const added: string[] = [];
@@ -1029,7 +1692,7 @@ async function addSpeakers(userId: string | undefined, found: { name: string; ge
     m.id = newId();
     m.name = f.name;
     m.kind = 'npc';
-    m.addedBy = 'ai';
+    m.addedBy = by;
     m.note = f.about;
     m.gender = f.gender;
     s.cast.push(m);
@@ -1037,6 +1700,180 @@ async function addSpeakers(userId: string | undefined, found: { name: string; ge
   }
   if (added.length) await saveSettings(userId, s);
   return added;
+}
+
+// ---------------------------------------------------------------------------
+// Who is in the scene, read on this device
+// ---------------------------------------------------------------------------
+
+// Verbs a story uses to say who spoke. "said Wren" and "Wren said" after or
+// before a quote name the speaker for certain, so no model is asked.
+const SPEECH_VERBS =
+  'said|says|asked|asks|whispered|whispers|murmured|murmurs|muttered|mutters|shouted|shouts|yelled|yells|replied|replies|answered|answers|called|calls|snapped|snaps|growled|growls|hissed|hisses|breathed|breathes|added|adds|continued|continues|laughed|laughs|sighed|sighs|cried|cries|told|tells|demanded|demands|begged|begs|pleaded|pleads|offered|offers|warned|warns|admitted|admits|insisted|insists|whimpered|whimpers|purred|purrs|groaned|groans|teased|teases|corrected|corrects|interrupted|interrupts';
+
+// Words that start a sentence with a capital and are never a name.
+const NOT_NAMES = new Set(
+  ('i he she they we you it his her their our your its the a an this that these those there here then when while as ' +
+    'and but or so if after before once someone something somebody nobody everyone everybody one another both each ' +
+    'mr mrs ms miss sir lady lord my mine his hers theirs').split(' '),
+);
+
+interface SceneRead {
+  // Quoted lines whose speaker the text names, by line number.
+  named: Record<number, string>;
+  // Quoted lines where only an action next to them points at someone.
+  likely: Record<number, string>;
+  // Cast members the message names, the author first.
+  inScene: string[];
+  // Names the text says speak who are not in the cast.
+  found: string[];
+}
+
+function nameIn(cast: CastMember[], raw: string): { member: CastMember | null; name: string } {
+  const name = String(raw || '').replace(/['’]s$/, '').trim();
+  return { member: findMember(cast, name), name };
+}
+
+// A capitalized name of one to three words that is not a common word.
+function looksLikeName(t: string): boolean {
+  const words = String(t || '').trim().split(/\s+/);
+  if (!words.length || words.length > 3) return false;
+  return words.every((w) => /^\p{Lu}[\p{L}'’-]{1,}$/u.test(w) && !NOT_NAMES.has(w.toLowerCase()));
+}
+
+function readScene(segs: Segment[], cast: CastMember[], author: string): SceneRead {
+  const out: SceneRead = { named: {}, likely: {}, inScene: [], found: [] };
+  const NAME = '(\\p{Lu}[\\p{L}\'’-]+(?:\\s\\p{Lu}[\\p{L}\'’-]+){0,2})';
+  const AFTER_A = new RegExp('^\\s*' + NAME + '\\s+(?:' + SPEECH_VERBS + ')\\b', 'u');
+  const AFTER_B = new RegExp('^\\s*(?:' + SPEECH_VERBS + ')\\s+' + NAME + '\\b', 'u');
+  const BEFORE = new RegExp(NAME + '\\s+(?:' + SPEECH_VERBS + ')(?:\\s+\\w+){0,3}\\s*[:,]?\\s*$', 'u');
+  const take = (i: number, raw: string, sure: boolean) => {
+    if (!looksLikeName(raw)) return;
+    const got = nameIn(cast, raw);
+    const name = got.member ? got.member.name : got.name;
+    if (got.member) {
+      (sure ? out.named : out.likely)[i] = name;
+    } else if (sure && out.found.indexOf(name) < 0 && name.toLowerCase() !== 'narrator') {
+      out.found.push(name);
+      out.named[i] = name;
+    }
+  };
+  for (const g of segs) {
+    if (g.kind !== 'speech') continue;
+    const next = segs[g.i + 1];
+    const prev = segs[g.i - 1];
+    let m: RegExpMatchArray | null = null;
+    if (next && next.kind === 'narration' && ((m = next.text.match(AFTER_A)) || (m = next.text.match(AFTER_B)))) {
+      take(g.i, m[1], true);
+      continue;
+    }
+    if (prev && prev.kind === 'narration' && (m = prev.text.match(BEFORE))) {
+      take(g.i, m[1], true);
+      continue;
+    }
+    // An action just before a quote, such as "Wren set the cup down.", points
+    // at who speaks next. Only when the sentence starts with one cast name.
+    if (prev && prev.kind === 'narration') {
+      const tail = prev.text.match(/[^.!?…]+[.!?…]*\s*$/);
+      const last = tail ? tail[0].trim() : '';
+      const first = last.match(new RegExp('^' + NAME, 'u'));
+      if (first) take(g.i, first[1], false);
+    }
+  }
+  const all = segs.map((g) => g.text).join(' ').toLowerCase();
+  const seen: string[] = [];
+  const authorMember = findMember(cast, author);
+  if (authorMember) seen.push(authorMember.name);
+  for (const c of cast) {
+    if (c.kind === 'narrator' || seen.indexOf(c.name) >= 0) continue;
+    const names = [c.name, c.name.split(/\s+/)[0]].concat(c.aliases).filter((n) => n && n.length >= 3);
+    if (names.some((n) => new RegExp('(^|[^\\p{L}])' + escapeRe(n.toLowerCase()) + '(?![\\p{L}])', 'u').test(all))) seen.push(c.name);
+  }
+  for (const f of out.found) if (seen.indexOf(f) < 0) seen.push(f);
+  out.inScene = seen;
+  return out;
+}
+
+// One round with one connection: the first ask, the waits and the asks made
+// again. Answers with a usable answer, or none, and writes each step to the
+// Log in plain words.
+async function askDirector(userId: string | undefined, s: Settings, payload: any, connection: string, script: Script): Promise<{ answer: any }> {
+  let waits = 0;
+  let asks = 0;
+  let note = '';
+  for (;;) {
+    let content = '';
+    let failed = '';
+    try {
+      const messages: any[] = [
+        { role: 'system', content: s.prompt.trim() || BUILT_IN_PROMPT },
+        { role: 'user', content: JSON.stringify(payload) },
+      ];
+      if (note) messages.push({ role: 'user', content: note });
+      const req: any = { messages };
+      const reasoning = reasoningFor(s);
+      if (reasoning) req.reasoning = reasoning;
+      if (Object.keys(s.samplers).length) req.parameters = Object.assign({}, s.samplers);
+      if (connection) req.connection_id = connection;
+      if (userId) req.userId = userId;
+      const res = await withTimeout(req, s.timeoutSecs);
+      content = res && typeof res.content === 'string' ? res.content : '';
+      const cost = Number(res && res.usage && res.usage.cost);
+      if (Number.isFinite(cost)) script.cost += cost;
+    } catch (e: any) {
+      failed = String((e && e.message) || e || '');
+    }
+    let why = '';
+    let kind = '';
+    if (failed) {
+      if (REFUSAL_ERROR.test(failed)) {
+        why = 'The Director\'s provider refused this message';
+        kind = 'refused';
+      } else if (errorKind(failed) === 'wait' && waits < s.rateWaits) {
+        waits++;
+        const ms = Math.min(60000, rateWait(waits, failed));
+        script.log.push('The Director\'s provider is busy. Asked again after ' + Math.round(ms / 1000) + ' s (wait ' + waits + ' of ' + s.rateWaits + ').');
+        await sleep(ms);
+        continue;
+      } else {
+        script.log.push('The Director could not be asked: ' + generationTrouble(failed) + '.');
+        return { answer: null };
+      }
+    } else {
+      const answer = parseJsonObject(content);
+      const usable = answer && Array.isArray(answer.lines) && answer.lines.length > 0;
+      const kept = usable
+        ? answer.lines.filter((l: any) => {
+            const seg = payload.lines[Number(l && l.i)];
+            return seg && typeof l.text === 'string' && sameWords(l.text, seg.text);
+          }).length
+        : 0;
+      // More than half the lines with changed words is an answer that did the
+      // wrong job, not one with a slip in it.
+      if (usable && kept * 2 >= answer.lines.length) return { answer };
+      if (!content.trim()) {
+        why = 'The Director sent back nothing';
+        kind = 'empty';
+      } else if (!answer && answerRefused(content)) {
+        why = 'The Director declined to direct this message';
+        kind = 'refused';
+      } else if (!usable) {
+        why = !answer ? 'The Director answered, but not in the shape asked for' : 'The Director sent back no lines';
+        kind = 'shape';
+      } else {
+        why = 'The Director changed the words of most lines';
+        kind = 'changed';
+      }
+    }
+    if (asks < s.retryDirector) {
+      asks++;
+      note = noteFor(s, kind);
+      script.log.push(why + ', so it was asked again' + (note ? ' with a note' : '') + ' (' + asks + ' of ' + s.retryDirector + ').');
+      continue;
+    }
+    script.log.push(why + '.');
+    return { answer: null };
+  }
 }
 
 async function direct(userId: string | undefined, p: any): Promise<Script> {
@@ -1070,7 +1907,7 @@ async function direct(userId: string | undefined, p: any): Promise<Script> {
   }
   const segs = splitSegments(text, s.extraThinkTags, await boundPairs(userId));
   const script: Script = {
-    key, messageId, author, lines: [], log: [], directed: false, added: authorAdded ? [author] : [], model: '', cost: 0,
+    key, messageId, author, lines: [], log: [], directed: false, added: authorAdded ? [author] : [], inScene: [], isUser, model: '', cost: 0,
   };
 
   if (!segs.length) {
@@ -1090,15 +1927,29 @@ async function direct(userId: string | undefined, p: any): Promise<Script> {
     bigMoments: s.bigMoments,
   };
 
-  let fixed: Record<number, string> = {};
+  // The text first: a quote the story itself says who spoke, such as
+  // "said Wren", needs no model. The Decision model then picks the rest.
+  const scene = readScene(segs, s.cast, author);
+  const fixed: Record<number, string> = Object.assign({}, scene.named);
   let hints: Record<number, number> = {};
+  const namedCount = Object.keys(scene.named).length;
+  if (namedCount) script.log.push('The text names the speaker of ' + namedCount + (namedCount === 1 ? ' quoted line.' : ' quoted lines.'));
+  if (scene.found.length && s.findSpeakers) {
+    const addedNow = await addSpeakers(userId, scene.found.map((n) => ({ name: n, gender: 'unknown', about: '' })), 'found');
+    if (addedNow.length) {
+      script.added.push(...addedNow);
+      script.log.push('Found in the text and added to the cast: ' + addedNow.join(', ') + '.');
+    }
+  }
   if (s.decisionsOn) {
-    const d = await askDecisions(userId, s, segs, author);
-    fixed = d.speakers;
+    const left = segs.filter((g) => g.kind === 'narration' || !fixed[g.i]);
+    const d = await askDecisions(userId, s, left.length ? segs : [], author, fixed);
+    for (const k of Object.keys(d.speakers)) if (!fixed[Number(k)]) fixed[Number(k)] = d.speakers[Number(k)];
     hints = d.hints;
     script.log.push(...d.log);
     script.cost += d.cost;
   }
+  script.inScene = scene.inScene;
 
   if (!s.directorOn) {
     const plain = applyDirection(segs, null, s.cast, author, fixed, rules);
@@ -1117,8 +1968,10 @@ async function direct(userId: string | undefined, p: any): Promise<Script> {
     lines: segs.map((g) => {
       const l: any = { i: g.i, kind: g.kind, text: g.text };
       if (fixed[g.i]) l.speaker = fixed[g.i];
+      else if (scene.likely[g.i]) l.likely_speaker = scene.likely[g.i];
       return l;
     }),
+    in_scene: scene.inScene,
     rules: {
       max_tags: MAX_TAGS[s.strength],
       acting: s.strength,
@@ -1134,30 +1987,23 @@ async function direct(userId: string | undefined, p: any): Promise<Script> {
   };
   if (Object.keys(hints).length) payload.rules.sound_hints = hints;
 
-  let answer: any = null;
-  try {
-    const req: any = {
-      messages: [
-        { role: 'system', content: s.prompt.trim() || BUILT_IN_PROMPT },
-        { role: 'user', content: JSON.stringify(payload) },
-      ],
-      reasoning: { source: 'off' },
-    };
-    if (s.directorConnection) req.connection_id = s.directorConnection;
-    if (userId) req.userId = userId;
-    const res = await spindle.generate.quiet(req);
-    const content = res && typeof res.content === 'string' ? res.content : '';
-    const cost = Number(res && res.usage && res.usage.cost);
-    if (Number.isFinite(cost)) script.cost += cost;
-    answer = parseJsonObject(content);
-    if (!answer) {
-      script.log.push(content.trim()
-        ? 'The Director answered, but not in the shape asked for, so the message is read as written.'
-        : 'The Director sent back nothing, so the message is read as written.');
-    }
-  } catch (e: any) {
-    script.log.push('The message is read as written: ' + generationTrouble(e) + '.');
+  // The Director is asked, and asked again when the answer cannot be used:
+  // - A busy or rate-limited provider is waited out, up to Wait out a
+  //   provider that will not take the call. The refused call cost nothing.
+  // - A refusal, an empty answer, an answer in the wrong shape, or one that
+  //   changed most words is asked for again, up to Ask again when the
+  //   Director's answer fails, with a note saying what went wrong.
+  // - Still nothing usable, and a fallback connection is picked: it is asked
+  //   the same way.
+  // Whatever happens, the message is still read, as written if need be.
+  const firstTry = await askDirector(userId, s, payload, s.directorConnection, script);
+  let answer = firstTry.answer;
+  if (!answer && s.fallbackConnection && s.fallbackConnection !== s.directorConnection) {
+    script.log.push('Asking the fallback connection instead.');
+    const second = await askDirector(userId, s, payload, s.fallbackConnection, script);
+    answer = second.answer;
   }
+  if (!answer) script.log.push('The message is read as written.');
 
   const done = applyDirection(segs, answer, s.cast, author, fixed, rules);
   script.lines = done.lines;
@@ -1425,19 +2271,37 @@ async function soundFor(userId: string | undefined, description: string): Promis
   if (!key) return { error: 'No sound in your library fits "' + desc + '". Save an ElevenLabs key in the Sounds tab to make new ones.' };
   const body: any = { text: desc, prompt_influence: 0.4 };
   if (s.soundSeconds >= 0.5) body.duration_seconds = s.soundSeconds;
+  // A busy answer is waited out, up to Wait out a provider that will not take
+  // the call. Each wait is capped at 30 seconds, since a sound is wanted while
+  // the message is still playing.
   let res: any;
-  try {
-    res = await cors('https://api.elevenlabs.io/v1/sound-generation?output_format=mp3_44100_128', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'xi-api-key': key, Accept: 'audio/mpeg' },
-      body: JSON.stringify(body),
-      responseType: 'arraybuffer',
-      mediaType: 'audio',
-    });
-  } catch (e: any) {
-    return { error: corsTrouble(e) };
+  let status = 0;
+  for (let wait = 0; ; wait++) {
+    try {
+      res = await cors('https://api.elevenlabs.io/v1/sound-generation?output_format=mp3_44100_128', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'xi-api-key': key, Accept: 'audio/mpeg' },
+        body: JSON.stringify(body),
+        responseType: 'arraybuffer',
+        mediaType: 'audio',
+      });
+    } catch (e: any) {
+      const raw = String((e && e.message) || e || '');
+      if (wait < s.rateWaits && errorKind(raw) === 'wait') {
+        await sleep(Math.min(30000, rateWait(wait + 1, raw)));
+        continue;
+      }
+      return { error: corsTrouble(e) };
+    }
+    status = Number(res && res.status);
+    const busy = status === 429 || (status >= 500 && status < 600);
+    if (busy && wait < s.rateWaits) {
+      const said = String((res && res.headers && (res.headers['retry-after'] || res.headers['Retry-After'])) || '');
+      await sleep(Math.min(30000, rateWait(wait + 1, said ? 'retry-after: ' + said : '')));
+      continue;
+    }
+    break;
   }
-  const status = Number(res && res.status);
   if (!res || status < 200 || status >= 300) return { error: elevenTrouble(status, String((res && res.body) || '')) };
   const b64 = String(res.body || '');
   const bytes = fromBase64(b64);
@@ -1557,7 +2421,7 @@ async function onPanel(p: any, userId: string | undefined) {
         try {
           hasKey = !!(spindle.enclave && typeof spindle.enclave.has === 'function' && (await spindle.enclave.has(KEY_NAME, userId)));
         } catch (_) {}
-        answer({ type: 'state', settings, sounds, hasKey, builtInPrompt: BUILT_IN_PROMPT, version: VERSION, decisions: hasDecisions() });
+        answer({ type: 'state', settings, sounds, hasKey, builtInPrompt: BUILT_IN_PROMPT, builtInNotes: ASK_NOTES, version: VERSION, decisions: hasDecisions() });
         return;
       }
       case 'save': {
@@ -1713,6 +2577,43 @@ async function onPanel(p: any, userId: string | undefined) {
           }
         }
         answer({ type: 'check', part: 'decisions', ok, text });
+        return;
+      }
+      case 'reset': {
+        // Start again: each chosen part goes back to its default. With every
+        // part chosen, everything Auto Foley keeps for this account is gone.
+        const parts: string[] = Array.isArray(p.parts) ? p.parts.filter((x: any) => RESET_PARTS.indexOf(x) >= 0) : [];
+        const s = await loadSettings(userId);
+        const fresh = cleanSettings({});
+        if (parts.indexOf('settings') >= 0) {
+          const keep = { cast: s.cast, prompt: s.prompt, exportParts: s.exportParts, importParts: s.importParts, resetParts: s.resetParts };
+          Object.assign(s, fresh, keep);
+        }
+        if (parts.indexOf('prompt') >= 0) s.prompt = '';
+        if (parts.indexOf('cast') >= 0) s.cast = fresh.cast;
+        let ok = await saveSettings(userId, s);
+        if (parts.indexOf('sounds') >= 0) {
+          const list = await loadSounds(userId);
+          for (const e of list) {
+            try {
+              await spindle.userStorage.delete('sounds/' + e.id, userId);
+            } catch (_) {}
+          }
+          ok = (await saveSounds(userId, [])) && ok;
+        }
+        if (parts.indexOf('key') >= 0) {
+          try {
+            await spindle.enclave.delete(KEY_NAME, userId);
+          } catch (_) {
+            ok = false;
+          }
+        }
+        delete scripts[userId || ''];
+        let hasKey = false;
+        try {
+          hasKey = !!(spindle.enclave && typeof spindle.enclave.has === 'function' && (await spindle.enclave.has(KEY_NAME, userId)));
+        } catch (_) {}
+        answer({ type: 'reset', ok, error: ok ? '' : 'Some of it could not be reset. The rest was.', settings: await loadSettings(userId), sounds: await loadSounds(userId), hasKey });
         return;
       }
       case 'notify': {

@@ -43,8 +43,9 @@ With **Save the performance to the message** on, the finished audio is saved to 
 | Generation | Asking the Director, listing your connections for **Which connection**, and reading the thinking Prefix and Suffix saved on them |
 | Decision models | Asking the Decision model, and listing your Decision connections |
 | CORS proxy | Making sound effects with ElevenLabs, and testing the key |
+| UI panels | The floating button, when you turn it on in the Settings tab |
 
-Refusing **CORS proxy** stops only new sound effects. Refusing **Decision models** turns the Decision model off. Refusing **Generation** turns the Director off, and messages are read as written.
+Refusing **UI panels** stops only the floating button. Refusing **CORS proxy** stops only new sound effects. Refusing **Decision models** turns the Decision model off. Refusing **Generation** turns the Director off, and messages are read as written.
 
 ---
 

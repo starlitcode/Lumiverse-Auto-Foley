@@ -115,7 +115,8 @@ function host(opts: {
       },
     };
   }
-  const box: any = { spindle, console, Date, Math, JSON, Promise, setTimeout, clearTimeout };
+  // Waits run at once here, so a test of a busy provider does not take a minute.
+  const box: any = { spindle, console, Date, Math, JSON, Promise, setTimeout: (fn: any) => setTimeout(fn, 0), clearTimeout };
   vm.createContext(box);
   vm.runInContext(SRC, box);
   return {
@@ -327,7 +328,7 @@ describe("directing a message, end to end", () => {
   });
 
   test("a new speaker the Director finds is added as an NPC, marked as added by the AI", async () => {
-    const answer = JSON.stringify({ lines: [], new_speakers: [{ name: "Ferryman", gender: "male", about: "slow and low" }] });
+    const answer = JSON.stringify({ lines: [{ i: 0, speaker: "Narrator", text: "Mara set the cup down." }], new_speakers: [{ name: "Ferryman", gender: "male", about: "slow and low" }] });
     const h = host({ answers: [answer] });
     const out = await h.ask(msg);
     const saved = JSON.parse(h.files.get("u1/settings.json"));
@@ -400,7 +401,7 @@ describe("the Decision model", () => {
 
   test("its picks are given to the Director as fixed speakers", async () => {
     const h = host({
-      answers: [JSON.stringify({ lines: [] })],
+      answers: [JSON.stringify({ lines: [{ i: 0, speaker: "Narrator", text: "Mara looked at Tobin." }] })],
       decide: (input) => {
         const answers: any = {};
         for (const k of Object.keys(input.questions)) {
@@ -424,7 +425,7 @@ describe("the Decision model", () => {
 
   test("a pick it is unsure of is left to the Director", async () => {
     const h = host({
-      answers: [JSON.stringify({ lines: [] })],
+      answers: [JSON.stringify({ lines: [{ i: 0, speaker: "Narrator", text: "Mara looked at Tobin." }] })],
       decide: (input) => {
         const answers: any = {};
         for (const k of Object.keys(input.questions)) answers[k] = k.startsWith("who_") ? { type: "choice", choice: "p0", confidence: 0.3 } : { type: "noul", noul: 0.1 };
@@ -438,7 +439,7 @@ describe("the Decision model", () => {
   });
 
   test("when it cannot be asked, the Log says why in plain words and the Director carries on", async () => {
-    const h = host({ answers: [JSON.stringify({ lines: [] })] });
+    const h = host({ answers: [JSON.stringify({ lines: [{ i: 0, speaker: "Narrator", text: "Mara looked at Tobin." }] })] });
     await setup(h);
     const out = await h.ask(msg);
     const log = out.find((m) => m.type === "script").script.log.join(" ");
@@ -447,7 +448,7 @@ describe("the Decision model", () => {
   });
 
   test("an old Lumiverse with no Decision connections says so", async () => {
-    const h = host({ answers: [JSON.stringify({ lines: [] })], noDecisions: true });
+    const h = host({ answers: [JSON.stringify({ lines: [{ i: 0, speaker: "Narrator", text: "Mara looked at Tobin." }] })], noDecisions: true });
     await setup(h);
     const out = await h.ask(msg);
     expect(out.find((m) => m.type === "script").script.log.join(" ")).toContain("Update Lumiverse");
@@ -459,6 +460,201 @@ describe("the Decision model", () => {
     expect(h.box.decisionTrouble(new Error("No readable API key for Decision connection x"))).toContain("no key saved");
     expect(h.box.decisionTrouble(new Error("PERMISSION_DENIED: decisions"))).toContain("permission is refused");
     expect(h.box.decisionTrouble(new Error("timed out after 30000ms"))).toContain("30 seconds");
+  });
+});
+
+describe("asking again", () => {
+  const msg = { type: "direct", chatId: "c1", messageId: "m7", swipeId: 0, name: "Mara Vell", text: 'Mara set the cup down. "Fine."' };
+  const good = JSON.stringify({ lines: [{ i: 1, speaker: "Mara Vell", text: "[flatly] Fine." }] });
+
+  test("a busy provider is waited out, and the Log says so", async () => {
+    const h = host({ answers: [new Error("Provider stream failed (429): rate limit reached"), good] });
+    const out = await h.ask(msg);
+    const script = out.find((m) => m.type === "script").script;
+    expect(h.calls.generate.length).toBe(2);
+    expect(script.directed).toBe(true);
+    expect(script.log.join(" ")).toContain("busy");
+  });
+
+  test("a refused key is not asked again", async () => {
+    const h = host({ answers: [new Error("Provider stream failed (401): invalid api key"), good] });
+    await h.ask(msg);
+    expect(h.calls.generate.length).toBe(1);
+  });
+
+  test("an answer that cannot be read is asked for again", async () => {
+    const h = host({ answers: ["not json", good] });
+    const out = await h.ask(msg);
+    expect(h.calls.generate.length).toBe(2);
+    expect(out.find((m) => m.type === "script").script.directed).toBe(true);
+  });
+
+  test("an answer that changed most words is asked for again", async () => {
+    const changed = JSON.stringify({ lines: [{ i: 0, speaker: "Narrator", text: "Mara put the mug away." }, { i: 1, speaker: "Mara Vell", text: "Okay." }] });
+    const h = host({ answers: [changed, good] });
+    await h.ask(msg);
+    expect(h.calls.generate.length).toBe(2);
+  });
+
+  test("with both counts at 0, nothing is asked again", async () => {
+    const h = host({ answers: [new Error("Provider stream failed (503): overloaded"), good] });
+    await h.ask({ type: "save", settings: { rateWaits: 0, retryDirector: 0 } });
+    await h.ask(msg);
+    expect(h.calls.generate.length).toBe(1);
+  });
+
+  test("a busy answer when making a sound is waited out", async () => {
+    let n = 0;
+    const mp3 = Buffer.from(new Uint8Array(200).fill(9)).toString("base64");
+    const h = host({ cors: (url) => (url.includes("subscription") ? { status: 200, body: "{}" } : ++n === 1 ? { status: 429, body: "{}", headers: { "retry-after": "1" } } : { status: 200, body: mp3 }) });
+    await h.ask({ type: "key_save", key: "sk_x" });
+    const out = await h.ask({ type: "sound", description: "rain on a tin roof" });
+    expect(out.find((m) => m.type === "sound").base64).toBe(mp3);
+    expect(n).toBe(2);
+  });
+});
+
+describe("a Director that refuses", () => {
+  const msg = { type: "direct", chatId: "c1", messageId: "m8", swipeId: 0, name: "Mara Vell", text: 'Mara set the cup down. "Fine."' };
+  const good = JSON.stringify({ lines: [{ i: 1, speaker: "Mara Vell", text: "[flatly] Fine." }] });
+
+  test("a refusal is asked again, with a note that says it is fiction", async () => {
+    const h = host({ answers: ["I'm sorry, but I can't help with that request.", good] });
+    const out = await h.ask(msg);
+    expect(h.calls.generate.length).toBe(2);
+    const second = h.calls.generate[1].messages;
+    expect(second[second.length - 1].content).toContain("fiction from my own story");
+    const script = out.find((m) => m.type === "script").script;
+    expect(script.directed).toBe(true);
+    expect(script.log.join(" ")).toContain("declined to direct");
+  });
+
+  test("a refusal sent as a content filter error is asked again too", async () => {
+    const h = host({ answers: [new Error("The provider stopped the response because of a content filter (content_filter)."), good] });
+    await h.ask(msg);
+    expect(h.calls.generate.length).toBe(2);
+  });
+
+  test("with notes off, it is asked again with no note", async () => {
+    const h = host({ answers: ["As an AI language model, I cannot do that.", good] });
+    await h.ask({ type: "save", settings: { askNote: false } });
+    await h.ask(msg);
+    const second = h.calls.generate[1].messages;
+    expect(second.length).toBe(2);
+  });
+
+  test("a note the reader wrote is sent instead of the built-in one", async () => {
+    const h = host({ answers: ["I'm sorry, but I can't assist with that.", good] });
+    await h.ask({ type: "save", settings: { askNotes: { refused: "Please just tag it." } } });
+    await h.ask(msg);
+    const second = h.calls.generate[1].messages;
+    expect(second[second.length - 1].content).toBe("Please just tag it.");
+  });
+
+  test("when it still refuses, the fallback connection is asked", async () => {
+    const h = host({ answers: ["I can't help with that.", "I won't do this.", good] });
+    await h.ask({ type: "save", settings: { fallbackConnection: "backup" } });
+    const out = await h.ask(msg);
+    expect(h.calls.generate.length).toBe(3);
+    expect(h.calls.generate[2].connection_id).toBe("backup");
+    expect(out.find((m) => m.type === "script").script.directed).toBe(true);
+  });
+
+  test("with nothing left to try, the message is still read as written", async () => {
+    const h = host({ answers: ["I can't help with that.", "Still no."] });
+    const out = await h.ask(msg);
+    const script = out.find((m) => m.type === "script").script;
+    expect(script.directed).toBe(false);
+    expect(script.lines.map((l: any) => l.text)).toEqual(["Mara set the cup down.", "Fine."]);
+    expect(script.log.join(" ")).toContain("read as written");
+  });
+
+  test("a long scene that happens to hold refusal words is not a refusal", () => {
+    const h = host();
+    const scene = "I can't do this anymore, she said, and the rain kept on. " + "The road ran on past the mill and the river. ".repeat(40);
+    expect(h.box.answerRefused(scene)).toBe(false);
+  });
+
+  test("thinking, samplers and the connection go with the ask", async () => {
+    const h = host({ answers: [good] });
+    await h.ask({ type: "save", settings: { thinkingMode: "custom", thinkingEffort: "medium", samplers: { temperature: 0.6, top_k: "" }, directorConnection: "fast" } });
+    await h.ask(msg);
+    const req = h.calls.generate[0];
+    expect(req.reasoning).toEqual({ source: "custom", effort: "medium" });
+    expect(req.parameters).toEqual({ temperature: 0.6 });
+    expect(req.connection_id).toBe("fast");
+  });
+});
+
+describe("Start again", () => {
+  test("only the chosen parts are put back", async () => {
+    const h = host({ cors: () => ({ status: 200, body: "{}" }) });
+    await h.ask({ type: "save", settings: { strength: "dramatic", prompt: "My own prompt", cast: [{ id: "x", name: "Ilse", kind: "character", voice: "v9" }] } });
+    const out = await h.ask({ type: "reset", parts: ["settings"] });
+    const r = out.find((m) => m.type === "reset");
+    expect(r.ok).toBe(true);
+    expect(r.settings.strength).toBe("natural");
+    expect(r.settings.prompt).toBe("My own prompt");
+    expect(r.settings.cast.some((c: any) => c.name === "Ilse")).toBe(true);
+  });
+
+  test("everything chosen deletes everything Auto Foley keeps", async () => {
+    const h = host({ cors: () => ({ status: 200, body: "{}" }) });
+    await h.ask({ type: "save", settings: { strength: "dramatic", prompt: "Mine", cast: [{ id: "x", name: "Ilse", kind: "character" }] } });
+    await h.ask({ type: "sound_upload", name: "a.mp3", mime: "audio/mpeg", base64: h.box.toBase64(new Uint8Array(100).fill(3)) });
+    await h.ask({ type: "key_save", key: "sk_x" });
+    const out = await h.ask({ type: "reset", parts: ["settings", "prompt", "cast", "sounds", "key"] });
+    const r = out.find((m) => m.type === "reset");
+    expect(r.settings.prompt).toBe("");
+    expect(r.settings.cast.map((c: any) => c.kind)).toEqual(["narrator"]);
+    expect(r.sounds).toEqual([]);
+    expect(r.hasKey).toBe(false);
+    expect([...h.files.keys()].some((k) => k.startsWith("u1/sounds/u"))).toBe(false);
+  });
+});
+
+describe("who is in the scene, read on this device", () => {
+  const h = host();
+  const cast = h.box.cleanSettings({ cast: [{ id: "a", name: "Wren Halloway", kind: "character" }, { id: "b", name: "Odile", kind: "persona", aliases: ["the courier"] }] }).cast;
+  const read = (t: string, author = "Wren Halloway") => h.box.readScene(h.box.splitSegments(t), cast, author);
+
+  test("a speech verb after the quote names the speaker", () => {
+    expect(read('"Not tonight," Odile said.').named).toEqual({ 0: "Odile" });
+  });
+
+  test("the verb first works too", () => {
+    expect(read('"Not tonight," said Wren.').named).toEqual({ 0: "Wren Halloway" });
+  });
+
+  test("a name with a speech verb before the quote", () => {
+    expect(read('Odile whispered: "Keep walking."').named).toEqual({ 1: "Odile" });
+  });
+
+  test("an action just before a quote only points at someone", () => {
+    const got = read('Wren shut the ledger. "Done."');
+    expect(got.named).toEqual({});
+    expect(got.likely).toEqual({ 1: "Wren Halloway" });
+  });
+
+  test("a pronoun names nobody", () => {
+    expect(read('"Fine," she said.').named).toEqual({});
+  });
+
+  test("someone new who speaks is found", () => {
+    const got = read('"Tickets," Barnaby said.');
+    expect(got.found).toEqual(["Barnaby"]);
+    expect(got.named).toEqual({ 0: "Barnaby" });
+  });
+
+  test("everyone named in the message is in the scene, the author first", () => {
+    expect(read('The courier waved. "Morning."', "Wren Halloway").inScene).toEqual(["Wren Halloway", "Odile"]);
+  });
+
+  test("a found speaker is added to the cast, marked as found in the text", async () => {
+    const h2 = host({ answers: [JSON.stringify({ lines: [{ i: 0, speaker: "Barnaby", text: "Tickets," }] })] });
+    await h2.ask({ type: "direct", chatId: "c", messageId: "m", swipeId: 0, name: "Wren Halloway", text: '"Tickets," Barnaby said.' });
+    const saved = JSON.parse(h2.files.get("u1/settings.json"));
+    expect(saved.cast.find((c: any) => c.name === "Barnaby").addedBy).toBe("found");
   });
 });
 

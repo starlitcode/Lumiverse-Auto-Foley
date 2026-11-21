@@ -36,6 +36,7 @@ describe("the permissions it asks for", () => {
     generation: /spindle\.generate\.quiet\(/,
     decisions: /spindle\.decisions\.evaluate\(/,
     cors_proxy: /spindle\.cors\(/,
+    ui_panels: /ui\.createFloatWidget\(/,
   };
 
   test("every one is used by the code", () => {
@@ -48,7 +49,7 @@ describe("the permissions it asks for", () => {
 
   test("the privacy page lists each one", () => {
     const page = read("docs/privacy.md");
-    const names: Record<string, string> = { generation: "Generation", decisions: "Decision models", cors_proxy: "CORS proxy" };
+    const names: Record<string, string> = { generation: "Generation", decisions: "Decision models", cors_proxy: "CORS proxy", ui_panels: "UI panels" };
     for (const p of asked) expect(page).toContain("| " + names[p] + " |");
   });
 });
@@ -76,7 +77,8 @@ describe("the writing rules", () => {
   });
 
   test("American spelling", () => {
-    const british = /\b(colour|grey|behaviour|recognis|cancelled|labelled|centre|favourite|organis|realis|analys(e|ing)|licence|judgement|travell)/i;
+    // aria-labelledby is a fixed HTML name, spelled that way everywhere.
+    const british = /\b(colour|grey|behaviour|recognis\w*|cancelled|(?<!aria-)labelled|centre|favourite|organis\w*|realis(e|ed|es|ing|ation)\b|analys(e|ing)|licence|judgement|travell\w*)/i;
     const hits = [...DOCS, ...CODE, "CLAUDE.md"].filter((f) => british.test(read(f)));
     expect(hits).toEqual([]);
   });

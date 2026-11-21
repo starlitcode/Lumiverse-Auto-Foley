@@ -141,13 +141,16 @@ window.__fetch = async (url, init) => {
   const json = (o) => new Response(JSON.stringify(o), { status: 200, headers: { 'Content-Type': 'application/json' } });
   if (u.includes('/tts-connections?')) return json({ data: [{ id: 't1', name: 'My ElevenLabs', provider: 'elevenlabs', model: 'eleven_v3', voice: 'v0', is_default: true, has_api_key: true }, { id: 't2', name: 'Other', provider: 'openai' }], total: 2 });
   if (u.includes('/voices')) return json({ voices: [{ id: 'v1', name: 'Hollow Bell', gender: 'female' }, { id: 'v2', name: 'Grit', gender: 'male' }, { id: 'v3', name: 'Lark', gender: 'female' }], provider: 'elevenlabs' });
+  if (u.includes('/chats/chat1?messages=false')) return json({ id: 'chat1', name: '', character_id: 'c', metadata: {} });
+  if (u.includes('/characters/c')) return json({ id: 'c', name: 'Ysolde Marrow-Kestrel of the Lower Quays' });
+  if (u.includes('/settings/voiceSettings')) return json({ key: 'voiceSettings', value: { ttsEnabled: true, ttsAutoPlay: true, ttsConnectionId: 't1' } });
   if (u.includes('/messages')) return json({ data: [{ id: 'm1', name: 'Ysolde Marrow-Kestrel of the Lower Quays', is_user: false, content: 'text', swipe_id: 0 }], total: 1 });
   if (u.includes('/tts/synthesize')) { window.__synth = (window.__synth || []).concat(JSON.parse(init.body)); return new Response(new Blob([new Uint8Array(64)], { type: 'audio/mpeg' }), { status: 200 }); }
   return new Response('{}', { status: 404 });
 };
 class FakeAudio {
   constructor() { this.dataset = {}; this.volume = 1; this.paused = true; FakeAudio.all.push(this); }
-  play() { this.paused = false; window.__played = (window.__played || 0) + 1; clearTimeout(this.t); this.t = setTimeout(() => { this.paused = true; this.onended && this.onended(); }, 40); return Promise.resolve(); }
+  play() { this.paused = false; window.__played = (window.__played || 0) + 1; clearTimeout(this.t); this.t = setTimeout(() => { this.paused = true; this.onended && this.onended(); }, window.__clipMs || 40); return Promise.resolve(); }
   pause() { this.paused = true; clearTimeout(this.t); }
 }
 FakeAudio.all = [];
@@ -163,15 +166,15 @@ window.__ctx = {
       const r = document.getElementById('drawer');
       return { root: r, setBadge() {}, activate() {}, destroy() { window.__tabDestroyed = true; }, onActivate() { return () => {}; } };
     },
-    registerDomDecorator(spec) {
-      const mount = document.getElementById('mount');
-      const holder = document.createElement('span');
-      mount.appendChild(holder);
-      const undo = spec.render(holder, { scope: 'message:m1:actions' });
-      decorators.push(undo);
-      return () => { window.__decoratorGone = true; if (typeof undo === 'function') undo(); };
-    },
     showConfirm: async () => ({ confirmed: true }),
+    showContextMenu: async (o) => { window.__menu = o; return { selectedKey: null }; },
+    createFloatWidget: (o) => {
+      const r = document.createElement('div');
+      r.style.cssText = 'position:fixed;left:' + o.initialPosition.x + 'px;top:' + o.initialPosition.y + 'px;width:' + o.width + 'px;height:' + o.height + 'px';
+      document.body.appendChild(r);
+      window.__widget = r;
+      return { root: r, destroy() { r.remove(); window.__widgetGone = true; } };
+    },
   },
   uploads: { pickFile: async () => [] },
   permissions: { getGranted: async () => ['generation', 'decisions'] },
@@ -191,7 +194,8 @@ function pageHtml(theme) {
 <style>body{background:${theme.bg};color:var(--lumiverse-text);font-family:system-ui,sans-serif;font-size:14px}
 .hostbtn{display:inline-grid;place-items:center;width:30px;height:30px;color:var(--lumiverse-text-muted)} .hostbtn svg{width:16px;height:16px}
 #row{display:flex;gap:4px;padding:8px}</style></head>
-<body><div id="row"><button class="hostbtn _actionBtn_ab12c_3"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16v16H4z"/></svg></button><span id="mount" data-spindle-mount="message_actions" style="display:contents"></span></div>
+<body><div id="bar"><button class="hostbtn _barBtn_cd34e_1" title="Send"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 12h16"/></svg></button><span id="barmount" data-spindle-mount="chat_actions" data-spindle-scope="chat:chat1:actions" style="display:contents"></span></div>
+<div data-message-id="m1"><p>A message.</p><div id="row"><button class="hostbtn _actionBtn_ab12c_3" title="Edit"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16v16H4z"/></svg></button><span id="mount" data-spindle-mount="message_actions" data-spindle-scope="message:m1:actions" style="display:contents"></span></div></div>
 <div id="drawer" style="background:var(--lumiverse-bg)"></div></body></html>`;
 }
 
@@ -282,7 +286,7 @@ const MEASURE = (touch) => {
     if (el.closest('.af-sub') && el.closest('.af-sub').hidden) continue;
     const name = (el.className && String(el.className)) || el.tagName;
     if (r.right > box.right + 1.5 || r.left < box.left - 1.5) out.overflow.push(name + ' runs off the side (' + Math.round(r.left) + '..' + Math.round(r.right) + ' in ' + Math.round(box.left) + '..' + Math.round(box.right) + ')');
-    const tappable = el.matches('button, select, input:not([type=checkbox]), .af-switch');
+    const tappable = el.matches('button, select, input, .af-box');
     if (touch && tappable && r.height < 32) out.small.push(name + ' is ' + Math.round(r.height) + 'px tall');
     const ownText = Array.prototype.some.call(el.childNodes, (n) => n.nodeType === 3 && n.textContent.trim());
     if (!ownText) continue;
@@ -305,7 +309,7 @@ if (section("layout")) {
     for (const size of SIZES) {
       const { context, page, errors } = await open(theme, size);
       // A message is performed first, so the Stage has a script to measure.
-      await page.click("#mount .af-msg-btn");
+      await page.click('#mount [data-af-slot="message"]');
       await page.waitForTimeout(900);
       for (const id of TABS) {
         await showTab(page, id);
@@ -340,16 +344,16 @@ if (section("scale")) {
 if (section("perform")) {
   console.log("Performing a message from its button");
   const { context, page, errors } = await open(THEMES[0], SIZES[1]);
-  const btn = page.locator("#mount .af-msg-btn");
+  const btn = page.locator('#mount [data-af-slot="message"]');
   check((await btn.count()) === 1, "the message gets one Auto Foley button");
   check((await btn.getAttribute("class")).includes("_actionBtn_ab12c_3"), "the button wears the host button's class");
-  check((await page.evaluate(() => document.querySelector("#mount .af-msg-btn svg").getAttribute("width"))) === "16", "its icon is the host icon's size");
+  check((await page.evaluate(() => document.querySelector('#mount [data-af-slot="message"] svg').getAttribute("width"))) === "16", "its icon is the host icon's size");
   await btn.click();
   await page.waitForTimeout(150);
   check((await page.evaluate(() => window.__sent.some((m) => m.type === "direct" && m.messageId === "m1" && m.chatId === "chat1"))), "the message is sent to be directed, with its chat");
   check((await page.locator(".af-line").count()) === 3, "the script shows every line");
   check((await page.locator(".af-chip-tag").count()) >= 2, "voice tags are drawn as chips");
-  check((await page.locator(".af-chip-insound").count()) === 1, "a sound in the voice is drawn as a sound chip");
+  check((await page.locator(".af-script .af-chip-insound").count()) === 1, "a sound in the voice is drawn as a sound chip");
   check((await page.locator("button.af-chip-sound").count()) === 1, "a separate sound effect is a button");
   check((await page.locator(".af-line-note").count()) === 1, "a line read as written says why");
   await page.waitForTimeout(700);
@@ -364,13 +368,43 @@ if (section("perform")) {
   const played = await page.evaluate(() => window.__played || 0);
   check(played >= 4, "every part plays, voices and sounds (" + played + ")");
   check((await page.locator('[data-af="sub"]').textContent()).includes("Finished") || (await page.locator('[data-af="title"]').textContent()).length > 0, "the status line says where it is");
+  // Each clip lasts long enough here for the second press to land mid-play.
+  await page.evaluate(() => (window.__clipMs = 600));
   await btn.click();
   await page.waitForTimeout(80);
-  check((await btn.getAttribute("data-af-busy")) === "true", "the button shows the message is playing");
+  check((await btn.getAttribute("aria-busy")) === "true", "the button shows the message is playing");
   await btn.click();
   await page.waitForTimeout(80);
-  check((await btn.getAttribute("data-af-busy")) === "false", "pressing it again stops it");
+  check((await btn.getAttribute("aria-busy")) === null, "pressing it again stops it");
+  await page.evaluate(() => (window.__clipMs = 40));
   check(!errors.length, "no console errors while performing. " + errors.slice(0, 2).join("; "));
+
+  console.log("The audience");
+  await page.evaluate(() => {
+    window.__played = 0;
+  });
+  await page.click('.af-tab[data-tab="settings"]');
+  await page.waitForTimeout(250);
+  await page.evaluate(() => document.querySelector('[data-af-row="applauseOn"] .af-box').click());
+  await page.waitForTimeout(350);
+  check((await page.locator('[data-af-row="applauseForUser"]').count()) === 1, "Cheer for you sits under Applause once it is on");
+  await page.click('.af-tab[data-tab="stage"]');
+  await page.waitForTimeout(250);
+  await page.evaluate(() => (window.__clipMs = 120));
+  await btn.click();
+  let sawCheer = false;
+  for (let k = 0; k < 40 && !sawCheer; k++) {
+    await page.waitForTimeout(50);
+    sawCheer = (await page.locator('.af-cue:has-text("The audience cheers")').count()) > 0;
+  }
+  check(sawCheer, "after the message, the audience cheers, and the subtitles say so");
+  await page.waitForTimeout(400);
+  await page.evaluate(() => (window.__clipMs = 40));
+  await page.click('.af-tab[data-tab="settings"]');
+  await page.waitForTimeout(250);
+  await page.evaluate(() => document.querySelector('[data-af-row="applauseOn"] .af-box').click());
+  await page.click('.af-tab[data-tab="stage"]');
+  await page.waitForTimeout(250);
 
   console.log("A message edited while it plays");
   await btn.click();
@@ -378,7 +412,7 @@ if (section("perform")) {
   const directsBefore = await page.evaluate(() => window.__sent.filter((m) => m.type === "direct").length);
   await page.evaluate(() => window.__emit("MESSAGE_EDITED", { chatId: "chat1", message: { id: "m1", content: "A rewritten reply." } }));
   await page.waitForTimeout(30);
-  check((await btn.getAttribute("data-af-busy")) === "true", "it starts again at once");
+  check((await btn.getAttribute("aria-busy")) === "true", "it starts again at once");
   await page.waitForTimeout(170);
   const directsAfter = await page.evaluate(() => window.__sent.filter((m) => m.type === "direct").length);
   check(directsAfter === directsBefore + 1, "an edit to the playing message directs it again (" + directsBefore + " then " + directsAfter + ")");
@@ -393,7 +427,7 @@ if (section("perform")) {
   });
   await page.click('.af-tab[data-tab="settings"]');
   await page.waitForTimeout(250);
-  await page.click('.af-seg button[data-v="skip"]');
+  await page.click('.af-segbtn[data-v="skip"]');
   await page.waitForTimeout(500);
   await page.click('.af-tab[data-tab="stage"]');
   await page.waitForTimeout(250);
@@ -406,13 +440,13 @@ if (section("perform")) {
   await page.click('.af-tab[data-tab="director"]');
   await page.waitForTimeout(250);
   const subOf = () => page.evaluate(() => {
-    const sw = Array.from(document.querySelectorAll('.af-switch')).find((l) => l.querySelector('b').textContent === 'Sounds');
-    const box = sw && sw.parentElement.querySelector('.af-sub');
+    const wrap = document.querySelector('[data-af-row="soundsOn"]');
+    const box = wrap && wrap.querySelector(':scope > .af-sub');
     return box ? { hidden: box.hidden, h: box.getBoundingClientRect().height } : null;
   });
   const before = await subOf();
   check(before && !before.hidden && before.h > 20, "the rows under Sounds show while it is on");
-  await page.evaluate(() => Array.from(document.querySelectorAll('.af-switch')).find((l) => l.querySelector('b').textContent === 'Sounds').click());
+  await page.evaluate(() => document.querySelector('[data-af-row="soundsOn"] .af-box').click());
   await page.waitForTimeout(90);
   const mid = await subOf();
   check(mid && !mid.hidden && mid.h > 0 && mid.h < before.h, "they close over several frames (" + (mid && Math.round(mid.h)) + "px part way)");
@@ -431,24 +465,74 @@ if (section("perform")) {
   check(!/Ysolde|Ferryman|Wyn/.test(report), "no cast name is in the report");
   check(report.includes("[npc 1] now has the voice"), "a Log line that names someone uses their role instead");
   check(!report.includes("You are late"), "no message text is in the report");
-  await page.locator('.af-check:has-text("The last script") input').uncheck();
+  await page.evaluate(() => Array.from(document.querySelectorAll('.af-between')).find((r) => r.textContent.startsWith('The last script')).querySelector('.af-box').click());
   await page.locator('.af-btn:has-text("Build preview")').click();
   await page.waitForTimeout(150);
   check(!(await page.locator('textarea[aria-label="Debug info"]').inputValue()).includes("recent activity"), "an unticked part is left out");
+
+  console.log("Chat, buttons and hints");
+  check((await page.locator('[data-af="chatline"]').textContent()).includes("Chat with Ysolde"), "the panel says which chat is open");
+  check((await page.locator('#barmount [data-af-slot="bar"]').count()) === 1, "the chat's own row gets a button for the newest reply");
+  check(((await page.locator('#barmount [data-af-slot="bar"]').getAttribute("class")) || "").includes("_barBtn_cd34e_1"), "and it wears that row's button class");
+  await page.click('.af-tab[data-tab="settings"]');
+  await page.waitForTimeout(250);
+  // Scrolled into view first: a scroll closes a description, and Playwright
+  // scrolls just before it clicks.
+  const q = page.locator('[data-af-row="autoplay"] > .af-between .af-q');
+  await q.scrollIntoViewIfNeeded();
+  await page.waitForTimeout(150);
+  await q.click();
+  await page.waitForTimeout(200);
+  check((await page.locator(".af-hint[data-af-open]").count()) === 1, "a ? opens its description");
+  check((await page.locator(".af-hint").textContent()).includes("Off by default"), "and the description says the default");
+  await page.mouse.click(5, 5);
+  await page.waitForTimeout(250);
+  check((await page.locator(".af-hint").count()) === 0, "a tap elsewhere closes it");
+
+  console.log("Expand");
+  await page.click('.af-tab[data-tab="director"]');
+  await page.waitForTimeout(250);
+  await page.locator('.af-card:has(textarea.af-tall) .af-btn:has-text("Expand")').click();
+  await page.waitForTimeout(250);
+  check((await page.locator(".af-bigbox textarea").count()) === 1, "Expand opens the text at full size");
+  await page.locator(".af-bigbox textarea").fill("<my_prompt>Tag lightly.</my_prompt>");
+  await page.locator('.af-bigbox .af-btn:has-text("Done")').click();
+  await page.waitForTimeout(600);
+  check((await page.evaluate(() => window.__settings.prompt)) === "<my_prompt>Tag lightly.</my_prompt>", "Done writes the text back and saves it");
+  check((await page.locator(".af-over").count()) === 0, "and the big editor closes");
+
+  console.log("Look and the floating button");
+  await page.click('.af-tab[data-tab="settings"]');
+  await page.waitForTimeout(250);
+  await page.evaluate(() => {
+    const s = Array.from(document.querySelectorAll('.af-col')).find((c) => c.textContent.startsWith('Pattern behind the panel'));
+    const sel = s.querySelector('select');
+    sel.value = 'stars';
+    sel.dispatchEvent(new Event('change'));
+  });
+  await page.waitForTimeout(250);
+  check((await page.evaluate(() => document.querySelector(".af").getAttribute("data-af-pattern"))) === "stars", "a pattern can be put behind the panel");
+  check((await page.locator('.af-col:has-text("How solid the boxes are")').count()) > 0, "and How solid the boxes are shows under it");
+  await page.evaluate(() => document.querySelector('[data-af-row="widgetOn"] .af-box').click());
+  await page.waitForTimeout(250);
+  check(await page.evaluate(() => !!window.__widget && !!window.__widget.querySelector(".af-float")), "the floating button appears");
+  await page.evaluate(() => window.__widget.querySelector(".af-float").dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true })));
+  await page.waitForTimeout(150);
+  check(await page.evaluate(() => !!window.__menu && window.__menu.items.some((i) => i.key === "latest")), "a right click opens its menu");
 
   console.log("Teardown");
   await page.evaluate(() => window.__teardown());
   const left = await page.evaluate(() => ({
     root: !!document.querySelector(".af"),
-    btn: !!document.querySelector(".af-msg-btn"),
+    btn: !!document.querySelector("[data-af-slot]"),
     counts: window.__counts(),
     tab: !!window.__tabDestroyed,
-    deco: !!window.__decoratorGone,
+    deco: !document.querySelector('[data-af-slot]') && !document.querySelector('.af-slot-row'),
     style: Array.from(document.querySelectorAll("style")).some((s) => s.textContent.includes(".af-tabs")),
   }));
   check(!left.root && !left.btn && !left.style, "nothing of the panel is left on the page");
   check(left.counts.backend === 0 && left.counts.listeners === 0, "every listener is gone (" + JSON.stringify(left.counts) + ")");
-  check(left.tab && left.deco, "the drawer tab and the message buttons are handed back");
+  check(left.tab && left.deco, "the drawer tab and every button on the page are handed back");
   await context.close();
 }
 
@@ -466,14 +550,13 @@ if (section("reduce")) {
   await page.waitForTimeout(150);
   await page.click('.af-tab[data-tab="director"]');
   await page.waitForTimeout(50);
-  await page.evaluate(() => Array.from(document.querySelectorAll('.af-switch')).find((l) => l.querySelector('b').textContent === 'Sounds').click());
+  await page.evaluate(() => document.querySelector('[data-af-row="soundsOn"] .af-box').click());
   await page.waitForTimeout(20);
   const hidden = await page.evaluate(() => {
-    const sw = Array.from(document.querySelectorAll('.af-switch')).find((l) => l.querySelector('b').textContent === 'Sounds');
-    return sw.parentElement.querySelector('.af-sub').hidden;
+    return document.querySelector('[data-af-row="soundsOn"] > .af-sub').hidden;
   });
   check(hidden, "with reduce motion on, a switch closes its rows at once");
-  check((await page.evaluate(() => document.querySelector(".af").dataset.calm)) === "true", "the panel is marked calm");
+  check(await page.evaluate(() => document.documentElement.hasAttribute("data-af-still")), "the page is marked still, so a description that opens outside the panel stays still too");
   await context.close();
 }
 
