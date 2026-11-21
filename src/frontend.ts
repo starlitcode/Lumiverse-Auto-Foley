@@ -5,7 +5,7 @@
 // row of buttons. Pressing it reads the message, sends it to the backend to be
 // directed, and plays the script that comes back: each line through one of
 // the reader's TTS connections in Lumiverse, with the voice of whoever says
-// it, and each sound from the library or from ElevenLabs sound effects.
+// it, and each sound from the library, Freesound or ElevenLabs.
 //
 // The key for speech stays in Lumiverse. Lines are spoken through
 // Lumiverse's own TTS route, as the signed-in reader, so this file never sees
@@ -1073,7 +1073,7 @@ const DEFAULTS: any = {
   tagsOn: true,
   breathsOn: true,
   soundsOn: true,
-  soundStyle: 'voice',
+  soundStyle: 'both',
   intimateOn: false,
   findSpeakers: true,
   bigMoments: true,
@@ -4596,10 +4596,9 @@ export function setup(ctx: Ctx, overrides?: any) {
     startShow(script, lastMeta, line.i, [{ kind: 'voice', line, at: line.i }]);
   }
 
-  // A new take of a sound effect made by ElevenLabs. It replaces the old one
-  // in the library, so every message that uses it gets the new take.
   // A new take of a sound: made again by ElevenLabs, or, for a sound found
-  // on Freesound, the next result found in its place.
+  // on Freesound, the next result found in its place. It replaces the old one
+  // in the library, so every message that uses it gets the new take.
   async function soundAgain(description: string, id: string, found?: boolean) {
     if (found) {
       if (!(await askSure('Find another sound', 'The next sound Freesound finds for “' + description + '” replaces this one in your library. It costs nothing.', 'Find another'))) return;
@@ -5445,7 +5444,7 @@ export function setup(ctx: Ctx, overrides?: any) {
             ], S.soundStyle, (v) => {
               set({ soundStyle: v });
               paintWarn();
-            }, 'In the voice is the default: a [sound of ...] tag inside a spoken line. Only Eleven v3 and v4 can perform it. Other engines play sound effects instead: separate clips from your library, or made with the key in the Sounds tab. Both lets the Director choose.'),
+            }, 'Both is the default: the Director puts short sounds in the voice where the engine can, and plays the rest as sound effects. Only Eleven v3 and v4 make sounds in the voice. Sound effects work with every engine.'),
             toggle('Intimate sounds', 'Off by default. Lets the Director add the sounds of sex scenes between adults, such as kissing, skin, wet sounds or a bed creaking.', 'intimateOn'),
             toggle('Only sounds the text shows', 'On by default. A sound is left out when no word of it is in its line or the lines beside it. The Log says how many.', 'soundCheck'),
           ]),

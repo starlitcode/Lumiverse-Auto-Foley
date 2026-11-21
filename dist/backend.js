@@ -6,7 +6,7 @@
 // model) for voice tags and sounds, checks that the Director changed no words,
 // and makes or finds sound effects. The panel in the browser is the part that
 // plays: it reads the message, sends it here, and plays the script that comes
-// back through the reader's ElevenLabs connection in Lumiverse.
+// back through the reader's TTS connections in Lumiverse.
 //
 // One backend process can serve every account on a server, so everything that
 // belongs to a person is kept per user id, in spindle.userStorage, and every
@@ -29,7 +29,7 @@ const DEFAULT_SETTINGS = {
     tagsOn: true,
     breathsOn: true,
     soundsOn: true,
-    soundStyle: 'voice',
+    soundStyle: 'both',
     intimateOn: false,
     findSpeakers: true,
     bigMoments: true,
@@ -536,7 +536,7 @@ function stripThinking(text, extra, bound) {
     return t;
 }
 // What a message holds that is not meant to be heard. Square brackets go too:
-// left in, ElevenLabs reads them as voice tags.
+// left in, a voice engine reads them as voice tags.
 function cleanForVoice(raw, extra, bound, skips) {
     let t = String(raw == null ? '' : raw);
     t = stripThinking(t, extra, bound);
@@ -915,8 +915,8 @@ function wordsOf(text) {
 function sameWords(a, b) {
     return wordsOf(a) === wordsOf(b);
 }
-// Tags that describe something seen, not heard. ElevenLabs cannot voice
-// them and sometimes reads them out.
+// Tags that describe something seen, not heard. No voice engine can voice
+// them, and some read them out.
 const SILENT_TAG = /\b(stand|standing|stands|grin|grins|grinning|smile|smiles|smiling|nod|nods|nodding|pace|pacing|paces|music|look|looks|looking|glance|glances|wink|winks|shrug|shrugs|frown|frowns|blush|blushes|blushing|walks?|sits?|sitting|leans?|leaning|stares?|staring|eyes)\b/i;
 // Tags for sounds the body makes. "Breaths, sighs and laughs" turns these off.
 const BREATH_TAG = /\b(laugh\w*|chuckl\w*|giggl\w*|snicker\w*|sigh\w*|gasp\w*|exhal\w*|inhal\w*|breath\w*|pant\w*|moan\w*|groan\w*|whimper\w*|gulp\w*|swallow\w*|cough\w*|sniff\w*|sob\w*|cr(y|ies|ying)|scream\w*|yawn\w*|hum\w*|purr\w*|growl\w*|grunt\w*|snort\w*|scoff\w*|clears throat|hiccup\w*|kiss\w*|yelp\w*|squeal\w*|whine\w*)\b/i;
@@ -3029,10 +3029,8 @@ async function testFreesound(userId) {
 }
 // One sound for a description: from the library when one fits, otherwise
 // found on Freesound or made by ElevenLabs and added to the library, so the
-// same sound is free the next time.
-// A sound for a description: from the library, or made with ElevenLabs. With
-// again set to a library id, a new take is made for that sound and replaces
-// it, keeping its name and trigger words.
+// same sound is free the next time. With again set to a library id, a new
+// take replaces that sound, keeping its name and trigger words.
 async function soundFor(userId, description, again) {
     const desc = cleanSound(description);
     if (!desc)

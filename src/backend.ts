@@ -5,7 +5,7 @@
 // model) for voice tags and sounds, checks that the Director changed no words,
 // and makes or finds sound effects. The panel in the browser is the part that
 // plays: it reads the message, sends it here, and plays the script that comes
-// back through the reader's ElevenLabs connection in Lumiverse.
+// back through the reader's TTS connections in Lumiverse.
 //
 // One backend process can serve every account on a server, so everything that
 // belongs to a person is kept per user id, in spindle.userStorage, and every
@@ -82,7 +82,7 @@ interface Settings {
   soundsOn: boolean;
   // How sounds are made. "voice": a [sound of ...] tag inside a spoken line,
   // which Eleven v3 and v4 perform with the line. "effects": separate clips,
-  // from the library or made by ElevenLabs. "both": the Director chooses.
+  // from the library, Freesound or ElevenLabs. "both": the Director chooses.
   soundStyle: SoundStyle;
   intimateOn: boolean;
   findSpeakers: boolean;
@@ -211,7 +211,7 @@ const DEFAULT_SETTINGS: Settings = {
   tagsOn: true,
   breathsOn: true,
   soundsOn: true,
-  soundStyle: 'voice',
+  soundStyle: 'both',
   intimateOn: false,
   findSpeakers: true,
   bigMoments: true,
@@ -736,7 +736,7 @@ function stripThinking(text: string, extra?: string[], bound?: ThinkPair[]): str
 }
 
 // What a message holds that is not meant to be heard. Square brackets go too:
-// left in, ElevenLabs reads them as voice tags.
+// left in, a voice engine reads them as voice tags.
 function cleanForVoice(raw: string, extra?: string[], bound?: ThinkPair[], skips?: RegExp[]): string {
   let t = String(raw == null ? '' : raw);
   t = stripThinking(t, extra, bound);
@@ -1106,8 +1106,8 @@ function sameWords(a: string, b: string): boolean {
   return wordsOf(a) === wordsOf(b);
 }
 
-// Tags that describe something seen, not heard. ElevenLabs cannot voice
-// them and sometimes reads them out.
+// Tags that describe something seen, not heard. No voice engine can voice
+// them, and some read them out.
 const SILENT_TAG = /\b(stand|standing|stands|grin|grins|grinning|smile|smiles|smiling|nod|nods|nodding|pace|pacing|paces|music|look|looks|looking|glance|glances|wink|winks|shrug|shrugs|frown|frowns|blush|blushes|blushing|walks?|sits?|sitting|leans?|leaning|stares?|staring|eyes)\b/i;
 
 // Tags for sounds the body makes. "Breaths, sighs and laughs" turns these off.
@@ -1427,7 +1427,7 @@ interface DirectedLine {
   i: number;
   kind: SegKind;
   speaker: string;
-  // What is sent to ElevenLabs, tags included.
+  // What is sent to the voice engine, tags included.
   text: string;
   // The line as it was written.
   plain: string;
@@ -3280,10 +3280,8 @@ async function testFreesound(userId: string | undefined): Promise<{ ok: boolean;
 
 // One sound for a description: from the library when one fits, otherwise
 // found on Freesound or made by ElevenLabs and added to the library, so the
-// same sound is free the next time.
-// A sound for a description: from the library, or made with ElevenLabs. With
-// again set to a library id, a new take is made for that sound and replaces
-// it, keeping its name and trigger words.
+// same sound is free the next time. With again set to a library id, a new
+// take replaces that sound, keeping its name and trigger words.
 async function soundFor(userId: string | undefined, description: string, again?: string): Promise<{ id?: string; base64?: string; url?: string; mime?: string; name?: string; credit?: Credit; error?: string; made?: boolean }> {
   const desc = cleanSound(description);
   if (!desc) return { error: 'No sound description.' };

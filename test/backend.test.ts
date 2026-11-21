@@ -511,6 +511,7 @@ describe("directing for each voice engine", () => {
 
   test("ElevenLabs v3 keeps the sound in the voice", async () => {
     const h = host({ answers: [answer] });
+    await h.ask({ type: "save", settings: { soundStyle: "voice" } });
     const out = await h.ask(Object.assign({ engine: { id: "eleven_v3", label: "ElevenLabs v3 or v4", tags: "free", list: [], style: false, inVoiceSounds: true, sing: true } }, msg));
     expect(sent(h).rules.sound_style).toBe("voice");
     const lines = out.find((m) => m.type === "script").script.lines;
