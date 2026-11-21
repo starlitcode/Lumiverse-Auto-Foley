@@ -890,6 +890,28 @@ if (section("key notice")) {
   await context.close();
 }
 
+if (section("log kinds")) {
+  console.log("Switches for each kind of Log line");
+  const { context, page } = await open(THEMES[0], SIZES[0]);
+  await page.click('.af-tab[data-tab="stage"]');
+  await page.waitForTimeout(200);
+  await page.click('#mount [data-af-slot="message"]');
+  await page.waitForTimeout(1200);
+  const count = () => page.evaluate(() => document.querySelectorAll(".af-log .af-log-line").length);
+  const before = await count();
+  await page.locator(".af-fold", { hasText: "What the Log shows" }).click();
+  await page.waitForTimeout(350);
+  await page.locator('[data-af-logkind="director"] .af-box').click();
+  await page.waitForTimeout(200);
+  const after = await count();
+  check(before > after && after > 0, "switching off a kind hides its lines and keeps the rest (" + before + " then " + after + ")");
+  await page.waitForTimeout(600);
+  check(await page.evaluate(() => window.__settings.logShow && window.__settings.logShow.director === false), "the choice is saved to the account");
+  const m = await page.evaluate(MEASURE, true);
+  check(!m.overflow.length && !m.small.length, "the switches fit on a phone. " + m.overflow.concat(m.small).slice(0, 2).join("; "));
+  await context.close();
+}
+
 if (section("taps")) {
   console.log("A tap on a ?, and the tab bar when the tab changes");
   {

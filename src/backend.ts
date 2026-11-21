@@ -153,6 +153,8 @@ interface Settings {
   engineNotes: Record<string, string>;
   // How much made audio to keep in the account, in MB. 0 keeps none.
   keepAudio: number;
+  // The kinds of Log line switched off, by kind. Every kind shows by default.
+  logShow: Record<string, boolean>;
   // Who the Director's prompt is sent as: system, user or assistant.
   promptRole: string;
   // Where the note for the engine goes: inside the rules, or as its own
@@ -207,6 +209,7 @@ const DEFAULT_SETTINGS: Settings = {
   engines: {},
   engineNotes: {},
   keepAudio: 100,
+  logShow: {},
   promptRole: 'system',
   engineNoteRole: 'rules',
   askNoteRole: 'user',
@@ -411,6 +414,14 @@ function question(s: Settings, k: string, n: number): string {
   return text.indexOf('{n}') >= 0 ? text.split('{n}').join(String(n)) : text + ' (line #' + n + ')';
 }
 
+const LOG_KIND_IDS = ['play', 'director', 'cast', 'sound', 'setting', 'problem'];
+function cleanLogShow(v: any): Record<string, boolean> {
+  const out: Record<string, boolean> = {};
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return out;
+  for (const k of LOG_KIND_IDS) if (v[k] === false) out[k] = false;
+  return out;
+}
+
 function cleanEngineChoices(v: any): Record<string, string> {
   const out: Record<string, string> = {};
   if (!v || typeof v !== 'object' || Array.isArray(v)) return out;
@@ -490,6 +501,7 @@ function cleanSettings(raw: any): Settings {
     extraThinkTags: Array.isArray(r.extraThinkTags) ? r.extraThinkTags.map((x: any) => str(x, 40).trim()).filter(Boolean).slice(0, 20) : [],
     engines: cleanEngineChoices(r.engines),
     engineNotes: cleanEngineNotes(r.engineNotes),
+    logShow: cleanLogShow(r.logShow),
     promptRole: pick(r.promptRole, ['system', 'user', 'assistant'] as const, 'system'),
     engineNoteRole: pick(r.engineNoteRole, ['rules', 'system', 'user', 'assistant'] as const, 'rules'),
     askNoteRole: pick(r.askNoteRole, ['system', 'user', 'assistant'] as const, 'user'),

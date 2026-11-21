@@ -43,6 +43,7 @@ const DEFAULT_SETTINGS = {
     engines: {},
     engineNotes: {},
     keepAudio: 100,
+    logShow: {},
     promptRole: 'system',
     engineNoteRole: 'rules',
     askNoteRole: 'user',
@@ -243,6 +244,16 @@ function question(s, k, n) {
     const text = own || DECISION_QUESTIONS[k] || '';
     return text.indexOf('{n}') >= 0 ? text.split('{n}').join(String(n)) : text + ' (line #' + n + ')';
 }
+const LOG_KIND_IDS = ['play', 'director', 'cast', 'sound', 'setting', 'problem'];
+function cleanLogShow(v) {
+    const out = {};
+    if (!v || typeof v !== 'object' || Array.isArray(v))
+        return out;
+    for (const k of LOG_KIND_IDS)
+        if (v[k] === false)
+            out[k] = false;
+    return out;
+}
 function cleanEngineChoices(v) {
     const out = {};
     if (!v || typeof v !== 'object' || Array.isArray(v))
@@ -332,6 +343,7 @@ function cleanSettings(raw) {
         extraThinkTags: Array.isArray(r.extraThinkTags) ? r.extraThinkTags.map((x) => str(x, 40).trim()).filter(Boolean).slice(0, 20) : [],
         engines: cleanEngineChoices(r.engines),
         engineNotes: cleanEngineNotes(r.engineNotes),
+        logShow: cleanLogShow(r.logShow),
         promptRole: pick(r.promptRole, ['system', 'user', 'assistant'], 'system'),
         engineNoteRole: pick(r.engineNoteRole, ['rules', 'system', 'user', 'assistant'], 'rules'),
         askNoteRole: pick(r.askNoteRole, ['system', 'user', 'assistant'], 'user'),

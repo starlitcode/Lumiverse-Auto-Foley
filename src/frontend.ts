@@ -1003,6 +1003,7 @@ const DEFAULTS: any = {
   engines: {},
   engineNotes: {},
   groups: [],
+  logShow: {},
   promptRole: 'system',
   engineNoteRole: 'rules',
   askNoteRole: 'user',
@@ -1228,11 +1229,21 @@ export function setup(ctx: Ctx, overrides?: any) {
   }
 
   // ---- the log ----
-  const logLines: { at: string; text: string; kind: string }[] = [];
-  function log(text: string, kind?: string) {
+  // Each line has a kind, and the Log shows the kinds switched on under it.
+  // A line marked bad is a problem, whatever it is about.
+  const LOG_KINDS: { id: string; label: string }[] = [
+    { id: 'play', label: 'Playing: starting, finishing and waits' },
+    { id: 'director', label: 'What the Director did' },
+    { id: 'cast', label: 'Voices given and people added' },
+    { id: 'sound', label: 'Sounds made' },
+    { id: 'setting', label: 'Settings and Start again' },
+    { id: 'problem', label: 'Problems and warnings' },
+  ];
+  const logLines: { at: string; text: string; kind: string; area: string }[] = [];
+  function log(text: string, kind?: string, area?: string) {
     const d = new Date();
     const at = String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0') + ':' + String(d.getSeconds()).padStart(2, '0');
-    logLines.push({ at, text: String(text), kind: kind || '' });
+    logLines.push({ at, text: String(text), kind: kind || '', area: kind === 'bad' ? 'problem' : area || 'play' });
     while (logLines.length > 120) logLines.shift();
     if (tab === 'stage') paintLog();
   }
@@ -1530,7 +1541,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     if (!v) return;
     setPick(m, conn, { voice: String(v.id), voiceName: String(v.name || v.id) });
     save();
-    log(m.name + ' now has the voice ' + (v.name || v.id) + '. You can change it in the Cast tab.');
+    log(m.name + ' now has the voice ' + (v.name || v.id) + '. You can change it in the Cast tab.', '', 'cast');
   }
 
   function buildItems(script: Script): Item[] {
@@ -1712,7 +1723,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     try {
       const r = await rpc({ type: 'sound', description }, 45000);
       if (r && r.base64) {
-        if (r.made) log('Made a new sound: ' + description + '. It is saved in the Sounds tab.');
+        if (r.made) log('Made a new sound: ' + description + '. It is saved in the Sounds tab.', '', 'sound');
         return { blob: base64ToBlob(r.base64, r.mime) };
       }
       return { why: (r && r.error) || 'No sound came back for "' + description + '".' };
@@ -2120,7 +2131,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       if (tab === 'stage') renderTab();
       return;
     }
-    for (const line of got.script.log || []) log(line);
+    for (const line of got.script.log || []) log(line, '', 'director');
     startShow(got.script, got.meta, 0);
   }
 
@@ -2128,8 +2139,8 @@ export function setup(ctx: Ctx, overrides?: any) {
     const chatId = activeChatId();
     const got = await getScript(chatId, messageId, false);
     if (got.script) {
-      for (const line of got.script.log || []) log(line);
-      log('A new reply is directed and ready to play.');
+      for (const line of got.script.log || []) log(line, '', 'director');
+      log('A new reply is directed and ready to play.', '', 'director');
       lastScript = got.script;
       lastMeta = got.meta;
       if (tab === 'stage' && !show) renderTab();
@@ -2514,13 +2525,13 @@ export function setup(ctx: Ctx, overrides?: any) {
         if (String(m.content || '') === directedText.get(id)) return;
         directedText.delete(id);
         if (show && show.messageId === id) {
-          log('This message was edited while it played, so it is performed again with the new text.');
+          log('This message was edited while it played, so it is performed again with the new text.', '', 'director');
           stop();
           perform(id);
         } else if (busyMessage === id) {
           return;
         } else if (lastMeta.messageId === id && S.prepareAhead) {
-          log('This message was edited, so it is directed again.');
+          log('This message was edited, so it is directed again.', '', 'director');
           lastScript = null;
           prepare(id);
         }
@@ -4123,6 +4134,27 @@ export function setup(ctx: Ctx, overrides?: any) {
     });
     const logBox = el('<div class="af-log" aria-live="polite"></div>');
     lg.appendChild(logBox);
+    lg.appendChild(
+      fold('What the Log shows', (body) => {
+        for (const k of LOG_KINDS) {
+          const id = rid('lk');
+          const box = el('<input type="checkbox" class="af-box" role="switch" id="' + id + '">') as HTMLInputElement;
+          box.checked = !S.logShow || S.logShow[k.id] !== false;
+          const row = labelRow(k.label, '', undefined, box);
+          box.setAttribute('aria-label', k.label);
+          row.setAttribute('data-af-logkind', k.id);
+          box.addEventListener('change', () => {
+            const next = Object.assign({}, S.logShow || {});
+            if (box.checked) delete next[k.id];
+            else next[k.id] = false;
+            set({ logShow: next });
+            paintLog();
+          });
+          body.appendChild(row);
+        }
+        body.appendChild(hint('Every kind is shown by default. Copy copies every line, shown or not.'));
+      }),
+    );
     page.appendChild(lg);
     (lg.querySelector('[data-af="copy"]') as HTMLElement).addEventListener('click', async () => {
       const t = logLines.map((l) => l.at + '  ' + l.text).join('\n') || 'The log is empty.';
@@ -4206,7 +4238,7 @@ export function setup(ctx: Ctx, overrides?: any) {
   // in the library, so every message that uses it gets the new take.
   async function soundAgain(description: string, id: string) {
     if (!(await askSure('Make this sound again', 'A new take of “' + description + '” replaces the one in your library. It costs ElevenLabs credits.', 'Make it again'))) return;
-    log('Making the sound again: ' + description + '.');
+    log('Making the sound again: ' + description + '.', '', 'sound');
     try {
       const got = await rpc(id ? { type: 'sound_again', id } : { type: 'sound_again', description }, 60000);
       if (got && got.base64) previewBlob(base64ToBlob(got.base64, got.mime), S.soundVolume);
@@ -4447,12 +4479,14 @@ export function setup(ctx: Ctx, overrides?: any) {
   function paintLog() {
     if (!stageRefs) return;
     const box = stageRefs.logBox as HTMLElement;
-    box.innerHTML = logLines.length
-      ? logLines
+    const shows = (l: { area: string }) => !S.logShow || S.logShow[l.area] !== false;
+    const lines = logLines.filter(shows);
+    box.innerHTML = lines.length
+      ? lines
           .slice(-60)
           .map((l) => '<div class="af-log-line" data-kind="' + esc(l.kind) + '"><b>' + esc(l.at) + '</b>' + esc(l.text) + '</div>')
           .join('')
-      : '<div class="af-log-line">Nothing has happened yet.</div>';
+      : '<div class="af-log-line">' + (logLines.length ? 'Nothing to show. The kinds of line switched off are hidden.' : 'Nothing has happened yet.') + '</div>';
     box.scrollTop = 1e6;
   }
 
@@ -5968,7 +6002,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       if (r && Array.isArray(r.sounds)) sounds = r.sounds;
       if (r && typeof r.hasKey === 'boolean') hasKey = r.hasKey;
       resetSaid = r && r.ok ? 'Put back: ' + names + '.' : (r && r.error) || 'The reset did not finish.';
-      log(resetSaid, r && r.ok ? '' : 'bad');
+      log(resetSaid, r && r.ok ? '' : 'bad', 'setting');
     } catch (e: any) {
       resetSaid = 'The reset did not finish: the backend did not answer.';
       log(resetSaid, 'bad');

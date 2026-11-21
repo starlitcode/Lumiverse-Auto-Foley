@@ -140,6 +140,13 @@ With **Keep made audio** on, in the Settings tab:
 - **One call to the Decision model** for each message, when it is on.
 - **ElevenLabs credits for each new sound effect**, when sounds are made as effects. A sound is saved after it is made, so the same sound is free the next time.
 
+## The Log
+
+The Log on the Stage tab says what happened, newest last. Anything that went wrong says why.
+
+- **What the Log shows**, under it, has a switch for each kind of line: playing, what the Director did, voices given and people added, sounds made, settings, and problems. Every kind is shown by default.
+- **Copy** copies every line, shown or not. **Clear the log** empties it.
+
 ## Reporting a problem
 
 1. Open the **Settings** tab and find **Debug info**.
