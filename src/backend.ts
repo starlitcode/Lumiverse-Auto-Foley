@@ -46,6 +46,9 @@ interface CastMember {
   voices: Record<string, { voice: string; voiceName: string; model: string }>;
   // The group they are in on the Cast tab. Empty is none.
   group: string;
+  // A small picture made on the reader's device, as a data address. Empty
+  // shows the first letter of the name.
+  picture: string;
   stability: number;
   similarity: number;
   style: number;
@@ -265,6 +268,7 @@ function narrator(): CastMember {
     connection: '',
     voices: {},
     group: '',
+    picture: '',
     stability: 0.5,
     similarity: 0.75,
     style: 0,
@@ -295,6 +299,12 @@ function pick<T extends string>(v: any, allowed: readonly T[], dflt: T): T {
 
 const MAX_CAST = 80;
 const MAX_GROUPS = 30;
+
+// A picture is kept only as a small image in a data address, at most 60 KB.
+function cleanPicture(v: any): string {
+  const t = typeof v === 'string' ? v : '';
+  return t.length <= 60000 && /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/.test(t) ? t : '';
+}
 
 // A person's voice on each connection. Kept for at most 20 connections.
 function cleanVoices(v: any): Record<string, { voice: string; voiceName: string; model: string }> {
@@ -328,6 +338,7 @@ function cleanMember(m: any): CastMember | null {
     connection: str(m.connection, 80),
     voices: cleanVoices(m.voices),
     group: str(m.group, 64),
+    picture: cleanPicture(m.picture),
     stability: num(m.stability, 0, 1, base.stability),
     similarity: num(m.similarity, 0, 1, base.similarity),
     style: num(m.style, 0, 1, base.style),

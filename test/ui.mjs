@@ -209,7 +209,20 @@ window.__ctx = {
       };
     },
   },
-  uploads: { pickFile: async () => [] },
+  uploads: {
+    // A picture asked for gets a small drawn one, so a picture can be chosen.
+    pickFile: async (o) => {
+      if (!o || !(o.accept || []).some((x) => /image/.test(x))) return [];
+      const c = document.createElement('canvas');
+      c.width = 40;
+      c.height = 30;
+      const g = c.getContext('2d');
+      g.fillStyle = '#3a7';
+      g.fillRect(0, 0, 40, 30);
+      const b = await new Promise((r) => c.toBlob(r, 'image/png'));
+      return [{ name: 'face.png', mimeType: 'image/png', bytes: new Uint8Array(await b.arrayBuffer()) }];
+    },
+  },
   permissions: { getGranted: async () => ['generation', 'decisions'] },
   events: { on(name, fn) { (listeners[name] = listeners[name] || []).push(fn); return () => { listeners[name] = listeners[name].filter((f) => f !== fn); }; } },
   sendToBackend(msg) { window.__sent.push(msg); answer(msg); },
@@ -910,6 +923,32 @@ if (section("log kinds")) {
   const m = await page.evaluate(MEASURE, true);
   check(!m.overflow.length && !m.small.length, "the switches fit on a phone. " + m.overflow.concat(m.small).slice(0, 2).join("; "));
   await context.close();
+}
+
+if (section("pictures")) {
+  console.log("A picture for a person, or the first letter of the name");
+  for (const size of SIZES) {
+    const { context, page, errors } = await open(THEMES[0], size);
+    await page.click('.af-tab[data-tab="cast"]');
+    await page.waitForTimeout(250);
+    const head = page.locator(".af-person").nth(1);
+    check(/^[A-Z]$/.test(((await head.locator(".af-person-head .af-avatar").textContent()) || "").trim()), size.name + ": with no picture, the first letter of the name is shown");
+    await head.locator(".af-person-head").click();
+    await page.waitForTimeout(350);
+    await head.locator(".af-btn", { hasText: "Choose a picture" }).click();
+    await page.waitForTimeout(400);
+    check((await head.locator(".af-person-head .af-avatar img").count()) === 1, size.name + ": a chosen picture is shown");
+    await page.waitForTimeout(600);
+    const saved = await page.evaluate(() => (window.__settings.cast || []).some((m) => /^data:image\/jpeg;base64,/.test(m.picture || "")));
+    check(saved, size.name + ": it is made small and saved with the cast");
+    await head.locator(".af-btn", { hasText: "Take it out" }).click();
+    await page.waitForTimeout(300);
+    check((await head.locator(".af-person-head .af-avatar img").count()) === 0, size.name + ": Take it out goes back to the first letter");
+    const m = await page.evaluate(MEASURE, size.touch);
+    check(!m.overflow.length && !m.small.length, size.name + ": the picture row fits. " + m.overflow.concat(m.small).slice(0, 2).join("; "));
+    check(!errors.length, size.name + ": no console errors. " + errors.slice(0, 2).join("; "));
+    await context.close();
+  }
 }
 
 if (section("taps")) {

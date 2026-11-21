@@ -23,7 +23,7 @@ Earlier messages in the chat are not sent anywhere.
 
 All of this is kept by Lumiverse, under your account, with `spindle.userStorage`:
 
-- Your settings and your cast.
+- Your settings and your cast, with any pictures you picked for it, made small on your device first.
 - Your sound library: made sounds and uploads.
 - With **Keep made audio** on, which it is by default: each spoken line, up to the size you pick, and the last 40 directed messages, with their text. **Clear kept audio** deletes them, and **Do not keep it** stops it.
 

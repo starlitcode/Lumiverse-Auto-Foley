@@ -97,6 +97,7 @@ function narrator() {
         connection: '',
         voices: {},
         group: '',
+        picture: '',
         stability: 0.5,
         similarity: 0.75,
         style: 0,
@@ -123,6 +124,11 @@ function pick(v, allowed, dflt) {
 }
 const MAX_CAST = 80;
 const MAX_GROUPS = 30;
+// A picture is kept only as a small image in a data address, at most 60 KB.
+function cleanPicture(v) {
+    const t = typeof v === 'string' ? v : '';
+    return t.length <= 60000 && /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/.test(t) ? t : '';
+}
 // A person's voice on each connection. Kept for at most 20 connections.
 function cleanVoices(v) {
     const out = {};
@@ -158,6 +164,7 @@ function cleanMember(m) {
         connection: str(m.connection, 80),
         voices: cleanVoices(m.voices),
         group: str(m.group, 64),
+        picture: cleanPicture(m.picture),
         stability: num(m.stability, 0, 1, base.stability),
         similarity: num(m.similarity, 0, 1, base.similarity),
         style: num(m.style, 0, 1, base.style),

@@ -389,6 +389,16 @@ async function readTrouble(res, what, who = 'the voice service') {
 function looksLikeDate(t) {
     return /\b(19|20)\d{2}\b/.test(t) && /\b\d{1,2}[:.]\d{2}([:.]\d{2})?\b/.test(t);
 }
+// The first letter of a name, for a picture when someone has none.
+function firstLetter(name) {
+    const m = String(name || '').match(/\p{L}|\p{N}/u);
+    return m ? m[0].toUpperCase() : '?';
+}
+// A person's picture, or the first letter of their name.
+function faceHtml(m, name) {
+    const pic = m && typeof m.picture === 'string' && /^data:image\/(jpeg|png|webp);base64,/.test(m.picture) ? m.picture : '';
+    return pic ? '<img src="' + pic + '" alt="">' : esc(firstLetter(name));
+}
 // A name for the service a connection speaks through, for messages.
 function serviceName(conn) {
     const p = String((conn && conn.provider) || '').toLowerCase();
@@ -801,7 +811,10 @@ button.af-chip-sound svg { width: 12px; height: 12px; flex: none; color: var(--a
 .af-person-head { display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; align-items: center; gap: 8px; width: 100%; min-height: 48px; padding: 8px 10px; border: 0; border-radius: var(--af-r-md); background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
 @media (hover: hover) { .af-person-head:hover { background: var(--af-accent-faint); } }
 .af-person-head:focus-visible { outline: none; box-shadow: inset 0 0 0 2px var(--af-accent-soft); }
-.af-avatar { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; background: var(--af-accent-soft); color: var(--af-text); font-size: 12px; font-weight: 700; box-shadow: inset 0 0 0 1.5px var(--af-accent); }
+.af-avatar img, .af-pl-face img, .af-pl-ch em img { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; display: block; }
+.af-pic { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.af-pic .af-avatar { width: 48px; height: 48px; font-size: 18px; }
+.af-avatar { overflow: hidden; display: grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; background: var(--af-accent-soft); color: var(--af-text); font-size: 12px; font-weight: 700; box-shadow: inset 0 0 0 1.5px var(--af-accent); }
 .af-person[data-kind="narrator"] .af-avatar { background: var(--af-fill); box-shadow: inset 0 0 0 1.5px var(--af-line-hover); }
 .af-person[data-kind="persona"] .af-avatar { background: var(--af-sound-soft); box-shadow: inset 0 0 0 1.5px var(--af-sound); }
 .af-person-name { display: flex; flex-direction: column; min-width: 0; }
@@ -3690,12 +3703,7 @@ export function setup(ctx, overrides) {
         paused = false;
         stopAudio();
     }
-    const initialsOf = (name) => String(name || '')
-        .split(/\s+/)
-        .map((w) => w.charAt(0))
-        .join('')
-        .slice(0, 2)
-        .toUpperCase() || '?';
+    const initialsOf = (name) => firstLetter(name);
     function drawFloat() {
         if (!floatBox)
             return;
@@ -3822,7 +3830,7 @@ export function setup(ctx, overrides) {
         const order = { narrator: 0, persona: 1, character: 2, npc: 3 };
         const people = S.cast.slice().sort((a, b) => (order[a.kind] ?? 9) - (order[b.kind] ?? 9));
         for (const m of people) {
-            const ch = el('<div class="af-pl-ch" data-person="' + esc(m.id) + '"><em>' + esc(initialsOf(m.name)) + '</em><span></span><button type="button"></button></div>');
+            const ch = el('<div class="af-pl-ch" data-person="' + esc(m.id) + '"><em>' + faceHtml(m, m.name) + '</em><span></span><button type="button"></button></div>');
             ch.querySelector('span').textContent = m.name;
             const b = ch.querySelector('button');
             const paintB = () => {
@@ -3876,7 +3884,7 @@ export function setup(ctx, overrides) {
         const faceKey = it ? (it.kind === 'voice' ? 'v:' + name : it.kind) : 'idle';
         if (face.dataset.k !== faceKey) {
             face.dataset.k = faceKey;
-            face.innerHTML = it && it.kind === 'voice' ? esc(initialsOf(name)) : it ? ICON_SOUND : ICON;
+            face.innerHTML = it && it.kind === 'voice' ? faceHtml(who, name) : it ? ICON_SOUND : ICON;
         }
         q('who').textContent = name || (busyMessage ? 'Directing the message' : 'Auto Foley');
         const chat = chatInfo.kind === 'none' ? 'No chat open' : chatInfo.name || 'This chat';
@@ -4469,8 +4477,7 @@ export function setup(ctx, overrides) {
         const line = it.line;
         const name = line.kind === 'narration' ? 'Narrator' : line.speaker;
         const m = line.kind === 'narration' ? narratorMember() : memberFor(line.speaker);
-        const initials = name.split(/\s+/).map((w) => w.charAt(0)).join('').slice(0, 2).toUpperCase() || '?';
-        who.innerHTML = '<span class="af-avatar af-avatar-' + esc((m && m.kind) || 'character') + '">' + esc(initials) + '</span><span>' + esc(name) + '</span>';
+        who.innerHTML = '<span class="af-avatar af-avatar-' + esc((m && m.kind) || 'character') + '">' + faceHtml(m, name) + '</span><span>' + esc(name) + '</span>';
         // Each part has a weight: a word by its vowels, and a tag the engine
         // performs by the time a breath or a sound takes. A tag the engine was
         // not sent takes no time.
@@ -4699,10 +4706,9 @@ export function setup(ctx, overrides) {
     }
     function personCard(m, conn) {
         const open = openPeople.has(m.id);
-        const initials = m.name.split(/\s+/).map((w) => w.charAt(0)).join('').slice(0, 2).toUpperCase() || '?';
         const badge = ADDED_LABEL[m.addedBy] ? '<span class="af-badge af-badge-ai">' + esc(ADDED_LABEL[m.addedBy]) + '</span>' : '<span class="af-badge">' + esc(KIND_LABEL[m.kind] || m.kind) + '</span>';
         const c = el('<section class="af-card af-person" data-kind="' + esc(m.kind) + '" data-open="' + (open ? 'true' : 'false') + '">' +
-            '<button type="button" class="af-person-head" aria-expanded="' + (open ? 'true' : 'false') + '"><span class="af-avatar">' + esc(initials) + '</span>' +
+            '<button type="button" class="af-person-head" aria-expanded="' + (open ? 'true' : 'false') + '"><span class="af-avatar">' + faceHtml(m, m.name) + '</span>' +
             '<span class="af-person-name"><b></b><span></span></span>' + badge + '<span class="af-chev">' + ICON_CHEVRON + '</span></button>' +
             '<div class="af-sub af-person-body"' + (open ? '' : ' hidden') + '><div class="af-person-inner"></div></div></section>');
         const head = c.querySelector('.af-person-head');
@@ -4710,6 +4716,7 @@ export function setup(ctx, overrides) {
         const inner = c.querySelector('.af-person-inner');
         const paintName = () => {
             c.querySelector('.af-person-name b').textContent = m.name;
+            c.querySelector('.af-person-head .af-avatar').innerHTML = faceHtml(m, m.name);
             const pick = pickOf(m, connOf(m));
             c.querySelector('.af-person-name span').textContent = m.muted ? 'Not voiced' : pick.voiceName || pick.voice || 'The connection’s voice';
         };
@@ -4737,7 +4744,85 @@ export function setup(ctx, overrides) {
         });
         return c;
     }
+    // A picture is made small on this device before it is saved, so the cast
+    // stays light: 96 pixels square, cut from the middle.
+    async function smallPicture(bytes, mime) {
+        const blob = new Blob([bytes], { type: mime || 'image/png' });
+        const url = URL.createObjectURL(blob);
+        try {
+            const img = await new Promise((done, fail) => {
+                const i = new Image();
+                i.onload = () => done(i);
+                i.onerror = () => fail(new Error('not an image'));
+                i.src = url;
+            });
+            const side = 96;
+            const c = document.createElement('canvas');
+            c.width = side;
+            c.height = side;
+            const g = c.getContext('2d');
+            if (!g)
+                throw new Error('no canvas');
+            const cut = Math.min(img.naturalWidth, img.naturalHeight);
+            g.drawImage(img, (img.naturalWidth - cut) / 2, (img.naturalHeight - cut) / 2, cut, cut, 0, 0, side, side);
+            return c.toDataURL('image/jpeg', 0.82);
+        }
+        finally {
+            URL.revokeObjectURL(url);
+        }
+    }
+    function pictureRow(m, paintName) {
+        const row = el('<div class="af-col"></div>');
+        row.appendChild(labelRow('Picture', 'Optional. Shown in Now playing and the player. With none, the first letter of the name is shown.'));
+        const box = el('<div class="af-pic"><span class="af-avatar"></span></div>');
+        const face = box.firstElementChild;
+        const said = el('<p class="af-status"></p>');
+        const paint = () => {
+            face.innerHTML = faceHtml(m, m.name);
+            take.disabled = !m.picture;
+        };
+        const choose = button('Choose a picture', async () => {
+            let files = [];
+            try {
+                files = await ctx.uploads.pickFile({ accept: ['image/*', '.png', '.jpg', '.jpeg', '.webp'], multiple: false, maxSizeBytes: 8 * 1024 * 1024 });
+            }
+            catch (e) {
+                said.textContent = 'The file picker could not open: ' + String((e && e.message) || e).slice(0, 200);
+                said.dataset.kind = 'bad';
+                return;
+            }
+            const f = files && files[0];
+            if (!f)
+                return;
+            try {
+                m.picture = await smallPicture(f.bytes, f.mimeType || '');
+                said.textContent = '';
+                save();
+                paint();
+                paintName();
+            }
+            catch (_) {
+                said.textContent = 'That file is not a picture Auto Foley can read. Use PNG, JPEG or WebP.';
+                said.dataset.kind = 'bad';
+            }
+        });
+        const take = button('Take it out', async () => {
+            if (!(await askSure('Take out the picture', 'The picture of ' + m.name + ' is taken out, and the first letter of the name is shown instead.', 'Take it out', true)))
+                return;
+            m.picture = '';
+            save();
+            paint();
+            paintName();
+        }, 'af-danger');
+        box.appendChild(choose);
+        box.appendChild(take);
+        row.appendChild(box);
+        row.appendChild(said);
+        paint();
+        return row;
+    }
     function fillPerson(inner, m, conn, paintName) {
+        inner.appendChild(pictureRow(m, paintName));
         if (m.kind !== 'narrator') {
             const g1 = el('<div class="af-grid2"></div>');
             g1.appendChild(text('Name', m.name, (v) => {

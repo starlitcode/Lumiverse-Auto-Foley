@@ -589,6 +589,18 @@ describe("keeping made audio", () => {
   });
 });
 
+describe("cast pictures", () => {
+  test("only a small image in a data address is kept", async () => {
+    const h = host();
+    const ok = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQ==";
+    await h.ask({ type: "save", settings: { cast: [{ name: "Pell", picture: ok }, { name: "Odile", picture: "https://example.com/a.png" }, { name: "Brin", picture: "data:text/html;base64,PGI+" }] } });
+    const cast = JSON.parse(h.files.get("u1/settings.json")).cast;
+    expect(cast.find((c: any) => c.name === "Pell").picture).toBe(ok);
+    expect(cast.find((c: any) => c.name === "Odile").picture).toBe("");
+    expect(cast.find((c: any) => c.name === "Brin").picture).toBe("");
+  });
+});
+
 describe("cast groups", () => {
   test("groups are kept, and a person in a group that is gone is in none", async () => {
     const h = host();
