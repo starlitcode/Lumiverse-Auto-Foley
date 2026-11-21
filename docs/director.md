@@ -114,9 +114,20 @@ A Decision model answers questions with a choice or a chance. It writes no text.
 
 With **Use a Decision model** on:
 
-- It picks who says each quoted line, from up to 12 people in the cast. A pick it is less than 50% sure of is left to the Director.
-- With sounds on, it gives the chance that each narration line describes a sound. The Director is told these chances.
+- It picks who says each quoted line, from up to 12 people in the cast. A pick it is less sure of than **How sure it must be** is left to the Director.
+- With sounds on, it gives the chance that each narration line describes a sound. The Director is told these chances. With **Only sounds the text shows** on, a line at or over **How sure it must be** keeps its sounds.
+- **How sure it must be** is 50% by default, from 10% to 95%. It sits under **Use a Decision model**.
+- The Log lists every answer under **What the Decision model answered**: who it picked for each quote and how sure it was, and the chance for each line. Each says whether it was used.
 - If it cannot be asked, the Log says why, and the Director does the whole job. The reasons it gives: no Decision connection, none set as the default, the one picked is gone, no key saved, the permission refused, or a Lumiverse too old to have Decision connections.
+
+For example, with **How sure it must be** at 70%, the Log can read:
+
+```
+fast-judge answered. An answer is used at 70% sure or more.
+"Leave the lamp," is Corin Vale, 84% sure. Used.
+"Then who will carry it?" is Ottoline, 62% sure. Left to the Director.
+"Rain fell hard on the shutters." describes a sound: 91%. Its sounds are kept.
+```
 
 ### Its questions
 

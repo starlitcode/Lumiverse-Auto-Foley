@@ -960,6 +960,7 @@ const DEFAULTS = {
     prompt: '',
     decisionsOn: false,
     decisionConnection: '',
+    decisionSure: 50,
     makeSounds: true,
     soundSeconds: 0,
     autoplayDelay: 0,
@@ -1055,6 +1056,8 @@ export function setup(ctx, overrides) {
     let builtInQuestions = {};
     let sounds = [];
     let hasKey = false;
+    // Whether a Freesound key is saved. The key itself never comes to the panel.
+    let hasFsKey = false;
     let hostHasDecisions = true;
     // The version the backend reported, for the debug report. The two halves
     // load separately, so after an update they can briefly differ.
@@ -1199,6 +1202,7 @@ export function setup(ctx, overrides) {
     const LOG_KINDS = [
         { id: 'play', label: 'Playing: starting, finishing and waits' },
         { id: 'director', label: 'What the Director did' },
+        { id: 'decision', label: 'What the Decision model answered' },
         { id: 'cast', label: 'Voices given and people added' },
         { id: 'sound', label: 'Sounds made' },
         { id: 'setting', label: 'Settings and Start again' },
@@ -2144,6 +2148,8 @@ export function setup(ctx, overrides) {
         }
         for (const line of got.script.log || [])
             log(line, '', 'director');
+        for (const line of got.script.decided || [])
+            log(line, '', 'decision');
         startShow(got.script, got.meta, 0);
     }
     async function prepare(messageId) {
@@ -2152,6 +2158,8 @@ export function setup(ctx, overrides) {
         if (got.script) {
             for (const line of got.script.log || [])
                 log(line, '', 'director');
+            for (const line of got.script.decided || [])
+                log(line, '', 'decision');
             log('A new reply is directed and ready to play.', '', 'director');
             lastScript = got.script;
             lastMeta = got.meta;
@@ -5037,9 +5045,12 @@ export function setup(ctx, overrides) {
         const head = c.querySelector('.af-person-head');
         const body = c.querySelector('.af-person-body');
         const inner = c.querySelector('.af-person-inner');
-        const paintName = () => {
-            c.querySelector('.af-person-name b').textContent = m.name;
-            c.querySelector('.af-person-head .af-avatar').innerHTML = faceHtml(m, m.name);
+        // typed is the name field while it is being changed. Empty, the header
+        // says so, rather than showing the name that was there before.
+        const paintName = (typed) => {
+            const name = typed === undefined ? m.name : typed.trim();
+            c.querySelector('.af-person-name b').textContent = name || 'No name yet';
+            c.querySelector('.af-person-head .af-avatar').innerHTML = faceHtml(m, name);
             const pick = pickOf(m, connOf(m));
             c.querySelector('.af-person-name span').textContent = m.muted ? 'Not voiced' : pick.voiceName || pick.voice || 'The connection’s voice';
         };
@@ -5145,14 +5156,28 @@ export function setup(ctx, overrides) {
         return row;
     }
     function fillPerson(inner, m, paintName) {
-        inner.appendChild(pictureRow(m, paintName));
+        inner.appendChild(pictureRow(m, () => paintName()));
         if (m.kind !== 'narrator') {
             const g1 = el('<div class="af-grid2"></div>');
-            g1.appendChild(text('Name', m.name, (v) => {
-                m.name = v.trim() || m.name;
-                save();
-                paintName();
-            }, '', 'The name the story uses for them. Lines are matched to a person by this name and the names below.'));
+            const nameRow = text('Name', m.name, (v) => {
+                // An empty name is not saved, since lines are matched by it. The
+                // header shows the field as it is, and leaving it empty puts the
+                // saved name back.
+                if (v.trim()) {
+                    m.name = v.trim();
+                    save();
+                }
+                paintName(v);
+            }, '', 'The name the story uses for them. Lines are matched to a person by this name and the names below.');
+            const nameIn = nameRow.querySelector('input');
+            if (nameIn)
+                nameIn.addEventListener('blur', () => {
+                    if (nameIn.value.trim())
+                        return;
+                    nameIn.value = m.name;
+                    paintName();
+                });
+            g1.appendChild(nameRow);
             g1.appendChild(text('Also called', (m.aliases || []).join(', '), (v) => {
                 m.aliases = v.split(',').map((x) => x.trim()).filter(Boolean).slice(0, 12);
                 save();
@@ -5191,13 +5216,13 @@ export function setup(ctx, overrides) {
             voiceBox.innerHTML = '';
             const cn = connOf(m);
             if (ttsConnections.length > 1 || m.connection) {
-                // Auto Foley's own connection is named in the first choice and not
-                // listed a second time, unless it is the one picked.
+                // Auto Foley's own connection is named in the first choice and never
+                // listed a second time. Picked by name, it shows as the first choice.
                 const main = activeConnection();
-                const opts = [{ id: '', label: 'Auto Foley’s connection' + (main ? ' (' + main.name + ')' : '') }].concat(ttsConnections.filter((c) => !main || c.id !== main.id || m.connection === c.id).map((c) => ({ id: String(c.id), label: String(c.name || c.id) + (engineFor(c, c.model).supported ? '' : ', no tags'), group: engineGroup(c) })));
+                const opts = [{ id: '', label: 'Auto Foley’s connection' + (main ? ' (' + main.name + ')' : '') }].concat(ttsConnections.filter((c) => !main || c.id !== main.id).map((c) => ({ id: String(c.id), label: String(c.name || c.id) + (engineFor(c, c.model).supported ? '' : ', no tags'), group: engineGroup(c) })));
                 if (m.connection && !connById(m.connection))
                     opts.push({ id: m.connection, label: 'A connection that is gone' });
-                voiceBox.appendChild(select('Connection', opts, m.connection || '', (v) => {
+                voiceBox.appendChild(select('Connection', opts, main && m.connection === main.id ? '' : m.connection || '', (v) => {
                     m.connection = v;
                     save();
                     paintName();
@@ -5257,8 +5282,11 @@ export function setup(ctx, overrides) {
             const modelField = el('<div class="af-col"></div>');
             modelField.appendChild(labelRow('Model', 'Empty uses the connection’s model. The model decides which acting directions work, shown under this box.', mid));
             const connModel = 'The connection’s model' + (cn.model ? ' (' + esc(cn.model) + ')' : '');
+            // The connection's own model, picked by name, shows as the first
+            // choice, since the two do the same.
+            const shownModel = pick.model && pick.model !== cn.model ? pick.model : '';
             const mwrap = el('<div class="af-selwrap"><select class="af-field" id="' + mid + '"><option value="">' + connModel + '</option>' +
-                (pick.model ? '<option value="' + esc(pick.model) + '" selected>' + esc(pick.model) + '</option>' : '') + '</select></div>');
+                (shownModel ? '<option value="' + esc(shownModel) + '" selected>' + esc(shownModel) + '</option>' : '') + '</select></div>');
             const ms = mwrap.firstElementChild;
             modelField.appendChild(mwrap);
             modelField.appendChild(hint(esc((eng.supported ? 'Engine: ' + eng.label + '. ' : '') + engineAbility(eng))));
@@ -5269,12 +5297,12 @@ export function setup(ctx, overrides) {
             const fillModels = (list) => {
                 // Only models that act are offered. One picked before that does not
                 // is still shown, marked, so it can be changed.
-                // The connection's own model is named in the first choice and not
-                // listed a second time, unless it is the one picked.
-                const opts = list.filter((o) => modelActs(cn, o.id) && (o.id !== cn.model || o.id === pick.model)).map((o) => (o.id === pick.model ? { id: o.id, label: pick.model } : o));
-                if (pick.model && !opts.some((o) => o.id === pick.model))
-                    opts.push({ id: pick.model, label: pick.model + (modelActs(cn, pick.model) ? '' : ' (no tags)') });
-                ms.innerHTML = '<option value="">' + connModel + '</option>' + opts.map((o) => '<option value="' + esc(o.id) + '"' + (o.id === pick.model ? ' selected' : '') + '>' + esc(o.label) + '</option>').join('');
+                // The connection's own model is named in the first choice and never
+                // listed a second time.
+                const opts = list.filter((o) => modelActs(cn, o.id) && o.id !== cn.model).map((o) => (o.id === shownModel ? { id: o.id, label: shownModel } : o));
+                if (shownModel && !opts.some((o) => o.id === shownModel))
+                    opts.push({ id: shownModel, label: shownModel + (modelActs(cn, shownModel) ? '' : ' (no tags)') });
+                ms.innerHTML = '<option value="">' + connModel + '</option>' + opts.map((o) => '<option value="' + esc(o.id) + '"' + (o.id === shownModel ? ' selected' : '') + '>' + esc(o.label) + '</option>').join('');
             };
             if (modelCache[cn.id])
                 fillModels(modelCache[cn.id]);
@@ -5471,14 +5499,15 @@ export function setup(ctx, overrides) {
             connBox.innerHTML = '';
             const list = llmConnections || [];
             // Empty asks with no connection named, and Lumiverse then uses your
-            // default one. It is named in the first choice and not listed a second
-            // time, unless it is the one picked.
+            // default one. It is named in the first choice and never listed a
+            // second time. Picked by name, it shows as the first choice, since the
+            // two do the same.
             const def = list.find((c) => c.isDefault) || (list.length === 1 ? list[0] : null);
-            const twin = def && S.directorConnection !== def.id ? def : null;
+            const twin = def;
             const opts = [{ id: '', label: 'Your default connection' + (def ? ' (' + (def.name || def.model) + ')' : '') }].concat(list.filter((c) => c !== twin).map((c) => ({ id: c.id, label: c.name + (c.model ? ' (' + c.model + ')' : ''), group: c.provider ? providerName(c.provider) : undefined })));
-            if (S.directorConnection && !opts.some((o) => o.id === S.directorConnection))
+            if (S.directorConnection && !(def && S.directorConnection === def.id) && !opts.some((o) => o.id === S.directorConnection))
                 opts.push({ id: S.directorConnection, label: 'A connection that is gone' });
-            connBox.appendChild(select('Which connection', opts, S.directorConnection, (v) => set({ directorConnection: v }), 'Any connection you set up in Lumiverse. The first choice is your default connection. ' + (llmWhy || '')));
+            connBox.appendChild(select('Which connection', opts, def && S.directorConnection === def.id ? '' : S.directorConnection, (v) => set({ directorConnection: v }), 'Any connection you set up in Lumiverse. The first choice is your default connection. ' + (llmWhy || '')));
         };
         drawConn();
         if (!llmConnections) {
@@ -5556,6 +5585,8 @@ export function setup(ctx, overrides) {
                 set({ askNotes: next });
             }, { rows: 3, help: 'The note sent with the next ask after this failure. Empty sends no note for it. Back to built-in puts the built-in note back.' });
             const back = button('Back to built-in', async () => {
+                if (sameText(f.querySelector('textarea').value, builtInNotes[n.id] || ''))
+                    return alreadyLine(f, 'This is already the built-in note. Nothing changed.');
                 if (!(await askSure('Back to the built-in note', 'Your wording of “' + n.label + '” is replaced by the built-in note. There is no undo.', 'Use the built-in note')))
                     return;
                 const next = Object.assign({}, S.askNotes || {});
@@ -5577,14 +5608,14 @@ export function setup(ctx, overrides) {
             const draw = () => {
                 box.innerHTML = '';
                 const dl = decisionList || [];
-                // The default is named in the first choice and not listed a second
-                // time, unless it is the one picked.
+                // The default is named in the first choice and never listed a
+                // second time. Picked by name, it shows as the first choice.
                 const def = dl.find((c) => c.isDefault) || (dl.length === 1 ? dl[0] : null);
-                const twin = def && S.decisionConnection !== def.id ? def : null;
+                const twin = def;
                 const opts = [{ id: '', label: 'Your default Decision connection' + (def ? ' (' + (def.name || def.model) + ')' : '') }].concat(dl.filter((c) => c !== twin).map((c) => ({ id: c.id, label: c.name + (c.model ? ' (' + c.model + ')' : '') + (c.hasKey ? '' : ', no key'), group: c.provider ? providerName(c.provider) : undefined })));
-                if (S.decisionConnection && !opts.some((o) => o.id === S.decisionConnection))
+                if (S.decisionConnection && !(def && S.decisionConnection === def.id) && !opts.some((o) => o.id === S.decisionConnection))
                     opts.push({ id: S.decisionConnection, label: 'A connection that is gone' });
-                box.appendChild(select('Which Decision connection', opts, S.decisionConnection, (v) => set({ decisionConnection: v }), 'Set these up under Decision models in Lumiverse’s Connections panel. ' + (decisionWhy || '')));
+                box.appendChild(select('Which Decision connection', opts, def && S.decisionConnection === def.id ? '' : S.decisionConnection, (v) => set({ decisionConnection: v }), 'Set these up under Decision models in Lumiverse’s Connections panel. ' + (decisionWhy || '')));
             };
             draw();
             if (!decisionList) {
@@ -5616,6 +5647,8 @@ export function setup(ctx, overrides) {
                 }, { rows: 3, help: q.help });
                 f.setAttribute('data-af-question', q.id);
                 f.appendChild(button('Back to built-in', async () => {
+                    if (sameText(f.querySelector('textarea').value, builtInQuestions[q.id] || ''))
+                        return alreadyLine(f, 'This is already the built-in question. Nothing changed.');
                     if (!(await askSure('Back to the built-in question', 'Your wording of “' + q.label + '” is replaced by the built-in one. There is no undo.', 'Use the built-in question')))
                         return;
                     const next = Object.assign({}, S.decisionQuestions || {});
@@ -5625,7 +5658,9 @@ export function setup(ctx, overrides) {
                 }));
                 return f;
             });
-            return [box].concat(fields);
+            const line = slider('How sure it must be', Number(S.decisionSure) || 50, 10, 95, 5, (v) => Math.round(v) + '%', (v) => set({ decisionSure: Math.round(v) }), '50% by default. A speaker it picks, or a sound it finds likely, is used only at this or higher. The Log shows each answer.');
+            line.setAttribute('data-af-sure', '');
+            return [box, line].concat(fields);
         }));
         page.appendChild(dec);
         const pr = card('The Director’s prompt', 'Everything the Director is told, in full. You can change any of it. The message, your cast and your switches are sent with it as JSON, and the answer has to be JSON in the shape the end of the prompt asks for.');
@@ -5641,6 +5676,11 @@ export function setup(ctx, overrides) {
         prRow.appendChild(expandButton('The Director’s prompt', ta));
         const stateText = el('<span class="af-note af-grow"></span>');
         const back = button('Back to the built-in prompt', async () => {
+            if (sameText(ta.value, builtInPrompt)) {
+                stateText.textContent = 'This is already the built-in prompt. Nothing changed.';
+                stateText.setAttribute('role', 'status');
+                return;
+            }
             if (!(await askSure('Back to the built-in prompt', 'Your own version of the Director’s prompt is replaced by the built-in one. There is no undo.', 'Use the built-in prompt')))
                 return;
             ta.value = builtInPrompt;
@@ -5653,7 +5693,6 @@ export function setup(ctx, overrides) {
         const paintPromptState = () => {
             const custom = !!S.prompt;
             stateText.textContent = custom ? 'You are using your own version.' : 'You are using the built-in prompt.';
-            back.disabled = !custom;
         };
         ta.addEventListener('input', () => {
             set({ prompt: ta.value.trim() === builtInPrompt.trim() ? '' : ta.value });
@@ -5884,15 +5923,15 @@ export function setup(ctx, overrides) {
         const drawConn = () => {
             connBox.innerHTML = '';
             // The first choice follows Lumiverse's Voice settings. It names the
-            // connection that means, and that one is not listed a second time,
-            // unless it is the one picked.
+            // connection that means, and that one is never listed a second time.
+            // Picked by name, it shows as the first choice.
             const hostPick = hostVoice && hostVoice.ttsConnectionId ? ttsConnections.find((c) => c.id === hostVoice.ttsConnectionId) : null;
             const named = hostPick || ttsConnections.find((c) => c.is_default) || ttsConnections[0] || null;
-            const twin = named && S.ttsConnection !== named.id ? named : null;
+            const twin = named;
             const opts = [{ id: '', label: 'Lumiverse’s TTS connection' + (named ? ' (' + named.name + ')' : '') }].concat(ttsConnections.filter((c) => c !== twin).map((c) => ({ id: c.id, label: c.name + (engineFor(c, c.model).supported ? '' : ', no tags'), group: engineGroup(c) })));
-            if (S.ttsConnection && !opts.some((o) => o.id === S.ttsConnection))
+            if (S.ttsConnection && !(named && S.ttsConnection === named.id) && !opts.some((o) => o.id === S.ttsConnection))
                 opts.push({ id: S.ttsConnection, label: 'A connection that is gone' });
-            connBox.appendChild(select('TTS connection', opts, S.ttsConnection, (v) => {
+            connBox.appendChild(select('TTS connection', opts, named && S.ttsConnection === named.id ? '' : S.ttsConnection, (v) => {
                 set({ ttsConnection: v });
                 drawConn();
             }, 'The connection Auto Foley speaks through. The first choice follows the connection picked in Lumiverse’s Voice settings. A person in the Cast tab can use another one.'));
@@ -5997,6 +6036,8 @@ export function setup(ctx, overrides) {
             }, { rows: 7, cls: 'af-mono', help: 'One pattern on each line. Text that matches is not read. /pattern/flags works too.' });
             f.setAttribute('data-af-skips', '');
             const back = button('Use defaults', async () => {
+                if (sameText(f.querySelector('textarea').value, builtInSkips))
+                    return alreadyLine(f, 'These are already the default patterns. Nothing changed.');
                 if (!(await askSure('Use the default patterns', 'Your own patterns are replaced by the built-in ones. There is no undo.', 'Use defaults')))
                     return;
                 set({ skipPatterns: '' });
@@ -6122,7 +6163,7 @@ export function setup(ctx, overrides) {
     const RESETS = TRANSFER.concat([
         { id: 'sounds', label: 'The sound library' },
         { id: 'audio', label: 'Kept audio and directed messages' },
-        { id: 'key', label: 'The sound effects key' },
+        { id: 'key', label: 'The sound keys, for Freesound and ElevenLabs' },
     ]);
     // The setting keys each part covers. Which parts are ticked are settings
     // too, but they are never carried in a file or put back by a reset.
@@ -6131,6 +6172,8 @@ export function setup(ctx, overrides) {
     let transferSaid = '';
     let transferKind = '';
     let resetSaid = '';
+    // True when the last reset changed nothing, so its line is not shown as done.
+    let resetNothing = false;
     let resetArmed = false;
     function partsPicker(key, parts) {
         const wrap = el('<div class="af-col" style="gap:8px"></div>');
@@ -6264,7 +6307,8 @@ export function setup(ctx, overrides) {
         if (resetSaid) {
             const st = el('<p class="af-status"></p>');
             st.textContent = resetSaid;
-            st.dataset.kind = resetArmed ? 'bad' : 'good';
+            st.dataset.kind = resetArmed ? 'bad' : resetNothing ? '' : 'good';
+            st.setAttribute('role', 'status');
             c.appendChild(st);
         }
         c.appendChild(fold('What to put back', (b) => {
@@ -6398,6 +6442,8 @@ export function setup(ctx, overrides) {
             }, { rows: 4, help: 'Sent to the Director with the rules when this engine speaks. Empty sends the built-in note.' });
             f.setAttribute('data-af-engine-note', e.id);
             f.appendChild(button('Back to built-in', async () => {
+                if (sameText(f.querySelector('textarea').value, builtInEngineNotes[e.id] || ''))
+                    return alreadyLine(f, 'This is already the built-in note. Nothing changed.');
                 if (!(await askSure('Back to the built-in note', 'Your wording of the note for ' + e.label + ' is replaced by the built-in one. There is no undo.', 'Use the built-in note')))
                     return;
                 const next = Object.assign({}, S.engineNotes || {});
@@ -6475,6 +6521,26 @@ export function setup(ctx, overrides) {
             out.push('The UI panels permission is refused, so the floating player cannot be shown.' + where);
         return out;
     }
+    // Says, under a button, that pressing it changed nothing because the text
+    // is already the built-in one. The line goes when the text is changed.
+    function alreadyLine(field, words) {
+        let line = field.querySelector('[data-af-already]');
+        if (!line) {
+            line = el('<p class="af-note" role="status" data-af-already></p>');
+            field.appendChild(line);
+            const box = field.querySelector('textarea, input');
+            const drop = () => {
+                if (line && line.isConnected)
+                    line.remove();
+                if (box)
+                    box.removeEventListener('input', drop);
+            };
+            if (box)
+                box.addEventListener('input', drop);
+        }
+        line.textContent = words;
+    }
+    const sameText = (a, b) => String(a || '').trim() === String(b || '').trim();
     // Asks before something is put back or deleted. Lumiverse's own dialog is
     // used, and the browser's when that is missing.
     async function askSure(title, message, confirmLabel, danger) {
@@ -6493,10 +6559,31 @@ export function setup(ctx, overrides) {
         }
     }
     async function resetAll() {
-        const chosen = S.resetParts || [];
+        let chosen = S.resetParts || [];
         if (!chosen.length)
             return;
-        const names = RESETS.filter((p) => chosen.indexOf(p.id) >= 0).map((p) => p.label.toLowerCase()).join(', ');
+        // Parts already at their defaults are left out, and said so, rather than
+        // asked about and reset to what they already are.
+        let already = [];
+        try {
+            const c = await rpc({ type: 'reset_check', parts: chosen }, 15000);
+            already = c && Array.isArray(c.already) ? c.already : [];
+        }
+        catch (_) { }
+        // Only the first letter is made small, so names such as Freesound keep
+        // their capital.
+        const nameOf = (ids) => RESETS.filter((p) => ids.indexOf(p.id) >= 0).map((p) => p.label.charAt(0).toLowerCase() + p.label.slice(1)).join(', ');
+        const sameNote = already.length ? ' Already at their defaults, so left alone: ' + nameOf(already) + '.' : '';
+        chosen = chosen.filter((x) => already.indexOf(x) < 0);
+        if (!chosen.length) {
+            resetArmed = false;
+            resetNothing = true;
+            resetSaid = (already.length === 1 ? 'That part is' : 'Those parts are') + ' already at ' + (already.length === 1 ? 'its' : 'their') + ' defaults. Nothing changed.';
+            renderTab();
+            return;
+        }
+        const names = nameOf(chosen);
+        resetNothing = false;
         let yes = null;
         try {
             if (ctx.ui && typeof ctx.ui.showConfirm === 'function') {
@@ -6541,7 +6628,9 @@ export function setup(ctx, overrides) {
                 sounds = r.sounds;
             if (r && typeof r.hasKey === 'boolean')
                 hasKey = r.hasKey;
-            resetSaid = r && r.ok ? 'Put back: ' + names + '.' : (r && r.error) || 'The reset did not finish.';
+            if (r && typeof r.hasFsKey === 'boolean')
+                hasFsKey = r.hasFsKey;
+            resetSaid = r && r.ok ? 'Put back: ' + names + '.' + sameNote : (r && r.error) || 'The reset did not finish.';
             log(resetSaid, r && r.ok ? '' : 'bad', 'setting');
         }
         catch (e) {
@@ -6774,6 +6863,7 @@ export function setup(ctx, overrides) {
         S = Object.assign({}, DEFAULTS, r.settings || {});
         sounds = Array.isArray(r.sounds) ? r.sounds : [];
         hasKey = !!r.hasKey;
+        hasFsKey = !!r.hasFsKey;
         builtInPrompt = String(r.builtInPrompt || '');
         builtInNotes = r.builtInNotes && typeof r.builtInNotes === 'object' ? r.builtInNotes : {};
         builtInEngineNotes = r.builtInEngineNotes && typeof r.builtInEngineNotes === 'object' ? r.builtInEngineNotes : {};

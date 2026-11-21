@@ -629,6 +629,19 @@ describe("sounds by link", () => {
   });
 });
 
+describe("Start again", () => {
+  test("says which parts are already at their defaults", async () => {
+    const h = host();
+    const all = ["settings", "prompt", "cast", "sounds", "audio", "key"];
+    const fresh = (await h.ask({ type: "reset_check", parts: all })).find((m) => m.type === "reset_check");
+    expect(fresh.already).toEqual(all);
+    await h.ask({ type: "save", settings: { strength: "dramatic", prompt: "Direct it quietly." } });
+    await h.ask({ type: "sound_link", url: "https://sounds.example.org/latch.mp3", name: "a latch" });
+    const now = (await h.ask({ type: "reset_check", parts: all })).find((m) => m.type === "reset_check");
+    expect(now.already).toEqual(["cast", "audio", "key"]);
+  });
+});
+
 describe("each account keeps its own", () => {
   test("settings, cast, sounds, kept audio, the key and directed messages never cross accounts", async () => {
     const good = JSON.stringify({ lines: [{ i: 0, speaker: "Narrator", text: "Brin waved." }], new_speakers: [] });
@@ -779,6 +792,31 @@ describe("the Decision model", () => {
     expect(sentLines.find((l: any) => l.i === 2).speaker).toBe("Tobin");
     const script = out.find((m) => m.type === "script").script;
     expect(script.log.join(" ")).toContain("fast-judge picked the speaker for 2 of 2");
+  });
+
+  test("each answer is listed for the Log, and the line it needs can be changed", async () => {
+    const decide = (input: any) => {
+      const answers: any = {};
+      for (const k of Object.keys(input.questions)) {
+        if (k.startsWith("who_")) {
+          const crit = input.questions[k].criteria;
+          answers[k] = { type: "choice", choice: Object.keys(crit).find((c) => crit[c].startsWith("Tobin"))!, confidence: 0.65, probabilities: {} };
+        } else answers[k] = { type: "noul", noul: 0.4 };
+      }
+      return { model: "maker/fast-judge", answers };
+    };
+    const lines = [JSON.stringify({ lines: [{ i: 0, speaker: "Narrator", text: "Mara looked at Tobin." }] })];
+    const h = host({ answers: lines.concat(lines), decide });
+    await setup(h);
+    const first = (await h.ask(msg)).find((m) => m.type === "script").script;
+    expect(first.decided[0]).toBe("fast-judge answered. An answer is used at 50% sure or more.");
+    expect(first.decided).toContain('"Go." is Tobin, 65% sure. Used.');
+    expect(first.decided).toContain('"Mara looked at Tobin." describes a sound: 40%.');
+    await h.ask({ type: "save", settings: { decisionsOn: true, decisionSure: 80, cast: [{ id: "a", name: "Mara Vell", kind: "character" }, { id: "b", name: "Tobin", kind: "npc" }] } });
+    const second = (await h.ask(Object.assign({}, msg, { messageId: "m3" }))).find((m) => m.type === "script").script;
+    expect(second.decided[0]).toContain("used at 80% sure");
+    expect(second.decided).toContain('"Go." is Tobin, 65% sure. Left to the Director.');
+    expect(second.log.join(" ")).toContain("picked the speaker for 0 of 2");
   });
 
   test("a pick it is unsure of is left to the Director", async () => {
@@ -1047,7 +1085,7 @@ describe("sounds", () => {
   test("with no key and no match, the answer says how to get one", async () => {
     const h = host();
     const out = await h.ask({ type: "sound", description: "a kettle whistling" });
-    expect(out.find((m) => m.type === "sound").error).toContain("Save an ElevenLabs key");
+    expect(out.find((m) => m.type === "sound").error).toContain("Save a Freesound key or an ElevenLabs key in the Sounds tab");
   });
 
   test("a made sound is kept, so the same description is free next time", async () => {

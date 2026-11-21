@@ -91,8 +91,17 @@ interface Settings {
   // The Decision model.
   decisionsOn: boolean;
   decisionConnection: string;
+  // How sure the Decision model must be, in percent, before its answer is
+  // used: a speaker it picks, or a line it finds likely to be a sound.
+  decisionSure: number;
   // Sounds.
   makeSounds: boolean;
+  // Where a sound the library does not have comes from: Freesound first and
+  // then ElevenLabs, or only one of them.
+  soundFrom: 'both' | 'freesound' | 'eleven';
+  // Which Freesound licenses may be used: all three, the two that allow any
+  // use, or Creative Commons 0 only.
+  freesoundLicense: 'any' | 'free' | 'cc0';
   soundSeconds: number;
   // The Director's model settings, named and sent the way Auto Refine sends
   // its own: thinking, the samplers typed in, and how long to wait.
@@ -205,7 +214,10 @@ const DEFAULT_SETTINGS: Settings = {
   prompt: '',
   decisionsOn: false,
   decisionConnection: '',
+  decisionSure: 50,
   makeSounds: true,
+  soundFrom: 'both',
+  freesoundLicense: 'any',
   soundSeconds: 0,
   autoplayDelay: 0,
   extraThinkTags: [],
@@ -425,7 +437,7 @@ function question(s: Settings, k: string, n: number): string {
   return text.indexOf('{n}') >= 0 ? text.split('{n}').join(String(n)) : text + ' (line #' + n + ')';
 }
 
-const LOG_KIND_IDS = ['play', 'director', 'cast', 'sound', 'setting', 'problem'];
+const LOG_KIND_IDS = ['play', 'director', 'decision', 'cast', 'sound', 'setting', 'problem'];
 function cleanLogShow(v: any): Record<string, boolean> {
   const out: Record<string, boolean> = {};
   if (!v || typeof v !== 'object' || Array.isArray(v)) return out;
@@ -506,7 +518,10 @@ function cleanSettings(raw: any): Settings {
     prompt: str(r.prompt, 20000),
     decisionsOn: bool(r.decisionsOn, d.decisionsOn),
     decisionConnection: str(r.decisionConnection, 80),
+    decisionSure: Math.round(num(r.decisionSure, 10, 95, d.decisionSure)),
     makeSounds: bool(r.makeSounds, d.makeSounds),
+    soundFrom: pick(r.soundFrom, ['both', 'freesound', 'eleven'] as const, d.soundFrom),
+    freesoundLicense: pick(r.freesoundLicense, ['any', 'free', 'cc0'] as const, d.freesoundLicense),
     soundSeconds: num(r.soundSeconds, 0, 30, d.soundSeconds),
     autoplayDelay: num(r.autoplayDelay, 0, 30, d.autoplayDelay),
     extraThinkTags: Array.isArray(r.extraThinkTags) ? r.extraThinkTags.map((x: any) => str(x, 40).trim()).filter(Boolean).slice(0, 20) : [],
@@ -1423,6 +1438,9 @@ interface Script {
   author: string;
   lines: DirectedLine[];
   log: string[];
+  // What the Decision model answered, line by line, for its own kind in the
+  // Log.
+  decided?: string[];
   directed: boolean;
   added: string[];
   // Who the message names or hears speak, for the Stage tab.
@@ -1590,11 +1608,11 @@ function shown(desc: string, around: string): boolean {
   return want.some((w) => have.some((h) => near(w, h)));
 }
 
-function checkSounds(lines: DirectedLine[], segs: Segment[], hints: Record<number, number>): number {
+function checkSounds(lines: DirectedLine[], segs: Segment[], hints: Record<number, number>, line: number): number {
   let dropped = 0;
   for (const l of lines) {
     const around = [segs[l.i - 1], segs[l.i], segs[l.i + 1]].filter(Boolean).map((g) => g.text).join(' ');
-    const sure = (hints[l.i] || 0) >= SURE;
+    const sure = (hints[l.i] || 0) >= line;
     for (const side of ['before', 'after'] as const) {
       if (l[side] && !sure && !shown(l[side], around)) {
         l[side] = '';
@@ -2146,9 +2164,11 @@ function decisionTrouble(e: any): string {
 // The most people offered as choices for one quote. A long list makes every
 // choice less likely and the answer less sure.
 const MAX_CHOICES = 12;
-// How sure the Decision model must be before its pick is used. Below this the
-// Director picks the speaker instead.
-const SURE = 0.5;
+// A line's first words, so the Log can say which line an answer is for.
+function lineStart(text: string): string {
+  const words = String(text || '').replace(/\s+/g, ' ').trim().split(' ');
+  return words.slice(0, 6).join(' ') + (words.length > 6 ? '…' : '');
+}
 
 function candidates(cast: CastMember[], text: string, author: string): CastMember[] {
   const lower = text.toLowerCase();
@@ -2172,8 +2192,9 @@ async function askDecisions(
   segs: Segment[],
   author: string,
   known?: Record<number, string>,
-): Promise<{ speakers: Record<number, string>; hints: Record<number, number>; log: string[]; cost: number }> {
-  const out = { speakers: {} as Record<number, string>, hints: {} as Record<number, number>, log: [] as string[], cost: 0 };
+): Promise<{ speakers: Record<number, string>; hints: Record<number, number>; log: string[]; decided: string[]; cost: number }> {
+  const out = { speakers: {} as Record<number, string>, hints: {} as Record<number, number>, log: [] as string[], decided: [] as string[], cost: 0 };
+  const sure = s.decisionSure / 100;
   if (!hasDecisions()) {
     out.log.push('The Decision model was not used: this Lumiverse has no Decision connections for extensions. Update Lumiverse to use it.');
     return out;
@@ -2223,7 +2244,12 @@ async function askDecisions(
   out.cost = Number.isFinite(cost) ? cost : 0;
   let picked = 0;
   let unsure = 0;
-  for (const key of Object.keys(got.answers)) {
+  const name = who(got.model);
+  const textOf = (i: number) => lineStart((segs.find((g) => g.i === i) || { text: '' }).text);
+  const pct = (x: number) => Math.round(x * 100) + '%';
+  // Lines in the order of the message, so the Log reads top to bottom.
+  const keys = Object.keys(got.answers).sort((a, b) => Number(a.replace(/\D/g, '')) - Number(b.replace(/\D/g, '')));
+  for (const key of keys) {
     const a = got.answers[key];
     if (!a) continue;
     if (key.indexOf('who_') === 0) {
@@ -2231,17 +2257,25 @@ async function askDecisions(
       const choice = String(a.choice || '');
       const conf = Number(a.confidence);
       const k = choice.charAt(0) === 'p' ? Number(choice.slice(1)) : -1;
-      if (k >= 0 && people[k] && Number.isFinite(conf) && conf >= SURE) {
+      const pickName = k >= 0 && people[k] ? people[k].name : 'someone not in the cast';
+      const known = Number.isFinite(conf);
+      if (k >= 0 && people[k] && known && conf >= sure) {
         out.speakers[i] = people[k].name;
         picked++;
-      } else unsure++;
+        out.decided.push('"' + textOf(i) + '" is ' + pickName + ', ' + pct(conf) + ' sure. Used.');
+      } else {
+        unsure++;
+        out.decided.push('"' + textOf(i) + '" is ' + pickName + (known ? ', ' + pct(conf) + ' sure' : '') + '. Left to the Director.');
+      }
     } else if (key.indexOf('sound_') === 0) {
       const i = Number(key.slice(6));
       const chance = Number(a.noul);
-      if (Number.isFinite(chance)) out.hints[i] = Math.round(chance * 100) / 100;
+      if (!Number.isFinite(chance)) continue;
+      out.hints[i] = Math.round(chance * 100) / 100;
+      out.decided.push('"' + textOf(i) + '" describes a sound: ' + pct(chance) + (chance >= sure ? '. Its sounds are kept.' : '.'));
     }
   }
-  const name = who(got.model);
+  if (out.decided.length) out.decided.unshift(name + ' answered. An answer is used at ' + s.decisionSure + '% sure or more.');
   if (speech.length && people.length > 1)
     out.log.push(name + ' picked the speaker for ' + picked + ' of ' + speech.length + ' quoted lines' + (unsure ? ', and left ' + unsure + ' to the Director' : '') + '.');
   return out;
@@ -2351,7 +2385,7 @@ function settingsSig(s: Settings): string {
       s.directorOn, s.directorConnection, s.strength, s.tagsOn, s.breathsOn, s.soundsOn, s.soundStyle, s.narration,
       s.intimateOn, s.findSpeakers, s.bigMoments, s.prompt, s.decisionsOn, s.decisionConnection, s.extraThinkTags,
       s.thinkingMode, s.thinkingEffort, s.samplers, s.engineNotes, s.skipOn, s.skipPatterns, s.speechMarks, s.asterisks,
-      s.promptRole, s.engineNoteRole, s.askNoteRole, s.decisionQuestions, s.soundCheck,
+      s.promptRole, s.engineNoteRole, s.askNoteRole, s.decisionQuestions, s.soundCheck, s.decisionSure,
       s.cast.map((c) => [c.name, c.aliases, c.note, c.muted]),
     ]),
   );
@@ -2738,6 +2772,7 @@ async function direct(userId: string | undefined, p: any): Promise<Script> {
     for (const k of Object.keys(d.speakers)) if (!fixed[Number(k)]) fixed[Number(k)] = d.speakers[Number(k)];
     hints = d.hints;
     script.log.push(...d.log);
+    if (d.decided.length) script.decided = d.decided.slice(0, 41);
     script.cost += d.cost;
   }
   script.inScene = scene.inScene;
@@ -2799,7 +2834,7 @@ async function direct(userId: string | undefined, p: any): Promise<Script> {
   script.lines = done.lines;
   script.log.push(...done.log);
   if (answer && s.soundCheck) {
-    const dropped = checkSounds(done.lines, segs, hints);
+    const dropped = checkSounds(done.lines, segs, hints, s.decisionSure / 100);
     if (dropped) script.log.push(dropped + (dropped === 1 ? ' sound was' : ' sounds were') + ' left out, since the text around ' + (dropped === 1 ? 'it' : 'them') + ' does not show ' + (dropped === 1 ? 'it.' : 'them.'));
   }
   script.directed = !!answer;
@@ -2830,6 +2865,7 @@ async function direct(userId: string | undefined, p: any): Promise<Script> {
 const SETTINGS_FILE = 'settings.json';
 const SOUND_INDEX = 'sounds/index.json';
 const KEY_NAME = 'api.elevenlabs.io';
+const FS_KEY_NAME = 'freesound.org';
 
 async function readJson(path: string, userId: string | undefined): Promise<any> {
   try {
@@ -2918,13 +2954,42 @@ interface SoundEntry {
   name: string;
   // Words that make this sound play when a description holds one of them.
   triggers: string[];
-  source: 'made' | 'upload' | 'link';
+  source: 'made' | 'upload' | 'link' | 'found';
   mime: string;
   bytes: number;
   added: number;
   uses: number;
   // For a sound added by link: the address the browser plays it from.
   url?: string;
+  // For a sound found on Freesound: who made it, its license and its page,
+  // shown wherever the sound is, since most licenses ask for credit.
+  credit?: Credit;
+}
+
+interface Credit {
+  title: string;
+  by: string;
+  license: string;
+  page: string;
+  fsId: number;
+  // Freesound sounds already used for this description, so Find another
+  // does not pick one of them again.
+  seen: number[];
+}
+
+function cleanCredit(c: any): Credit | null {
+  if (!c || typeof c !== 'object') return null;
+  const page = cleanLink(c.page);
+  const fsId = num(c.fsId, 0, 1e12, 0);
+  if (!fsId || !/^https:\/\/freesound\.org\//.test(page)) return null;
+  return {
+    title: str(c.title, 160).trim() || 'A Freesound sound',
+    by: str(c.by, 80).trim() || 'a Freesound user',
+    license: str(c.license, 30).trim(),
+    page,
+    fsId,
+    seen: Array.isArray(c.seen) ? c.seen.map((x: any) => num(x, 0, 1e12, 0)).filter(Boolean).slice(-30) : [],
+  };
 }
 
 // A link to a sound: http or https, with no spaces, at most 2000 letters.
@@ -2943,17 +3008,20 @@ function cleanSoundEntry(e: any): SoundEntry | null {
   if (!id) return null;
   const url = e.source === 'link' ? cleanLink(e.url) : '';
   if (e.source === 'link' && !url) return null;
+  const credit = e.source === 'found' ? cleanCredit(e.credit) : null;
+  if (e.source === 'found' && !credit) return null;
   const entry: SoundEntry = {
     id,
     name: str(e.name, 160).trim() || 'Sound',
     triggers: Array.isArray(e.triggers) ? e.triggers.map((t: any) => str(t, 40).trim().toLowerCase()).filter(Boolean).slice(0, 12) : [],
-    source: e.source === 'upload' ? 'upload' : e.source === 'link' ? 'link' : 'made',
+    source: e.source === 'upload' ? 'upload' : e.source === 'link' ? 'link' : e.source === 'found' ? 'found' : 'made',
     mime: /^audio\/[a-z0-9.+-]+$/i.test(String(e.mime)) ? String(e.mime) : 'audio/mpeg',
     bytes: num(e.bytes, 0, 1e9, 0),
     added: num(e.added, 0, 1e15, 0),
     uses: num(e.uses, 0, 1e9, 0),
   };
   if (url) entry.url = url;
+  if (credit) entry.credit = credit;
   return entry;
 }
 
@@ -2982,8 +3050,8 @@ function matchSound(list: SoundEntry[], description: string): SoundEntry | null 
   const want = soundKey(description);
   if (!want) return null;
   const words = want.split(' ');
-  // Your own sounds, uploaded or linked, come before made ones.
-  const mine = (e: SoundEntry) => (e.source === 'made' ? 1 : 0);
+  // Your own sounds, uploaded or linked, come before made and found ones.
+  const mine = (e: SoundEntry) => (e.source === 'made' || e.source === 'found' ? 1 : 0);
   const ordered = list.slice().sort((a, b) => mine(a) - mine(b));
   for (const e of ordered) {
     if (e.triggers.some((t) => t && (' ' + want + ' ').indexOf(' ' + soundKey(t) + ' ') >= 0)) return e;
@@ -3012,12 +3080,20 @@ function cleanKey(raw: any): string | null {
   return k;
 }
 
-async function getKey(userId: string | undefined): Promise<string | null> {
+async function getKey(userId: string | undefined, name = KEY_NAME): Promise<string | null> {
   try {
     if (!spindle.enclave || typeof spindle.enclave.get !== 'function') return null;
-    return await spindle.enclave.get(KEY_NAME, userId);
+    return await spindle.enclave.get(name, userId);
   } catch (_) {
     return null;
+  }
+}
+
+async function hasKeyFor(userId: string | undefined, name: string): Promise<boolean> {
+  try {
+    return !!(spindle.enclave && typeof spindle.enclave.has === 'function' && (await spindle.enclave.has(name, userId)));
+  } catch (_) {
+    return false;
   }
 }
 
@@ -3052,13 +3128,149 @@ async function cors(url: string, opts: any): Promise<any> {
   return await spindle.cors(url, opts);
 }
 
+// ---- Freesound ----
+// Freesound's API is free for non-commercial use with a key of your own. A
+// search costs one request: 60 a minute and 2000 a day are allowed. The
+// preview, an MP3 of about 128 kbps, needs no sign-in, so the key is only
+// sent to freesound.org.
+
+// The short name of a license, from the name or the address Freesound sends.
+function licenseName(v: any): string {
+  const t = String(v || '');
+  if (/publicdomain\/zero|creative commons 0|\bcc0\b/i.test(t)) return 'CC0';
+  if (/sampling/i.test(t)) return 'Sampling+';
+  if (/by-nc|noncommercial/i.test(t)) return 'CC BY-NC';
+  if (/licenses\/by\/|attribution/i.test(t)) return 'CC BY';
+  return '';
+}
+
+function licenseAllowed(name: string, which: Settings['freesoundLicense']): boolean {
+  if (which === 'cc0') return name === 'CC0';
+  if (which === 'free') return name === 'CC0' || name === 'CC BY';
+  return !!name;
+}
+
+function freesoundTrouble(status: number, body: string): string {
+  let detail = '';
+  try {
+    const j = JSON.parse(body);
+    detail = j && typeof j.detail === 'string' ? j.detail : '';
+  } catch (_) {}
+  const tail = detail ? ' Freesound said: ' + detail.slice(0, 200) : '';
+  if (status === 401 || status === 403) return 'Freesound refused the key. Check the key in the Sounds tab.' + tail;
+  if (status === 429) return 'Freesound\'s limit is reached: 60 searches a minute and 2000 a day. Try again later.' + tail;
+  return 'Freesound answered with an error (' + status + ').' + tail;
+}
+
+function freesoundCorsTrouble(e: any): string {
+  const raw = String((e && e.message) || e || '');
+  if (/PERMISSION_DENIED|cors_proxy/i.test(raw))
+    return 'The CORS proxy permission is refused, so Freesound cannot be searched. Grant it to Auto Foley in Lumiverse, under Extensions.';
+  if (/only serves audio|does not match/i.test(raw)) return 'Freesound sent something that is not a sound.';
+  if (/timed? ?out|timeout/i.test(raw)) return 'Freesound did not answer within 30 seconds.';
+  return 'Freesound could not be reached: ' + raw.slice(0, 200);
+}
+
+// The words a search uses: the description without filler words. A search
+// with every word can find nothing, so shorter ones follow.
+function freesoundQueries(desc: string): string[] {
+  const words = soundKey(desc).split(' ').filter((w) => w.length > 2);
+  const out: string[] = [];
+  for (const n of [6, 3, 2]) {
+    const q = words.slice(0, n).join(' ');
+    if (q && out.indexOf(q) < 0) out.push(q);
+  }
+  return out;
+}
+
+// A sound from Freesound for a description: the first result with an
+// allowed license and a preview, skipping the ones in skip. Sounds longer
+// than 20 seconds are left out, since a sound plays between lines.
+async function findFreesound(
+  key: string,
+  s: Settings,
+  desc: string,
+  skip: number[],
+): Promise<{ b64?: string; bytes?: Uint8Array; credit?: Credit; error?: string; none?: boolean }> {
+  for (const q of freesoundQueries(desc)) {
+    const url =
+      'https://freesound.org/apiv2/search/?query=' + encodeURIComponent(q) +
+      '&filter=' + encodeURIComponent('duration:[0.2 TO 20]') +
+      '&fields=id,name,username,license,url,previews&page_size=15';
+    let res: any;
+    try {
+      res = await cors(url, { method: 'GET', headers: { Authorization: 'Token ' + key, Accept: 'application/json' } });
+    } catch (e: any) {
+      return { error: freesoundCorsTrouble(e) };
+    }
+    const status = Number(res && res.status);
+    if (status < 200 || status >= 300) return { error: freesoundTrouble(status, String((res && res.body) || '')) };
+    let results: any[] = [];
+    try {
+      const j = JSON.parse(String(res.body || ''));
+      results = Array.isArray(j && j.results) ? j.results : [];
+    } catch (_) {
+      return { error: 'Freesound sent an answer Auto Foley could not read.' };
+    }
+    for (const r of results) {
+      const id = num(r && r.id, 0, 1e12, 0);
+      const lic = licenseName(r && r.license);
+      const preview = r && r.previews && String(r.previews['preview-hq-mp3'] || '');
+      if (!id || skip.indexOf(id) >= 0 || !licenseAllowed(lic, s.freesoundLicense)) continue;
+      if (!/^https:\/\/([a-z0-9-]+\.)*freesound\.org\//.test(preview)) continue;
+      let got: any;
+      try {
+        got = await cors(preview, { method: 'GET', responseType: 'arraybuffer', mediaType: 'audio' });
+      } catch (e: any) {
+        return { error: freesoundCorsTrouble(e) };
+      }
+      const st = Number(got && got.status);
+      if (st < 200 || st >= 300) continue;
+      const b64 = String(got.body || '');
+      const bytes = fromBase64(b64);
+      if (bytes.length < 64) continue;
+      const page = cleanLink(r.url);
+      return {
+        b64,
+        bytes,
+        credit: {
+          title: str(r.name, 160).trim() || 'A Freesound sound',
+          by: str(r.username, 80).trim() || 'a Freesound user',
+          license: lic,
+          page: /^https:\/\/freesound\.org\//.test(page) ? page : 'https://freesound.org/s/' + id + '/',
+          fsId: id,
+          seen: skip.concat([id]).slice(-30),
+        },
+      };
+    }
+  }
+  return { none: true };
+}
+
+async function testFreesound(userId: string | undefined): Promise<{ ok: boolean; text: string }> {
+  const key = await getKey(userId, FS_KEY_NAME);
+  if (!key) return { ok: false, text: 'No key is saved.' };
+  let res: any;
+  try {
+    res = await cors('https://freesound.org/apiv2/search/?query=door&fields=id&page_size=1', {
+      method: 'GET',
+      headers: { Authorization: 'Token ' + key, Accept: 'application/json' },
+    });
+  } catch (e: any) {
+    return { ok: false, text: freesoundCorsTrouble(e) };
+  }
+  const status = Number(res && res.status);
+  if (status >= 200 && status < 300) return { ok: true, text: 'The key works.' };
+  return { ok: false, text: freesoundTrouble(status, String((res && res.body) || '')) };
+}
+
 // One sound for a description: from the library when one fits, otherwise
-// made by ElevenLabs and added to the library, so the same sound is free the
-// next time.
+// found on Freesound or made by ElevenLabs and added to the library, so the
+// same sound is free the next time.
 // A sound for a description: from the library, or made with ElevenLabs. With
 // again set to a library id, a new take is made for that sound and replaces
 // it, keeping its name and trigger words.
-async function soundFor(userId: string | undefined, description: string, again?: string): Promise<{ id?: string; base64?: string; url?: string; mime?: string; name?: string; error?: string; made?: boolean }> {
+async function soundFor(userId: string | undefined, description: string, again?: string): Promise<{ id?: string; base64?: string; url?: string; mime?: string; name?: string; credit?: Credit; error?: string; made?: boolean }> {
   const desc = cleanSound(description);
   if (!desc) return { error: 'No sound description.' };
   const list = await loadSounds(userId);
@@ -3073,7 +3285,7 @@ async function soundFor(userId: string | undefined, description: string, again?:
       const bytes = await spindle.userStorage.readBinary('sounds/' + hit.id, userId);
       hit.uses++;
       await saveSounds(userId, list);
-      return { id: hit.id, base64: toBase64(bytes), mime: hit.mime, name: hit.name };
+      return { id: hit.id, base64: toBase64(bytes), mime: hit.mime, name: hit.name, credit: hit.credit };
     } catch (_) {
       // The file is gone while its entry stayed. The entry goes, and a new
       // sound is made below.
@@ -3082,9 +3294,98 @@ async function soundFor(userId: string | undefined, description: string, again?:
     }
   }
   const s = await loadSettings(userId);
-  if (!s.makeSounds) return { error: 'No sound in your library fits "' + desc + '", and making new sounds is off.' };
+  if (!s.makeSounds) return { error: 'No sound in your library fits "' + desc + '", and getting new sounds is off.' };
+  const old = again ? list.find((x) => x.id === again) : null;
+  // Find another for a found sound looks on Freesound only. Make it again for
+  // a made sound asks ElevenLabs only.
+  const order: Array<'freesound' | 'eleven'> = old
+    ? [old.source === 'found' ? 'freesound' : 'eleven']
+    : s.soundFrom === 'both' ? ['freesound', 'eleven'] : [s.soundFrom];
+  const why: string[] = [];
+  for (const from of order) {
+    if (from === 'freesound') {
+      const fsKey = await getKey(userId, FS_KEY_NAME);
+      if (!fsKey) {
+        why.push('No Freesound key is saved.');
+        continue;
+      }
+      const skip = old && old.credit ? old.credit.seen.concat([old.credit.fsId]) : [];
+      const got = await findFreesound(fsKey, s, desc, skip);
+      if (got.error) {
+        why.push(got.error);
+        continue;
+      }
+      if (got.none || !got.bytes || !got.credit) {
+        why.push(old ? 'Freesound has no other sound for it.' : 'Freesound found nothing for it.');
+        continue;
+      }
+      return keepSound(userId, list, old, desc, got.bytes, got.b64 || '', 'found', got.credit);
+    }
+    const made = await makeEleven(userId, s, desc);
+    if (made.error) {
+      why.push(made.error);
+      continue;
+    }
+    return keepSound(userId, list, old, desc, made.bytes as Uint8Array, made.b64 || '', 'made');
+  }
+  // With no key saved for any place it could look, the answer says what to
+  // do instead of listing each missing key.
+  if (why.length && why.every((w) => /^No (Freesound|ElevenLabs) key is saved\.$/.test(w))) {
+    const keys = order.map((f) => (f === 'freesound' ? 'a Freesound key' : 'an ElevenLabs key')).join(' or ');
+    return { error: 'No sound in your library fits "' + desc + '". Save ' + keys + ' in the Sounds tab to get new ones.' };
+  }
+  return { error: 'No sound in your library fits "' + desc + '". ' + why.join(' ') };
+}
+
+// Saves a new sound to the library, or a new take over an old one.
+async function keepSound(
+  userId: string | undefined,
+  list: SoundEntry[],
+  old: SoundEntry | null | undefined,
+  desc: string,
+  bytes: Uint8Array,
+  b64: string,
+  source: 'made' | 'found',
+  credit?: Credit,
+): Promise<{ id?: string; base64?: string; mime?: string; name?: string; credit?: Credit; error?: string; made?: boolean }> {
+  if (old) {
+    try {
+      await spindle.userStorage.writeBinary('sounds/' + old.id, bytes, userId);
+      old.bytes = bytes.length;
+      old.mime = 'audio/mpeg';
+      old.added = Date.now();
+      if (credit) old.credit = credit;
+      await saveSounds(userId, list);
+    } catch (e: any) {
+      return { error: 'The new take could not be saved: ' + String((e && e.message) || e).slice(0, 200) };
+    }
+    return { id: old.id, base64: b64, mime: old.mime, name: old.name, credit: old.credit, made: true };
+  }
+  const entry: SoundEntry = {
+    id: 's' + newId(),
+    name: desc,
+    triggers: [],
+    source,
+    mime: 'audio/mpeg',
+    bytes: bytes.length,
+    added: Date.now(),
+    uses: 1,
+  };
+  if (credit) entry.credit = credit;
+  try {
+    await spindle.userStorage.writeBinary('sounds/' + entry.id, bytes, userId);
+    list.push(entry);
+    await saveSounds(userId, list);
+  } catch (e: any) {
+    logWarn('could not keep a new sound: ' + String((e && e.message) || e));
+  }
+  return { id: entry.id, base64: b64, mime: entry.mime, name: entry.name, credit: entry.credit, made: true };
+}
+
+// A new sound made by ElevenLabs for a description.
+async function makeEleven(userId: string | undefined, s: Settings, desc: string): Promise<{ bytes?: Uint8Array; b64?: string; error?: string }> {
   const key = await getKey(userId);
-  if (!key) return { error: 'No sound in your library fits "' + desc + '". Save an ElevenLabs key in the Sounds tab to make new ones.' };
+  if (!key) return { error: 'No ElevenLabs key is saved.' };
   const body: any = { text: desc, prompt_influence: 0.4 };
   if (s.soundSeconds >= 0.5) body.duration_seconds = s.soundSeconds;
   // A busy answer is waited out, up to Wait out a provider that will not take
@@ -3122,37 +3423,7 @@ async function soundFor(userId: string | undefined, description: string, again?:
   const b64 = String(res.body || '');
   const bytes = fromBase64(b64);
   if (bytes.length < 64) return { error: 'ElevenLabs sent back an empty sound.' };
-  const old = again ? list.find((x) => x.id === again) : null;
-  if (old) {
-    try {
-      await spindle.userStorage.writeBinary('sounds/' + old.id, bytes, userId);
-      old.bytes = bytes.length;
-      old.mime = 'audio/mpeg';
-      old.added = Date.now();
-      await saveSounds(userId, list);
-    } catch (e: any) {
-      return { error: 'The new take could not be saved: ' + String((e && e.message) || e).slice(0, 200) };
-    }
-    return { id: old.id, base64: b64, mime: old.mime, name: old.name, made: true };
-  }
-  const entry: SoundEntry = {
-    id: 's' + newId(),
-    name: desc,
-    triggers: [],
-    source: 'made',
-    mime: 'audio/mpeg',
-    bytes: bytes.length,
-    added: Date.now(),
-    uses: 1,
-  };
-  try {
-    await spindle.userStorage.writeBinary('sounds/' + entry.id, bytes, userId);
-    list.push(entry);
-    await saveSounds(userId, list);
-  } catch (e: any) {
-    logWarn('could not keep a made sound: ' + String((e && e.message) || e));
-  }
-  return { id: entry.id, base64: b64, mime: entry.mime, name: entry.name, made: true };
+  return { bytes, b64 };
 }
 
 async function testKey(userId: string | undefined): Promise<{ ok: boolean; text: string }> {
@@ -3247,11 +3518,9 @@ async function onPanel(p: any, userId: string | undefined) {
       case 'load': {
         const settings = await loadSettings(userId);
         const sounds = await loadSounds(userId);
-        let hasKey = false;
-        try {
-          hasKey = !!(spindle.enclave && typeof spindle.enclave.has === 'function' && (await spindle.enclave.has(KEY_NAME, userId)));
-        } catch (_) {}
-        answer({ type: 'state', settings, sounds, hasKey, builtInPrompt: BUILT_IN_PROMPT, builtInNotes: ASK_NOTES, builtInEngineNotes: ENGINE_NOTES, builtInSkips: BUILT_IN_SKIPS, builtInQuestions: DECISION_QUESTIONS, version: VERSION, decisions: hasDecisions() });
+        const hasKey = await hasKeyFor(userId, KEY_NAME);
+        const hasFsKey = await hasKeyFor(userId, FS_KEY_NAME);
+        answer({ type: 'state', settings, sounds, hasKey, hasFsKey, builtInPrompt: BUILT_IN_PROMPT, builtInNotes: ASK_NOTES, builtInEngineNotes: ENGINE_NOTES, builtInSkips: BUILT_IN_SKIPS, builtInQuestions: DECISION_QUESTIONS, version: VERSION, decisions: hasDecisions() });
         return;
       }
       case 'save': {
@@ -3280,7 +3549,7 @@ async function onPanel(p: any, userId: string | undefined) {
         // From Now playing, a sound is named by its description instead.
         const e = id ? list.find((x) => x.id === id) : matchSound(list, cleanSound(p.description));
         if (!e) return answer({ type: 'sound', error: 'That sound is no longer in the library.' });
-        if (e.source !== 'made') return answer({ type: 'sound', error: 'Only a sound made by ElevenLabs can be made again. Upload a new file for one of yours.' });
+        if (e.source !== 'made' && e.source !== 'found') return answer({ type: 'sound', error: 'Only a sound made by ElevenLabs or found on Freesound can be swapped. Upload a new file for one of yours.' });
         const got = await soundFor(userId, e.name, e.id);
         answer(Object.assign({ type: 'sound' }, got));
         answer({ type: 'sounds', sounds: await loadSounds(userId) });
@@ -3294,7 +3563,7 @@ async function onPanel(p: any, userId: string | undefined) {
         if (e.source === 'link') return answer({ type: 'sound', id: e.id, url: e.url, name: e.name });
         try {
           const bytes = await spindle.userStorage.readBinary('sounds/' + e.id, userId);
-          return answer({ type: 'sound', id: e.id, base64: toBase64(bytes), mime: e.mime, name: e.name });
+          return answer({ type: 'sound', id: e.id, base64: toBase64(bytes), mime: e.mime, name: e.name, credit: e.credit });
         } catch (_) {
           return answer({ type: 'sound', error: 'The file for this sound could not be read.' });
         }
@@ -3464,30 +3733,36 @@ async function onPanel(p: any, userId: string | undefined) {
         answer({ type: 'sounds', sounds: list });
         return;
       }
+      // Two keys: ElevenLabs, for making sounds, and Freesound, for finding
+      // them. "which" says which one. Each is kept in the enclave and only
+      // sent to its own host.
       case 'key_save': {
+        const fs = p.which === 'freesound';
         const key = cleanKey(p.key);
-        if (!key) return answer({ type: 'key', hasKey: false, text: 'That does not look like an ElevenLabs key. Paste it again, with no spaces or line breaks.' });
+        if (!key) return answer({ type: 'key', which: fs ? 'freesound' : 'eleven', hasKey: false, text: 'That does not look like a' + (fs ? ' Freesound' : 'n ElevenLabs') + ' key. Paste it again, with no spaces or line breaks.' });
         try {
-          await spindle.enclave.put(KEY_NAME, key, userId);
+          await spindle.enclave.put(fs ? FS_KEY_NAME : KEY_NAME, key, userId);
         } catch (e: any) {
-          return answer({ type: 'key', hasKey: false, text: 'The key could not be saved: ' + String((e && e.message) || e).slice(0, 200) });
+          return answer({ type: 'key', which: fs ? 'freesound' : 'eleven', hasKey: false, text: 'The key could not be saved: ' + String((e && e.message) || e).slice(0, 200) });
         }
-        const t = await testKey(userId);
-        answer({ type: 'key', hasKey: true, ok: t.ok, text: t.text });
+        const t = fs ? await testFreesound(userId) : await testKey(userId);
+        answer({ type: 'key', which: fs ? 'freesound' : 'eleven', hasKey: true, ok: t.ok, text: t.text });
         return;
       }
       case 'key_forget': {
+        const fs = p.which === 'freesound';
         try {
-          await spindle.enclave.delete(KEY_NAME, userId);
+          await spindle.enclave.delete(fs ? FS_KEY_NAME : KEY_NAME, userId);
         } catch (e: any) {
-          return answer({ type: 'key', hasKey: true, text: 'The key could not be removed: ' + String((e && e.message) || e).slice(0, 200) });
+          return answer({ type: 'key', which: fs ? 'freesound' : 'eleven', hasKey: true, text: 'The key could not be removed: ' + String((e && e.message) || e).slice(0, 200) });
         }
-        answer({ type: 'key', hasKey: false, text: 'The key is removed.' });
+        answer({ type: 'key', which: fs ? 'freesound' : 'eleven', hasKey: false, text: 'The key is removed.' });
         return;
       }
       case 'key_test': {
-        const t = await testKey(userId);
-        answer({ type: 'key', hasKey: t.text !== 'No key is saved.', ok: t.ok, text: t.text });
+        const fs = p.which === 'freesound';
+        const t = fs ? await testFreesound(userId) : await testKey(userId);
+        answer({ type: 'key', which: fs ? 'freesound' : 'eleven', hasKey: t.text !== 'No key is saved.', ok: t.ok, text: t.text });
         return;
       }
       case 'list_connections': {
@@ -3534,6 +3809,37 @@ async function onPanel(p: any, userId: string | undefined) {
         answer({ type: 'check', part: 'decisions', ok, text });
         return;
       }
+      case 'reset_check': {
+        // Which chosen parts are already at their defaults, so Start again
+        // can say so and leave them out.
+        const parts: string[] = Array.isArray(p.parts) ? p.parts.filter((x: any) => RESET_PARTS.indexOf(x) >= 0) : [];
+        const s = await loadSettings(userId);
+        const fresh = cleanSettings({});
+        const NOT = ['cast', 'groups', 'prompt', 'promptRole', 'engineNoteRole', 'askNoteRole', 'askNotes', 'engineNotes', 'decisionQuestions', 'exportParts', 'importParts', 'resetParts', 'guideSeen'];
+        const strip = (x: any) => {
+          const o: any = {};
+          for (const k of Object.keys(x).sort()) if (NOT.indexOf(k) < 0) o[k] = x[k];
+          return JSON.stringify(o);
+        };
+        const empty = (o: any) => !o || !Object.keys(o).length;
+        const already: string[] = [];
+        for (const part of parts) {
+          let same = false;
+          if (part === 'settings') same = strip(s) === strip(fresh);
+          else if (part === 'prompt')
+            same = !s.prompt && empty(s.askNotes) && empty(s.engineNotes) && empty(s.decisionQuestions) &&
+              s.promptRole === fresh.promptRole && s.engineNoteRole === fresh.engineNoteRole && s.askNoteRole === fresh.askNoteRole;
+          else if (part === 'cast') same = JSON.stringify(s.cast) === JSON.stringify(fresh.cast) && !(s.groups || []).length;
+          else if (part === 'sounds') same = !(await loadSounds(userId)).length;
+          else if (part === 'audio') {
+            const kept = await readJson(SCRIPTS_FILE, userId);
+            same = !(await loadClips(userId)).length && !(Array.isArray(kept) && kept.length);
+          } else if (part === 'key') same = !(await hasKeyFor(userId, KEY_NAME)) && !(await hasKeyFor(userId, FS_KEY_NAME));
+          if (same) already.push(part);
+        }
+        answer({ type: 'reset_check', already });
+        return;
+      }
       case 'reset': {
         // Start again: each chosen part goes back to its default. With every
         // part chosen, everything Auto Foley keeps for this account is gone.
@@ -3576,18 +3882,18 @@ async function onPanel(p: any, userId: string | undefined) {
           } catch (_) {}
         }
         if (parts.indexOf('key') >= 0) {
-          try {
-            await spindle.enclave.delete(KEY_NAME, userId);
-          } catch (_) {
-            ok = false;
+          for (const name of [KEY_NAME, FS_KEY_NAME]) {
+            try {
+              if (await hasKeyFor(userId, name)) await spindle.enclave.delete(name, userId);
+            } catch (_) {
+              ok = false;
+            }
           }
         }
         delete scripts[userId || ''];
-        let hasKey = false;
-        try {
-          hasKey = !!(spindle.enclave && typeof spindle.enclave.has === 'function' && (await spindle.enclave.has(KEY_NAME, userId)));
-        } catch (_) {}
-        answer({ type: 'reset', ok, error: ok ? '' : 'Some of it could not be reset. The rest was.', settings: await loadSettings(userId), sounds: await loadSounds(userId), hasKey });
+        const hasKey = await hasKeyFor(userId, KEY_NAME);
+        const hasFsKey = await hasKeyFor(userId, FS_KEY_NAME);
+        answer({ type: 'reset', ok, error: ok ? '' : 'Some of it could not be reset. The rest was.', settings: await loadSettings(userId), sounds: await loadSounds(userId), hasKey, hasFsKey });
         return;
       }
       case 'notify': {

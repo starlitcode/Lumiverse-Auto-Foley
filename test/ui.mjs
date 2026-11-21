@@ -131,6 +131,8 @@ function answer(msg) {
     case 'list_connections': return reply({ type: 'connections', list: window.__llmList || [{ id: 'l1', name: 'Fast helper with a very long connection name for testing', model: 'maker/tiny-fast-model' }] });
     case 'list_decision_connections': return reply({ type: 'decision_connections', list: window.__decList || [{ id: 'd1', name: 'Quick', model: 'fast-judge', isDefault: true, hasKey: true }], state: 'ok' });
     case 'key_test': return reply({ type: 'key', hasKey: true, ok: true, text: 'The key works.' });
+    case 'reset_check': return reply({ type: 'reset_check', already: window.__already || [] });
+    case 'reset': return reply({ type: 'reset', ok: true, settings: window.__settings, sounds: window.__sounds, hasKey: true });
     case 'check_director': return reply({ type: 'check', ok: true, text: 'The Director answered.' });
     case 'check_decisions': return reply({ type: 'check', ok: true, text: 'Ready.' });
     // The kept audio, as the backend keeps it: by fingerprint.
@@ -188,7 +190,7 @@ window.__ctx = {
       const r = document.getElementById('drawer');
       return { root: r, setBadge() {}, activate() {}, destroy() { window.__tabDestroyed = true; }, onActivate() { return () => {}; } };
     },
-    showConfirm: async () => ({ confirmed: true }),
+    showConfirm: async () => { window.__asked = (window.__asked || 0) + 1; return { confirmed: true }; },
     showContextMenu: async (o) => { window.__menu = o; return { selectedKey: null }; },
     createFloatWidget: (o) => {
       // As Lumiverse draws it: a sized, placed surface, with the root the
@@ -1030,6 +1032,180 @@ if (section("listed once")) {
   check(twice(models, "eleven_v3") + twice(models, "Eleven v3") === 1 && models.some((o) => o.includes("Eleven v4")), "a person's Model: the connection's model is named in the first choice only (" + models.join(" | ") + ")");
   check(!errors.length, "no console errors. " + errors.slice(0, 2).join("; "));
   await context.close();
+  {
+    // The same, with every default picked by name.
+    const { context, page, errors } = await open(THEMES[0], SIZES[0]);
+    await page.evaluate(() => window.__teardown());
+    await page.evaluate(() => {
+      window.__llmList = [{ id: "l1", name: "Brisk", model: "maker/brisk-1", provider: "openai", isDefault: true }, { id: "l2", name: "Slowpoke", model: "maker/slow-2", provider: "openai" }];
+      window.__decList = [{ id: "d1", name: "Quick", model: "fast-judge", isDefault: true, hasKey: true }];
+      Object.assign(window.__settings, { decisionsOn: true, directorConnection: "l1", decisionConnection: "d1", ttsConnection: "t1" });
+      window.__settings.cast[0] = Object.assign({}, window.__settings.cast[0], { connection: "t1", voices: { t1: { voice: "", voiceName: "", model: "eleven_v3" } } });
+      const base = window.__fetch;
+      window.__fetch = async (url, init) => {
+        if (/\/tts-connections\/t1\/models/.test(String(url))) return new Response(JSON.stringify({ models: [{ id: "eleven_v3", label: "Eleven v3" }, { id: "eleven_v4", label: "Eleven v4" }], provider: "elevenlabs" }), { status: 200, headers: { "Content-Type": "application/json" } });
+        if (String(url).includes("/settings/voiceSettings")) return new Response("{}", { status: 404 });
+        return base(url, init);
+      };
+      document.getElementById("drawer").innerHTML = "";
+      window.__teardown = window.__setup(window.__ctx, { fetch: window.__fetch, Audio: window.__Audio });
+    });
+    await page.waitForTimeout(300);
+    const read = (words) => page.evaluate((w) => {
+      const l = Array.from(document.querySelectorAll(".af label")).find((x) => x.textContent.trim() === w);
+      const sel = l && (l.htmlFor ? document.getElementById(l.htmlFor) : l.closest(".af-col").querySelector("select"));
+      return sel ? { opts: Array.from(sel.options).map((o) => o.textContent), at: sel.selectedIndex } : null;
+    }, words);
+    const one = (r, name) => !!r && r.at === 0 && r.opts.filter((o) => o.includes(name)).length === 1 && !r.opts.some((o) => /gone/.test(o));
+    await page.click('.af-tab[data-tab="settings"]');
+    await page.waitForTimeout(400);
+    const tts = await read("TTS connection");
+    check(one(tts, "My ElevenLabs"), "picked by name, the TTS connection shows once, as the first choice (" + JSON.stringify(tts) + ")");
+    await page.click('.af-tab[data-tab="director"]');
+    await page.waitForTimeout(400);
+    const dir = await read("Which connection");
+    check(one(dir, "Brisk"), "picked by name, the Director's connection shows once, as the first choice (" + JSON.stringify(dir) + ")");
+    const dec = await read("Which Decision connection");
+    check(one(dec, "Quick") && dec.opts.length === 1, "the only Decision connection, picked by name, is one choice (" + JSON.stringify(dec) + ")");
+    await page.click('.af-tab[data-tab="cast"]');
+    await page.waitForTimeout(300);
+    await page.locator(".af-person-head").first().click();
+    await page.waitForTimeout(600);
+    const conn = await read("Connection");
+    check(one(conn, "My ElevenLabs"), "picked by name, a person's Connection shows Auto Foley's once (" + JSON.stringify(conn) + ")");
+    const model = await read("Model");
+    check(!!model && model.at === 0 && model.opts.filter((o) => /eleven_v3|Eleven v3/.test(o)).length === 1, "picked by name, a person's Model shows the connection's model once (" + JSON.stringify(model) + ")");
+    check(!errors.length, "no console errors. " + errors.slice(0, 2).join("; "));
+    await context.close();
+  }
+}
+
+if (section("erase name")) {
+  console.log("Erasing a person's name leaves no old letter behind");
+  for (const size of SIZES) {
+    const { context, page, errors } = await open(THEMES[0], size);
+    await page.click('.af-tab[data-tab="cast"]');
+    await page.waitForTimeout(300);
+    const got = await page.evaluate(async () => {
+      const people = Array.from(document.querySelectorAll(".af-person"));
+      for (const c of people) {
+        const head = c.querySelector(".af-person-head");
+        if (head.getAttribute("aria-expanded") !== "true") head.click();
+        await new Promise((r) => setTimeout(r, 400));
+        const label = Array.from(c.querySelectorAll("label")).find((x) => x.textContent.trim() === "Name");
+        if (!label) continue;
+        const input = label.htmlFor ? document.getElementById(label.htmlFor) : label.closest(".af-col").querySelector("input");
+        const was = c.querySelector(".af-person-name b").textContent;
+        input.focus();
+        for (let k = input.value.length; k >= 0; k--) {
+          input.value = input.value.slice(0, k);
+          input.dispatchEvent(new Event("input", { bubbles: true }));
+        }
+        await new Promise((r) => setTimeout(r, 50));
+        const empty = { name: c.querySelector(".af-person-name b").textContent, face: c.querySelector(".af-person-head .af-avatar").textContent };
+        input.value = "Wren";
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+        await new Promise((r) => setTimeout(r, 50));
+        const typed = { name: c.querySelector(".af-person-name b").textContent, face: c.querySelector(".af-person-head .af-avatar").textContent };
+        input.value = "";
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+        input.blur();
+        await new Promise((r) => setTimeout(r, 50));
+        const back = { name: c.querySelector(".af-person-name b").textContent, field: input.value };
+        return { was, empty, typed, back };
+      }
+      return null;
+    });
+    check(!!got && got.empty.name === "No name yet" && got.empty.face === "?", size.name + ": an empty name shows No name yet and ? (" + JSON.stringify(got && got.empty) + ")");
+    check(!!got && got.typed.name === "Wren" && got.typed.face === "W", size.name + ": a new name shows at once, with its own first letter");
+    check(!!got && got.back.name === "Wren" && got.back.field === "Wren", size.name + ": leaving the field empty puts the saved name back (" + JSON.stringify(got && got.back) + ")");
+    check(!errors.length, size.name + ": no page errors. " + errors.slice(0, 2).join(" | "));
+    await context.close();
+  }
+}
+
+if (section("already")) {
+  console.log("Pressing a button that would change nothing says so");
+  for (const size of SIZES) {
+    const { context, page, errors } = await open(THEMES[0], size);
+    const where = size.name;
+    await page.click('.af-tab[data-tab="director"]');
+    await page.waitForTimeout(400);
+    const prompt = await page.evaluate(async () => {
+      window.__asked = 0;
+      const b = Array.from(document.querySelectorAll(".af button")).find((x) => x.textContent.trim() === "Back to the built-in prompt");
+      b.click();
+      await new Promise((r) => setTimeout(r, 100));
+      const line = b.parentElement.querySelector(".af-note");
+      return { said: line ? line.textContent : "", asked: window.__asked };
+    });
+    check(prompt.asked === 0 && /already the built-in prompt\. Nothing changed\./.test(prompt.said), where + ": the built-in prompt says it is already in use, and asks nothing (" + JSON.stringify(prompt) + ")");
+    const note = await page.evaluate(async () => {
+      window.__asked = 0;
+      const f = document.querySelector("[data-af-engine-note]");
+      if (!f) return null;
+      const b = Array.from(f.querySelectorAll("button")).find((x) => x.textContent.trim() === "Back to built-in");
+      b.click();
+      await new Promise((r) => setTimeout(r, 100));
+      const line = f.querySelector("[data-af-already]");
+      const said = line ? line.textContent : "";
+      const ta = f.querySelector("textarea");
+      ta.value = ta.value + " More.";
+      ta.dispatchEvent(new Event("input", { bubbles: true }));
+      await new Promise((r) => setTimeout(r, 50));
+      return { said, asked: window.__asked, gone: !f.querySelector("[data-af-already]") };
+    });
+    check(!!note && note.asked === 0 && note.said === "This is already the built-in note. Nothing changed." && note.gone, where + ": an engine note says the same, and the line goes once the note is changed (" + JSON.stringify(note) + ")");
+    await page.click('.af-tab[data-tab="settings"]');
+    await page.waitForTimeout(400);
+    const reset = await page.evaluate(async () => {
+      window.__asked = 0;
+      window.__already = window.__settings.resetParts && window.__settings.resetParts.length ? window.__settings.resetParts.slice() : ["settings", "prompt", "cast", "sounds", "audio", "key"];
+      const b = Array.from(document.querySelectorAll(".af button")).find((x) => /^Reset (everything|the \d+ chosen)$/.test(x.textContent.trim()));
+      b.click();
+      await new Promise((r) => setTimeout(r, 300));
+      const st = Array.from(document.querySelectorAll(".af-status")).find((x) => /defaults/.test(x.textContent));
+      window.__already = [];
+      return { said: st ? st.textContent : "", kind: st ? st.dataset.kind : "?", asked: window.__asked };
+    });
+    check(reset.asked === 0 && /already at (its|their) defaults\. Nothing changed\./.test(reset.said) && reset.kind === "", where + ": Start again with nothing to reset says so, asks nothing, and is not shown as done (" + JSON.stringify(reset) + ")");
+    check(!errors.length, where + ": no page errors. " + errors.slice(0, 2).join(" | "));
+    await context.close();
+  }
+}
+
+if (section("decision line")) {
+  console.log("The Decision model's line can be changed, and its answers have a Log kind");
+  for (const size of SIZES) {
+    const { context, page, errors } = await open(THEMES[0], size);
+    await page.click('.af-tab[data-tab="director"]');
+    await page.waitForTimeout(400);
+    const got = await page.evaluate(async () => {
+      const row = document.querySelector("[data-af-sure]");
+      if (!row) return null;
+      const r = row.querySelector('input[type="range"]');
+      const before = row.textContent;
+      r.value = "70";
+      r.dispatchEvent(new Event("input", { bubbles: true }));
+      r.dispatchEvent(new Event("change", { bubbles: true }));
+      await new Promise((x) => setTimeout(x, 400));
+      const box = row.getBoundingClientRect();
+      return { before, after: row.textContent, saved: window.__settings.decisionSure, w: box.width, vw: document.documentElement.clientWidth, right: box.right };
+    });
+    check(!!got && /50%/.test(got.before) && /70%/.test(got.after) && got.saved === 70, size.name + ": How sure it must be shows 50% and saves a new value (" + JSON.stringify(got) + ")");
+    check(!!got && got.right <= got.vw + 0.5, size.name + ": the slider stays on screen");
+    await page.click('.af-tab[data-tab="stage"]');
+    await page.waitForTimeout(300);
+    const kind = await page.evaluate(async () => {
+      const fold = Array.from(document.querySelectorAll(".af-fold")).find((x) => /What the Log shows/.test(x.textContent));
+      if (fold && fold.getAttribute("aria-expanded") !== "true") fold.click();
+      await new Promise((x) => setTimeout(x, 400));
+      return Array.from(document.querySelectorAll(".af label, .af span")).some((x) => x.textContent.trim() === "What the Decision model answered");
+    });
+    check(kind, size.name + ": the Log has a switch for What the Decision model answered");
+    check(!errors.length, size.name + ": no page errors. " + errors.slice(0, 2).join(" | "));
+    await context.close();
+  }
 }
 
 if (section("switch rows")) {
