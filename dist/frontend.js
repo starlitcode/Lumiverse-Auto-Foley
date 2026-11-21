@@ -928,6 +928,9 @@ const DEFAULTS = {
     engines: {},
     engineNotes: {},
     folders: [],
+    skipOn: true,
+    skipPatterns: '',
+    speechMarks: 'auto',
     keepAudio: 100,
     applauseSound: '',
     applauseSeconds: 5,
@@ -998,6 +1001,7 @@ export function setup(ctx, overrides) {
     // The built-in notes sent with an ask made again, from the backend.
     let builtInNotes = {};
     let builtInEngineNotes = {};
+    let builtInSkips = '';
     let sounds = [];
     let hasKey = false;
     let hostHasDecisions = true;
@@ -5326,6 +5330,32 @@ export function setup(ctx, overrides) {
         page.appendChild(audienceCard());
         page.appendChild(lookCard());
         const r = card('Reading messages', 'Thinking a model writes in a message, such as a <think> block, is never read aloud. Neither is anything in square brackets, HTML or code.');
+        r.appendChild(select('How speech is marked', [
+            { id: 'auto', label: 'Quote marks (Auto)' },
+            { id: 'single', label: 'Quote marks, single quotes too' },
+            { id: 'plain', label: 'Plain text is speech, *asterisks* are actions' },
+        ], S.speechMarks || 'auto', (v) => set({ speechMarks: v }), 'Auto reads "double", “curly”, «guillemet», „low” and 「corner」 quotes, and a line that starts with a dash. Pick the plain style for stories written as *she waves* Hello.'));
+        r.appendChild(toggle('Leave out trackers and status blocks', 'On by default. Tables, status lines such as Time: 9:40 PM, lines that start with an emoji, folded blocks, and bars are not read. The patterns are below.', 'skipOn', undefined, () => {
+            const cur = S.skipPatterns || builtInSkips;
+            const said = el('<div class="af-col"></div>');
+            const f = area('Patterns to leave out', cur, (v) => {
+                const mine = v.trim() === builtInSkips.trim() ? '' : v;
+                set({ skipPatterns: mine });
+                checkSkips(v, said);
+            }, { rows: 7, cls: 'af-mono', help: 'One pattern on each line. Text that matches is not read. /pattern/flags works too.' });
+            f.setAttribute('data-af-skips', '');
+            const back = button('Use defaults', async () => {
+                if (!(await askSure('Use the default patterns', 'Your own patterns are replaced by the built-in ones. There is no undo.', 'Use defaults')))
+                    return;
+                set({ skipPatterns: '' });
+                const ta = f.querySelector('textarea');
+                ta.value = builtInSkips;
+                checkSkips(builtInSkips, said);
+            });
+            f.appendChild(back);
+            checkSkips(cur, said);
+            return [f, said];
+        }));
         r.appendChild(area('Extra thinking tag names', (S.extraThinkTags || []).join('\n'), (v) => set({ extraThinkTags: v.split('\n').map((x) => x.trim()).filter(Boolean).slice(0, 20) }), {
             placeholder: 'musing',
             help: 'More tag names that hold thinking, one per line, without the angle brackets. Text inside these tags is not read aloud. The same setting as in Auto Retry and Auto Refine.',
@@ -5707,6 +5737,19 @@ export function setup(ctx, overrides) {
         }));
         return c;
     }
+    // Says which lines of the pattern box cannot be used.
+    let skipAsk = 0;
+    function checkSkips(text, box) {
+        const ask = ++skipAsk;
+        rpc({ type: 'skip_check', text }, 15000).then((r) => {
+            if (ask !== skipAsk || !box.isConnected)
+                return;
+            box.innerHTML = '';
+            const bad = (r && Array.isArray(r.bad) ? r.bad : []).slice(0, 5);
+            for (const b of bad)
+                box.appendChild(notice('warn', 'This pattern is not used: ' + b + '.'));
+        }, () => { });
+    }
     // Asks before something is put back or deleted. Lumiverse's own dialog is
     // used, and the browser's when that is missing.
     async function askSure(title, message, confirmLabel, danger) {
@@ -5987,6 +6030,7 @@ export function setup(ctx, overrides) {
         builtInPrompt = String(r.builtInPrompt || '');
         builtInNotes = r.builtInNotes && typeof r.builtInNotes === 'object' ? r.builtInNotes : {};
         builtInEngineNotes = r.builtInEngineNotes && typeof r.builtInEngineNotes === 'object' ? r.builtInEngineNotes : {};
+        builtInSkips = typeof r.builtInSkips === 'string' ? r.builtInSkips : '';
         hostHasDecisions = r.decisions !== false;
         backendVersion = String(r.version || '');
         keepLocal();

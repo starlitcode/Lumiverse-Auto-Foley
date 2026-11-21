@@ -19,7 +19,7 @@
 ## What happens when you press the button
 
 1. Auto Foley reads the message from Lumiverse.
-2. It splits the message into lines. Text in quotes is speech. The rest is narration.
+2. It splits the message into lines. Text in quotes is speech. The rest is narration. See [How speech is marked](#how-speech-is-marked).
 3. If the Decision model is on, it picks who says each quoted line.
 4. The Director marks each line with voice tags and sounds.
 5. Auto Foley checks that no words changed. A line with changed words is read as written.
@@ -56,6 +56,36 @@ Thinking a model writes in the message is never read aloud. The same nine format
 - **Anything in square brackets**, such as an out-of-character note. Left in, the voice would read it as a voice tag.
 - **HTML, code blocks and comments.**
 - **Text in double parentheses**, such as `((brb))`.
+
+### Trackers and status blocks
+
+**Leave out trackers and status blocks**, in the Settings tab, is on by default. These are not read:
+
+| What | Example |
+| --- | --- |
+| A table | `\| Mood \| tired \|` |
+| A status line: a short label, a colon, and a number | `Time: 11:20 PM` |
+| A line that starts with an emoji | `📍 The east dock` |
+| A folded block | `<details>` … `</details>` |
+| Text in lenticular brackets | `【Day 4】` |
+| A line that is only data in braces or square brackets | `{"hp": 30}` |
+| A bar of block characters | `Stamina ▓▓▓░░` |
+
+- Each one is a pattern in the box under the switch. Change them, or add your own, one on each line.
+- A pattern can be written as `/pattern/flags`. A pattern that could stall Auto Foley, or that matches nothing, is not used, and the box says why.
+- **Use defaults** puts the built-in patterns back. It asks first.
+
+## How speech is marked
+
+**How speech is marked**, in the Settings tab, says which text is said out loud.
+
+| Choice | Speech |
+| --- | --- |
+| **Quote marks (Auto)**, the default | `"double"`, `“curly”`, `«guillemets»`, `„low quotes“`, `「corner brackets」`, and a line that starts with a dash |
+| **Quote marks, single quotes too** | All of the above, and `'single quotes'`. An apostrophe, as in `don't`, does not count. |
+| **Plain text is speech, \*asterisks\* are actions** | Everything outside asterisks. For stories written as `*waves* Hello there.` |
+
+A line that starts with a dash is speech up to the next dash, and the narration after that dash runs to the next one or to the end of the line.
 
 ## Playing on its own
 

@@ -182,6 +182,47 @@ describe("reading a message", () => {
   });
 });
 
+describe("writing styles and text not meant to be heard", () => {
+  const h = host();
+  const split = (text: string, o: any = {}) => h.box.splitSegments(text, o).map((g: any) => g.kind[0] + ":" + g.text);
+  const skips = () => h.box.skipsFor("").list;
+
+  test("guillemets, low quotes and corner brackets are speech", () => {
+    expect(split("Brin leaned in. «Not here.» He waited.")).toEqual(["n:Brin leaned in.", "s:Not here.", "n:He waited."]);
+    expect(split("Sie nickte. \u201EGleich.\u201C")).toEqual(["n:Sie nickte.", "s:Gleich."]);
+    expect(split("\u300C\u5F85\u3063\u3066\u300D\u3068\u8A00\u3063\u305F\u3002")).toEqual(["s:\u5F85\u3063\u3066", "n:\u3068\u8A00\u3063\u305F\u3002"]);
+  });
+
+  test("a line that starts with a dash is speech, up to the next dash", () => {
+    expect(split("\u2014 Close the gate, \u2014 said Tova. \u2014 Now.")).toEqual(["s:Close the gate,", "n:said Tova.", "s:Now."]);
+  });
+
+  test("single quotes count only when picked, and an apostrophe opens nothing", () => {
+    expect(split("Tova's hands shook. 'Leave it,' she said.", { marks: "single" })).toEqual(["n:Tova's hands shook.", "s:Leave it,", "n:she said."]);
+    expect(split("Tova's hands shook. 'Leave it,' she said.")).toEqual(["n:Tova's hands shook. 'Leave it,' she said."]);
+  });
+
+  test("plain text is speech and *asterisks* are actions, when picked", () => {
+    expect(split("*shrugs and turns away* Fine by me. *pauses* Mostly.", { marks: "plain" })).toEqual(["n:shrugs and turns away", "s:Fine by me.", "n:pauses", "s:Mostly."]);
+  });
+
+  test("trackers, status lines and bars are left out", () => {
+    const text = 'Brin set the lamp down. "Night shift again."\n\nTime: 11:20 PM\n| Mood | tired |\n📍 The east dock\nStamina ▓▓▓░░\n【Day 4】\n<details><summary>Notes</summary>Owes a favor.</details>';
+    expect(split(text, { skips: skips() })).toEqual(["n:Brin set the lamp down.", "s:Night shift again."]);
+  });
+
+  test("a narration line with a colon and no number stays", () => {
+    expect(split("The sign read: closed for the season.", { skips: skips() })).toEqual(["n:The sign read: closed for the season."]);
+  });
+
+  test("a pattern that would stall or match everywhere is refused, with why", () => {
+    const got = h.box.makePatterns("(a+)+b\n^\n[unclosed\nstatus: \\d+");
+    expect(got.list.length).toBe(1);
+    expect(got.bad.length).toBe(3);
+    expect(got.bad.join(" ")).toContain("repeat inside a repeat");
+  });
+});
+
 describe("the words never change", () => {
   const h = host();
   test("tags, capitals, ellipses and dashes are allowed", () => {

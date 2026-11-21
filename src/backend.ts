@@ -138,6 +138,13 @@ interface Settings {
   autoplayDelay: number;
   // More tag names that hold thinking, one per entry, such as "musing".
   extraThinkTags: string[];
+  // Leave out trackers, status blocks and other text not meant to be heard.
+  skipOn: boolean;
+  // The patterns for it, one per line. Empty uses the built-in ones.
+  skipPatterns: string;
+  // How speech is marked in the story: auto, single quotes too, or plain
+  // text as speech with *asterisks* for actions.
+  speechMarks: string;
   // Also write each Log line to the browser's developer console.
   debugConsole: boolean;
   // The engine a connection runs, by connection id, when it is said outright
@@ -191,6 +198,9 @@ const DEFAULT_SETTINGS: Settings = {
   engines: {},
   engineNotes: {},
   keepAudio: 100,
+  skipOn: true,
+  skipPatterns: '',
+  speechMarks: 'auto',
   thinkingMode: 'off',
   thinkingEffort: 'low',
   samplers: {},
@@ -447,6 +457,9 @@ function cleanSettings(raw: any): Settings {
     debugConsole: bool(r.debugConsole, d.debugConsole),
     engines: cleanEngineChoices(r.engines),
     engineNotes: cleanEngineNotes(r.engineNotes),
+    skipOn: bool(r.skipOn, d.skipOn),
+    skipPatterns: str(r.skipPatterns, 8000),
+    speechMarks: pick(r.speechMarks, ['auto', 'single', 'plain'] as const, 'auto'),
     keepAudio: KEEP_AUDIO_CHOICES.indexOf(Number(r.keepAudio)) >= 0 ? Number(r.keepAudio) : d.keepAudio,
     thinkingMode: pick(r.thinkingMode, ['off', 'inherit', 'custom'] as const, 'off'),
     thinkingEffort: pick(r.thinkingEffort, EFFORTS, 'low'),
@@ -638,9 +651,12 @@ function stripThinking(text: string, extra?: string[], bound?: ThinkPair[]): str
 
 // What a message holds that is not meant to be heard. Square brackets go too:
 // left in, ElevenLabs reads them as voice tags.
-function cleanForVoice(raw: string, extra?: string[], bound?: ThinkPair[]): string {
+function cleanForVoice(raw: string, extra?: string[], bound?: ThinkPair[], skips?: RegExp[]): string {
   let t = String(raw == null ? '' : raw);
   t = stripThinking(t, extra, bound);
+  // The reader's patterns run on the text as written, before HTML is taken
+  // out, so a pattern can match a whole block such as <details>.
+  if (skips && skips.length) t = leaveOut(t, skips);
   t = t.replace(/<!--[\s\S]*?-->/g, ' ');
   t = t.replace(/```[\s\S]*?```/g, ' ');
   t = t.replace(/<(style|script)\b[\s\S]*?<\/\1\s*>/gi, ' ');
@@ -693,37 +709,267 @@ const MUSIC_NOTES = /[\u266A\u266B\u266C\u{1F3B5}\u{1F3B6}]/gu;
 // Splits a message into lines in the order they are read. Text in straight
 // or curly double quotes is speech. Everything else is narration, including
 // *asterisk actions*. A paragraph break ends a narration line.
-function splitSegments(raw: string, extra?: string[], bound?: ThinkPair[]): Segment[] {
-  const t = cleanForVoice(raw, extra, bound);
+// ---- Text that is not meant to be heard ----
+// Built-in patterns for trackers, status blocks and other parts of a message
+// that are read with the eyes. Each is one line of the box in the Settings
+// tab, where they can be changed.
+const BUILT_IN_SKIPS = [
+  // A table, one row per line, such as | HP | 30/40 |
+  '^[ \\t]*\\|.*\\|[ \\t]*$',
+  // A folded block, such as <details><summary>Stats</summary>...</details>
+  '<details\\b[\\s\\S]*?</details>',
+  // A status line: a short label, a colon, and a value with a number in it,
+  // such as "Time: 9:40 PM" or "Health: 3 of 5", with no quote marks.
+  '^[ \\t]*[-*•]?[ \\t]*[\\p{L}][\\p{L} ]{0,24}:[ \\t]*[^"“”«»\\n]*\\d[^"“”«»\\n]*$',
+  // A line that starts with an emoji, such as a location or mood marker.
+  '^[ \\t]*\\p{Extended_Pictographic}.*$',
+  // Text in lenticular brackets, such as 【Day 2】
+  '【[^】\\n]*】',
+  // A line that is only a block of data in braces or square brackets.
+  '^[ \\t]*[{\\[].*[}\\]][ \\t]*$',
+  // A bar drawn with block characters, such as ▓▓▓░░
+  '^.*[█▓▒░■□]{3,}.*$',
+].join('\n');
+
+// One line of a pattern box as a pattern. The same reader as Auto Refine's:
+// written as /pattern/flags it takes those flags, plus g. A leading (?i),
+// (?m) or (?s) is read as that flag. u is added where the pattern allows it.
+function readPattern(src: string, flags: string): RegExp {
+  let body = src;
+  let use = flags;
+  const slash = /^\/([\s\S]+)\/([a-z]*)$/.exec(src);
+  if (slash) {
+    if (!/^[dgimsuy]*$/.test(slash[2])) throw new Error('unknown flag in /' + slash[2]);
+    body = slash[1];
+    use = slash[2].indexOf('g') < 0 ? slash[2] + 'g' : slash[2];
+  }
+  const inline = /^\(\?([a-z]+)\)/.exec(body);
+  if (inline) {
+    if (!/^[ims]+$/.test(inline[1])) throw new Error('(?' + inline[1] + ') is not a flag this can read');
+    body = body.slice(inline[0].length);
+    for (const f of inline[1]) if (use.indexOf(f) < 0) use += f;
+  }
+  if (use.indexOf('u') < 0) {
+    try {
+      return new RegExp(body, use + 'u');
+    } catch (_) {}
+  }
+  return new RegExp(body, use);
+}
+
+// Whether a pattern repeats a group that repeats something inside it, such as
+// (a+)+. On text that almost matches, that shape tries every way of splitting
+// the text, and stops the backend for every account while it does. It is
+// refused when it is read.
+function repeatsARepeat(src: string): boolean {
+  const repeatAt = (i: number): boolean => {
+    const c = src[i];
+    if (c === '+' || c === '*') return true;
+    if (c !== '{') return false;
+    const close = src.indexOf('}', i);
+    return close > i && src.slice(i, close).indexOf(',') >= 0;
+  };
+  const open: boolean[] = [];
+  let inClass = false;
+  for (let i = 0; i < src.length; i++) {
+    const c = src[i];
+    if (c === '\\') {
+      i++;
+      continue;
+    }
+    if (inClass) {
+      if (c === ']') inClass = false;
+      continue;
+    }
+    if (c === '[') inClass = true;
+    else if (c === '(') open.push(false);
+    else if (c === ')') {
+      const inner = open.pop();
+      if (inner && repeatAt(i + 1)) return true;
+      if (inner && open.length) open[open.length - 1] = true;
+    } else if (repeatAt(i) && open.length && src[i - 1] !== '(') open[open.length - 1] = true;
+  }
+  return false;
+}
+
+const SKIP_MAX = 40;
+// The patterns in a box, and the lines that could not be used, with why.
+function makePatterns(raw: string): { list: RegExp[]; bad: string[] } {
+  const list: RegExp[] = [];
+  const bad: string[] = [];
+  for (const line of String(raw == null ? '' : raw).split(/\n/)) {
+    const src = line.trim();
+    if (!src) continue;
+    if (list.length >= SKIP_MAX) break;
+    if (src.length > 400) {
+      bad.push(src.slice(0, 40) + ' (too long)');
+      continue;
+    }
+    if (repeatsARepeat(src)) {
+      bad.push(src.slice(0, 40) + ' (a repeat inside a repeat, which can stop Auto Foley for a second on each message)');
+      continue;
+    }
+    let re: RegExp;
+    try {
+      re = readPattern(src, 'gim');
+    } catch (e: any) {
+      bad.push(src.slice(0, 40) + ' (' + ((e && e.message) || 'not a pattern') + ')');
+      continue;
+    }
+    re.lastIndex = 0;
+    const hit = re.exec('');
+    if (hit && hit[0] === '') {
+      bad.push(src.slice(0, 40) + ' (matches nothing, so it would match everywhere)');
+      continue;
+    }
+    re.lastIndex = 0;
+    list.push(re);
+  }
+  return { list, bad };
+}
+
+const skipCache: Record<string, { list: RegExp[]; bad: string[] }> = {};
+function skipsFor(raw: string): { list: RegExp[]; bad: string[] } {
+  const key = raw || BUILT_IN_SKIPS;
+  if (!skipCache[key]) skipCache[key] = makePatterns(key);
+  return skipCache[key];
+}
+
+function leaveOut(text: string, patterns: RegExp[]): string {
+  let t = text;
+  for (const re of patterns) {
+    re.lastIndex = 0;
+    t = t.replace(re, ' ');
+  }
+  return t;
+}
+
+// ---- Where speech starts and ends ----
+// Each opening mark, and the marks that close it. Auto reads double quotes,
+// curly quotes, guillemets, low quotes and corner brackets.
+const OPENERS: Record<string, string> = {
+  '"': '"',
+  '“': '”"',
+  '«': '»',
+  '»': '«',
+  '„': '“”',
+  '「': '」',
+  '『': '』',
+};
+const SINGLE_OPENERS: Record<string, string> = { "'": "'", '‘': '’' };
+// A dash at the start of a line opens speech in some languages' style:
+//   (dash) Come here, (dash) she said.
+const DASHES = '\u2014\u2015';
+const LETTER = /[\p{L}\p{N}]/u;
+
+interface SplitOptions {
+  extra?: string[];
+  bound?: ThinkPair[];
+  skips?: RegExp[];
+  marks?: string;
+}
+
+// Splits a message into lines in the order they are read. Text in speech
+// marks is speech. Everything else is narration, including *asterisk
+// actions*. A paragraph break ends a narration line. With marks "plain",
+// text outside *asterisks* is speech, for a story written that way.
+function splitSegments(raw: string, extra?: string[] | SplitOptions, bound?: ThinkPair[]): Segment[] {
+  const o: SplitOptions = Array.isArray(extra) || extra === undefined ? { extra: extra as string[] | undefined, bound } : extra;
+  const t = cleanForVoice(raw, o.extra, o.bound, o.skips);
+  const marks = o.marks || 'auto';
   const parts: { kind: SegKind; text: string }[] = [];
   let buf = '';
-  let inQuote = false;
-  let closer = '"';
   const flush = (kind: SegKind) => {
     const text = buf.replace(/\*/g, ' ').replace(/[ \t]+/g, ' ').trim();
     buf = '';
     if (text && /[\p{L}\p{N}]/u.test(text)) parts.push({ kind, text });
   };
-  for (let k = 0; k < t.length; k++) {
-    const ch = t[k];
-    if (!inQuote && (ch === '"' || ch === '“')) {
-      flush('narration');
-      inQuote = true;
-      closer = ch === '“' ? '”' : '"';
-      continue;
+  if (marks === 'plain') {
+    // *Actions* are narration. Everything else is said out loud.
+    let inStar = false;
+    for (let k = 0; k < t.length; k++) {
+      const ch = t[k];
+      if (ch === '*') {
+        flush(inStar ? 'narration' : 'speech');
+        inStar = !inStar;
+        continue;
+      }
+      if (ch === '\n' && t[k + 1] === '\n') {
+        flush(inStar ? 'narration' : 'speech');
+        continue;
+      }
+      buf += ch === '\n' ? ' ' : ch;
     }
-    if (inQuote && (ch === closer || (closer === '”' && ch === '"'))) {
-      flush('speech');
-      inQuote = false;
-      continue;
+    flush(inStar ? 'narration' : 'speech');
+  } else {
+    const openers: Record<string, string> = marks === 'single' ? Object.assign({}, OPENERS, SINGLE_OPENERS) : OPENERS;
+    let closers = '';
+    let dashLine = false;
+    for (let k = 0; k < t.length; k++) {
+      const ch = t[k];
+      const prev = k > 0 ? t[k - 1] : '';
+      const next = k + 1 < t.length ? t[k + 1] : '';
+      const lineStart = k === 0 || prev === '\n';
+      if (!closers && !dashLine) {
+        if (lineStart && DASHES.indexOf(ch) >= 0) {
+          flush('narration');
+          dashLine = true;
+          continue;
+        }
+        if (openers[ch] !== undefined) {
+          // A single quote opens only where a word does not go on before it,
+          // so the apostrophe in "don't" opens nothing.
+          if ((ch === "'" || ch === '‘') && LETTER.test(prev)) {
+            buf += ch;
+            continue;
+          }
+          // » opens only in the reversed style, and « is more common.
+          if (ch === '»' && !/[«]/.test(t.slice(k + 1, k + 400))) {
+            buf += ch;
+            continue;
+          }
+          flush('narration');
+          closers = openers[ch];
+          continue;
+        }
+      } else if (closers) {
+        if (closers.indexOf(ch) >= 0) {
+          if ((ch === "'" || ch === '’') && LETTER.test(next)) {
+            buf += ch;
+            continue;
+          }
+          flush('speech');
+          closers = '';
+          continue;
+        }
+      } else if (dashLine) {
+        // A dash with a space before it ends what is said, and the narration
+        // after it runs to the next dash or the end of the line.
+        if (DASHES.indexOf(ch) >= 0 && /\s/.test(prev)) {
+          flush('speech');
+          dashLine = false;
+          let end = k + 1;
+          while (end < t.length && t[end] !== '\n' && DASHES.indexOf(t[end]) < 0) end++;
+          buf = t.slice(k + 1, end);
+          flush('narration');
+          if (end < t.length && DASHES.indexOf(t[end]) >= 0) dashLine = true;
+          k = end;
+          continue;
+        }
+        if (ch === '\n') {
+          flush('speech');
+          dashLine = false;
+          continue;
+        }
+      }
+      if (!closers && !dashLine && ch === '\n' && next === '\n') {
+        flush('narration');
+        continue;
+      }
+      buf += ch === '\n' ? ' ' : ch;
     }
-    if (!inQuote && ch === '\n' && t[k + 1] === '\n') {
-      flush('narration');
-      continue;
-    }
-    buf += ch === '\n' ? ' ' : ch;
+    flush(closers || dashLine ? 'speech' : 'narration');
   }
-  flush(inQuote ? 'speech' : 'narration');
   const segs: Segment[] = [];
   for (const p of parts) {
     // A music note marks a line as sung. The note itself is not read.
@@ -1976,7 +2222,7 @@ function settingsSig(s: Settings): string {
     JSON.stringify([
       s.directorOn, s.directorConnection, s.strength, s.tagsOn, s.breathsOn, s.soundsOn, s.soundStyle, s.narration,
       s.intimateOn, s.findSpeakers, s.bigMoments, s.prompt, s.decisionsOn, s.decisionConnection, s.extraThinkTags,
-      s.thinkingMode, s.thinkingEffort, s.samplers, s.engineNotes,
+      s.thinkingMode, s.thinkingEffort, s.samplers, s.engineNotes, s.skipOn, s.skipPatterns, s.speechMarks,
       s.cast.map((c) => [c.name, c.aliases, c.note, c.muted]),
     ]),
   );
@@ -2209,7 +2455,8 @@ async function direct(userId: string | undefined, p: any): Promise<Script> {
     const kept = keptScript(uid, key);
     if (kept) return Object.assign({}, kept, { added: [], log: kept.log.concat('Played from the copy directed before.') });
   }
-  const segs = splitSegments(text, s.extraThinkTags, await boundPairs(userId));
+  const skip = s.skipOn ? skipsFor(s.skipPatterns) : { list: [], bad: [] };
+  const segs = splitSegments(text, { extra: s.extraThinkTags, bound: await boundPairs(userId), skips: skip.list, marks: s.speechMarks });
   const script: Script = {
     key, messageId, author, lines: [], log: [], directed: false, added: authorAdded ? [author] : [], inScene: [], isUser, model: '', cost: 0,
   };
@@ -2736,7 +2983,7 @@ async function onPanel(p: any, userId: string | undefined) {
         try {
           hasKey = !!(spindle.enclave && typeof spindle.enclave.has === 'function' && (await spindle.enclave.has(KEY_NAME, userId)));
         } catch (_) {}
-        answer({ type: 'state', settings, sounds, hasKey, builtInPrompt: BUILT_IN_PROMPT, builtInNotes: ASK_NOTES, builtInEngineNotes: ENGINE_NOTES, version: VERSION, decisions: hasDecisions() });
+        answer({ type: 'state', settings, sounds, hasKey, builtInPrompt: BUILT_IN_PROMPT, builtInNotes: ASK_NOTES, builtInEngineNotes: ENGINE_NOTES, builtInSkips: BUILT_IN_SKIPS, version: VERSION, decisions: hasDecisions() });
         return;
       }
       case 'save': {
@@ -2769,6 +3016,11 @@ async function onPanel(p: any, userId: string | undefined) {
         } catch (_) {
           return answer({ type: 'sound', error: 'The file for this sound could not be read.' });
         }
+      }
+      case 'skip_check': {
+        // The lines of a pattern box that cannot be used, and why.
+        const got = makePatterns(str(p.text, 8000) || BUILT_IN_SKIPS);
+        return answer({ type: 'skip_check', bad: got.bad, count: got.list.length });
       }
       case 'clip_get': {
         const sig = str(p.sig, 40);

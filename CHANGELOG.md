@@ -30,5 +30,7 @@
 - **A description for every setting**, behind a ? button beside it.
 - **The look.** A pattern behind the panel and how solid the boxes are, the same as Auto Refine's. The tab bar stays at the top while you scroll.
 - **Expand** for every long text box, and **Clear the log** on the Stage tab.
+- **Leave out trackers and status blocks.** Tables, status lines, emoji markers, folded blocks and bars are not read. The patterns can be changed in the Settings tab, with **Use defaults**.
+- **How speech is marked.** Guillemets, low quotes, corner brackets and dash dialogue are read as speech, with single quotes, or plain text with *asterisk* actions, as choices.
 - **Cast folders.** Sort the cast on the Cast tab into folders you name, open and close.
 - **A floating player.** A round button over the chat opens a small player, with the line being spoken, a strip of every part of the message, the volumes, quick switches, and who is voiced.

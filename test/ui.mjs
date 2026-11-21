@@ -124,7 +124,7 @@ window.__sounds = [
 function answer(msg) {
   const reply = (m) => setTimeout(() => backendFns.forEach((fn) => fn(Object.assign({ requestId: msg.requestId }, m))), 5);
   switch (msg.type) {
-    case 'load': return reply({ type: 'state', settings: window.__settings, sounds: window.__sounds, hasKey: true, builtInPrompt: '<the_director>\\nYou direct.\\n</the_director>', version: '0', decisions: true });
+    case 'load': return reply({ type: 'state', settings: window.__settings, sounds: window.__sounds, hasKey: true, builtInPrompt: '<the_director>\\nYou direct.\\n</the_director>', builtInSkips: '^[ \\\\t]*\\\\|.*\\\\|[ \\\\t]*$\\n【[^】\\\\n]*】', version: '0', decisions: true });
     case 'save': window.__settings = msg.settings; return reply({ type: 'saved', ok: true, settings: msg.settings });
     case 'direct': return reply({ type: 'script', script: SCRIPT });
     case 'sound': return reply({ type: 'sound', base64: 'AAAA', mime: 'audio/mpeg' });
@@ -134,6 +134,7 @@ function answer(msg) {
     case 'check_director': return reply({ type: 'check', ok: true, text: 'The Director answered.' });
     case 'check_decisions': return reply({ type: 'check', ok: true, text: 'Ready.' });
     // The kept audio, as the backend keeps it: by fingerprint.
+    case 'skip_check': return reply({ type: 'skip_check', bad: /\(a\+\)\+/.test(msg.text) ? ['(a+)+ (a repeat inside a repeat)'] : [], count: 2 });
     case 'clip_get': { const c = (window.__clips || {})[msg.sig]; return reply(c ? { type: 'clip', found: true, base64: c.base64, mime: c.mime } : { type: 'clip', found: false }); }
     case 'clip_put': window.__clips = Object.assign(window.__clips || {}, { [msg.sig]: { base64: msg.base64, mime: msg.mime } }); return reply({ type: 'clip_kept', ok: true });
     case 'clips_state': { const c = window.__clips || {}; return reply({ type: 'clips_state', count: Object.keys(c).length, bytes: Object.values(c).reduce((n, x) => n + x.base64.length * 0.75, 0) }); }
@@ -781,6 +782,28 @@ if (section("folders")) {
     await page.waitForTimeout(300);
     check((await page.locator(".af-folder").count()) === 0 && (await page.locator(".af-page > .af-person").count()) >= 4, where + ": deleting the folder keeps its people in the cast");
     check(!errors.length, where + ": no console errors. " + errors.slice(0, 2).join("; "));
+    await context.close();
+  }
+}
+
+if (section("patterns")) {
+  console.log("Patterns to leave out");
+  for (const size of SIZES) {
+    const { context, page, errors } = await open(THEMES[0], size);
+    await page.click('.af-tab[data-tab="settings"]');
+    await page.waitForTimeout(250);
+    const ta = page.locator("[data-af-skips] textarea");
+    check((await ta.inputValue()).includes("【"), size.name + ": the built-in patterns show in the box");
+    await ta.fill("(a+)+");
+    await page.waitForTimeout(250);
+    check((await page.locator('.af-warn', { hasText: "This pattern is not used" }).count()) === 1, size.name + ": a pattern that cannot be used says why");
+    await page.locator('[data-af-skips] .af-btn', { hasText: "Use defaults" }).click();
+    // Settings are saved to the account a moment after the last change.
+    await page.waitForTimeout(800);
+    check((await ta.inputValue()).includes("【") && (await page.evaluate(() => window.__settings.skipPatterns)) === "", size.name + ": Use defaults puts the built-in patterns back");
+    const m = await page.evaluate(MEASURE, size.touch);
+    check(!m.overflow.length, size.name + ": nothing runs off the side. " + m.overflow.slice(0, 2).join("; "));
+    check(!errors.length, size.name + ": no console errors. " + errors.slice(0, 2).join("; "));
     await context.close();
   }
 }
