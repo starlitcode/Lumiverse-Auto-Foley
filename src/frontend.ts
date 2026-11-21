@@ -952,6 +952,12 @@ interface Line {
 }
 
 interface Script {
+  // Tokens the Director was sent and wrote back for this message, and
+  // whether they were counted or guessed from the length.
+  sent?: number;
+  back?: number;
+  counted?: boolean;
+  cost?: number;
   key: string;
   messageId: string;
   author: string;
@@ -998,6 +1004,8 @@ const DEFAULTS: any = {
   engineNotes: {},
   groups: [],
   promptRole: 'system',
+  engineNoteRole: 'rules',
+  askNoteRole: 'user',
   decisionQuestions: {},
   soundCheck: true,
   skipOn: true,
@@ -4052,7 +4060,8 @@ export function setup(ctx: Ctx, overrides?: any) {
         '<div class="af-now-text"><div class="af-now-title" data-af="title"></div><div class="af-now-sub" data-af="sub"></div></div></div>' +
         '<div class="af-theater" data-af="theater"><div class="af-theater-who" data-af="who"></div><div class="af-theater-line" data-af="line"></div><div class="af-theater-cue" data-af="cue"></div></div>' +
         '<div class="af-parts" data-af="parts" role="group" aria-label="The parts of the message"></div>' +
-        '<div class="af-scene" data-af="scene"></div>',
+        '<div class="af-scene" data-af="scene"></div>' +
+        '<p class="af-note" data-af="used" hidden></p>',
     );
     // A new take of the part playing, or of the whole message.
     const againRow = el('<div class="af-row" data-af="againrow"></div>');
@@ -4244,6 +4253,14 @@ export function setup(ctx: Ctx, overrides?: any) {
     (q('again') as HTMLButtonElement).disabled = !cur || cur.kind === 'applause';
     (q('again').lastElementChild as HTMLElement).textContent = cur && cur.kind === 'sound' ? 'Make this sound again' : 'Make this line again';
     paintParts(q('parts'), script);
+    const used = q('used');
+    const sc0 = currentScript();
+    const n = sc0 ? Number(sc0.sent) || 0 : 0;
+    used.hidden = !n;
+    if (n) {
+      const word = (x: number) => (sc0!.counted === false ? 'about ' : '') + x.toLocaleString();
+      used.textContent = 'The Director read ' + word(n) + ' tokens for this message and wrote ' + word(Number(sc0!.back) || 0) + '.' + (Number(sc0!.cost) > 0 ? ' It cost ' + money(Number(sc0!.cost)) + '.' : '');
+    }
     stageRefs.retryRow.hidden = !(lastFailed && !show && !busyMessage);
     const title = q('title');
     const sub = q('sub');
@@ -4270,6 +4287,13 @@ export function setup(ctx: Ctx, overrides?: any) {
       title.textContent = script ? (script.author ? script.author + '’s message' : 'This message') : 'Nothing playing';
       sub.textContent = phase || (script ? 'Ready. Press Play.' : chatInfo.kind === 'none' ? 'Open a chat, then press the boom microphone on a message.' : 'Press the boom microphone on a message.');
     }
+  }
+
+  // A cost with no currency symbol, since nothing here knows the currency.
+  // Two places from one up, two significant figures below one.
+  function money(n: number): string {
+    if (!Number.isFinite(n) || n <= 0) return '0';
+    return n >= 1 ? n.toFixed(2) : String(Number(n.toPrecision(2)));
   }
 
   // One mark for each part of the message: lines, sounds and the cheer. The
@@ -5007,7 +5031,13 @@ export function setup(ctx: Ctx, overrides?: any) {
     ];
     again.appendChild(
       toggle('Send a note when it asks again', 'On by default. The next ask ends with a short note that says what went wrong with the last answer. A model that refused a scene by mistake often does the job when told it is fiction from your own story.', 'askNote', undefined, () =>
-        NOTE_PARTS.map((n) => {
+        [
+          segmented('Send the notes as', [
+            { id: 'system', label: 'System' },
+            { id: 'user', label: 'User' },
+            { id: 'assistant', label: 'Assistant' },
+          ], S.askNoteRole || 'user', (v) => set({ askNoteRole: v }), 'User by default. The note is the last message of the ask made again.'),
+        ].concat(NOTE_PARTS.map((n) => {
           const cur = S.askNotes && typeof S.askNotes[n.id] === 'string' ? S.askNotes[n.id] : (builtInNotes[n.id] || '');
           const f = area(n.label, cur, (v) => {
             const next = Object.assign({}, S.askNotes || {});
@@ -5025,7 +5055,7 @@ export function setup(ctx: Ctx, overrides?: any) {
           });
           f.appendChild(back);
           return f;
-        }),
+        })),
       ),
     );
     page.appendChild(again);
@@ -5546,7 +5576,7 @@ export function setup(ctx: Ctx, overrides?: any) {
   ]);
   // The setting keys each part covers. Which parts are ticked are settings
   // too, but they are never carried in a file or put back by a reset.
-  const NOT_SETTINGS = ['cast', 'groups', 'prompt', 'promptRole', 'askNotes', 'engineNotes', 'decisionQuestions', 'exportParts', 'importParts', 'resetParts', 'guideSeen'];
+  const NOT_SETTINGS = ['cast', 'groups', 'prompt', 'promptRole', 'engineNoteRole', 'askNoteRole', 'askNotes', 'engineNotes', 'decisionQuestions', 'exportParts', 'importParts', 'resetParts', 'guideSeen'];
   const settingKeys = () => Object.keys(DEFAULTS).filter((k) => NOT_SETTINGS.indexOf(k) < 0);
   let transferSaid = '';
   let transferKind = '';
@@ -5596,6 +5626,8 @@ export function setup(ctx: Ctx, overrides?: any) {
           body.engineNotes = JSON.parse(JSON.stringify(S.engineNotes || {}));
           body.decisionQuestions = JSON.parse(JSON.stringify(S.decisionQuestions || {}));
           body.promptRole = S.promptRole || 'system';
+          body.engineNoteRole = S.engineNoteRole || 'rules';
+          body.askNoteRole = S.askNoteRole || 'user';
         }
         if (parts.indexOf('cast') >= 0) {
           body.cast = JSON.parse(JSON.stringify(S.cast || []));
@@ -5720,6 +5752,8 @@ export function setup(ctx: Ctx, overrides?: any) {
       if (body.engineNotes && typeof body.engineNotes === 'object') S.engineNotes = body.engineNotes;
       if (body.decisionQuestions && typeof body.decisionQuestions === 'object') S.decisionQuestions = body.decisionQuestions;
       if (typeof body.promptRole === 'string') S.promptRole = body.promptRole;
+      if (typeof body.engineNoteRole === 'string') S.engineNoteRole = body.engineNoteRole;
+      if (typeof body.askNoteRole === 'string') S.askNoteRole = body.askNoteRole;
       took.push('the Director’s prompt and notes');
     }
     if (want.indexOf('cast') >= 0 && Array.isArray(body.cast)) {
@@ -5810,6 +5844,14 @@ export function setup(ctx: Ctx, overrides?: any) {
       );
       return f;
     };
+    c.appendChild(
+      segmented('Send the notes as', [
+        { id: 'rules', label: 'In the rules' },
+        { id: 'system', label: 'System' },
+        { id: 'user', label: 'User' },
+        { id: 'assistant', label: 'Assistant' },
+      ], S.engineNoteRole || 'rules', (v) => set({ engineNoteRole: v }), 'In the rules by default, as engine_note in the JSON. The others send the note as its own message, right after the prompt.'),
+    );
     if (now.supported) {
       c.appendChild(hint(esc('In use now: ' + now.label + '. ' + engineAbility(now))));
       c.appendChild(noteField(now));

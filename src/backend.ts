@@ -155,6 +155,11 @@ interface Settings {
   keepAudio: number;
   // Who the Director's prompt is sent as: system, user or assistant.
   promptRole: string;
+  // Where the note for the engine goes: inside the rules, or as its own
+  // message from system, user or assistant.
+  engineNoteRole: string;
+  // Who a note sent with an ask made again is from.
+  askNoteRole: string;
   // The reader's own wording of the Decision model's questions, by name.
   decisionQuestions: Record<string, string>;
   // Leave out a sound the text around it does not show.
@@ -203,6 +208,8 @@ const DEFAULT_SETTINGS: Settings = {
   engineNotes: {},
   keepAudio: 100,
   promptRole: 'system',
+  engineNoteRole: 'rules',
+  askNoteRole: 'user',
   decisionQuestions: {},
   soundCheck: true,
   skipOn: true,
@@ -484,6 +491,8 @@ function cleanSettings(raw: any): Settings {
     engines: cleanEngineChoices(r.engines),
     engineNotes: cleanEngineNotes(r.engineNotes),
     promptRole: pick(r.promptRole, ['system', 'user', 'assistant'] as const, 'system'),
+    engineNoteRole: pick(r.engineNoteRole, ['rules', 'system', 'user', 'assistant'] as const, 'rules'),
+    askNoteRole: pick(r.askNoteRole, ['system', 'user', 'assistant'] as const, 'user'),
     decisionQuestions: cleanQuestions(r.decisionQuestions),
     soundCheck: bool(r.soundCheck, d.soundCheck),
     skipOn: bool(r.skipOn, d.skipOn),
@@ -1389,6 +1398,11 @@ interface Script {
   isUser: boolean;
   model: string;
   cost: number;
+  // Tokens sent to the Director and written back, over every ask for this
+  // message. counted is false when any of them is a guess from the length.
+  sent: number;
+  back: number;
+  counted: boolean;
 }
 
 // Pulls one JSON object out of what the model wrote. Models wrap it in a code
@@ -2310,7 +2324,7 @@ function settingsSig(s: Settings): string {
       s.directorOn, s.directorConnection, s.strength, s.tagsOn, s.breathsOn, s.soundsOn, s.soundStyle, s.narration,
       s.intimateOn, s.findSpeakers, s.bigMoments, s.prompt, s.decisionsOn, s.decisionConnection, s.extraThinkTags,
       s.thinkingMode, s.thinkingEffort, s.samplers, s.engineNotes, s.skipOn, s.skipPatterns, s.speechMarks, s.asterisks,
-      s.promptRole, s.decisionQuestions, s.soundCheck,
+      s.promptRole, s.engineNoteRole, s.askNoteRole, s.decisionQuestions, s.soundCheck,
       s.cast.map((c) => [c.name, c.aliases, c.note, c.muted]),
     ]),
   );
@@ -2492,6 +2506,41 @@ function readScene(segs: Segment[], cast: CastMember[], author: string): SceneRe
 // One round with one connection: the first ask, the waits and the asks made
 // again. Answers with a usable answer, or none, and writes each step to the
 // Log in plain words.
+// The tokens one ask used. The provider's own count when it sends one, or
+// Lumiverse's count of the text, or a guess from its length.
+async function countSaying(text: string, userId?: string): Promise<{ n: number; counted: boolean }> {
+  const guess = Math.ceil(String(text || '').length / 4);
+  try {
+    if (!spindle.tokens || typeof spindle.tokens.countText !== 'function') return { n: guess, counted: false };
+    const got = await spindle.tokens.countText(text, { userId: userId });
+    if (got && got.approximate) return { n: guess, counted: false };
+    const n = got && Number(got.total_tokens);
+    return Number.isFinite(n) && n > 0 ? { n, counted: true } : { n: guess, counted: false };
+  } catch (_) {
+    return { n: guess, counted: false };
+  }
+}
+
+async function addUsed(script: Script, usage: any, sent: string[], back: string, userId?: string) {
+  const pin = Number(usage && (usage.prompt_tokens != null ? usage.prompt_tokens : usage.input_tokens));
+  const pout = Number(usage && (usage.completion_tokens != null ? usage.completion_tokens : usage.output_tokens));
+  if (Number.isFinite(pin) && pin > 0 && Number.isFinite(pout) && pout >= 0) {
+    script.sent += pin;
+    script.back += pout;
+    return;
+  }
+  let counted = true;
+  for (const t of sent) {
+    const c = await countSaying(t, userId);
+    script.sent += c.n;
+    if (!c.counted) counted = false;
+  }
+  const b = await countSaying(back, userId);
+  script.back += b.n;
+  if (!b.counted) counted = false;
+  if (!counted) script.counted = false;
+}
+
 async function askDirector(userId: string | undefined, s: Settings, payload: any, connection: string, script: Script): Promise<{ answer: any }> {
   let waits = 0;
   let asks = 0;
@@ -2500,11 +2549,15 @@ async function askDirector(userId: string | undefined, s: Settings, payload: any
     let content = '';
     let failed = '';
     try {
-      const messages: any[] = [
-        { role: s.promptRole || 'system', content: s.prompt.trim() || BUILT_IN_PROMPT },
-        { role: 'user', content: JSON.stringify(payload) },
-      ];
-      if (note) messages.push({ role: 'user', content: note });
+      // The note for the engine goes in the rules, or as a message of its own
+      // right after the prompt, as the reader picked.
+      const own = payload._engineNote ? String(payload._engineNote) : '';
+      const sent = Object.assign({}, payload);
+      delete sent._engineNote;
+      const messages: any[] = [{ role: s.promptRole || 'system', content: s.prompt.trim() || BUILT_IN_PROMPT }];
+      if (own) messages.push({ role: s.engineNoteRole, content: own });
+      messages.push({ role: 'user', content: JSON.stringify(sent) });
+      if (note) messages.push({ role: s.askNoteRole || 'user', content: note });
       const req: any = { messages };
       const reasoning = reasoningFor(s);
       if (reasoning) req.reasoning = reasoning;
@@ -2515,6 +2568,7 @@ async function askDirector(userId: string | undefined, s: Settings, payload: any
       content = res && typeof res.content === 'string' ? res.content : '';
       const cost = Number(res && res.usage && res.usage.cost);
       if (Number.isFinite(cost)) script.cost += cost;
+      await addUsed(script, res && res.usage, messages.map((m: any) => String(m.content || '')), content, userId);
     } catch (e: any) {
       failed = String((e && e.message) || e || '');
     }
@@ -2605,7 +2659,7 @@ async function direct(userId: string | undefined, p: any): Promise<Script> {
   const skip = s.skipOn ? skipsFor(s.skipPatterns) : { list: [], bad: [] };
   const segs = splitSegments(text, { extra: s.extraThinkTags, bound: await boundPairs(userId), skips: skip.list, marks: s.speechMarks, asterisks: s.asterisks });
   const script: Script = {
-    key, messageId, author, lines: [], log: [], directed: false, added: authorAdded ? [author] : [], inScene: [], isUser, model: '', cost: 0,
+    key, messageId, author, lines: [], log: [], directed: false, added: authorAdded ? [author] : [], inScene: [], isUser, model: '', cost: 0, sent: 0, back: 0, counted: true,
   };
 
   if (!segs.length) {
@@ -2685,7 +2739,7 @@ async function direct(userId: string | undefined, p: any): Promise<Script> {
     in_scene: scene.inScene,
     rules: {
       engine: engine.label,
-      engine_note: engineNote(s, engine.id),
+      engine_note: s.engineNoteRole === 'rules' ? engineNote(s, engine.id) : undefined,
       max_tags: MAX_TAGS[s.strength],
       acting: s.strength,
       voice_tags: tagsOn,
@@ -2700,6 +2754,7 @@ async function direct(userId: string | undefined, p: any): Promise<Script> {
     },
   };
   if (tagsOn && engine.tags === 'list') payload.rules.tag_list = engine.list;
+  if (s.engineNoteRole !== 'rules') payload._engineNote = engineNote(s, engine.id);
   if (Object.keys(hints).length) payload.rules.sound_hints = hints;
 
   // The Director is asked, and asked again when the answer cannot be used:
@@ -3407,7 +3462,7 @@ async function onPanel(p: any, userId: string | undefined) {
         const s = await loadSettings(userId);
         const fresh = cleanSettings({});
         if (parts.indexOf('settings') >= 0) {
-          const keep = { cast: s.cast, groups: s.groups, prompt: s.prompt, promptRole: s.promptRole, askNotes: s.askNotes, engineNotes: s.engineNotes, decisionQuestions: s.decisionQuestions, exportParts: s.exportParts, importParts: s.importParts, resetParts: s.resetParts };
+          const keep = { cast: s.cast, groups: s.groups, prompt: s.prompt, promptRole: s.promptRole, engineNoteRole: s.engineNoteRole, askNoteRole: s.askNoteRole, askNotes: s.askNotes, engineNotes: s.engineNotes, decisionQuestions: s.decisionQuestions, exportParts: s.exportParts, importParts: s.importParts, resetParts: s.resetParts };
           Object.assign(s, fresh, keep);
         }
         if (parts.indexOf('prompt') >= 0) {
@@ -3416,6 +3471,8 @@ async function onPanel(p: any, userId: string | undefined) {
           s.engineNotes = {};
           s.decisionQuestions = {};
           s.promptRole = 'system';
+          s.engineNoteRole = 'rules';
+          s.askNoteRole = 'user';
         }
         if (parts.indexOf('cast') >= 0) {
           s.cast = fresh.cast;

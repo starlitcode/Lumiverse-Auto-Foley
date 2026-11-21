@@ -33,6 +33,8 @@ Two messages, to the connection picked under **Which connection**:
 
 Nothing else from your chat is sent. The Director does not see earlier messages.
 
+Now playing says how many tokens the Director read and wrote for the message, over every ask. The count comes from the provider when it sends one, or from Lumiverse. When neither can count, it is a guess from the length, and it says "about".
+
 ## An example
 
 A message from a character named Pell, with your persona Odessa in the cast:
@@ -84,6 +86,7 @@ All on the Director tab:
 
 The Director tab has a note for each engine. It says how that engine reads tags, and it is sent with the rules.
 
+- **Send the notes as** puts the note in the rules, the default, or sends it as its own message from system, user or assistant, right after the prompt.
 - The note for the engine in use is shown first. The rest are under a fold.
 - **Back to built-in** puts the built-in note back. It asks first.
 

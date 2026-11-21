@@ -109,7 +109,7 @@ window.__settings = {
   ],
 };
 const SCRIPT = {
-  key: 'k', messageId: 'm1', author: 'Ysolde Marrow-Kestrel of the Lower Quays', directed: true, added: [],
+  key: 'k', messageId: 'm1', author: 'Ysolde Marrow-Kestrel of the Lower Quays', directed: true, added: [], sent: 1840, back: 212, counted: true,
   log: ['The Director tagged 2 of 3 lines and added 2 sounds.'],
   lines: [
     { i: 0, kind: 'narration', speaker: 'Narrator', text: 'She set the cup down on the long table by the window.', plain: '', tags: [], inSounds: [], big: false, before: '', after: 'a ceramic cup set down on a wooden table', note: '' },
@@ -387,6 +387,7 @@ if (section("perform")) {
   check((await page.locator('[data-af="parts"] [data-at]').count()) >= 3, "Now playing has a mark for each part of the message");
   check((await page.locator('[data-af="parts"] [data-k="sound"]').count()) === 1, "a separate sound effect has a mark of its own");
   check((await page.locator(".af-script, .af-line").count()) === 0, "there is no script list beside Now playing");
+  check(((await page.locator('[data-af="used"]').textContent()) || "").includes("1,840 tokens"), "Now playing says how many tokens the Director read and wrote");
   await page.waitForTimeout(700);
   const synth = await page.evaluate(() => window.__synth || []);
   check(synth.length >= 2, "lines are spoken through Lumiverse's TTS route (" + synth.length + ")");

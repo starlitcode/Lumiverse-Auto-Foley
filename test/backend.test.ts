@@ -360,6 +360,14 @@ describe("directing a message, end to end", () => {
     expect(h.sent.every((s) => s.userId === "u7")).toBe(true);
   });
 
+  test("the tokens the Director read and wrote are counted for the message", async () => {
+    const h = host({ answers: [good] });
+    const script = (await h.ask(msg)).find((m) => m.type === "script").script;
+    expect(script.sent).toBeGreaterThan(100);
+    expect(script.back).toBeGreaterThan(10);
+    expect(script.counted).toBe(false);
+  });
+
   test("the author joins the cast the first time they speak", async () => {
     const h = host({ answers: [good] });
     await h.ask(msg);
@@ -636,6 +644,18 @@ describe("the prompt's role and the Decision questions", () => {
     await h.ask({ type: "save", settings: { promptRole: "user" } });
     await h.ask(msg);
     expect(h.calls.generate[0].messages[0].role).toBe("user");
+  });
+
+  test("the engine note can go as its own message, and the note after a refusal as the role picked", async () => {
+    const h = host({ answers: ["I can't help with that.", ""] });
+    await h.ask({ type: "save", settings: { engineNoteRole: "system", askNoteRole: "assistant", retryDirector: 1 } });
+    await h.ask(msg);
+    const first = h.calls.generate[0].messages;
+    expect(first[1].role).toBe("system");
+    expect(first[1].content).toContain("ElevenLabs");
+    expect(JSON.parse(first[2].content).rules.engine_note).toBeUndefined();
+    const second = h.calls.generate[1].messages;
+    expect(second[second.length - 1].role).toBe("assistant");
   });
 
   test("a question the reader wrote is asked, with the line number filled in", async () => {

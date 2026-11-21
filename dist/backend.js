@@ -44,6 +44,8 @@ const DEFAULT_SETTINGS = {
     engineNotes: {},
     keepAudio: 100,
     promptRole: 'system',
+    engineNoteRole: 'rules',
+    askNoteRole: 'user',
     decisionQuestions: {},
     soundCheck: true,
     skipOn: true,
@@ -331,6 +333,8 @@ function cleanSettings(raw) {
         engines: cleanEngineChoices(r.engines),
         engineNotes: cleanEngineNotes(r.engineNotes),
         promptRole: pick(r.promptRole, ['system', 'user', 'assistant'], 'system'),
+        engineNoteRole: pick(r.engineNoteRole, ['rules', 'system', 'user', 'assistant'], 'rules'),
+        askNoteRole: pick(r.askNoteRole, ['system', 'user', 'assistant'], 'user'),
         decisionQuestions: cleanQuestions(r.decisionQuestions),
         soundCheck: bool(r.soundCheck, d.soundCheck),
         skipOn: bool(r.skipOn, d.skipOn),
@@ -2086,7 +2090,7 @@ function settingsSig(s) {
         s.directorOn, s.directorConnection, s.strength, s.tagsOn, s.breathsOn, s.soundsOn, s.soundStyle, s.narration,
         s.intimateOn, s.findSpeakers, s.bigMoments, s.prompt, s.decisionsOn, s.decisionConnection, s.extraThinkTags,
         s.thinkingMode, s.thinkingEffort, s.samplers, s.engineNotes, s.skipOn, s.skipPatterns, s.speechMarks, s.asterisks,
-        s.promptRole, s.decisionQuestions, s.soundCheck,
+        s.promptRole, s.engineNoteRole, s.askNoteRole, s.decisionQuestions, s.soundCheck,
         s.cast.map((c) => [c.name, c.aliases, c.note, c.muted]),
     ]));
 }
@@ -2264,6 +2268,45 @@ function readScene(segs, cast, author) {
 // One round with one connection: the first ask, the waits and the asks made
 // again. Answers with a usable answer, or none, and writes each step to the
 // Log in plain words.
+// The tokens one ask used. The provider's own count when it sends one, or
+// Lumiverse's count of the text, or a guess from its length.
+async function countSaying(text, userId) {
+    const guess = Math.ceil(String(text || '').length / 4);
+    try {
+        if (!spindle.tokens || typeof spindle.tokens.countText !== 'function')
+            return { n: guess, counted: false };
+        const got = await spindle.tokens.countText(text, { userId: userId });
+        if (got && got.approximate)
+            return { n: guess, counted: false };
+        const n = got && Number(got.total_tokens);
+        return Number.isFinite(n) && n > 0 ? { n, counted: true } : { n: guess, counted: false };
+    }
+    catch (_) {
+        return { n: guess, counted: false };
+    }
+}
+async function addUsed(script, usage, sent, back, userId) {
+    const pin = Number(usage && (usage.prompt_tokens != null ? usage.prompt_tokens : usage.input_tokens));
+    const pout = Number(usage && (usage.completion_tokens != null ? usage.completion_tokens : usage.output_tokens));
+    if (Number.isFinite(pin) && pin > 0 && Number.isFinite(pout) && pout >= 0) {
+        script.sent += pin;
+        script.back += pout;
+        return;
+    }
+    let counted = true;
+    for (const t of sent) {
+        const c = await countSaying(t, userId);
+        script.sent += c.n;
+        if (!c.counted)
+            counted = false;
+    }
+    const b = await countSaying(back, userId);
+    script.back += b.n;
+    if (!b.counted)
+        counted = false;
+    if (!counted)
+        script.counted = false;
+}
 async function askDirector(userId, s, payload, connection, script) {
     let waits = 0;
     let asks = 0;
@@ -2272,12 +2315,17 @@ async function askDirector(userId, s, payload, connection, script) {
         let content = '';
         let failed = '';
         try {
-            const messages = [
-                { role: s.promptRole || 'system', content: s.prompt.trim() || BUILT_IN_PROMPT },
-                { role: 'user', content: JSON.stringify(payload) },
-            ];
+            // The note for the engine goes in the rules, or as a message of its own
+            // right after the prompt, as the reader picked.
+            const own = payload._engineNote ? String(payload._engineNote) : '';
+            const sent = Object.assign({}, payload);
+            delete sent._engineNote;
+            const messages = [{ role: s.promptRole || 'system', content: s.prompt.trim() || BUILT_IN_PROMPT }];
+            if (own)
+                messages.push({ role: s.engineNoteRole, content: own });
+            messages.push({ role: 'user', content: JSON.stringify(sent) });
             if (note)
-                messages.push({ role: 'user', content: note });
+                messages.push({ role: s.askNoteRole || 'user', content: note });
             const req = { messages };
             const reasoning = reasoningFor(s);
             if (reasoning)
@@ -2293,6 +2341,7 @@ async function askDirector(userId, s, payload, connection, script) {
             const cost = Number(res && res.usage && res.usage.cost);
             if (Number.isFinite(cost))
                 script.cost += cost;
+            await addUsed(script, res && res.usage, messages.map((m) => String(m.content || '')), content, userId);
         }
         catch (e) {
             failed = String((e && e.message) || e || '');
@@ -2391,7 +2440,7 @@ async function direct(userId, p) {
     const skip = s.skipOn ? skipsFor(s.skipPatterns) : { list: [], bad: [] };
     const segs = splitSegments(text, { extra: s.extraThinkTags, bound: await boundPairs(userId), skips: skip.list, marks: s.speechMarks, asterisks: s.asterisks });
     const script = {
-        key, messageId, author, lines: [], log: [], directed: false, added: authorAdded ? [author] : [], inScene: [], isUser, model: '', cost: 0,
+        key, messageId, author, lines: [], log: [], directed: false, added: authorAdded ? [author] : [], inScene: [], isUser, model: '', cost: 0, sent: 0, back: 0, counted: true,
     };
     if (!segs.length) {
         script.log.push('This message has nothing to read aloud.');
@@ -2472,7 +2521,7 @@ async function direct(userId, p) {
         in_scene: scene.inScene,
         rules: {
             engine: engine.label,
-            engine_note: engineNote(s, engine.id),
+            engine_note: s.engineNoteRole === 'rules' ? engineNote(s, engine.id) : undefined,
             max_tags: MAX_TAGS[s.strength],
             acting: s.strength,
             voice_tags: tagsOn,
@@ -2488,6 +2537,8 @@ async function direct(userId, p) {
     };
     if (tagsOn && engine.tags === 'list')
         payload.rules.tag_list = engine.list;
+    if (s.engineNoteRole !== 'rules')
+        payload._engineNote = engineNote(s, engine.id);
     if (Object.keys(hints).length)
         payload.rules.sound_hints = hints;
     // The Director is asked, and asked again when the answer cannot be used:
@@ -3233,7 +3284,7 @@ async function onPanel(p, userId) {
                 const s = await loadSettings(userId);
                 const fresh = cleanSettings({});
                 if (parts.indexOf('settings') >= 0) {
-                    const keep = { cast: s.cast, groups: s.groups, prompt: s.prompt, promptRole: s.promptRole, askNotes: s.askNotes, engineNotes: s.engineNotes, decisionQuestions: s.decisionQuestions, exportParts: s.exportParts, importParts: s.importParts, resetParts: s.resetParts };
+                    const keep = { cast: s.cast, groups: s.groups, prompt: s.prompt, promptRole: s.promptRole, engineNoteRole: s.engineNoteRole, askNoteRole: s.askNoteRole, askNotes: s.askNotes, engineNotes: s.engineNotes, decisionQuestions: s.decisionQuestions, exportParts: s.exportParts, importParts: s.importParts, resetParts: s.resetParts };
                     Object.assign(s, fresh, keep);
                 }
                 if (parts.indexOf('prompt') >= 0) {
@@ -3242,6 +3293,8 @@ async function onPanel(p, userId) {
                     s.engineNotes = {};
                     s.decisionQuestions = {};
                     s.promptRole = 'system';
+                    s.engineNoteRole = 'rules';
+                    s.askNoteRole = 'user';
                 }
                 if (parts.indexOf('cast') >= 0) {
                     s.cast = fresh.cast;
