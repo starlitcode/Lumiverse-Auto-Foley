@@ -1499,6 +1499,8 @@ export function setup(ctx, overrides) {
                 const got = await rpc({ type: 'sound_play', id: S.applauseSound }, 20000);
                 if (got && got.base64)
                     return { blob: base64ToBlob(got.base64, got.mime) };
+                if (got && got.url)
+                    return { blob: String(got.url) };
                 log('The applause sound picked is not in your library any more, so the built-in cheer plays instead.', 'bad');
             }
             catch (_) { }
@@ -1658,6 +1660,9 @@ export function setup(ctx, overrides) {
     async function makeSoundClip(description) {
         try {
             const r = await rpc({ type: 'sound', description }, 45000);
+            // A sound kept as a link is played from that address.
+            if (r && r.url)
+                return { blob: String(r.url) };
             if (r && r.base64) {
                 if (r.made)
                     log('Made a new sound: ' + description + '. It is saved in the Sounds tab.', '', 'sound');
@@ -1689,7 +1694,7 @@ export function setup(ctx, overrides) {
             sh.clips.set(k, p);
             if (it.kind === 'voice')
                 p.then((r) => {
-                    if (r && r.blob)
+                    if (r && r.blob && typeof r.blob !== 'string')
                         voicedOf(r.blob).then((v) => {
                             if (v)
                                 sh.voiced.set(k, v);
@@ -1797,7 +1802,8 @@ export function setup(ctx, overrides) {
                 return;
             // The cheer is not saved with the message: it is the audience, not
             // the performance.
-            if (how === 'ended' && sh.items[at].kind !== 'applause')
+            // The cheer is not saved with the message, and a linked sound cannot be.
+            if (how === 'ended' && sh.items[at].kind !== 'applause' && typeof got.blob !== 'string')
                 sh.played.push({ blob: got.blob });
             if (sh.jumped) {
                 sh.jumped = false;
@@ -1827,7 +1833,7 @@ export function setup(ctx, overrides) {
             const el = new AudioCtor();
             audio = el;
             settle = resolve;
-            el.src = URL.createObjectURL(blob);
+            el.src = typeof blob === 'string' ? blob : URL.createObjectURL(blob);
             el.volume = kind === 'voice' ? (muted.voice ? 0 : S.voiceVolume) : muted.sound ? 0 : kind === 'applause' ? S.soundVolume * S.applauseVolume : S.soundVolume;
             if (kind === 'applause')
                 fadeApplause(el);
@@ -4324,6 +4330,8 @@ export function setup(ctx, overrides) {
             const got = await rpc(id ? { type: 'sound_again', id } : { type: 'sound_again', description }, 60000);
             if (got && got.base64)
                 previewBlob(base64ToBlob(got.base64, got.mime), S.soundVolume);
+            else if (got && got.url)
+                previewBlob(String(got.url), S.soundVolume);
             else
                 log((got && got.error) || 'The sound could not be made again.', 'bad');
         }
@@ -4345,7 +4353,7 @@ export function setup(ctx, overrides) {
         }
         catch (_) { }
         preview = new AudioCtor();
-        preview.src = URL.createObjectURL(blob);
+        preview.src = typeof blob === 'string' ? blob : URL.createObjectURL(blob);
         preview.volume = volume;
         const p = preview.play();
         if (p && typeof p.catch === 'function')
@@ -4882,25 +4890,35 @@ export function setup(ctx, overrides) {
             const vid = rid('vc');
             const voiceField = el('<div class="af-col"></div>');
             voiceField.appendChild(labelRow('Voice', 'Their voice on this connection. Designed or cloned voices act better than the stock voices.', vid));
-            const vwrap = el('<div class="af-selwrap"><select class="af-field" id="' + vid + '" disabled><option>Loading your voices…</option></select></div>');
+            // The box shows the voice picked from the first frame, and the rest of
+            // the list is added under it when it arrives, so what it says never
+            // changes while it loads. The picked voice keeps the same words in the
+            // list as it had before the list came.
+            const first = cn ? pickOf(m, cn) : { voice: '', voiceName: '', model: '' };
+            const firstLabel = first.voice ? first.voiceName || first.voice : 'The connection’s voice';
+            const vwrap = el('<div class="af-selwrap"><select class="af-field" id="' + vid + '"><option value="' + esc(first.voice) + '" selected>' + esc(firstLabel) + '</option></select></div>');
             const vs = vwrap.firstElementChild;
             voiceField.appendChild(vwrap);
             const vh = el('<p class="af-note" hidden></p>');
             voiceField.appendChild(vh);
             voiceBox.appendChild(voiceField);
+            const fillVoices = (got) => {
+                const now = pickOf(m, cn);
+                const opts = [{ id: '', label: 'The connection’s voice' }].concat(got.voices.map((v) => ({ id: String(v.id), label: String(v.id) === now.voice ? firstLabel : String(v.name || v.id) + (v.gender ? ' (' + v.gender + ')' : '') })));
+                if (now.voice && !opts.some((o) => o.id === now.voice))
+                    opts.push({ id: now.voice, label: firstLabel });
+                vs.innerHTML = opts.map((o) => '<option value="' + esc(o.id) + '"' + (o.id === now.voice ? ' selected' : '') + '>' + esc(o.label) + '</option>').join('');
+                vh.textContent = got.why;
+                vh.hidden = !got.why;
+            };
             if (cn) {
-                loadVoices(cn.id).then((got) => {
-                    if (!vs.isConnected)
-                        return;
-                    vs.disabled = false;
-                    const now = pickOf(m, cn);
-                    const opts = [{ id: '', label: 'The connection’s voice' }].concat(got.voices.map((v) => ({ id: String(v.id), label: String(v.name || v.id) + (v.gender ? ' (' + v.gender + ')' : '') })));
-                    if (now.voice && !opts.some((o) => o.id === now.voice))
-                        opts.push({ id: now.voice, label: now.voiceName || now.voice });
-                    vs.innerHTML = opts.map((o) => '<option value="' + esc(o.id) + '"' + (o.id === now.voice ? ' selected' : '') + '>' + esc(o.label) + '</option>').join('');
-                    vh.textContent = got.why;
-                    vh.hidden = !got.why;
-                });
+                if (voiceCache[cn.id])
+                    fillVoices(voiceCache[cn.id]);
+                else
+                    loadVoices(cn.id).then((got) => {
+                        if (vs.isConnected)
+                            fillVoices(got);
+                    });
             }
             else {
                 vs.innerHTML = '<option>No TTS connection</option>';
@@ -4921,25 +4939,31 @@ export function setup(ctx, overrides) {
             const mid = rid('md');
             const modelField = el('<div class="af-col"></div>');
             modelField.appendChild(labelRow('Model', 'Empty uses the connection’s model. The model decides which acting directions work, shown under this box.', mid));
-            const mwrap = el('<div class="af-selwrap"><select class="af-field" id="' + mid + '"><option value="">The connection’s model' + (cn.model ? ' (' + esc(cn.model) + ')' : '') + '</option></select></div>');
+            const connModel = 'The connection’s model' + (cn.model ? ' (' + esc(cn.model) + ')' : '');
+            const mwrap = el('<div class="af-selwrap"><select class="af-field" id="' + mid + '"><option value="">' + connModel + '</option>' +
+                (pick.model ? '<option value="' + esc(pick.model) + '" selected>' + esc(pick.model) + '</option>' : '') + '</select></div>');
             const ms = mwrap.firstElementChild;
             modelField.appendChild(mwrap);
             modelField.appendChild(hint(esc((eng.supported ? 'Engine: ' + eng.label + '. ' : '') + engineAbility(eng))));
             if (!eng.supported)
                 modelField.appendChild(notice('bad', noTagsWhy(cn, pick.model || cn.model)));
             voiceBox.appendChild(modelField);
-            loadModels(cn).then((list) => {
-                if (!ms.isConnected)
-                    return;
+            // The same for the model: the pick shows at once, under the same words.
+            const fillModels = (list) => {
                 // Only models that act are offered. One picked before that does not
                 // is still shown, marked, so it can be changed.
-                const opts = list.filter((o) => modelActs(cn, o.id));
+                const opts = list.filter((o) => modelActs(cn, o.id)).map((o) => (o.id === pick.model ? { id: o.id, label: pick.model } : o));
                 if (pick.model && !opts.some((o) => o.id === pick.model))
                     opts.push({ id: pick.model, label: pick.model + (modelActs(cn, pick.model) ? '' : ' (no tags)') });
-                ms.innerHTML =
-                    '<option value="">The connection’s model' + (cn.model ? ' (' + esc(cn.model) + ')' : '') + '</option>' +
-                        opts.map((o) => '<option value="' + esc(o.id) + '"' + (o.id === pick.model ? ' selected' : '') + '>' + esc(o.label) + '</option>').join('');
-            });
+                ms.innerHTML = '<option value="">' + connModel + '</option>' + opts.map((o) => '<option value="' + esc(o.id) + '"' + (o.id === pick.model ? ' selected' : '') + '>' + esc(o.label) + '</option>').join('');
+            };
+            if (modelCache[cn.id])
+                fillModels(modelCache[cn.id]);
+            else
+                loadModels(cn).then((list) => {
+                    if (ms.isConnected)
+                        fillModels(list);
+                });
             ms.addEventListener('change', () => {
                 setPick(m, cn, { model: ms.value });
                 save();
@@ -5414,6 +5438,39 @@ export function setup(ctx, overrides) {
         search.value = soundFilter;
         urow.appendChild(search);
         lib.appendChild(urow);
+        // A sound by link: the browser plays it from that address, so a big
+        // file costs nothing to keep.
+        const linkRow = el('<div class="af-col" data-af-link></div>');
+        const lid = rid('ln');
+        linkRow.appendChild(labelRow('Add a sound by link', 'A link to an MP3, WAV or OGG file, starting with https://. It is played from that address. Name it so the Director’s descriptions can find it.', lid));
+        const linkIn = el('<input type="text" class="af-field" id="' + lid + '" placeholder="https://" inputmode="url" autocomplete="off" spellcheck="false">');
+        const nameIn = el('<input type="text" class="af-field" placeholder="What it is, such as rain on a window" aria-label="What the linked sound is">');
+        linkRow.appendChild(linkIn);
+        linkRow.appendChild(nameIn);
+        const linkGo = el('<div class="af-row"></div>');
+        linkGo.appendChild(button('Add the link', async () => {
+            const url = linkIn.value.trim();
+            if (!/^https?:\/\//i.test(url)) {
+                ust.textContent = 'That does not look like a link. It has to start with http:// or https://.';
+                ust.dataset.kind = 'bad';
+                return;
+            }
+            try {
+                const r = await rpc({ type: 'sound_link', url, name: nameIn.value.trim() }, 15000);
+                ust.textContent = r && r.ok ? 'Added the link.' : (r && r.error) || 'The link could not be added.';
+                ust.dataset.kind = r && r.ok ? 'good' : 'bad';
+                if (r && r.ok) {
+                    linkIn.value = '';
+                    nameIn.value = '';
+                }
+            }
+            catch (e) {
+                ust.textContent = String((e && e.message) || 'The backend did not answer.');
+                ust.dataset.kind = 'bad';
+            }
+        }));
+        linkRow.appendChild(linkGo);
+        lib.appendChild(linkRow);
         lib.appendChild(ust);
         const listBox = el('<div class="af-sounds"></div>');
         lib.appendChild(listBox);
@@ -5437,10 +5494,11 @@ export function setup(ctx, overrides) {
     }
     function soundRow(s) {
         const r = el('<div class="af-sound"><button type="button" class="af-round" title="Play" aria-label="Play">' + ICON_PLAY + '</button>' +
-            '<div class="af-sound-main"><div class="af-sound-name"></div><div class="af-sound-meta">' + (s.source === 'upload' ? 'Yours' : 'Made by ElevenLabs') + ' · ' +
-            Math.max(1, Math.round((s.bytes || 0) / 1024)) + ' KB · played ' + (s.uses || 0) + ' times</div>' +
+            '<div class="af-sound-main"><div class="af-sound-name"></div><div class="af-sound-meta">' +
+            (s.source === 'upload' ? 'Yours' : s.source === 'link' ? 'A link' : 'Made by ElevenLabs') + ' · ' +
+            (s.source === 'link' ? '' : Math.max(1, Math.round((s.bytes || 0) / 1024)) + ' KB · ') + 'played ' + (s.uses || 0) + ' times</div>' +
             '<input type="text" class="af-field" placeholder="Trigger words, with commas"></div>' +
-            (s.source === 'upload' ? '' : '<button type="button" class="af-btn" data-again>Make it again</button>') +
+            (s.source === 'made' ? '<button type="button" class="af-btn" data-again>Make it again</button>' : '') +
             '<button type="button" class="af-btn af-danger">Delete</button></div>');
         const again = r.querySelector('[data-again]');
         if (again)
@@ -5465,6 +5523,8 @@ export function setup(ctx, overrides) {
                 const got = await rpc({ type: 'sound_play', id: s.id }, 20000);
                 if (got && got.base64)
                     previewBlob(base64ToBlob(got.base64, got.mime), S.soundVolume);
+                else if (got && got.url)
+                    previewBlob(String(got.url), S.soundVolume);
                 else
                     log((got && got.error) || 'The sound could not be played.', 'bad');
             }
@@ -5473,7 +5533,7 @@ export function setup(ctx, overrides) {
             }
         });
         r.querySelector('.af-danger').addEventListener('click', async () => {
-            if (!(await askSure('Delete this sound', '“' + s.name + '” is deleted from your library. ' + (s.source === 'upload' ? 'Upload it again to get it back.' : 'If it is needed again, a new one is made, which costs ElevenLabs credits.'), 'Delete', true)))
+            if (!(await askSure('Delete this sound', '“' + s.name + '” is deleted from your library. ' + (s.source === 'upload' ? 'Upload it again to get it back.' : s.source === 'link' ? 'Add the link again to get it back.' : 'If it is needed again, a new one is made, which costs ElevenLabs credits.'), 'Delete', true)))
                 return;
             try {
                 const res = await rpc({ type: 'sound_delete', id: s.id }, 15000);

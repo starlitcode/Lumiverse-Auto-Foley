@@ -589,6 +589,26 @@ describe("keeping made audio", () => {
   });
 });
 
+describe("sounds by link", () => {
+  test("a link is kept, matched like any sound, and played from its address", async () => {
+    const h = host();
+    const out = await h.ask({ type: "sound_link", url: "https://sounds.example.org/clips/rain_on_glass.mp3", name: "" });
+    expect(out.find((m) => m.type === "uploaded").ok).toBe(true);
+    const list = out.filter((m) => m.type === "sounds").pop().sounds;
+    expect(list[0].name).toBe("rain on glass");
+    expect(list[0].source).toBe("link");
+    const got = (await h.ask({ type: "sound", description: "rain on glass" })).find((m) => m.type === "sound");
+    expect(got.url).toBe("https://sounds.example.org/clips/rain_on_glass.mp3");
+    expect(h.calls.cors.length).toBe(0);
+  });
+
+  test("something that is not a web link is refused, in plain words", async () => {
+    const h = host();
+    const out = await h.ask({ type: "sound_link", url: "javascript:alert(1)" });
+    expect(out.find((m) => m.type === "uploaded").error).toContain("http://");
+  });
+});
+
 describe("cast pictures", () => {
   test("only a small image in a data address is kept", async () => {
     const h = host();

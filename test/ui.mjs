@@ -134,6 +134,7 @@ function answer(msg) {
     case 'check_director': return reply({ type: 'check', ok: true, text: 'The Director answered.' });
     case 'check_decisions': return reply({ type: 'check', ok: true, text: 'Ready.' });
     // The kept audio, as the backend keeps it: by fingerprint.
+    case 'sound_link': window.__sounds = window.__sounds.concat([{ id: 'l9', name: msg.name || 'a linked sound', triggers: [], source: 'link', url: msg.url, mime: 'audio/mpeg', bytes: 0, added: 9, uses: 0 }]); reply({ type: 'uploaded', ok: true }); return reply({ type: 'sounds', sounds: window.__sounds });
     case 'skip_check': return reply({ type: 'skip_check', bad: /\(a\+\)\+/.test(msg.text) ? ['(a+)+ (a repeat inside a repeat)'] : [], count: 2 });
     case 'clip_get': { const c = (window.__clips || {})[msg.sig]; return reply(c ? { type: 'clip', found: true, base64: c.base64, mime: c.mime } : { type: 'clip', found: false }); }
     case 'clip_put': window.__clips = Object.assign(window.__clips || {}, { [msg.sig]: { base64: msg.base64, mime: msg.mime } }); return reply({ type: 'clip_kept', ok: true });
@@ -946,6 +947,51 @@ if (section("pictures")) {
     check((await head.locator(".af-person-head .af-avatar img").count()) === 0, size.name + ": Take it out goes back to the first letter");
     const m = await page.evaluate(MEASURE, size.touch);
     check(!m.overflow.length && !m.small.length, size.name + ": the picture row fits. " + m.overflow.concat(m.small).slice(0, 2).join("; "));
+    check(!errors.length, size.name + ": no console errors. " + errors.slice(0, 2).join("; "));
+    await context.close();
+  }
+}
+
+if (section("no flicker")) {
+  console.log("Opening a person shows their voice from the first frame");
+  const { context, page } = await open(THEMES[0], SIZES[0]);
+  await page.click('.af-tab[data-tab="cast"]');
+  await page.waitForTimeout(250);
+  // Every frame for half a second, the words the voice and model boxes show.
+  const seen = await page.evaluate(async () => {
+    const card = Array.from(document.querySelectorAll(".af-person")).find((c) => /Ysolde/.test(c.textContent));
+    card.querySelector(".af-person-head").click();
+    const out = [];
+    const t0 = performance.now();
+    while (performance.now() - t0 < 500) {
+      const sels = card.querySelectorAll(".af-voicebox select");
+      const show = (sel) => (sel && sel.selectedOptions[0] ? sel.selectedOptions[0].textContent : "");
+      out.push(Array.from(sels).map(show).join(" | "));
+      await new Promise((r) => requestAnimationFrame(r));
+    }
+    return Array.from(new Set(out.filter(Boolean)));
+  });
+  check(seen.length === 1, "what the boxes show never changes while the lists load (" + seen.join(" / ") + ")");
+  await context.close();
+}
+
+if (section("sound link")) {
+  console.log("Adding a sound by link");
+  for (const size of SIZES) {
+    const { context, page, errors } = await open(THEMES[0], size);
+    await page.click('.af-tab[data-tab="sounds"]');
+    await page.waitForTimeout(250);
+    await page.locator("[data-af-link] input").first().fill("ftp://nope");
+    await page.locator(".af-btn", { hasText: "Add the link" }).click();
+    await page.waitForTimeout(150);
+    check(((await page.locator("[data-af-link] + .af-status").textContent()) || "").includes("http"), size.name + ": something that is not a link says so");
+    await page.locator("[data-af-link] input").first().fill("https://sounds.example.org/door.mp3");
+    await page.locator("[data-af-link] input").nth(1).fill("a heavy door closing");
+    await page.locator(".af-btn", { hasText: "Add the link" }).click();
+    await page.waitForTimeout(300);
+    check((await page.locator(".af-sound-meta", { hasText: "A link" }).count()) === 1, size.name + ": the link is in the library, marked as a link");
+    const m = await page.evaluate(MEASURE, size.touch);
+    check(!m.overflow.length && !m.small.length, size.name + ": the link field fits. " + m.overflow.concat(m.small).slice(0, 2).join("; "));
     check(!errors.length, size.name + ": no console errors. " + errors.slice(0, 2).join("; "));
     await context.close();
   }

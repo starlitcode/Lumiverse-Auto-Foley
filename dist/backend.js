@@ -2680,6 +2680,11 @@ function fromBase64(text) {
     }
     return out.slice(0, o);
 }
+// A link to a sound: http or https, with no spaces, at most 2000 letters.
+function cleanLink(v) {
+    const t = String(v == null ? '' : v).trim();
+    return t.length <= 2000 && /^https?:\/\/[^\s"'<>]+$/i.test(t) ? t : '';
+}
 const MAX_SOUNDS = 400;
 // Uploads are kept small: they travel through the extension's message bridge.
 const MAX_UPLOAD_BYTES = 3 * 1024 * 1024;
@@ -2689,16 +2694,22 @@ function cleanSoundEntry(e) {
     const id = str(e.id, 64).replace(/[^a-z0-9_-]/gi, '');
     if (!id)
         return null;
-    return {
+    const url = e.source === 'link' ? cleanLink(e.url) : '';
+    if (e.source === 'link' && !url)
+        return null;
+    const entry = {
         id,
         name: str(e.name, 160).trim() || 'Sound',
         triggers: Array.isArray(e.triggers) ? e.triggers.map((t) => str(t, 40).trim().toLowerCase()).filter(Boolean).slice(0, 12) : [],
-        source: e.source === 'upload' ? 'upload' : 'made',
+        source: e.source === 'upload' ? 'upload' : e.source === 'link' ? 'link' : 'made',
         mime: /^audio\/[a-z0-9.+-]+$/i.test(String(e.mime)) ? String(e.mime) : 'audio/mpeg',
         bytes: num(e.bytes, 0, 1e9, 0),
         added: num(e.added, 0, 1e15, 0),
         uses: num(e.uses, 0, 1e9, 0),
     };
+    if (url)
+        entry.url = url;
+    return entry;
 }
 async function loadSounds(userId) {
     const raw = await readJson(SOUND_INDEX, userId);
@@ -2723,7 +2734,9 @@ function matchSound(list, description) {
     if (!want)
         return null;
     const words = want.split(' ');
-    const ordered = list.slice().sort((a, b) => (a.source === b.source ? 0 : a.source === 'upload' ? -1 : 1));
+    // Your own sounds, uploaded or linked, come before made ones.
+    const mine = (e) => (e.source === 'made' ? 1 : 0);
+    const ordered = list.slice().sort((a, b) => mine(a) - mine(b));
     for (const e of ordered) {
         if (e.triggers.some((t) => t && (' ' + want + ' ').indexOf(' ' + soundKey(t) + ' ') >= 0))
             return e;
@@ -2812,6 +2825,11 @@ async function soundFor(userId, description, again) {
         return { error: 'No sound description.' };
     const list = await loadSounds(userId);
     const hit = again ? null : matchSound(list, desc);
+    if (hit && hit.source === 'link' && hit.url) {
+        hit.uses++;
+        await saveSounds(userId, list);
+        return { id: hit.id, url: hit.url, name: hit.name };
+    }
     if (hit) {
         try {
             const bytes = await spindle.userStorage.readBinary('sounds/' + hit.id, userId);
@@ -3056,6 +3074,8 @@ async function onPanel(p, userId) {
                 const e = list.find((x) => x.id === id);
                 if (!e)
                     return answer({ type: 'sound', error: 'That sound is no longer in the library.' });
+                if (e.source === 'link')
+                    return answer({ type: 'sound', id: e.id, url: e.url, name: e.name });
                 try {
                     const bytes = await spindle.userStorage.readBinary('sounds/' + e.id, userId);
                     return answer({ type: 'sound', id: e.id, base64: toBase64(bytes), mime: e.mime, name: e.name });
@@ -3200,15 +3220,44 @@ async function onPanel(p, userId) {
                 answer({ type: 'sounds', sounds: list });
                 return;
             }
+            case 'sound_link': {
+                // A sound kept as a link. The browser plays it from that address, so
+                // nothing is downloaded or stored but the link.
+                const url = cleanLink(p.url);
+                if (!url)
+                    return answer({ type: 'uploaded', ok: false, error: 'That does not look like a link. It has to start with http:// or https://.' });
+                const list = await loadSounds(userId);
+                if (list.length >= MAX_SOUNDS)
+                    return answer({ type: 'uploaded', ok: false, error: 'The library is full (' + MAX_SOUNDS + ' sounds). Delete some first.' });
+                const fromUrl = decodeURIComponent((url.split(/[?#]/)[0].split('/').pop() || '').replace(/%(?![0-9a-f]{2})/gi, '')).replace(/\.[a-z0-9]{2,4}$/i, '').replace(/[_-]+/g, ' ').trim();
+                const entry = {
+                    id: 'l' + newId(),
+                    name: str(p.name, 160).trim() || fromUrl.slice(0, 160) || 'A linked sound',
+                    triggers: Array.isArray(p.triggers) ? p.triggers.map((t) => str(t, 40).trim().toLowerCase()).filter(Boolean).slice(0, 12) : [],
+                    source: 'link',
+                    mime: 'audio/mpeg',
+                    bytes: 0,
+                    added: Date.now(),
+                    uses: 0,
+                    url,
+                };
+                list.push(entry);
+                const ok = await saveSounds(userId, list);
+                answer({ type: 'uploaded', ok, error: ok ? '' : 'The link could not be saved to the library.' });
+                answer({ type: 'sounds', sounds: await loadSounds(userId) });
+                return;
+            }
             case 'sound_delete': {
                 const list = await loadSounds(userId);
                 const at = list.findIndex((x) => x.id === str(p.id, 64));
                 if (at >= 0) {
                     const [gone] = list.splice(at, 1);
-                    try {
-                        await spindle.userStorage.delete('sounds/' + gone.id, userId);
+                    if (gone.source !== 'link') {
+                        try {
+                            await spindle.userStorage.delete('sounds/' + gone.id, userId);
+                        }
+                        catch (_) { }
                     }
-                    catch (_) { }
                     const ok = await saveSounds(userId, list);
                     if (!ok)
                         notify('warning', 'The sound could not be removed from the library.', userId);

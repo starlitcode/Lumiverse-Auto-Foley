@@ -17,6 +17,8 @@
 | A short sound description | `api.elevenlabs.io`, with your sound effects key | Each new sound effect made |
 | A key test | `api.elevenlabs.io` | When you save or test the key |
 
+A sound you added by link is played by your browser from that address, so that site sees the request, as with any link you open.
+
 Earlier messages in the chat are not sent anywhere.
 
 ## What is kept

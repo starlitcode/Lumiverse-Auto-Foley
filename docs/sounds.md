@@ -67,9 +67,10 @@ Every sound made by ElevenLabs is saved in your library. When the Director asks 
 3. A clip that shares most of the description's words.
 4. Only then is a new sound made, if **Make new sounds with ElevenLabs** is on.
 
-Your own uploads are checked before made sounds at every step.
+Your own uploads and links are checked before made sounds at every step.
 
 - **Upload a sound** takes MP3, WAV, OGG or M4A files, up to 3 MB each.
+- **Add a sound by link** keeps a link to a sound, starting with `https://`. The sound is played from that address each time, so a big file costs no space. Name it so the Director's descriptions can find it. A linked sound cannot be saved to a message with **Save the performance to the message**.
 - **Sound length** sets how long a made sound is. **Let ElevenLabs choose** is the default. Longer sounds cost more credits.
 - The library holds up to 400 sounds.
 
