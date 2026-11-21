@@ -6496,15 +6496,16 @@ export function setup(ctx: Ctx, overrides?: any) {
         { id: 'assistant', label: 'Assistant' },
       ], S.engineNoteRole || 'rules', (v) => set({ engineNoteRole: v }), 'In the rules by default, as engine_note in the JSON. The others send the note as its own message, right after the prompt.'),
     );
-    if (now.supported) {
-      c.appendChild(hint(esc('In use now: ' + now.label + '. ' + engineAbility(now))));
-      c.appendChild(noteField(now));
+    // Every engine is listed the same way, each under its own fold, in the
+    // order of the engine table. The one Auto Foley's connection runs says so.
+    for (const e of ENGINE_LIST) {
+      c.appendChild(
+        fold(e.label + (now.supported && e.id === now.id ? ' (in use)' : ''), (body) => {
+          body.appendChild(hint(esc(engineAbility(e))));
+          body.appendChild(noteField(e));
+        }),
+      );
     }
-    c.appendChild(
-      fold('The notes for the other engines', (body) => {
-        for (const e of ENGINE_LIST) if (e.id !== now.id) body.appendChild(noteField(e));
-      }),
-    );
     return c;
   }
 

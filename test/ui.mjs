@@ -805,6 +805,13 @@ if (section("engines")) {
     check((await page.locator(".af-note", { hasText: "Engine: Chatterbox-Turbo" }).count()) === 1, size.name + ": a server named Chatterbox is found as Chatterbox-Turbo");
     await page.click('.af-tab[data-tab="director"]');
     await page.waitForTimeout(300);
+    const folds = await page.evaluate(() => {
+      const card = Array.from(document.querySelectorAll(".af-card")).find((c) => /Notes for each voice engine/.test(c.textContent));
+      return Array.from(card.querySelectorAll(".af-fold")).map((f) => ({ t: f.textContent.replace("▶", "").trim(), open: f.getAttribute("aria-expanded") }));
+    });
+    check(folds.length === 5 && folds.every((f) => f.open === "false") && folds.filter((f) => /\(in use\)$/.test(f.t)).length === 1 && /^Chatterbox-Turbo \(in use\)$/.test(folds.find((f) => /in use/.test(f.t)).t), size.name + ": every engine has its own closed fold, and the one in use is marked (" + folds.map((f) => f.t).join(" | ") + ")");
+    await page.locator(".af-fold", { hasText: "Chatterbox-Turbo (in use)" }).click();
+    await page.waitForTimeout(400);
     check((await page.locator('[data-af-engine-note="chatterbox_turbo"] textarea').count()) === 1, size.name + ": the note for the engine in use can be read and changed");
     check(!errors.length, size.name + ": no console errors. " + errors.slice(0, 2).join("; "));
     await context.close();
@@ -1143,6 +1150,9 @@ if (section("already")) {
     check(prompt.asked === 0 && /already the built-in prompt\. Nothing changed\./.test(prompt.said), where + ": the built-in prompt says it is already in use, and asks nothing (" + JSON.stringify(prompt) + ")");
     const note = await page.evaluate(async () => {
       window.__asked = 0;
+      const card = Array.from(document.querySelectorAll(".af-card")).find((c) => /Notes for each voice engine/.test(c.textContent));
+      card.querySelector(".af-fold").click();
+      await new Promise((r) => setTimeout(r, 400));
       const f = document.querySelector("[data-af-engine-note]");
       if (!f) return null;
       const b = Array.from(f.querySelectorAll("button")).find((x) => x.textContent.trim() === "Back to built-in");
