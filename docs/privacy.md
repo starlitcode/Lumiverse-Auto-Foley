@@ -3,7 +3,7 @@
 ## In short
 
 - Your messages are sent to the Director's connection and, when it is on, to your Decision connection. Both are connections you set up in Lumiverse.
-- Spoken lines go to ElevenLabs through your ElevenLabs connection in Lumiverse.
+- Spoken lines go to your TTS engine through your TTS connection in Lumiverse.
 - Sound descriptions go to ElevenLabs only when a new sound effect is made.
 - Your settings, cast and sound library are kept in Lumiverse, under your account.
 
@@ -13,7 +13,7 @@
 | --- | --- | --- |
 | The message, split into lines, and your cast with its notes | The Director's connection | Each message performed or prepared, while the Director is on |
 | The message lines, and up to 12 cast names with the start of their notes | Your Decision connection | Each message, while the Decision model is on |
-| Each line, with its tags | ElevenLabs, through your Lumiverse TTS connection | Each line spoken |
+| Each line, with the tags its engine reads, and a note on how it is said for Gemini and Qwen3-TTS | Your TTS engine, through your Lumiverse TTS connection | Each line spoken |
 | A short sound description | `api.elevenlabs.io`, with your sound effects key | Each new sound effect made |
 | A key test | `api.elevenlabs.io` | When you save or test the key |
 

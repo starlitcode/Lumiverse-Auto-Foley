@@ -41,6 +41,8 @@ const DEFAULT_SETTINGS = {
     autoplayDelay: 0,
     extraThinkTags: [],
     debugConsole: false,
+    engines: {},
+    engineNotes: {},
     thinkingMode: 'off',
     thinkingEffort: 'low',
     samplers: {},
@@ -82,6 +84,8 @@ function narrator() {
         voice: '',
         voiceName: '',
         model: '',
+        connection: '',
+        voices: {},
         stability: 0.5,
         similarity: 0.75,
         style: 0,
@@ -107,6 +111,20 @@ function pick(v, allowed, dflt) {
     return allowed.indexOf(v) >= 0 ? v : dflt;
 }
 const MAX_CAST = 80;
+// A person's voice on each connection. Kept for at most 20 connections.
+function cleanVoices(v) {
+    const out = {};
+    if (!v || typeof v !== 'object' || Array.isArray(v))
+        return out;
+    for (const k of Object.keys(v).slice(0, 20)) {
+        const id = str(k, 80);
+        const e = v[k];
+        if (!id || !e || typeof e !== 'object')
+            continue;
+        out[id] = { voice: str(e.voice, 120), voiceName: str(e.voiceName, 120), model: str(e.model, 120) };
+    }
+    return out;
+}
 function cleanMember(m) {
     if (!m || typeof m !== 'object')
         return null;
@@ -125,6 +143,8 @@ function cleanMember(m) {
         voice: str(m.voice, 80),
         voiceName: str(m.voiceName, 120),
         model: str(m.model, 64),
+        connection: str(m.connection, 80),
+        voices: cleanVoices(m.voices),
         stability: num(m.stability, 0, 1, base.stability),
         similarity: num(m.similarity, 0, 1, base.similarity),
         style: num(m.style, 0, 1, base.style),
@@ -190,6 +210,26 @@ function cleanNotes(v) {
             out[k] = v[k].slice(0, 2000);
     return out;
 }
+function cleanEngineChoices(v) {
+    const out = {};
+    if (!v || typeof v !== 'object' || Array.isArray(v))
+        return out;
+    for (const k of Object.keys(v).slice(0, 40)) {
+        const id = str(k, 80);
+        if (id && ENGINE_IDS.indexOf(v[k]) >= 0)
+            out[id] = v[k];
+    }
+    return out;
+}
+function cleanEngineNotes(v) {
+    const out = {};
+    if (!v || typeof v !== 'object' || Array.isArray(v))
+        return out;
+    for (const k of ENGINE_IDS)
+        if (typeof v[k] === 'string')
+            out[k] = v[k].slice(0, 2000);
+    return out;
+}
 function partList(v, allowed, dflt) {
     if (!Array.isArray(v))
         return dflt.slice();
@@ -242,6 +282,8 @@ function cleanSettings(raw) {
         autoplayDelay: num(r.autoplayDelay, 0, 30, d.autoplayDelay),
         extraThinkTags: Array.isArray(r.extraThinkTags) ? r.extraThinkTags.map((x) => str(x, 40).trim()).filter(Boolean).slice(0, 20) : [],
         debugConsole: bool(r.debugConsole, d.debugConsole),
+        engines: cleanEngineChoices(r.engines),
+        engineNotes: cleanEngineNotes(r.engineNotes),
         thinkingMode: pick(r.thinkingMode, ['off', 'inherit', 'custom'], 'off'),
         thinkingEffort: pick(r.thinkingEffort, EFFORTS, 'low'),
         samplers: cleanSamplerInput(r.samplers),
@@ -254,7 +296,7 @@ function cleanSettings(raw) {
         applauseOn: bool(r.applauseOn, d.applauseOn),
         applauseForAi: bool(r.applauseForAi, d.applauseForAi),
         applauseForUser: bool(r.applauseForUser, d.applauseForUser),
-        applauseWhen: pick(r.applauseWhen, ['message', 'big', 'line'], 'message'),
+        applauseWhen: pick(r.applauseWhen, ['message', 'big'], 'message'),
         applauseSound: str(r.applauseSound, 64).replace(/[^a-z0-9_-]/gi, ''),
         applauseSeconds: num(r.applauseSeconds, 1, 15, d.applauseSeconds),
         applauseVolume: num(r.applauseVolume, 0, 1, d.applauseVolume),
@@ -459,6 +501,8 @@ function splitLong(text) {
         out.push(cur.trim());
     return out.filter(Boolean);
 }
+const MUSIC_NOTE = /[\u266A\u266B\u266C\u{1F3B5}\u{1F3B6}]/u;
+const MUSIC_NOTES = /[\u266A\u266B\u266C\u{1F3B5}\u{1F3B6}]/gu;
 // Splits a message into lines in the order they are read. Text in straight
 // or curly double quotes is speech. Everything else is narration, including
 // *asterisk actions*. A paragraph break ends a narration line.
@@ -496,8 +540,17 @@ function splitSegments(raw, extra, bound) {
     flush(inQuote ? 'speech' : 'narration');
     const segs = [];
     for (const p of parts) {
-        for (const piece of splitLong(p.text))
-            segs.push({ i: segs.length, kind: p.kind, text: piece });
+        // A music note marks a line as sung. The note itself is not read.
+        const sung = MUSIC_NOTE.test(p.text);
+        const text = sung ? p.text.replace(MUSIC_NOTES, ' ').replace(/[ \t]+/g, ' ').trim() : p.text;
+        if (!/[\p{L}\p{N}]/u.test(text))
+            continue;
+        for (const piece of splitLong(text)) {
+            const seg = { i: segs.length, kind: p.kind, text: piece };
+            if (sung)
+                seg.sung = true;
+            segs.push(seg);
+        }
     }
     return segs;
 }
@@ -525,6 +578,123 @@ const SILENT_TAG = /\b(stand|standing|stands|grin|grins|grinning|smile|smiles|sm
 // Tags for sounds the body makes. "Breaths, sighs and laughs" turns these off.
 const BREATH_TAG = /\b(laugh\w*|chuckl\w*|giggl\w*|snicker\w*|sigh\w*|gasp\w*|exhal\w*|inhal\w*|breath\w*|pant\w*|moan\w*|groan\w*|whimper\w*|gulp\w*|swallow\w*|cough\w*|sniff\w*|sob\w*|cr(y|ies|ying)|scream\w*|yawn\w*|hum\w*|purr\w*|growl\w*|grunt\w*|snort\w*|scoff\w*|clears throat|hiccup\w*|kiss\w*|yelp\w*|squeal\w*|whine\w*)\b/i;
 const MAX_TAGS = { subtle: 1, natural: 2, dramatic: 4 };
+// ---- Voice engines ----
+// The panel says which engine Auto Foley's connection runs, and what it can
+// do. The Director is told, so it writes what that engine can read. The panel
+// fits each line again to the engine that speaks it.
+const ENGINE_IDS = ['eleven_v3', 'eleven_plain', 'fish', 'fish_s1', 'gemini', 'gemini_plain', 'chatterbox_turbo', 'chatterbox_multi', 'qwen', 'plain'];
+// What the panel sent, checked. A message directed with no engine named is
+// directed for ElevenLabs v3, which takes every kind of direction.
+function cleanEngine(v) {
+    const e = v && typeof v === 'object' ? v : {};
+    const id = ENGINE_IDS.indexOf(e.id) >= 0 ? e.id : 'eleven_v3';
+    const tags = pick(e.tags, ['free', 'list', 'none'], id === 'eleven_v3' ? 'free' : 'none');
+    return {
+        id,
+        label: str(e.label, 60) || 'ElevenLabs v3 or v4',
+        tags,
+        list: tags === 'list' && Array.isArray(e.list) ? e.list.map((x) => str(x, 30).toLowerCase()).filter((x) => /^[a-z][a-z -]*$/.test(x)).slice(0, 60) : [],
+        style: e.style === true,
+        inVoiceSounds: e.inVoiceSounds === true || (!v && true),
+        sing: e.sing === true || (!v && true),
+    };
+}
+// The note sent with each engine, saying how it reads tags. Shown in the
+// Director tab, where it can be changed, with a way back to this text.
+const ENGINE_NOTES = {
+    eleven_v3: 'ElevenLabs v3 acts out any short tag in square brackets. A tag shapes the words right after it, so it goes just before them. It can also perform a [sound of ...] tag inside the line.',
+    eleven_plain: 'This ElevenLabs model reads tags out loud, so it gets none. Send every line back with no tags, and still pick the speakers and the sounds.',
+    fish: 'Fish Audio acts out free tags in square brackets, like [barely holding it together] or [whispering]. Put a tag at the start of the sentence it shapes. A tag keeps going until the next one, so when a whisper ends, mark where the voice comes back up. One feeling per sentence works best. Fish can\'t make the sounds of the world, so sounds go in "before" and "after".',
+    fish_s1: 'This Fish Audio model gets no tags. Send every line back with none, and still pick the speakers and the sounds.',
+    gemini: 'Gemini knows only the tags in "tag_list". Use them as written, in square brackets, right where the sound happens, even mid-sentence. How a line is said goes in its "style": a few plain words like "hushed and nervous" or "fast, out of breath". Most lines need no style at all. Leave age, accent and who they are out of it, since the voice already carries those.',
+    gemini_plain: 'This Gemini model gets no tags. Send every line back with none, and still pick the speakers and the sounds.',
+    chatterbox_turbo: 'Chatterbox knows only the nine tags in "tag_list", and they\'re all sounds a voice makes. Use them as written, in square brackets, and rarely: one in a line at most, and most lines get none. It can\'t take a delivery tag like [quietly], so the punctuation carries the delivery.',
+    chatterbox_multi: 'This voice gets no tags. Send every line back with none. Punctuation is all it reads.',
+    qwen: 'Qwen takes no tags inside a line. How a line is said goes in its "style" instead: a short plain instruction like "whispered, close to the ear" or "clipped and angry". Leave it empty when the line works plain.',
+    plain: 'This voice reads lines exactly as written and gets no tags. Still pick the speakers and the sounds.',
+};
+function engineNote(s, id) {
+    const own = s.engineNotes && typeof s.engineNotes[id] === 'string' ? s.engineNotes[id].trim() : '';
+    return own || ENGINE_NOTES[id] || '';
+}
+// Turns a tag into the vocal sound it names, so [laughs softly], [laughing]
+// and [laughter] all become laugh. Empty when it names none of them. The
+// panel has the same table, so a line fitted here and there comes out the
+// same.
+const TAG_WORDS = {
+    laughs: 'laugh', laughing: 'laugh', laughter: 'laugh', laughed: 'laugh',
+    chuckles: 'chuckle', chuckling: 'chuckle', chuckled: 'chuckle',
+    sighs: 'sigh', sighing: 'sigh', sighed: 'sigh',
+    gasps: 'gasp', gasping: 'gasp', gasped: 'gasp',
+    coughs: 'cough', coughing: 'cough',
+    groans: 'groan', groaning: 'groan',
+    sniffs: 'sniff', sniffing: 'sniff', sniffles: 'sniff', sniffling: 'sniff', sniffle: 'sniff',
+    sobs: 'sob', sobbing: 'sob',
+    cries: 'cry', crying: 'cry',
+    giggles: 'giggle', giggling: 'giggle',
+    snorts: 'snort', snorting: 'snort',
+    yawns: 'yawn', yawning: 'yawn',
+    screams: 'scream', screaming: 'scream',
+    shouts: 'shout', shouting: 'shout', yells: 'shout', yelling: 'shout', yell: 'shout',
+    whisper: 'whispers', whispering: 'whispers', whispered: 'whispers',
+    exhale: 'exhales', exhaling: 'exhales', exhaled: 'exhales',
+    breathes: 'breath', breathing: 'breath', inhales: 'breath', inhale: 'breath', inhaling: 'breath', breaths: 'breath',
+    pants: 'pant', panting: 'pant',
+    moans: 'moan', moaning: 'moan',
+    whimpers: 'whimper', whimpering: 'whimper',
+    growls: 'growl', growling: 'growl',
+    grunts: 'grunt', grunting: 'grunt',
+    hisses: 'hiss', hissing: 'hiss',
+    sneezes: 'sneeze', sneezing: 'sneeze',
+    snickers: 'snicker', snickering: 'snicker',
+    shrieks: 'shriek', shrieking: 'shriek',
+    cackles: 'cackle', cackling: 'cackle',
+    cheers: 'cheer', cheering: 'cheer',
+    shh: 'shush', shushes: 'shush', shushing: 'shush',
+    tuts: 'tsk', tut: 'tsk',
+    pff: 'phew', whew: 'phew',
+};
+const TAG_KNOWN = new Set([
+    'argh', 'breath', 'heavy breath', 'exhales', 'cackle', 'cheer', 'chuckle', 'cough', 'cry', 'gasp', 'giggle', 'groan', 'growl',
+    'grunt', 'hiss', 'laugh', 'moan', 'pant', 'phew', 'scream', 'shout', 'shriek', 'sigh', 'sneeze', 'snicker', 'snort', 'sob',
+    'throat-clearing', 'tsk', 'whimper', 'whispers', 'yawn', 'short pause', 'long pause', 'clear throat', 'shush', 'sniff',
+]);
+function tagSound(tag) {
+    const t = String(tag || '').toLowerCase().replace(/[^a-z\s-]/g, ' ').replace(/\s+/g, ' ').trim();
+    if (!t)
+        return '';
+    if (/\b(clears?|clearing)\b.*\bthroat\b|\bthroat[- ]clear/.test(t))
+        return 'throat';
+    if (/\blong pause\b/.test(t))
+        return 'long pause';
+    if (/\b(short pause|pause|beat)\b/.test(t))
+        return 'short pause';
+    if (/\bheavy breath/.test(t))
+        return 'heavy breath';
+    for (const w of t.split(' ')) {
+        const c = TAG_WORDS[w] || w;
+        if (TAG_KNOWN.has(c))
+            return c;
+    }
+    return '';
+}
+function fitTag(tag, list) {
+    const c = tagSound(tag);
+    if (!c)
+        return '';
+    if (c === 'throat')
+        return list.indexOf('clear throat') >= 0 ? 'clear throat' : list.indexOf('throat-clearing') >= 0 ? 'throat-clearing' : '';
+    return list.indexOf(c) >= 0 ? c : '';
+}
+// A note on how a line is said, for an engine that takes it beside the line.
+function cleanStyle(v) {
+    const t = str(v, 120).replace(/\s+/g, ' ').trim();
+    if (!t || t.length > 80 || t.split(' ').length > 12)
+        return '';
+    if (!/^[\p{L}][\p{L} ,'-]*$/u.test(t))
+        return '';
+    return t;
+}
 // A sound performed inside the line, such as [sound of a chair scraping
 // back, someone muttering "fine"]. It may be longer than a voice tag and may
 // carry a few quoted words for a voice in the background.
@@ -533,7 +703,7 @@ const SOUND_TAG_MAX = 140;
 // One in a line is enough. More turn the line into a sound collage and the
 // speech gets lost.
 const SOUND_TAGS_PER_LINE = 1;
-// Keeps the tags ElevenLabs can use and drops the rest. A tag is kept when it
+// Keeps the tags the engine can use and drops the rest. A tag is kept when it
 // is short, made of plain words, describes a sound or a way of speaking, and
 // fits the switches. A [sound of ...] tag has its own, looser rules. The rest
 // of the text is left as it is.
@@ -569,8 +739,11 @@ function cleanTags(text, rules) {
             return ' ';
         if (tags.length >= rules.max)
             return ' ';
-        tags.push(inner.toLowerCase());
-        return ' [' + inner.toLowerCase() + '] ';
+        const tag = rules.list && rules.list.length ? fitTag(inner, rules.list) : inner.toLowerCase();
+        if (!tag)
+            return ' ';
+        tags.push(tag);
+        return ' [' + tag + '] ';
     });
     out = out.replace(/[ \t]+/g, ' ').replace(/\s+([,.!?…;:])/g, '$1').trim();
     return { text: out, tags, sounds };
@@ -582,7 +755,7 @@ function cleanTags(text, rules) {
 // changed there, with a way back to this text. It names no character and
 // assumes nothing about who plays whom, so it suits group chats.
 const BUILT_IN_PROMPT = `<the_director>
-You're directing an audio drama. A scene from a roleplay is about to be read aloud by ElevenLabs voices, and you get it first. Your job is how each line sounds. What's said belongs to the user, so every word stays exactly where they put it.
+You're directing an audio drama. A scene from a roleplay is about to be read aloud by text-to-speech voices, and you get it first. Your job is how each line sounds. What's said belongs to the user, so every word stays exactly where they put it.
 
 The user sets the tone. Maybe it's a lazy morning in a kitchen. Maybe it's a sex scene, or somebody bleeding out on a stairwell. You direct all of it the same way. The scene comes out at the strength it went in: quiet stays quiet, and a brutal scene keeps its teeth. Don't add drama nobody wrote, and don't sand any off either.
 
@@ -597,6 +770,7 @@ A JSON object with:
 "lines": the message split into numbered lines, in order. Each has "i" (its number), "kind" and "text". A "speech" line is said out loud by someone, without its quote marks. A "narration" line is everything else, read by the narrator.
   Some speech lines already carry "speaker". The story itself named who said it, or another model picked it. Keep it.
   Some carry "likely_speaker" instead. That's a guess from an action right before the quote. Use it unless the text clearly points at someone else.
+  A line with "sung": true is one the text itself marks as a song.
 "rules": what you're allowed to do this time. Every rule is explained below.
 </what_you_get>
 
@@ -612,6 +786,12 @@ Mood carries. Once a scene goes hushed, it stays hushed until something on the p
 
 <how_to_tag>
 "voice_tags" in the rules says whether you can add voice tags at all. If it's false, add none, and go straight to sounds.
+
+"engine" names the voice that reads this scene, and "engine_note" says how it takes tags. Voices differ a lot here, so read the note and follow it.
+
+When "tag_list" is there, those are the only tags this voice knows. Use them exactly as written, in square brackets. Anything else you put in brackets gets cut before it reaches the voice.
+
+When "line_style" is true, each line can also carry a "style": a few plain words on how it's said, like "hushed and nervous" or "bright, talking fast". That's where delivery goes for this voice. It follows the same rules as a tag: it comes from the page, and most lines are fine with "style" left as "".
 
 A tag sits in square brackets and describes something you'd hear: a delivery like [quietly], [through gritted teeth], [deadpan] or [half asleep], or a sound a voice makes like [exhales] or [laughs under her breath]. One to four plain words. When "breaths_and_laughs" is false, leave out every sound a voice makes, like sighs, laughs, gasps and breaths.
 
@@ -665,6 +845,10 @@ When "intimate" is true, sounds can include the noises of a sex scene between ad
 Set "big": true on a line that's a real peak: a scream, or the confession that cracks somebody open. It lets the voice swing wider. A scene has one, maybe two. Most have none.
 </big_moments>
 
+<singing>
+Set "sung": true on a line someone actually sings, like song lyrics or a lullaby. Only mark it when the words are sung. A character who mentions a song, or teases in a sing-song voice, is still talking. Don't add a tag that says they sing, because "sung" handles that, and a voice that can't sing will just speak the line. Humming with no words is a sound a voice makes, so it's a tag like [hums].
+</singing>
+
 <new_speakers>
 When "find_speakers" is true and someone speaks who isn't in the cast, use the name the text gives them, or a short plain one if it gives none, like "Bartender". List them in "new_speakers" with "gender" (female, male or unknown) and "about": a few words on how they sound, like "gravelly older man" or "bright, quick young woman". Anyone in a sex scene is an adult.
 </new_speakers>
@@ -679,9 +863,10 @@ Every line comes back, in order, with the same "i" it came with.
 "text" is the whole line: every word of it, exactly as written, with your tags added. Never just the tags.
 "speaker" is a name from the cast, a name from "new_speakers", or "Narrator".
 Leave "before" and "after" as "" when there's no sound, and "big" as false unless it's a real peak.
+Leave "style" as "" and "sung" as false unless the line needs them.
 Leave "new_speakers" as [] when nobody new speaks.
 
-{"lines":[{"i":0,"speaker":"Narrator","text":"...","before":"","after":"","big":false}],"new_speakers":[]}
+{"lines":[{"i":0,"speaker":"Narrator","text":"...","style":"","before":"","after":"","big":false,"sung":false}],"new_speakers":[]}
 </your_answer>`;
 // Pulls one JSON object out of what the model wrote. Models wrap it in a code
 // fence or a sentence often enough that a plain JSON.parse would fail on a
@@ -771,6 +956,8 @@ function applyDirection(segs, answer, cast, author, fixed, rules) {
             before: '',
             after: '',
             note: '',
+            style: '',
+            sung: !!seg.sung,
         };
         if (!d) {
             if (answer)
@@ -807,6 +994,10 @@ function applyDirection(segs, answer, cast, author, fixed, rules) {
             line.after = cleanSound(d.after);
         }
         line.big = rules.bigMoments && d.big === true;
+        if (d.sung === true)
+            line.sung = true;
+        if (rules.lineStyle)
+            line.style = cleanStyle(d.style);
         return line;
     });
     if (changed)
@@ -1487,7 +1678,7 @@ function settingsSig(s) {
     return hash(JSON.stringify([
         s.directorOn, s.directorConnection, s.strength, s.tagsOn, s.breathsOn, s.soundsOn, s.soundStyle, s.narration,
         s.intimateOn, s.findSpeakers, s.bigMoments, s.prompt, s.decisionsOn, s.decisionConnection, s.extraThinkTags,
-        s.thinkingMode, s.thinkingEffort, s.samplers,
+        s.thinkingMode, s.thinkingEffort, s.samplers, s.engineNotes,
         s.cast.map((c) => [c.name, c.aliases, c.note, c.muted]),
     ]));
 }
@@ -1699,9 +1890,10 @@ async function direct(userId, p) {
     const isUser = p.isUser === true;
     const messageId = str(p.messageId, 80);
     const uid = userId || '';
+    const engine = cleanEngine(p.engine);
     // The key holds the settings that change a direction, the cast among
     // them, so a changed note or a new person directs the message again.
-    const keyFor = (set) => hash([messageId, str(p.swipeId, 8), text, settingsSig(set)].join('\u0001'));
+    const keyFor = (set) => hash([messageId, str(p.swipeId, 8), text, JSON.stringify(engine), settingsSig(set)].join('\u0001'));
     // The author of a message is in the cast from the first time they speak, so
     // a voice can be picked for them. This comes before the key, so the key
     // holds the cast as it is directed.
@@ -1730,16 +1922,22 @@ async function direct(userId, p) {
         script.log.push('This message has nothing to read aloud.');
         return script;
     }
+    // An engine that cannot make a sound inside a line has its sounds played
+    // as separate effects instead.
+    const soundStyle = engine.inVoiceSounds ? s.soundStyle : 'effects';
+    const tagsOn = s.tagsOn && engine.tags !== 'none';
     const rules = {
-        tagsOn: s.tagsOn,
+        tagsOn: tagsOn,
         breathsOn: s.breathsOn,
         max: MAX_TAGS[s.strength],
-        soundTags: s.soundsOn && s.soundStyle !== 'effects',
+        soundTags: s.soundsOn && soundStyle !== 'effects',
         sounds: s.soundsOn,
-        effects: s.soundStyle !== 'voice',
+        effects: soundStyle !== 'voice',
         narrationRead: s.narration === 'read',
         findSpeakers: s.findSpeakers,
         bigMoments: s.bigMoments,
+        list: engine.tags === 'list' ? engine.list : [],
+        lineStyle: engine.style && s.tagsOn,
     };
     // The text first: a quote the story itself says who spoke, such as
     // "said Wren", needs no model. The Decision model then picks the rest.
@@ -1782,6 +1980,8 @@ async function direct(userId, p) {
         author: author,
         lines: segs.map((g) => {
             const l = { i: g.i, kind: g.kind, text: g.text };
+            if (g.sung)
+                l.sung = true;
             if (fixed[g.i])
                 l.speaker = fixed[g.i];
             else if (scene.likely[g.i])
@@ -1790,18 +1990,23 @@ async function direct(userId, p) {
         }),
         in_scene: scene.inScene,
         rules: {
+            engine: engine.label,
+            engine_note: engineNote(s, engine.id),
             max_tags: MAX_TAGS[s.strength],
             acting: s.strength,
-            voice_tags: s.tagsOn,
+            voice_tags: tagsOn,
+            line_style: engine.style && s.tagsOn,
             breaths_and_laughs: s.breathsOn,
             sounds: s.soundsOn,
-            sound_style: s.soundStyle,
+            sound_style: soundStyle,
             narration_is_read: s.narration === 'read',
             intimate: s.soundsOn && s.intimateOn,
             find_speakers: s.findSpeakers,
             big_moments: s.bigMoments,
         },
     };
+    if (tagsOn && engine.tags === 'list')
+        payload.rules.tag_list = engine.list;
     if (Object.keys(hints).length)
         payload.rules.sound_hints = hints;
     // The Director is asked, and asked again when the answer cannot be used:
@@ -2238,7 +2443,7 @@ async function onPanel(p, userId) {
                     hasKey = !!(spindle.enclave && typeof spindle.enclave.has === 'function' && (await spindle.enclave.has(KEY_NAME, userId)));
                 }
                 catch (_) { }
-                answer({ type: 'state', settings, sounds, hasKey, builtInPrompt: BUILT_IN_PROMPT, builtInNotes: ASK_NOTES, version: VERSION, decisions: hasDecisions() });
+                answer({ type: 'state', settings, sounds, hasKey, builtInPrompt: BUILT_IN_PROMPT, builtInNotes: ASK_NOTES, builtInEngineNotes: ENGINE_NOTES, version: VERSION, decisions: hasDecisions() });
                 return;
             }
             case 'save': {

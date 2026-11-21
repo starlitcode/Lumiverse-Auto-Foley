@@ -3,11 +3,11 @@
 // The panel lives in a Lumiverse drawer tab, with five tabs: Stage, Cast,
 // Director, Sounds and Settings. Each message gets an Auto Foley button in its
 // row of buttons. Pressing it reads the message, sends it to the backend to be
-// directed, and plays the script that comes back: each line through the
-// reader's ElevenLabs connection in Lumiverse, with the voice of whoever says
-// it, and each sound from the library or from ElevenLabs.
+// directed, and plays the script that comes back: each line through one of
+// the reader's TTS connections in Lumiverse, with the voice of whoever says
+// it, and each sound from the library or from ElevenLabs sound effects.
 //
-// The ElevenLabs key for speech stays in Lumiverse. Lines are spoken through
+// The key for speech stays in Lumiverse. Lines are spoken through
 // Lumiverse's own TTS route, as the signed-in reader, so this file never sees
 // that key.
 
@@ -20,10 +20,9 @@ const OTHER_UI = '[data-spindle-extension-root],[data-spindle-ext],[data-spindle
 const STORE_KEY = 'lv-auto-foley:settings:v1';
 const API = '/api/v1';
 
-// The ElevenLabs models Lumiverse offers. Only v3 and v4 understand voice
-// tags. On the others a tag is read out loud, so tags are taken out first.
-const MODELS: { id: string; label: string }[] = [
-  { id: '', label: 'The connection\'s model' },
+// The ElevenLabs models Lumiverse offers, used when the connection cannot
+// list its own. Only v3 and v4 understand voice tags.
+const ELEVEN_MODELS: { id: string; label: string }[] = [
   { id: 'eleven_v4', label: 'Eleven v4' },
   { id: 'eleven_v4_turbo', label: 'Eleven v4 Turbo' },
   { id: 'eleven_v3', label: 'Eleven v3' },
@@ -31,16 +30,176 @@ const MODELS: { id: string; label: string }[] = [
   { id: 'eleven_flash_v2_5', label: 'Eleven Flash v2.5 (no tags)' },
 ];
 
-function takesTags(model: string): boolean {
-  return /^eleven_v(3|4)/.test(String(model || ''));
+// ---- Voice engines ----
+// Each engine reads acting directions its own way. The Director writes every
+// tag in square brackets, and each line is fitted to the engine that speaks
+// it just before it is sent:
+// - tags "free": any short tag is kept.
+// - tags "list": only the tags the engine knows are kept, and are written in
+//   its own brackets.
+// - tags "none": every tag is taken out, or the voice reads it aloud.
+// style: the engine takes a few plain words on how a line is said, sent
+// beside the line rather than inside it.
+// inVoiceSounds: the engine can perform a [sound of ...] tag in the voice.
+// singTag / singStyle: how a sung line is marked, if the engine can sing.
+interface Engine {
+  id: string;
+  label: string;
+  tags: 'free' | 'list' | 'none';
+  list: string[];
+  wrap: '[]' | '<>';
+  style: boolean;
+  inVoiceSounds: boolean;
+  singTag: string;
+  singStyle: boolean;
+  // The ElevenLabs voice settings: stability, similarity and style.
+  eleven: boolean;
+}
+
+// The vocal sounds Gemini 3.8 lists for its inline tags.
+const GEMINI_TAGS = [
+  'argh', 'breath', 'heavy breath', 'exhales', 'cackle', 'cheer', 'chuckle', 'cough', 'cry', 'gasp', 'giggle', 'groan', 'growl',
+  'grunt', 'hiss', 'laugh', 'moan', 'pant', 'phew', 'scream', 'shout', 'shriek', 'sigh', 'sneeze', 'snicker', 'snort', 'sob',
+  'throat-clearing', 'tsk', 'whimper', 'whispers', 'yawn', 'short pause', 'long pause',
+];
+// The nine tags Chatterbox-Turbo knows.
+const CHATTERBOX_TAGS = ['clear throat', 'sigh', 'shush', 'cough', 'groan', 'sniff', 'gasp', 'chuckle', 'laugh'];
+
+const ENGINE_LIST: Engine[] = [
+  { id: 'eleven_v3', label: 'ElevenLabs v3 or v4', tags: 'free', list: [], wrap: '[]', style: false, inVoiceSounds: true, singTag: 'sings', singStyle: false, eleven: true },
+  { id: 'eleven_plain', label: 'ElevenLabs, a model with no tags', tags: 'none', list: [], wrap: '[]', style: false, inVoiceSounds: false, singTag: '', singStyle: false, eleven: true },
+  { id: 'fish', label: 'Fish Audio S2 or Drama 3', tags: 'free', list: [], wrap: '[]', style: false, inVoiceSounds: false, singTag: 'singing', singStyle: false, eleven: false },
+  { id: 'fish_s1', label: 'Fish Audio S1', tags: 'none', list: [], wrap: '[]', style: false, inVoiceSounds: false, singTag: '', singStyle: false, eleven: false },
+  { id: 'gemini', label: 'Gemini 3.8 TTS', tags: 'list', list: GEMINI_TAGS, wrap: '<>', style: true, inVoiceSounds: false, singTag: '', singStyle: true, eleven: false },
+  { id: 'gemini_plain', label: 'Gemini, an older TTS model', tags: 'none', list: [], wrap: '[]', style: false, inVoiceSounds: false, singTag: '', singStyle: false, eleven: false },
+  { id: 'chatterbox_turbo', label: 'Chatterbox-Turbo', tags: 'list', list: CHATTERBOX_TAGS, wrap: '[]', style: false, inVoiceSounds: false, singTag: '', singStyle: false, eleven: false },
+  { id: 'chatterbox_multi', label: 'Chatterbox-Multilingual', tags: 'none', list: [], wrap: '[]', style: false, inVoiceSounds: false, singTag: '', singStyle: false, eleven: false },
+  { id: 'qwen', label: 'Qwen3-TTS', tags: 'none', list: [], wrap: '[]', style: true, inVoiceSounds: false, singTag: '', singStyle: true, eleven: false },
+  { id: 'plain', label: 'Another engine, read as written', tags: 'none', list: [], wrap: '[]', style: false, inVoiceSounds: false, singTag: '', singStyle: false, eleven: false },
+];
+const ENGINES: Record<string, Engine> = {};
+for (const e of ENGINE_LIST) ENGINES[e.id] = e;
+
+// Which engine a connection runs, from its provider and model. A connection
+// to a local server, such as Chatterbox, is an OpenAI-style connection in
+// Lumiverse, so it is found by name: in the model, the connection's name or
+// its address. Settings can say it outright when the name does not show it.
+function engineOf(conn: any, model?: string, chosen?: string): Engine {
+  if (chosen && ENGINES[chosen]) return ENGINES[chosen];
+  const provider = String((conn && conn.provider) || '').toLowerCase();
+  const m = String(model || (conn && conn.model) || '').toLowerCase();
+  const hay = [m, conn && conn.name, conn && conn.api_url].map((x) => String(x || '').toLowerCase()).join(' ');
+  if (provider === 'elevenlabs') return /^eleven_v(3|4)/.test(m) ? ENGINES.eleven_v3 : ENGINES.eleven_plain;
+  if (provider === 'fish_audio') return /^s1$/.test(m) ? ENGINES.fish_s1 : ENGINES.fish;
+  if (provider === 'google_tts' || provider === 'google_vertex_tts') return /gemini-3\.8-flash(-lite)?-tts/.test(m) ? ENGINES.gemini : ENGINES.gemini_plain;
+  if (provider === 'qwen3_tts_server') return ENGINES.qwen;
+  if (/chatterbox/.test(hay)) return /multilingual|\bmtl\b/.test(hay) ? ENGINES.chatterbox_multi : ENGINES.chatterbox_turbo;
+  return ENGINES.plain;
+}
+
+// Turns a tag into the vocal sound it names, so [laughs softly], [laughing]
+// and [laughter] all become laugh. Empty when it names none of them.
+const TAG_WORDS: Record<string, string> = {
+  laughs: 'laugh', laughing: 'laugh', laughter: 'laugh', laughed: 'laugh',
+  chuckles: 'chuckle', chuckling: 'chuckle', chuckled: 'chuckle',
+  sighs: 'sigh', sighing: 'sigh', sighed: 'sigh',
+  gasps: 'gasp', gasping: 'gasp', gasped: 'gasp',
+  coughs: 'cough', coughing: 'cough',
+  groans: 'groan', groaning: 'groan',
+  sniffs: 'sniff', sniffing: 'sniff', sniffles: 'sniff', sniffling: 'sniff', sniffle: 'sniff',
+  sobs: 'sob', sobbing: 'sob',
+  cries: 'cry', crying: 'cry',
+  giggles: 'giggle', giggling: 'giggle',
+  snorts: 'snort', snorting: 'snort',
+  yawns: 'yawn', yawning: 'yawn',
+  screams: 'scream', screaming: 'scream',
+  shouts: 'shout', shouting: 'shout', yells: 'shout', yelling: 'shout', yell: 'shout',
+  whisper: 'whispers', whispering: 'whispers', whispered: 'whispers',
+  exhale: 'exhales', exhaling: 'exhales', exhaled: 'exhales',
+  breathes: 'breath', breathing: 'breath', inhales: 'breath', inhale: 'breath', inhaling: 'breath', breaths: 'breath',
+  pants: 'pant', panting: 'pant',
+  moans: 'moan', moaning: 'moan',
+  whimpers: 'whimper', whimpering: 'whimper',
+  growls: 'growl', growling: 'growl',
+  grunts: 'grunt', grunting: 'grunt',
+  hisses: 'hiss', hissing: 'hiss',
+  sneezes: 'sneeze', sneezing: 'sneeze',
+  snickers: 'snicker', snickering: 'snicker',
+  shrieks: 'shriek', shrieking: 'shriek',
+  cackles: 'cackle', cackling: 'cackle',
+  cheers: 'cheer', cheering: 'cheer',
+  shh: 'shush', shushes: 'shush', shushing: 'shush',
+  tuts: 'tsk', tut: 'tsk',
+  pff: 'phew', whew: 'phew',
+};
+const TAG_KNOWN = new Set(GEMINI_TAGS.concat(CHATTERBOX_TAGS));
+function tagSound(tag: string): string {
+  const t = String(tag || '').toLowerCase().replace(/[^a-z\s-]/g, ' ').replace(/\s+/g, ' ').trim();
+  if (!t) return '';
+  if (/\b(clears?|clearing)\b.*\bthroat\b|\bthroat[- ]clear/.test(t)) return 'throat';
+  if (/\blong pause\b/.test(t)) return 'long pause';
+  if (/\b(short pause|pause|beat)\b/.test(t)) return 'short pause';
+  if (/\bheavy breath/.test(t)) return 'heavy breath';
+  for (const w of t.split(' ')) {
+    const c = TAG_WORDS[w] || w;
+    if (TAG_KNOWN.has(c)) return c;
+  }
+  return '';
+}
+function fitTag(tag: string, list: string[]): string {
+  const c = tagSound(tag);
+  if (!c) return '';
+  if (c === 'throat') return list.indexOf('clear throat') >= 0 ? 'clear throat' : list.indexOf('throat-clearing') >= 0 ? 'throat-clearing' : '';
+  return list.indexOf(c) >= 0 ? c : '';
+}
+
+// What an engine can do, in one short line for the panel.
+function engineAbility(e: Engine): string {
+  const tags = e.tags === 'free' ? 'yes' : e.tags === 'list' ? 'only its own ' + e.list.length + ' sound tags' : 'no';
+  return (
+    'Voice tags: ' + tags + '. ' +
+    (e.style ? 'Notes on how a line is said: yes. ' : '') +
+    'Sounds inside a line: ' + (e.inVoiceSounds ? 'yes' : 'no') + '. ' +
+    'Singing: ' + (e.singTag || e.singStyle ? 'yes' : 'no, sung lines are spoken') + '.'
+  );
 }
 
 function stripTags(text: string): string {
+  return tidy(String(text || '').replace(/\[[^\]]*\]/g, ' '));
+}
+
+function tidy(text: string): string {
   return String(text || '')
-    .replace(/\[[^\]]*\]/g, ' ')
     .replace(/[ \t]+/g, ' ')
     .replace(/\s+([,.!?…;:])/g, '$1')
     .trim();
+}
+
+// The words sent for one line, fitted to the engine that speaks it.
+function textFor(line: { text: string; sung?: boolean }, eng: Engine): string {
+  let t = String(line.text || '');
+  if (eng.tags === 'none') t = stripTags(t);
+  else
+    t = tidy(
+      t.replace(/\[([^\]]*)\]/g, (_m, inner) => {
+        const tag = String(inner).trim();
+        if (/^sounds? of\b/i.test(tag)) return eng.inVoiceSounds ? ' [' + tag + '] ' : ' ';
+        if (eng.tags === 'free') return ' [' + tag + '] ';
+        const fit = fitTag(tag, eng.list);
+        if (!fit) return ' ';
+        return eng.wrap === '<>' ? ' <' + fit + '> ' : ' [' + fit + '] ';
+      }),
+    );
+  if (line.sung && eng.singTag && !/\[(sings?|singing)\b[^\]]*\]/i.test(t)) t = '[' + eng.singTag + '] ' + t;
+  return t;
+}
+
+// How a line is said, for an engine that takes it beside the line.
+function styleFor(line: { style?: string; sung?: boolean }, eng: Engine): string {
+  if (!eng.style) return '';
+  const said = String(line.style || '').trim();
+  if (line.sung && eng.singStyle) return said ? 'singing, ' + said : 'singing the words to a simple tune';
+  return said;
 }
 
 // Eleven v3 has three stability settings, not a range: Creative, Natural and
@@ -112,7 +271,7 @@ async function hostTrouble(res: Response, what: string): Promise<string> {
 
 // The words for a failed call, and the same failure in the shape errorKind
 // reads, "failed (status): detail", to decide whether waiting can fix it.
-async function readTrouble(res: Response, what: string): Promise<{ why: string; raw: string }> {
+async function readTrouble(res: Response, what: string, who = 'the voice service'): Promise<{ why: string; raw: string }> {
   let said = '';
   try {
     const text = await res.text();
@@ -128,11 +287,25 @@ async function readTrouble(res: Response, what: string): Promise<{ why: string; 
   const wrap = (why: string) => ({ why, raw });
   if (res.status === 401) return wrap(what + ' failed because Lumiverse says you are signed out. Reload the page and sign in.' + tail);
   if (res.status === 404) return wrap(what + ' failed because Lumiverse could not find it.' + tail);
-  if (/No API key/i.test(said)) return wrap(what + ' failed because your ElevenLabs connection in Lumiverse has no key saved.' + tail);
-  if (/quota|credit/i.test(said)) return wrap(what + ' failed because the ElevenLabs account is out of credits.' + tail);
-  if (/401|invalid.*key|unauthori/i.test(said)) return wrap(what + ' failed because ElevenLabs refused the key saved on your connection.' + tail);
-  if (/429|rate|busy|too many/i.test(said)) return wrap(what + ' failed because ElevenLabs is busy. Try again in a moment.' + tail);
+  if (/No API key/i.test(said)) return wrap(what + ' failed because your connection to ' + who + ' in Lumiverse has no key saved.' + tail);
+  if (/quota|credit/i.test(said)) return wrap(what + ' failed because your account with ' + who + ' is out of credits.' + tail);
+  if (/401|invalid.*key|unauthori/i.test(said)) return wrap(what + ' failed because ' + who + ' refused the key saved on your connection.' + tail);
+  if (/429|rate|busy|too many/i.test(said)) return wrap(what + ' failed because ' + who + ' is busy. Try again in a moment.' + tail);
+  if (/ECONNREFUSED|fetch failed|Unable to connect|connect(ion)? refused|unreachable|timed? ?out/i.test(said))
+    return wrap(what + ' failed because Lumiverse could not reach ' + who + '. If it runs on your own computer, check that the server is running and that the address on the connection is right.' + tail);
   return wrap(what + ' failed (' + res.status + ').' + tail);
+}
+
+// A name for the service a connection speaks through, for messages.
+function serviceName(conn: any): string {
+  const p = String((conn && conn.provider) || '').toLowerCase();
+  if (p === 'elevenlabs') return 'ElevenLabs';
+  if (p === 'fish_audio') return 'Fish Audio';
+  if (p === 'google_tts' || p === 'google_vertex_tts') return 'Gemini';
+  if (p === 'qwen3_tts_server') return 'your Qwen3-TTS server';
+  const hay = [conn && conn.model, conn && conn.name, conn && conn.api_url].map((x) => String(x || '').toLowerCase()).join(' ');
+  if (/chatterbox/.test(hay)) return 'your Chatterbox server';
+  return 'the voice service';
 }
 
 function netTrouble(e: any, what: string): string {
@@ -328,7 +501,6 @@ const CSS = `
 @media (max-width: 340px) { .af-tabs { gap: 1px; } .af-tab { padding-left: 1px; padding-right: 1px; } }
 
 .af-page { display: flex; flex-direction: column; gap: 12px; }
-.af-page.af-enter { animation: af-in .22s cubic-bezier(.2,.7,.2,1) both; }
 @keyframes af-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
 
 .af-card { display: flex; flex-direction: column; gap: 11px; padding: 12px; min-width: 0; border-radius: var(--af-r-md); border: 1px solid var(--af-line); background: var(--af-fill-subtle); }
@@ -628,6 +800,10 @@ interface Member {
   voice: string;
   voiceName: string;
   model: string;
+  // The connection this person speaks through. Empty uses Auto Foley's.
+  connection: string;
+  // Their voice and model on each connection, by connection id.
+  voices: Record<string, { voice: string; voiceName: string; model: string }>;
   stability: number;
   similarity: number;
   style: number;
@@ -649,6 +825,9 @@ interface Line {
   before: string;
   after: string;
   note: string;
+  // How the line is said, for an engine that takes it beside the line.
+  style?: string;
+  sung?: boolean;
 }
 
 interface Script {
@@ -696,6 +875,8 @@ const DEFAULTS: any = {
   applauseForAi: true,
   applauseForUser: false,
   applauseWhen: 'message',
+  engines: {},
+  engineNotes: {},
   applauseSound: '',
   applauseSeconds: 5,
   applauseVolume: 0.6,
@@ -766,6 +947,7 @@ export function setup(ctx: Ctx, overrides?: any) {
   let builtInPrompt = '';
   // The built-in notes sent with an ask made again, from the backend.
   let builtInNotes: Record<string, string> = {};
+  let builtInEngineNotes: Record<string, string> = {};
   let sounds: any[] = [];
   let hasKey = false;
   let hostHasDecisions = true;
@@ -798,6 +980,17 @@ export function setup(ctx: Ctx, overrides?: any) {
   function set(patch: any) {
     Object.assign(S, patch);
     save();
+  }
+
+  // What an engine cannot do of what is switched on, said where the switch
+  // is, so nobody waits for a tag or a sound that never comes.
+  function engineWarnings(eng: Engine): string[] {
+    const out: string[] = [];
+    if (S.directorOn && S.tagsOn && eng.tags === 'none')
+      out.push('This engine reads no voice tags, so lines are spoken without them. Eleven v3 or v4, Fish Audio S2 or Drama 3, Gemini 3.8 and Chatterbox-Turbo act them out.');
+    if (S.directorOn && S.soundsOn && S.soundStyle !== 'effects' && !eng.inVoiceSounds)
+      out.push('This engine cannot make sounds inside a line. Its sounds are played as separate sound effects instead, which need the sound effects key in the Sounds tab or sounds you upload there.');
+    return out;
   }
 
   // ---- talking to the backend ----
@@ -894,8 +1087,8 @@ export function setup(ctx: Ctx, overrides?: any) {
       }
       const j = await res.json();
       const all = Array.isArray(j && j.data) ? j.data : [];
-      ttsConnections = all.filter((c: any) => String(c && c.provider).toLowerCase() === 'elevenlabs');
-      ttsWhy = ttsConnections.length ? '' : 'You have no ElevenLabs connection in Lumiverse. Add one under Connections, in the TTS section.';
+      ttsConnections = all.filter((c: any) => c && c.id);
+      ttsWhy = ttsConnections.length ? '' : 'You have no TTS connection in Lumiverse. Add one under Connections, in the TTS section.';
     } catch (e) {
       ttsWhy = netTrouble(e, 'Reading your TTS connections');
       ttsConnections = [];
@@ -921,6 +1114,53 @@ export function setup(ctx: Ctx, overrides?: any) {
     return hostPick || ttsConnections.find((c) => c.is_default) || ttsConnections[0] || null;
   }
 
+  function connById(id: string): any {
+    return (id && ttsConnections.find((c) => c.id === id)) || null;
+  }
+
+  // The connection a person speaks through: their own, when one is picked
+  // and still there, or Auto Foley's.
+  function connOf(m: Member | null): any {
+    const own = m && m.connection ? connById(m.connection) : null;
+    return own || activeConnection();
+  }
+
+  // A person's voice and model on one connection. Voices belong to a
+  // connection, so each connection keeps its own pick. A pick from before
+  // connections were told apart was always an ElevenLabs voice.
+  function pickOf(m: Member | null, conn: any): { voice: string; voiceName: string; model: string } {
+    const none = { voice: '', voiceName: '', model: '' };
+    if (!m || !conn) return none;
+    const v = m.voices && m.voices[conn.id];
+    if (v) return v;
+    if (m.voice && String(conn.provider || '').toLowerCase() === 'elevenlabs') return { voice: m.voice, voiceName: m.voiceName, model: m.model };
+    return none;
+  }
+
+  function setPick(m: Member, conn: any, patch: Partial<{ voice: string; voiceName: string; model: string }>) {
+    if (!conn) return;
+    const next = Object.assign({}, pickOf(m, conn), patch);
+    m.voices = Object.assign({}, m.voices || {});
+    m.voices[conn.id] = next;
+    if (String(conn.provider || '').toLowerCase() === 'elevenlabs') {
+      m.voice = '';
+      m.voiceName = '';
+      m.model = '';
+    }
+  }
+
+  // The engine a connection runs, with the model a person uses on it.
+  function engineFor(conn: any, model?: string): Engine {
+    return engineOf(conn, model, conn && S.engines ? S.engines[conn.id] : '');
+  }
+
+  // The engine for the connection Auto Foley speaks through, which the
+  // Director writes for.
+  function mainEngine(): Engine {
+    const conn = activeConnection();
+    return conn ? engineFor(conn, conn.model) : ENGINES.eleven_v3;
+  }
+
   // Both play a new reply when Lumiverse's auto-play and Auto Foley's are on.
   function bothAutoplay(): boolean {
     return !!S.autoplay && !!S.enabled && !!hostVoice && !!hostVoice.ttsEnabled && !!hostVoice.ttsAutoPlay;
@@ -928,19 +1168,40 @@ export function setup(ctx: Ctx, overrides?: any) {
 
   const voiceCache: Record<string, { voices: any[]; why: string }> = {};
   async function loadVoices(connId: string): Promise<{ voices: any[]; why: string }> {
-    if (!connId) return { voices: [], why: 'Pick your ElevenLabs connection in the Settings tab first.' };
+    if (!connId) return { voices: [], why: 'Pick your TTS connection in the Settings tab first.' };
     if (voiceCache[connId]) return voiceCache[connId];
     try {
       const res = await api('/tts-connections/' + encodeURIComponent(connId) + '/voices');
-      if (!res.ok) return { voices: [], why: await hostTrouble(res, 'Reading your ElevenLabs voices') };
+      if (!res.ok) return { voices: [], why: await hostTrouble(res, 'Reading the voices on this connection') };
       const j = await res.json();
       const voices = Array.isArray(j && j.voices) ? j.voices : [];
-      const out = { voices, why: j && j.error ? 'Reading your ElevenLabs voices failed. Lumiverse said: ' + String(j.error).slice(0, 200) : '' };
+      const out = { voices, why: j && j.error ? 'Reading the voices on this connection failed. Lumiverse said: ' + String(j.error).slice(0, 200) : '' };
       if (voices.length) voiceCache[connId] = out;
       return out;
     } catch (e) {
-      return { voices: [], why: netTrouble(e, 'Reading your ElevenLabs voices') };
+      return { voices: [], why: netTrouble(e, 'Reading the voices on this connection') };
     }
+  }
+
+  // The models a connection offers, for a person's own model. ElevenLabs
+  // falls back to the models Lumiverse is known to offer.
+  const modelCache: Record<string, { id: string; label: string }[]> = {};
+  async function loadModels(conn: any): Promise<{ id: string; label: string }[]> {
+    if (!conn) return [];
+    if (modelCache[conn.id]) return modelCache[conn.id];
+    let list: { id: string; label: string }[] = [];
+    try {
+      const res = await api('/tts-connections/' + encodeURIComponent(conn.id) + '/models');
+      if (res.ok) {
+        const j = await res.json();
+        list = (Array.isArray(j && j.models) ? j.models : [])
+          .filter((x: any) => x && x.id)
+          .map((x: any) => ({ id: String(x.id), label: String(x.label || x.id) }));
+      }
+    } catch (_) {}
+    if (!list.length && String(conn.provider || '').toLowerCase() === 'elevenlabs') list = ELEVEN_MODELS.slice();
+    if (list.length) modelCache[conn.id] = list;
+    return list;
   }
 
   // The chat on screen. Lumiverse's address for a chat is /chat/ and its id,
@@ -1038,7 +1299,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     complete: boolean;
     abort: AbortController;
     startedAt: number;
-    // Parts waiting out a busy ElevenLabs, by part: when the wait ends, and
+    // Parts waiting out a busy voice service, by part: when the wait ends, and
     // which wait it is.
     waiting: Map<number, { until: number; n: number }>;
     // Parts that could not be played, by part.
@@ -1072,20 +1333,19 @@ export function setup(ctx: Ctx, overrides?: any) {
   // connection's voices that matches their gender and nobody in the cast
   // uses, so two new people never sound the same.
   async function voiceForNew(m: Member, conn: any): Promise<void> {
-    if (m.voice || !conn) return;
+    if (!conn || pickOf(m, conn).voice) return;
     const got = await loadVoices(conn.id);
     if (!got.voices.length) return;
-    const used = new Set((S.cast || []).map((c: Member) => c.voice).filter(Boolean));
+    const used = new Set((S.cast || []).map((c: Member) => pickOf(c, conn).voice).filter(Boolean));
     if (conn.voice) used.add(conn.voice);
     const free = got.voices.filter((v: any) => !used.has(v.id));
     const fits = free.filter((v: any) => m.gender !== 'unknown' && String(v.gender || '').toLowerCase() === m.gender);
     const pickFrom = fits.length ? fits : free.length ? free : got.voices;
     const v = pickFrom[Math.floor(Math.random() * pickFrom.length)];
     if (!v) return;
-    m.voice = v.id;
-    m.voiceName = v.name || v.id;
+    setPick(m, conn, { voice: String(v.id), voiceName: String(v.name || v.id) });
     save();
-    log(m.name + ' now has the voice ' + m.voiceName + '. You can change it in the Cast tab.');
+    log(m.name + ' now has the voice ' + (v.name || v.id) + '. You can change it in the Cast tab.');
   }
 
   function buildItems(script: Script): Item[] {
@@ -1106,7 +1366,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       if (spoken) items.push({ kind: 'voice', line, at: line.i });
       if (line.after && S.soundsOn) items.push({ kind: 'sound', line, sound: line.after, at: line.i });
       if (spoken && !isNarr && cheersFor(who, !!script.isUser)) {
-        if (S.applauseWhen === 'line' || (S.applauseWhen === 'big' && line.big)) items.push({ kind: 'applause', line, at: line.i });
+        if (S.applauseWhen === 'big' && line.big) items.push({ kind: 'applause', line, at: line.i });
       }
     }
     if (S.applauseWhen === 'message' && items.length && cheersFor(memberFor(script.author), !!script.isUser)) {
@@ -1129,26 +1389,43 @@ export function setup(ctx: Ctx, overrides?: any) {
   }
 
   async function makeVoiceClip(line: Line, signal: AbortSignal, onWait?: (ms: number, n: number) => void): Promise<{ blob?: Blob; why?: string }> {
-    const conn = activeConnection();
-    if (!conn) return { why: ttsWhy || 'Pick your ElevenLabs connection in the Settings tab.' };
     const isNarr = line.kind === 'narration';
-    let m = isNarr ? narratorMember() : memberFor(line.speaker);
-    if (m && m.kind === 'npc' && !m.voice) await voiceForNew(m, conn);
-    const model = (m && m.model) || conn.model || '';
-    const text = takesTags(model) ? line.text : stripTags(line.text);
-    const params: any = { use_speaker_boost: true };
-    if (m) {
-      params.stability = stabilityFor(model, m.stability, line.big);
-      params.similarity_boost = m.similarity;
-      params.style = m.style;
-      params.speed = m.speed;
+    const m = isNarr ? narratorMember() : memberFor(line.speaker);
+    const conn = connOf(m);
+    if (!conn) return { why: ttsWhy || 'Pick your TTS connection in the Settings tab.' };
+    if (m && m.kind === 'npc' && !pickOf(m, conn).voice) await voiceForNew(m, conn);
+    const pick = pickOf(m, conn);
+    const model = pick.model || conn.model || '';
+    const eng = engineFor(conn, model);
+    const text = textFor(line, eng);
+    const style = styleFor(line, eng);
+    const provider = String(conn.provider || '').toLowerCase();
+    const params: any = {};
+    const speed = m ? Number(m.speed) || 1 : 1;
+    if (eng.eleven) {
+      params.use_speaker_boost = true;
+      if (m) {
+        params.stability = stabilityFor(model, m.stability, line.big);
+        params.similarity_boost = m.similarity;
+        params.style = m.style;
+        params.speed = speed;
+      }
+    } else if (speed !== 1 && provider !== 'google_tts' && provider !== 'google_vertex_tts') {
+      params.speed = speed;
+    }
+    // Gemini takes it as speech_style and Qwen as instruct. With nothing to
+    // say, the connection's own setting is used.
+    if (style) {
+      if (provider === 'qwen3_tts_server') params.instruct = style;
+      else params.speech_style = style;
     }
     const body: any = { connectionId: conn.id, text, parameters: params };
-    if (m && m.voice) body.voice = m.voice;
-    if (m && m.model) body.model = m.model;
+    if (pick.voice) body.voice = pick.voice;
+    if (pick.model) body.model = pick.model;
+    const who = serviceName(conn);
     const what = 'Speaking line ' + (line.i + 1);
-    // A busy ElevenLabs, or a connection that dropped, is waited out up to
-    // Wait out a provider that will not take the call. A refused key or an
+    // A busy voice service, or a connection that dropped, is waited out up
+    // to Wait out a provider that will not take the call. A refused key or an
     // empty account is said at once, since waiting cannot change it.
     for (let wait = 0; ; wait++) {
       let raw = '';
@@ -1164,10 +1441,10 @@ export function setup(ctx: Ctx, overrides?: any) {
         if (res.ok) {
           const blob = await res.blob();
           if (blob.size) return { blob };
-          why = 'ElevenLabs sent back no sound for line ' + (line.i + 1) + '.';
+          why = who.charAt(0).toUpperCase() + who.slice(1) + ' sent back no sound for line ' + (line.i + 1) + '.';
           raw = 'empty';
         } else {
-          const t = await readTrouble(res, what);
+          const t = await readTrouble(res, what, who);
           why = t.why;
           raw = t.raw;
         }
@@ -1177,12 +1454,12 @@ export function setup(ctx: Ctx, overrides?: any) {
         raw = 'network error';
       }
       // An account out of credits reads like a busy one to the shared rules,
-      // since ElevenLabs words it as a quota. It is said at once.
+      // since some services word it as a quota. It is said at once.
       const kind = /quota|credits?|exceeds your/i.test(raw) ? 'hard' : raw === 'empty' ? 'wait' : errorKind(raw);
       if (kind !== 'wait' || wait >= (Number(S.rateWaits) || 0)) return { why };
       const ms = Math.min(30000, rateWait(wait + 1, raw));
       if (onWait) onWait(ms, wait + 1);
-      log('ElevenLabs is busy for line ' + (line.i + 1) + '. Trying again in ' + Math.round(ms / 1000) + ' s (wait ' + (wait + 1) + ' of ' + S.rateWaits + ').');
+      log(who.charAt(0).toUpperCase() + who.slice(1) + ' is busy for line ' + (line.i + 1) + '. Trying again in ' + Math.round(ms / 1000) + ' s (wait ' + (wait + 1) + ' of ' + S.rateWaits + ').');
       const went = await pause(ms, signal);
       if (onWait) onWait(0, 0);
       if (!went) return { why: what + ' was stopped.' };
@@ -1514,11 +1791,17 @@ export function setup(ctx: Ctx, overrides?: any) {
     const swipeId = Number.isInteger(m.swipe_id) ? m.swipe_id : 0;
     directedText.set(messageId, String(m.content || ''));
     while (directedText.size > 60) directedText.delete(directedText.keys().next().value as string);
-    const key = messageId + ':' + swipeId + (fresh ? ':fresh' : '');
+    // The Director writes for the engine of Auto Foley's connection. Each
+    // line is fitted again to the engine that speaks it, when a person in the
+    // cast uses another one.
+    if (!activeConnection()) await loadTtsConnections();
+    const eng = mainEngine();
+    const engine = { id: eng.id, label: eng.label, tags: eng.tags, list: eng.list, style: eng.style, inVoiceSounds: eng.inVoiceSounds, sing: !!(eng.singTag || eng.singStyle) };
+    const key = messageId + ':' + swipeId + ':' + eng.id + (fresh ? ':fresh' : '');
     let p = preparing.get(key);
     if (!p) {
       p = rpc(
-        { type: 'direct', chatId, messageId, swipeId, text: String(m.content || ''), name: String(m.name || ''), isUser: !!m.is_user, fresh },
+        { type: 'direct', chatId, messageId, swipeId, text: String(m.content || ''), name: String(m.name || ''), isUser: !!m.is_user, fresh, engine },
         150000,
       );
       preparing.set(key, p);
@@ -2031,8 +2314,8 @@ export function setup(ctx: Ctx, overrides?: any) {
       title: 'Auto Foley',
       shortName: 'Foley',
       headerTitle: 'Auto Foley',
-      description: 'Voice acting and sound effects for ElevenLabs',
-      keywords: ['tts', 'voice', 'elevenlabs', 'sound effects', 'audio', 'foley', 'speech', 'narrator'],
+      description: 'Voice acting and sound effects for your TTS',
+      keywords: ['tts', 'voice', 'elevenlabs', 'fish audio', 'gemini', 'chatterbox', 'qwen', 'sound effects', 'audio', 'foley', 'speech', 'narrator'],
       iconSvg: ICON,
     });
     drawer.root.appendChild(root);
@@ -2078,7 +2361,7 @@ export function setup(ctx: Ctx, overrides?: any) {
 
   root.innerHTML =
     '<div class="af-head"><div class="af-brand"><div class="af-brand-icon">' + ICON + '</div><div style="min-width:0">' +
-    '<div class="af-brand-name">Auto Foley</div><div class="af-brand-sub">Voice acting and sound effects for ElevenLabs</div></div></div>' +
+    '<div class="af-brand-name">Auto Foley</div><div class="af-brand-sub">Voice acting and sound effects for your TTS</div></div></div>' +
     '<span class="af-pill" data-af="pill"></span></div>' +
     '<div class="af-chatline" data-af="chatline"><span class="af-dot"></span><span></span></div>' +
     '<div class="af-stick" data-af-stick><div class="af-tabs" role="tablist">' +
@@ -2097,9 +2380,34 @@ export function setup(ctx: Ctx, overrides?: any) {
         localStorage.setItem('lv-auto-foley:tab', id);
       } catch (_) {}
       hideHint();
-      renderTab(true);
+      switchTab();
     });
   });
+
+  // A new tab is drawn with the tab bar left where it is on screen, the same
+  // as in Auto Refine. Scrolled down, with the bar held at the top, the new
+  // tab starts right under the bar. With the bar in its own place, the scroll
+  // is left as it is. The page keeps enough height for the bar to stay where
+  // it was, so a short tab does not pull the panel back down.
+  function switchTab() {
+    const box = root.isConnected ? scrollBoxOf(root) : null;
+    const stick = root.querySelector('[data-af-stick]') as HTMLElement | null;
+    if (!box || !stick) {
+      renderTab();
+      return;
+    }
+    // Lumiverse's UI Scale: rectangles are read in zoomed pixels, and the
+    // scroll and the height are written in CSS pixels.
+    const zoom = box.offsetHeight ? box.getBoundingClientRect().height / box.offsetHeight || 1 : 1;
+    const gap = parseFloat(getComputedStyle(root).rowGap) || 0;
+    const boxTop = box.getBoundingClientRect().top;
+    const barBottom = stick.getBoundingClientRect().bottom;
+    const pageTop = page.getBoundingClientRect().top;
+    const target = Math.max(0, box.scrollTop + (pageTop - barBottom) / zoom - gap);
+    page.style.minHeight = Math.ceil(box.clientHeight - (barBottom - boxTop) / zoom - gap) + 'px';
+    renderTab();
+    box.scrollTop = target;
+  }
 
   function paintHead() {
     paintStill();
@@ -2233,17 +2541,32 @@ export function setup(ctx: Ctx, overrides?: any) {
     q.addEventListener('mouseleave', (e: any) => {
       if (fromMouse(e) && hintAnchor === q) hideHint();
     });
+    // Focus opens it only when a key put you there. A tap focuses the button
+    // too, so opening from focus as well would open it on the press and close
+    // it again on the click, and the first tap would show nothing. Blur closes
+    // only what focus opened, so a finger reading the popover keeps it open.
+    let byFocus = false;
     q.addEventListener('focus', () => {
+      let byKey = true;
+      try {
+        byKey = q.matches(':focus-visible');
+      } catch (_) {}
+      if (!byKey) return;
+      byFocus = true;
       if (hintAnchor !== q) showHint(q, say);
     });
     q.addEventListener('blur', () => {
+      if (!byFocus) return;
+      byFocus = false;
       if (hintAnchor === q) hideHint();
     });
     q.addEventListener('click', (e: any) => {
       e.preventDefault();
       e.stopPropagation();
-      if (hintAnchor === q && !fromMouse(e)) hideHint();
-      else if (hintAnchor !== q) showHint(q, say);
+      // On a mouse, hover has it open already. On touch, each tap toggles.
+      if (fromMouse(e)) return;
+      if (hintAnchor === q) hideHint();
+      else showHint(q, say);
     });
     return q;
   }
@@ -2602,12 +2925,11 @@ export function setup(ctx: Ctx, overrides?: any) {
   }
 
   // ---- rendering ----
-  function renderTab(animate?: boolean) {
+  function renderTab() {
     if (!alive) return;
     paintHead();
     hideHint();
     page.innerHTML = '';
-    page.classList.remove('af-enter');
     stageRefs = null;
     try {
       if (tab === 'stage') renderStage();
@@ -2617,10 +2939,6 @@ export function setup(ctx: Ctx, overrides?: any) {
       else renderSettings();
     } catch (e: any) {
       page.appendChild(notice('bad', 'This tab could not be drawn: ' + String((e && e.message) || e)));
-    }
-    if (animate && !calm()) {
-      void page.offsetWidth;
-      page.classList.add('af-enter');
     }
   }
 
@@ -2969,12 +3287,11 @@ export function setup(ctx: Ctx, overrides?: any) {
     c.appendChild(
       toggle('Applause', 'Off by default. Plays a cheering crowd after a performance. The built-in cheer is a free recording from Pixabay.', 'applauseOn', () => {}, () => [
         toggle('Cheer for the AI\u2019s characters', 'On by default. The audience cheers after the characters the AI plays.', 'applauseForAi'),
-        toggle('Cheer for you', 'Off by default. The audience cheers after your own messages too, in your persona\u2019s voice.', 'applauseForUser'),
+        toggle('Cheer for you', 'Off by default. The audience cheers after your own messages too.', 'applauseForUser'),
         segmented('When they cheer', [
           { id: 'message', label: 'End of a message' },
           { id: 'big', label: 'Big moments' },
-          { id: 'line', label: 'Every line' },
-        ], S.applauseWhen, (v) => set({ applauseWhen: v }), 'End of a message is the default: one cheer when a message finishes. Big moments cheers after the lines the Director marks as a peak. Every line cheers after each spoken line.'),
+        ], S.applauseWhen, (v) => set({ applauseWhen: v }), 'End of a message is the default: one cheer when a message finishes. Big moments cheers after a line the Director marks as a peak, which needs Big moments on in the Director tab.'),
         slider('How long they cheer', Number(S.applauseSeconds) || 5, 1, 15, 1, (v) => v + ' s', (v) => set({ applauseSeconds: v }), '5 seconds by default. The cheer fades out at the end, so the next part is not held up.'),
         slider('How loud they cheer', Math.round((Number(S.applauseVolume) || 0) * 100), 0, 100, 5, (v) => v + '%', (v) => set({ applauseVolume: v / 100 }), '60% by default, of the Sounds volume on the Stage tab.'),
         select('Applause sound', [{ id: '', label: 'The built-in cheering crowd' }].concat(sounds.map((x) => ({ id: String(x.id), label: String(x.name) }))), S.applauseSound, (v) => set({ applauseSound: v }), 'The built-in cheer by default. Any sound in your library can be used instead. Upload one in the Sounds tab.'),
@@ -3288,7 +3605,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       title.textContent = show.script.author ? show.script.author + '’s message' : 'This message';
       const w = show.waiting.get(show.index);
       const said = w
-        ? 'ElevenLabs is busy. Trying again in ' + Math.max(0, Math.ceil((w.until - Date.now()) / 1000)) + ' s (wait ' + w.n + ' of ' + S.rateWaits + ')'
+        ? 'The voice service is busy. Trying again in ' + Math.max(0, Math.ceil((w.until - Date.now()) / 1000)) + ' s (wait ' + w.n + ' of ' + S.rateWaits + ')'
         : phase || 'Playing';
       sub.textContent = said + ' · part ' + Math.min(show.index + 1, show.items.length) + ' of ' + show.items.length + ' · ' + secs + ' s';
       bar.style.width = Math.round((show.index / show.items.length) * 100) + '%';
@@ -3434,7 +3751,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     row.appendChild(
       button('Add someone', () => {
         const m: Member = {
-          id: rid('c'), name: 'New person', kind: 'npc', addedBy: 'you', aliases: [], voice: '', voiceName: '', model: '',
+          id: rid('c'), name: 'New person', kind: 'npc', addedBy: 'you', aliases: [], voice: '', voiceName: '', model: '', connection: '', voices: {},
           stability: 0.5, similarity: 0.75, style: 0, speed: 1, note: '', gender: 'unknown', muted: false,
         };
         S.cast.push(m);
@@ -3445,7 +3762,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     );
     top.appendChild(row);
     const conn = activeConnection();
-    if (!conn) top.appendChild(notice('warn', ttsWhy || 'Pick your ElevenLabs connection in the Settings tab to choose voices.'));
+    if (!conn) top.appendChild(notice('warn', ttsWhy || 'Pick your TTS connection in the Settings tab to choose voices.'));
     page.appendChild(top);
     const order: Record<string, number> = { narrator: 0, persona: 1, character: 2, npc: 3 };
     const people = (S.cast as Member[]).slice().sort((a, b) => (order[a.kind] ?? 9) - (order[b.kind] ?? 9));
@@ -3467,7 +3784,8 @@ export function setup(ctx: Ctx, overrides?: any) {
     const inner = c.querySelector('.af-person-inner') as HTMLElement;
     const paintName = () => {
       (c.querySelector('.af-person-name b') as HTMLElement).textContent = m.name;
-      (c.querySelector('.af-person-name span') as HTMLElement).textContent = m.muted ? 'Not voiced' : m.voiceName || (m.voice ? m.voice : 'The connection’s voice');
+      const pick = pickOf(m, connOf(m));
+      (c.querySelector('.af-person-name span') as HTMLElement).textContent = m.muted ? 'Not voiced' : pick.voiceName || pick.voice || 'The connection’s voice';
     };
     paintName();
     let built = false;
@@ -3524,85 +3842,129 @@ export function setup(ctx: Ctx, overrides?: any) {
       inner.appendChild(g1);
     }
 
-    const vid = rid('vc');
-    const voiceField = el('<div class="af-col"></div>');
-    voiceField.appendChild(labelRow('Voice', 'The ElevenLabs voice for this person, from your connection. Designed or cloned voices act better than the stock voices.', vid));
-    const vwrap = el('<div class="af-selwrap"><select class="af-field" id="' + vid + '" disabled><option>Loading your voices…</option></select></div>');
-    const vs = vwrap.firstElementChild as HTMLSelectElement;
-    voiceField.appendChild(vwrap);
-    const vh = el('<p class="af-note"></p>');
-    voiceField.appendChild(vh);
-    inner.appendChild(voiceField);
-    if (conn) {
-      loadVoices(conn.id).then((got) => {
-        if (!vs.isConnected) return;
-        vs.disabled = false;
-        const opts = [{ id: '', label: 'The connection’s voice' }].concat(
-          got.voices.map((v: any) => ({ id: String(v.id), label: String(v.name || v.id) + (v.gender ? ' (' + v.gender + ')' : '') })),
+    // The connection, voice and model, and the voice settings that engine
+    // has. Drawn again when the connection or the model changes, since each
+    // engine has its own.
+    const voiceBox = el('<div class="af-col af-voicebox"></div>');
+    inner.appendChild(voiceBox);
+    const drawVoice = () => {
+      voiceBox.innerHTML = '';
+      const cn = connOf(m);
+      if (ttsConnections.length > 1 || m.connection) {
+        const main = activeConnection();
+        const opts = [{ id: '', label: 'Auto Foley’s connection' + (main ? ' (' + main.name + ')' : '') }].concat(
+          ttsConnections.map((c) => ({ id: String(c.id), label: String(c.name || c.id) + ' · ' + engineFor(c, c.model).label })),
         );
-        if (m.voice && !opts.some((o) => o.id === m.voice)) opts.push({ id: m.voice, label: m.voiceName || m.voice });
-        vs.innerHTML = opts.map((o) => '<option value="' + esc(o.id) + '"' + (o.id === m.voice ? ' selected' : '') + '>' + esc(o.label) + '</option>').join('');
-        vh.textContent = got.why;
-        vh.hidden = !got.why;
-      });
-    } else {
-      vs.innerHTML = '<option>No ElevenLabs connection</option>';
-      vh.textContent = ttsWhy || 'Pick your ElevenLabs connection in the Settings tab.';
-    }
-    vs.addEventListener('change', () => {
-      m.voice = vs.value;
-      m.voiceName = m.voice ? String((vs.selectedOptions[0] && vs.selectedOptions[0].textContent) || '').replace(/ \((female|male|neutral)\)$/i, '') : '';
-      save();
-      paintName();
-    });
-
-    const stabilityBox = el('<div></div>');
-    const drawStability = () => {
-      stabilityBox.innerHTML = '';
-      const model = m.model || (conn && conn.model) || '';
-      if (/^eleven_v3/.test(model)) {
-        stabilityBox.appendChild(
-          segmented('Stability', [
-            { id: '0', label: 'Creative' },
-            { id: '0.5', label: 'Natural' },
-            { id: '1', label: 'Robust' },
-          ], String(stabilityFor('eleven_v3', m.stability, false)), (v) => {
-            m.stability = Number(v);
+        if (m.connection && !connById(m.connection)) opts.push({ id: m.connection, label: 'A connection that is gone' });
+        voiceBox.appendChild(
+          select('Connection', opts, m.connection || '', (v) => {
+            m.connection = v;
             save();
-          }, 'Eleven v3 has three settings. Creative is the most expressive and can drift. Robust is the steadiest and acts the least. Natural is the default.'),
-        );
-      } else {
-        stabilityBox.appendChild(
-          slider('Stability', m.stability, 0, 1, 0.05, (v) => v.toFixed(2), (v) => {
-            m.stability = v;
-            save();
-          }, 'Lower is more expressive and varied. Higher is steadier and more even. 0.50 by default.'),
+            paintName();
+            drawVoice();
+          }, 'The TTS connection this person speaks through. Use it to mix engines, such as a narrator on a cheaper engine. Each connection keeps its own voice for them.'),
         );
       }
-    };
-    inner.appendChild(
-      select('Model', MODELS, m.model, (v) => {
-        m.model = v;
+      const vid = rid('vc');
+      const voiceField = el('<div class="af-col"></div>');
+      voiceField.appendChild(labelRow('Voice', 'Their voice on this connection. Designed or cloned voices act better than the stock voices.', vid));
+      const vwrap = el('<div class="af-selwrap"><select class="af-field" id="' + vid + '" disabled><option>Loading your voices…</option></select></div>');
+      const vs = vwrap.firstElementChild as HTMLSelectElement;
+      voiceField.appendChild(vwrap);
+      const vh = el('<p class="af-note" hidden></p>');
+      voiceField.appendChild(vh);
+      voiceBox.appendChild(voiceField);
+      if (cn) {
+        loadVoices(cn.id).then((got) => {
+          if (!vs.isConnected) return;
+          vs.disabled = false;
+          const now = pickOf(m, cn);
+          const opts = [{ id: '', label: 'The connection’s voice' }].concat(
+            got.voices.map((v: any) => ({ id: String(v.id), label: String(v.name || v.id) + (v.gender ? ' (' + v.gender + ')' : '') })),
+          );
+          if (now.voice && !opts.some((o) => o.id === now.voice)) opts.push({ id: now.voice, label: now.voiceName || now.voice });
+          vs.innerHTML = opts.map((o) => '<option value="' + esc(o.id) + '"' + (o.id === now.voice ? ' selected' : '') + '>' + esc(o.label) + '</option>').join('');
+          vh.textContent = got.why;
+          vh.hidden = !got.why;
+        });
+      } else {
+        vs.innerHTML = '<option>No TTS connection</option>';
+        vh.textContent = ttsWhy || 'Pick your TTS connection in the Settings tab.';
+        vh.hidden = false;
+      }
+      vs.addEventListener('change', () => {
+        const voice = vs.value;
+        const voiceName = voice ? String((vs.selectedOptions[0] && vs.selectedOptions[0].textContent) || '').replace(/ \((female|male|neutral)\)$/i, '') : '';
+        setPick(m, cn, { voice, voiceName });
         save();
-        drawStability();
-      }, 'Voice tags and sounds in the voice work only with Eleven v3 and v4. Other models read the line with the tags taken out. Empty uses the connection’s model.'),
-    );
-    drawStability();
-    inner.appendChild(stabilityBox);
-    const g2 = el('<div class="af-grid2"></div>');
-    g2.appendChild(slider('Similarity', m.similarity, 0, 1, 0.05, (v) => v.toFixed(2), (v) => {
-      m.similarity = v;
-      save();
-    }, 'How closely ElevenLabs keeps to the original voice. 0.75 by default.'));
-    g2.appendChild(slider('Style', m.style, 0, 1, 0.05, (v) => v.toFixed(2), (v) => {
-      m.style = v;
-      save();
-    }, 'Exaggerates the voice’s own style. 0 by default. Higher can sound less stable.'));
-    g2.appendChild(slider('Speed', m.speed, 0.7, 1.2, 0.05, (v) => v.toFixed(2) + '×', (v) => {
-      m.speed = v;
-      save();
-    }, 'How fast they speak, from 0.7 to 1.2. 1.00 by default.'));
-    inner.appendChild(g2);
+        paintName();
+      });
+      if (!cn) return;
+      const pick = pickOf(m, cn);
+      const eng = engineFor(cn, pick.model || cn.model);
+      const mid = rid('md');
+      const modelField = el('<div class="af-col"></div>');
+      modelField.appendChild(labelRow('Model', 'Empty uses the connection’s model. The model decides which acting directions work, shown under this box.', mid));
+      const mwrap = el('<div class="af-selwrap"><select class="af-field" id="' + mid + '"><option value="">The connection’s model' + (cn.model ? ' (' + esc(cn.model) + ')' : '') + '</option></select></div>');
+      const ms = mwrap.firstElementChild as HTMLSelectElement;
+      modelField.appendChild(mwrap);
+      modelField.appendChild(hint(esc('Engine: ' + eng.label + '. ' + engineAbility(eng))));
+      voiceBox.appendChild(modelField);
+      loadModels(cn).then((list) => {
+        if (!ms.isConnected) return;
+        const opts = list.slice();
+        if (pick.model && !opts.some((o) => o.id === pick.model)) opts.push({ id: pick.model, label: pick.model });
+        ms.innerHTML =
+          '<option value="">The connection’s model' + (cn.model ? ' (' + esc(cn.model) + ')' : '') + '</option>' +
+          opts.map((o) => '<option value="' + esc(o.id) + '"' + (o.id === pick.model ? ' selected' : '') + '>' + esc(o.label) + '</option>').join('');
+      });
+      ms.addEventListener('change', () => {
+        setPick(m, cn, { model: ms.value });
+        save();
+        drawVoice();
+      });
+      if (eng.eleven) {
+        const model = pick.model || cn.model || '';
+        if (/^eleven_v3/.test(model)) {
+          voiceBox.appendChild(
+            segmented('Stability', [
+              { id: '0', label: 'Creative' },
+              { id: '0.5', label: 'Natural' },
+              { id: '1', label: 'Robust' },
+            ], String(stabilityFor('eleven_v3', m.stability, false)), (v) => {
+              m.stability = Number(v);
+              save();
+            }, 'Eleven v3 has three settings. Creative is the most expressive and can drift. Robust is the steadiest and acts the least. Natural is the default.'),
+          );
+        } else {
+          voiceBox.appendChild(
+            slider('Stability', m.stability, 0, 1, 0.05, (v) => v.toFixed(2), (v) => {
+              m.stability = v;
+              save();
+            }, 'Lower is more expressive and varied. Higher is steadier and more even. 0.50 by default.'),
+          );
+        }
+      }
+      const g2 = el('<div class="af-grid2"></div>');
+      if (eng.eleven) {
+        g2.appendChild(slider('Similarity', m.similarity, 0, 1, 0.05, (v) => v.toFixed(2), (v) => {
+          m.similarity = v;
+          save();
+        }, 'How closely ElevenLabs keeps to the original voice. 0.75 by default.'));
+        g2.appendChild(slider('Style', m.style, 0, 1, 0.05, (v) => v.toFixed(2), (v) => {
+          m.style = v;
+          save();
+        }, 'Exaggerates the voice’s own style. 0 by default. Higher can sound less stable.'));
+      }
+      if (!/^gemini/.test(eng.id)) {
+        g2.appendChild(slider('Speed', m.speed, 0.7, 1.2, 0.05, (v) => v.toFixed(2) + '×', (v) => {
+          m.speed = v;
+          save();
+        }, 'How fast they speak, from 0.7 to 1.2. 1.00 by default.'));
+      }
+      if (g2.childElementCount) voiceBox.appendChild(g2);
+    };
+    drawVoice();
     inner.appendChild(
       area('How they speak', m.note, (v) => {
         m.note = v.slice(0, 300);
@@ -3629,13 +3991,15 @@ export function setup(ctx: Ctx, overrides?: any) {
     const status = el('<p class="af-status"></p>');
     actions.appendChild(
       button('Hear a sample', async () => {
-        status.textContent = 'Asking ElevenLabs…';
+        const cn = connOf(m);
+        status.textContent = 'Asking ' + serviceName(cn) + '…';
         status.dataset.kind = '';
-        const model = m.model || (conn && conn.model) || '';
+        const eng = engineFor(cn, pickOf(m, cn).model || (cn && cn.model));
         const sample: Line = {
           i: 0, kind: m.kind === 'narrator' ? 'narration' : 'speech', speaker: m.name,
-          text: takesTags(model) ? 'This is how I sound. [softly] And this is how I sound when I lower my voice.' : 'This is how I sound when I read a line for you.',
+          text: eng.tags === 'free' ? 'This is how I sound. [softly] And this is how I sound when I lower my voice.' : eng.tags === 'list' ? 'This is how I sound. [sigh] And this is how I sound after a long day.' : 'This is how I sound when I read a line for you.',
           plain: '', tags: [], big: false, before: '', after: '', note: '',
+          style: eng.style ? 'quiet and close' : '',
         };
         const got = await makeVoiceClip(sample, new AbortController().signal);
         if (got.blob) {
@@ -3717,20 +4081,33 @@ export function setup(ctx: Ctx, overrides?: any) {
             { id: 'dramatic', label: 'Dramatic' },
           ], S.strength, (v) => set({ strength: v }), 'At most 1, 2 or 4 voice tags in one line. Natural by default. Subtle suits quiet scenes, and Dramatic suits big ones.'),
         );
-        rows.push(toggle('Voice tags', 'On by default. How a line is said, such as [whispers], [shouting] or [voice breaking]. Off: no voice tags at all.', 'tagsOn'));
+        // What the engine in use cannot do of what is on, painted again as
+        // the switches change.
+        const warnBox = el('<div class="af-col" data-af-engine-warn></div>');
+        const paintWarn = () => {
+          warnBox.innerHTML = '';
+          for (const w of engineWarnings(mainEngine())) warnBox.appendChild(notice('warn', w));
+          warnBox.hidden = !warnBox.childElementCount;
+        };
+        paintWarn();
+        rows.push(toggle('Voice tags', 'On by default. How a line is said, such as [whispers], [shouting] or [voice breaking]. Off: no voice tags at all.', 'tagsOn', paintWarn));
         rows.push(toggle('Breaths, sighs and laughs', 'On by default. Sounds a voice makes, such as [sighs], [laughs] or [gasps]. Off takes them out of every line.', 'breathsOn'));
         rows.push(
-          toggle('Sounds', 'On by default. Sounds of what happens in the scene: a door, footsteps, a glass breaking.', 'soundsOn', undefined, () => [
+          toggle('Sounds', 'On by default. Sounds of what happens in the scene: a door, footsteps, a glass breaking.', 'soundsOn', paintWarn, () => [
             segmented('How sounds are made', [
               { id: 'voice', label: 'In the voice' },
               { id: 'effects', label: 'Sound effects' },
               { id: 'both', label: 'Both' },
-            ], S.soundStyle, (v) => set({ soundStyle: v }), 'In the voice is the default: a [sound of ...] tag inside a spoken line, which Eleven v3 and v4 perform with the line, with no extra key. Sound effects are separate clips from your library, or made with the key in the Sounds tab. Both lets the Director choose.'),
+            ], S.soundStyle, (v) => {
+              set({ soundStyle: v });
+              paintWarn();
+            }, 'In the voice is the default: a [sound of ...] tag inside a spoken line. Only Eleven v3 and v4 can perform it. Other engines play sound effects instead: separate clips from your library, or made with the key in the Sounds tab. Both lets the Director choose.'),
             toggle('Intimate sounds', 'Off by default. Lets the Director add the sounds of sex scenes between adults, such as kissing, skin, wet sounds or a bed creaking.', 'intimateOn'),
           ]),
         );
+        rows.push(warnBox);
         rows.push(toggle('Find new speakers', 'On by default. Someone who speaks and is not in the cast is added to it, and given a voice nobody else uses.', 'findSpeakers'));
-        rows.push(toggle('Big moments', 'On by default. The Director can mark an emotional peak, such as a scream. That line gets a looser, more expressive voice.', 'bigMoments'));
+        rows.push(toggle('Big moments', 'On by default. The Director can mark an emotional peak, such as a scream. On ElevenLabs, that line gets a looser, more expressive voice. The audience can cheer on it.', 'bigMoments'));
         return rows;
       }),
     );
@@ -3806,7 +4183,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     const again = card('Asking again', 'What happens when a call fails. A refused call costs nothing. An answer that came back costs a call each time it is asked for again.');
     again.appendChild(
       select('Wait out a provider that will not take the call', ['0', '1', '2', '3', '4', '5'].map((n) => ({ id: n, label: n === '0' ? 'Do not wait' : n + (n === '1' ? ' time' : ' times') })), String(S.rateWaits), (v) => set({ rateWaits: Number(v) }),
-        'How many times to wait and ask again when ElevenLabs or the Director’s provider is busy, rate-limited or loading. 2 by default. A refused key or an empty account is never asked again.'),
+        'How many times to wait and ask again when the voice service or the Director’s provider is busy, rate-limited or loading. 2 by default. A refused key or an empty account is never asked again.'),
     );
     again.appendChild(
       select('Ask again when the Director’s answer fails', ['0', '1', '2', '3'].map((n) => ({ id: n, label: n === '0' ? 'Do not ask again' : n + (n === '1' ? ' time' : ' times') })), String(S.retryDirector), (v) => set({ retryDirector: Number(v) }),
@@ -3828,7 +4205,8 @@ export function setup(ctx: Ctx, overrides?: any) {
             else next[n.id] = v;
             set({ askNotes: next });
           }, { rows: 3, help: 'The note sent with the next ask after this failure. Empty sends no note for it. Back to built-in puts the built-in note back.' });
-          const back = button('Back to built-in', () => {
+          const back = button('Back to built-in', async () => {
+            if (!(await askSure('Back to the built-in note', 'Your wording of “' + n.label + '” is replaced by the built-in note. There is no undo.', 'Use the built-in note'))) return;
             const next = Object.assign({}, S.askNotes || {});
             delete next[n.id];
             set({ askNotes: next });
@@ -3850,6 +4228,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     drawFb();
     again.appendChild(fbBox);
     page.appendChild(again);
+    page.appendChild(engineNotesCard());
     if (!llmConnections) {
       const t = setTimeout(() => {
         timers.delete(t);
@@ -3896,7 +4275,8 @@ export function setup(ctx: Ctx, overrides?: any) {
     const prRow = el('<div class="af-row"></div>');
     prRow.appendChild(expandButton('The Director’s prompt', ta));
     const stateText = el('<span class="af-note af-grow"></span>');
-    const back = button('Back to the built-in prompt', () => {
+    const back = button('Back to the built-in prompt', async () => {
+      if (!(await askSure('Back to the built-in prompt', 'Your own version of the Director’s prompt is replaced by the built-in one. There is no undo.', 'Use the built-in prompt'))) return;
       ta.value = builtInPrompt;
       set({ prompt: '' });
       paintPromptState();
@@ -4085,7 +4465,7 @@ export function setup(ctx: Ctx, overrides?: any) {
   // ---------- Settings ----------
   let setupChecked = 0;
   function renderSettings() {
-    const a = card('Auto Foley', 'Auto Foley speaks through your ElevenLabs connection in Lumiverse, so your ElevenLabs key stays in Lumiverse.');
+    const a = card('Auto Foley', 'Auto Foley speaks through a TTS connection in Lumiverse, so the key for it stays in Lumiverse. ElevenLabs, Fish Audio, Gemini, Chatterbox and Qwen3-TTS can act. Any other engine reads the lines plain.');
     a.appendChild(toggle('Auto Foley is on', 'On by default. Off: no buttons on messages, nothing plays, and nothing is sent anywhere.', 'enabled', () => {
       if (!S.enabled) stop();
       syncSlots();
@@ -4094,10 +4474,31 @@ export function setup(ctx: Ctx, overrides?: any) {
     const drawConn = () => {
       connBox.innerHTML = '';
       const hostPick = hostVoice && hostVoice.ttsConnectionId ? ttsConnections.find((c) => c.id === hostVoice.ttsConnectionId) : null;
-      const opts = [{ id: '', label: hostPick ? 'Lumiverse’s TTS connection (' + hostPick.name + ')' : 'Lumiverse’s TTS connection' }].concat(ttsConnections.map((c) => ({ id: c.id, label: c.name + (c.model ? ' (' + c.model + ')' : '') })));
+      const opts = [{ id: '', label: hostPick ? 'Lumiverse’s TTS connection (' + hostPick.name + ')' : 'Lumiverse’s TTS connection' }].concat(
+        ttsConnections.map((c) => ({ id: c.id, label: c.name + ' · ' + engineFor(c, c.model).label })),
+      );
       if (S.ttsConnection && !opts.some((o) => o.id === S.ttsConnection)) opts.push({ id: S.ttsConnection, label: 'A connection that is gone' });
-      connBox.appendChild(select('ElevenLabs connection', opts, S.ttsConnection, (v) => set({ ttsConnection: v }), 'The ElevenLabs connection Auto Foley speaks through. Only ElevenLabs connections are listed. The first choice follows the connection picked in Lumiverse’s Voice settings.'));
+      connBox.appendChild(select('TTS connection', opts, S.ttsConnection, (v) => {
+        set({ ttsConnection: v });
+        drawConn();
+      }, 'The connection Auto Foley speaks through. The first choice follows the connection picked in Lumiverse’s Voice settings. A person in the Cast tab can use another one.'));
       if (ttsWhy) connBox.appendChild(notice('warn', ttsWhy));
+      const conn = activeConnection();
+      if (conn) {
+        const found = engineOf(conn, conn.model);
+        const chosen = S.engines && S.engines[conn.id] ? S.engines[conn.id] : '';
+        connBox.appendChild(
+          select('What this connection runs', [{ id: '', label: 'Found from the connection (' + found.label + ')' }].concat(ENGINE_LIST.map((e) => ({ id: e.id, label: e.label }))), chosen, (v) => {
+            const next = Object.assign({}, S.engines || {});
+            if (v) next[conn.id] = v;
+            else delete next[conn.id];
+            set({ engines: next });
+            drawConn();
+          }, 'How the acting is written for this connection. It is found from the provider and the model. Pick it here when a local server, such as Chatterbox, is not found by its name.'),
+        );
+        connBox.appendChild(hint(esc(engineAbility(engineFor(conn, conn.model)))));
+        for (const w of engineWarnings(engineFor(conn, conn.model))) connBox.appendChild(notice('warn', w));
+      }
       if (bothAutoplay())
         connBox.appendChild(notice('warn', 'Lumiverse’s own Auto-play responses is on too, so new replies would be read twice. Turn it off in Lumiverse’s Settings, on the Voice tab.'));
     };
@@ -4166,7 +4567,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     );
     page.appendChild(r);
 
-    const c = card('Check my setup', 'Checks your ElevenLabs connection, the Director, the Decision model and the sounds key. It spends no ElevenLabs credits.');
+    const c = card('Check my setup', 'Checks your TTS connection, the Director, the Decision model and the sounds key. It speaks nothing, so it spends no voice credits.');
     const list = el('<ul class="af-checks"></ul>');
     const run = button('Check my setup', async () => {
       run.disabled = true;
@@ -4184,13 +4585,21 @@ export function setup(ctx: Ctx, overrides?: any) {
       await Promise.all([loadTtsConnections(), loadHostVoice(), readChat()]);
       add(chatInfo.kind !== 'none', chatInfo.kind === 'none' ? 'No chat is open. Open one to perform its messages.' : chatInfo.kind === 'temporary' ? 'A temporary chat is open.' : 'A chat is open' + (chatInfo.name ? ', with ' + chatInfo.name : '') + '.');
       const conn = activeConnection();
-      if (!conn) add(false, ttsWhy || 'No ElevenLabs connection is picked.');
+      if (!conn) add(false, ttsWhy || 'No TTS connection is picked.');
       else {
         add(conn.has_api_key !== false, conn.has_api_key === false ? 'The connection "' + conn.name + '" has no key saved in Lumiverse.' : 'Speaking through "' + conn.name + '".');
-        const m = conn.model || '';
-        add(takesTags(m) || (S.cast as Member[]).some((x) => takesTags(x.model)), takesTags(m) ? 'Its model, ' + m + ', understands voice tags.' : 'Its model, ' + (m || 'not set') + ', does not understand voice tags. Pick Eleven v3 or v4 on the connection, or for each person in the Cast tab.');
+        const eng = engineFor(conn, conn.model);
+        add(eng.id !== 'plain', 'Its engine is ' + eng.label + '. ' + engineAbility(eng));
+        for (const w of engineWarnings(eng)) add(false, w);
         const v = await loadVoices(conn.id);
-        add(!!v.voices.length, v.voices.length ? v.voices.length + ' voices are available.' : v.why || 'No voices came back from ElevenLabs.');
+        add(!!v.voices.length, v.voices.length ? v.voices.length + ' voices are available.' : v.why || 'No voices came back from ' + serviceName(conn) + '.');
+      }
+      // People who speak through a connection of their own.
+      const own = (S.cast as Member[]).filter((x) => x.connection && x.connection !== (conn && conn.id));
+      for (const x of own) {
+        const cn = connById(x.connection);
+        if (!cn) add(false, x.name + ' speaks through a connection that is gone. Pick another in the Cast tab.');
+        else add(true, x.name + ' speaks through "' + cn.name + '", ' + engineFor(cn, pickOf(x, cn).model || cn.model).label + '.');
       }
       if (bothAutoplay()) add(false, 'Lumiverse’s own Auto-play responses is on too, so new replies would be read twice. Turn it off on Lumiverse’s Voice settings tab.');
       if (S.directorOn) {
@@ -4424,6 +4833,58 @@ export function setup(ctx: Ctx, overrides?: any) {
     return 'Imported ' + took.join(', ') + '.';
   }
 
+  // The note sent with each engine, saying how it reads tags. The one for the
+  // engine in use is open, and the rest sit in a fold.
+  function engineNotesCard(): HTMLElement {
+    const c = card('Notes for each voice engine', 'Each engine reads acting directions its own way. The Director gets the note for the engine it writes for. Change a note here if your engine needs something else.');
+    const now = mainEngine();
+    const noteField = (e: Engine) => {
+      const cur = S.engineNotes && typeof S.engineNotes[e.id] === 'string' ? S.engineNotes[e.id] : builtInEngineNotes[e.id] || '';
+      const f = area(e.label, cur, (v) => {
+        const next = Object.assign({}, S.engineNotes || {});
+        if (v.trim() === String(builtInEngineNotes[e.id] || '').trim()) delete next[e.id];
+        else next[e.id] = v;
+        set({ engineNotes: next });
+      }, { rows: 4, help: 'Sent to the Director with the rules when this engine speaks. Empty sends the built-in note.' });
+      f.setAttribute('data-af-engine-note', e.id);
+      f.appendChild(
+        button('Back to built-in', async () => {
+          if (!(await askSure('Back to the built-in note', 'Your wording of the note for ' + e.label + ' is replaced by the built-in one. There is no undo.', 'Use the built-in note'))) return;
+          const next = Object.assign({}, S.engineNotes || {});
+          delete next[e.id];
+          set({ engineNotes: next });
+          const ta = f.querySelector('textarea') as HTMLTextAreaElement;
+          ta.value = builtInEngineNotes[e.id] || '';
+        }),
+      );
+      return f;
+    };
+    c.appendChild(hint(esc('In use now: ' + now.label + '. ' + engineAbility(now))));
+    c.appendChild(noteField(now));
+    c.appendChild(
+      fold('The notes for the other engines', (body) => {
+        for (const e of ENGINE_LIST) if (e.id !== now.id) body.appendChild(noteField(e));
+      }),
+    );
+    return c;
+  }
+
+  // Asks before something is put back or deleted. Lumiverse's own dialog is
+  // used, and the browser's when that is missing.
+  async function askSure(title: string, message: string, confirmLabel: string, danger?: boolean): Promise<boolean> {
+    try {
+      if (ctx.ui && typeof ctx.ui.showConfirm === 'function') {
+        const r = await ctx.ui.showConfirm({ title, message, variant: danger ? 'danger' : 'default', confirmLabel });
+        return !!(r && r.confirmed);
+      }
+    } catch (_) {}
+    try {
+      return confirm(title + '\n\n' + message);
+    } catch (_) {
+      return false;
+    }
+  }
+
   async function resetAll() {
     const chosen: string[] = S.resetParts || [];
     if (!chosen.length) return;
@@ -4556,14 +5017,15 @@ export function setup(ctx: Ctx, overrides?: any) {
     if (debugPicked.cast) {
       lines.push('');
       const conn = activeConnection();
-      lines.push('elevenlabs connection: ' + (conn ? 'found, model ' + (conn.model || 'not set') + ', key ' + (conn.has_api_key === false ? 'MISSING' : 'saved') : ttsWhy || 'none picked'));
+      lines.push('tts connection: ' + (conn ? 'found, provider ' + (conn.provider || 'not set') + ', model ' + (conn.model || 'not set') + ', engine ' + engineFor(conn, conn.model).id + ', key ' + (conn.has_api_key === false ? 'MISSING' : 'saved') : ttsWhy || 'none picked'));
       if (conn && voiceCache[conn.id]) lines.push('voices on it: ' + voiceCache[conn.id].voices.length);
       lines.push('sound effects key: ' + (hasKey ? 'saved' : 'none') + ', library: ' + sounds.length + ' sounds');
       lines.push('cast (' + (S.cast || []).length + '):');
       ((S.cast || []) as Member[]).forEach((m, k) => {
         const role = roles[k].role;
         lines.push(
-          '  ' + role + ': added by ' + m.addedBy + ', voice ' + (m.voice ? 'picked' : 'the connection\'s') + ', model ' + (m.model || 'the connection\'s') +
+          '  ' + role + ': added by ' + m.addedBy + (m.connection ? ', own connection ' + (connById(m.connection) ? engineFor(connById(m.connection)).id : 'gone') : '') +
+            ', voice ' + (pickOf(m, connOf(m)).voice ? 'picked' : 'the connection\'s') + ', model ' + (pickOf(m, connOf(m)).model || 'the connection\'s') +
             ', stability ' + m.stability + ', similarity ' + m.similarity + ', style ' + m.style + ', speed ' + m.speed + (m.muted ? ', not voiced' : '') +
             (m.note ? ', has a note' : ''),
         );
@@ -4676,6 +5138,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       hasKey = !!r.hasKey;
       builtInPrompt = String(r.builtInPrompt || '');
       builtInNotes = r.builtInNotes && typeof r.builtInNotes === 'object' ? r.builtInNotes : {};
+      builtInEngineNotes = r.builtInEngineNotes && typeof r.builtInEngineNotes === 'object' ? r.builtInEngineNotes : {};
       hostHasDecisions = r.decisions !== false;
       backendVersion = String(r.version || '');
       keepLocal();
@@ -4723,7 +5186,7 @@ export function setup(ctx: Ctx, overrides?: any) {
   };
 }
 
-export const __testing = { takesTags, stripTags, stabilityFor, lineHtml };
+export const __testing = { engineOf, fitTag, tagSound, textFor, styleFor, stripTags, stabilityFor, lineHtml, ENGINES };
 
 // The built-in cheer: "Cheering and clapping crowd 1" by freesound_community,
 // a free sound from Pixabay (pixabay.com/sound-effects/people-cheering-and-clapping-crowd-1-5995/),

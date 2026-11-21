@@ -3,7 +3,7 @@
 ## In short
 
 - The Director is a second model. It reads each message before it is spoken.
-- It adds ElevenLabs voice tags, such as `[whispers]` or `[flatly]`, where the delivery changes.
+- It adds voice tags, such as `[whispers]` or `[flatly]`, where the delivery changes. It writes for the engine you use. See [Voice engines](engines.md).
 - It adds sounds for what happens in the scene.
 - It picks who says each quoted line, unless the Decision model already did.
 - It never changes a word. If it does, that line is read as written.
@@ -16,7 +16,7 @@
 3. It answers with each line, marked up, and who says it.
 4. Auto Foley checks each line:
    - The words outside the brackets must be the same words. Capitals, ellipses and dashes may change.
-   - Tags that describe something seen, such as `[smiles]`, are taken out. ElevenLabs cannot voice them.
+   - Tags that describe something seen, such as `[smiles]`, are taken out. No voice can say them.
    - A line keeps no more tags than **How much acting** allows: 1, 2 or 4.
 5. A line that fails the word check is read as written. The Stage tab shows a note under it.
 
@@ -29,7 +29,7 @@ Two messages, to the connection picked under **Which connection**:
   - `cast`: each person's name, other names, and the **How they speak** note
   - `author`: who wrote the message
   - `lines`: the numbered lines, with a speaker filled in where the Decision model was sure
-  - `rules`: your switches, such as the tag limit, the sound style, and whether intimate sounds are allowed
+  - `rules`: your switches, such as the tag limit, the sound style, and whether intimate sounds are allowed. It also names the engine, with its note, and its tag list when it has one. See [Voice engines](engines.md).
 
 Nothing else from your chat is sent. The Director does not see earlier messages.
 
@@ -51,7 +51,7 @@ It is split into five lines:
 
 With **How sounds are made** set to **In the voice**, the Director answers, and Auto Foley plays:
 
-| # | Speaker | What ElevenLabs is sent |
+| # | Speaker | What Eleven v3 is sent |
 | --- | --- | --- |
 | 0 | Narrator | Pell slid the key across the counter. |
 | 1 | Pell | Room six. [flatly] The lock sticks. |
@@ -72,7 +72,20 @@ All on the Director tab:
 - **Breaths, sighs and laughs.** Sounds a voice makes. Off takes them out of every line.
 - **Sounds**, and under it **How sounds are made** and **Intimate sounds**. See [Sounds](sounds.md).
 - **Find new speakers.** Someone new who speaks is added to the cast. See [The cast](cast.md).
-- **Big moments.** The Director can mark an emotional peak. That line gets a looser voice: one step toward Creative on Eleven v3, or 0.25 lower stability on Eleven v4.
+- **Big moments.** The Director can mark an emotional peak. On ElevenLabs, that line gets a looser voice: one step toward Creative on Eleven v3, or 0.25 lower stability on Eleven v4. The audience can cheer on it.
+
+## Singing
+
+- A line someone sings is marked as sung. The Director marks it, and so does a music note in the text, such as ♪. The note is not read.
+- Each engine that can sing is told the line is sung: `[sings]` on Eleven v3, `[singing]` on Fish Audio, and a note on Gemini 3.8 and Qwen3-TTS.
+- On an engine that cannot sing, the line is spoken.
+
+## Notes for each voice engine
+
+The Director tab has a note for each engine. It says how that engine reads tags, and it is sent with the rules.
+
+- The note for the engine in use is shown first. The rest are under a fold.
+- **Back to built-in** puts the built-in note back. It asks first.
 
 ## The Decision model
 
@@ -88,12 +101,12 @@ With **Use a Decision model** on:
 
 The Director tab shows the whole prompt. You can change any of it.
 
-- **Back to the built-in prompt** puts the built-in one back.
+- **Back to the built-in prompt** puts the built-in one back. It asks first, since there is no undo.
 - The message and the cast are always sent with it, as JSON. Your prompt should say what to do with them, and ask for the same JSON answer.
 - The answer has to be JSON in this shape, or the message is read as written:
 
 ```json
-{"lines":[{"i":0,"speaker":"Narrator","text":"...","before":"","after":"","big":false}],"new_speakers":[{"name":"","gender":"unknown","about":""}]}
+{"lines":[{"i":0,"speaker":"Narrator","text":"...","style":"","before":"","after":"","big":false,"sung":false}],"new_speakers":[{"name":"","gender":"unknown","about":""}]}
 ```
 
 The built-in prompt follows the same approach as Auto Refine's:

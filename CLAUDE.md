@@ -1,7 +1,8 @@
 # Working on Auto Foley
 
-Auto Foley is a Lumiverse extension built on Spindle. It gives ElevenLabs voice
-acting and sound effects to Lumiverse. Its sister extensions are
+Auto Foley is a Lumiverse extension built on Spindle. It gives voice acting
+and sound effects to Lumiverse's TTS: ElevenLabs, Fish Audio, Gemini,
+Chatterbox and Qwen3-TTS. Its sister extensions are
 [Auto Retry](https://github.com/starlitcode/Lumiverse-Auto-Retry) and
 [Auto Refine](https://github.com/starlitcode/Lumiverse-Auto-Refine), and the three are
 kept in step: a fix to something they share, such as how a switch, a field row,
@@ -104,16 +105,35 @@ Two skills are available. Load them before starting work.
 - `test/repo.test.ts` holds the checks on the whole repository: versions,
   permissions, docs links and the writing rules.
 
-## ElevenLabs only
+## Voice engines
 
-- Auto Foley works only with ElevenLabs. The connection picker lists only
-  ElevenLabs connections, and nothing is written for another TTS provider.
-- Speech goes through the reader's ElevenLabs connection in Lumiverse, with
-  Lumiverse's own `/api/v1/tts/synthesize` route. Lumiverse keeps that key.
-- Voice tags only work on Eleven v3 and v4. On any other model the tags are
-  taken out before a line is sent, or the voice reads them aloud.
-- Sound effects have no Lumiverse route, so they need a key of the
-  extension's own. It lives in `spindle.enclave` under `api.elevenlabs.io`,
+- Auto Foley speaks through any TTS connection in Lumiverse, with Lumiverse's
+  own `/api/v1/tts/synthesize` route. Lumiverse keeps every speech key.
+- Five engines act: ElevenLabs, Fish Audio, Gemini, Chatterbox and Qwen3-TTS.
+  Any other engine reads lines plain. `ENGINE_LIST` in `src/frontend.ts` says
+  what each can do, and `docs/engines.md` has the same table.
+- The engine is found from the connection's provider and model by
+  `engineOf`. Chatterbox runs behind an OpenAI-style connection, so it is
+  found by name. **What this connection runs** in Settings overrides it.
+- The Director writes every tag in square brackets. `textFor` fits each line
+  to the engine of the person who says it, just before it is sent: free tags,
+  a closed list (Gemini 3.8, Chatterbox-Turbo, in their own brackets), or none.
+  A tag an engine cannot read is taken out, or the voice reads it aloud.
+- The backend's `fitTag` and `TAG_WORDS` match the frontend's. A test checks
+  that both fit the same tags the same way. A change goes into both.
+- Gemini 3.8 and Qwen3-TTS take a note on how a line is said, sent as
+  `speech_style` and `instruct`.
+- Only ElevenLabs v3 and v4 make a sound inside a line. On every other engine
+  sounds are played as separate effects, and the panel warns while **In the
+  voice** is picked.
+- A sung line is marked `[sings]` on Eleven v3, `[singing]` on Fish Audio, and
+  with a note on Gemini 3.8 and Qwen3-TTS. Other engines speak it.
+- A person's voice belongs to a connection: `voices` on a cast member is keyed
+  by connection id. A person can speak through a connection of their own.
+- The note sent with each engine is in `ENGINE_NOTES` in the backend, and can
+  be changed on the Director tab.
+- Sound effects have no Lumiverse route, so they need an ElevenLabs key of
+  the extension's own. It lives in `spindle.enclave` under `api.elevenlabs.io`,
   is only sent to that host, and never goes back to the panel.
 
 ## The Director

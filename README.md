@@ -1,16 +1,16 @@
 # Auto Foley
 
-Voice acting and sound effects for ElevenLabs, in Lumiverse.
+Voice acting and sound effects for your TTS, in Lumiverse.
 
 Lumiverse can already read a reply aloud. Auto Foley makes it a performance:
 
-- A second model, the **Director**, marks how each line is said, with ElevenLabs voice tags such as `[whispers]`, `[sighs]` or `[through gritted teeth]`.
+- A second model, the **Director**, marks how each line is said, with voice tags such as `[whispers]`, `[sighs]` or `[through gritted teeth]`.
 - Sounds go with what happens: a door, footsteps, a glass breaking. They can be made inside the voice or as separate sound effects.
 - Everyone who speaks gets their own voice: your personas, the characters and the NPCs. New speakers are added by the AI, or by you.
 - An optional **Decision model** picks who says each quoted line.
-- It never changes the words of your story. Only the copy sent to ElevenLabs gets tags.
+- It never changes the words of your story. Only the copy sent to the voice gets tags.
 
-It works only with ElevenLabs. Voice tags need **Eleven v3** or **Eleven v4**.
+It acts with ElevenLabs, Fish Audio, Gemini 3.8, Chatterbox and Qwen3-TTS. Any other TTS connection reads the lines plain. See [Voice engines](docs/engines.md).
 
 ## Install
 
@@ -18,7 +18,7 @@ It works only with ElevenLabs. Voice tags need **Eleven v3** or **Eleven v4**.
 2. Enter `https://github.com/starlitcode/Lumiverse-Auto-Foley`.
 3. Turn on Auto Foley and grant its permissions.
 
-You also need an ElevenLabs connection in Lumiverse, under **Connections**, in the TTS section. Auto Foley speaks through it, so your ElevenLabs key stays in Lumiverse.
+You also need a TTS connection in Lumiverse, under **Connections**, in the TTS section. Auto Foley speaks through it, so its key stays in Lumiverse.
 
 ## Where it is
 
@@ -33,6 +33,7 @@ You also need an ElevenLabs connection in Lumiverse, under **Connections**, in t
 
 **Going further**
 
+- [Voice engines](docs/engines.md): what each engine can do, and how to set up Chatterbox.
 - [The Director](docs/director.md): what it does, what it is sent, and its prompt.
 - [The cast](docs/cast.md): voices for personas, characters and NPCs.
 - [Sounds](docs/sounds.md): sounds in the voice, sound effects and your library.

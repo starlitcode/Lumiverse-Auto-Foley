@@ -139,7 +139,8 @@ function answer(msg) {
 window.__fetch = async (url, init) => {
   const u = String(url);
   const json = (o) => new Response(JSON.stringify(o), { status: 200, headers: { 'Content-Type': 'application/json' } });
-  if (u.includes('/tts-connections?')) return json({ data: [{ id: 't1', name: 'My ElevenLabs', provider: 'elevenlabs', model: 'eleven_v3', voice: 'v0', is_default: true, has_api_key: true }, { id: 't2', name: 'Other', provider: 'openai' }], total: 2 });
+  if (u.includes('/tts-connections?')) return json({ data: [{ id: 't1', name: 'My ElevenLabs', provider: 'elevenlabs', model: 'eleven_v3', voice: 'v0', is_default: true, has_api_key: true }, { id: 't2', name: 'Fish on the side', provider: 'fish_audio', model: 's2.1-pro', has_api_key: true }, { id: 't3', name: 'Box at home', provider: 'openai_tts', api_url: 'http://192.0.2.10:8004/v1', model: 'chatterbox', has_api_key: true }], total: 3 });
+  if (u.includes('/models')) return json({ models: [{ id: 's2.1-pro', label: 'Fish S2.1 Pro' }, { id: 'drama-3-preview', label: 'Drama 3 (Preview)' }], provider: 'fish_audio' });
   if (u.includes('/voices')) return json({ voices: [{ id: 'v1', name: 'Hollow Bell', gender: 'female' }, { id: 'v2', name: 'Grit', gender: 'male' }, { id: 'v3', name: 'Lark', gender: 'female' }], provider: 'elevenlabs' });
   if (u.includes('/chats/chat1?messages=false')) return json({ id: 'chat1', name: '', character_id: 'c', metadata: {} });
   if (u.includes('/characters/c')) return json({ id: 'c', name: 'Ysolde Marrow-Kestrel of the Lower Quays' });
@@ -534,6 +535,88 @@ if (section("perform")) {
   check(left.counts.backend === 0 && left.counts.listeners === 0, "every listener is gone (" + JSON.stringify(left.counts) + ")");
   check(left.tab && left.deco, "the drawer tab and every button on the page are handed back");
   await context.close();
+}
+
+if (section("engines")) {
+  console.log("Voice engines in the Cast and Settings tabs");
+  for (const size of SIZES) {
+    const { context, page, errors } = await open(THEMES[0], size);
+    await page.click('.af-tab[data-tab="cast"]');
+    await page.waitForTimeout(250);
+    await page.locator(".af-person-head").first().click();
+    await page.waitForTimeout(400);
+    const first = page.locator(".af-person").first();
+    check((await first.locator('label:has-text("Connection")').count()) >= 1, size.name + ": a person can speak through another connection");
+    check((await first.locator(".af-note", { hasText: "Engine: ElevenLabs v3 or v4" }).count()) === 1, size.name + ": the person card names the engine and what it can do");
+    const sel = first.locator(".af-voicebox select").first();
+    await sel.selectOption("t2");
+    await page.waitForTimeout(400);
+    check((await first.locator(".af-note", { hasText: "Engine: Fish Audio S2 or Drama 3" }).count()) === 1, size.name + ": picking Fish shows the Fish engine");
+    check((await first.locator('label:has-text("Similarity")').count()) === 0, size.name + ": ElevenLabs-only settings are hidden for Fish");
+    const m = await page.evaluate(MEASURE, size.touch);
+    check(!m.overflow.length, size.name + ": the cast card fits. " + m.overflow.slice(0, 2).join("; "));
+    check(!m.small.length, size.name + ": its tap targets are big enough. " + m.small.slice(0, 2).join("; "));
+    await page.click('.af-tab[data-tab="settings"]');
+    await page.waitForTimeout(300);
+    check((await page.locator('label:has-text("What this connection runs")').count()) === 1, size.name + ": Settings can say what a connection runs");
+    await page.click('.af-tab[data-tab="director"]');
+    await page.waitForTimeout(300);
+    check((await page.locator('[data-af-engine-note="eleven_v3"] textarea').count()) === 1, size.name + ": the note for the engine in use can be read and changed");
+    check(!errors.length, size.name + ": no console errors. " + errors.slice(0, 2).join("; "));
+    await context.close();
+  }
+}
+
+if (section("taps")) {
+  console.log("A tap on a ?, and the tab bar when the tab changes");
+  {
+    const { context, page } = await open(THEMES[0], SIZES[0]);
+    await page.tap('.af-tab[data-tab="settings"]');
+    await page.waitForTimeout(250);
+    const q = page.locator('[data-af-row="autoplay"] > .af-between .af-q');
+    await q.scrollIntoViewIfNeeded();
+    await page.waitForTimeout(150);
+    await q.tap();
+    await page.waitForTimeout(350);
+    check((await page.locator(".af-hint[data-af-open]").count()) === 1, "the first tap on a ? opens its description, and it stays open");
+    await q.tap();
+    await page.waitForTimeout(350);
+    check((await page.locator(".af-hint").count()) === 0, "a second tap on the same ? closes it");
+    await context.close();
+  }
+  for (const zoom of [0.85, 1, 1.25]) {
+    for (const size of SIZES) {
+      const { context, page } = await open(THEMES[0], size, zoom);
+      // The drawer scrolls inside its own box, as Lumiverse's does.
+      await page.evaluate(() => window.__teardown());
+      await page.evaluate(() => {
+        const d = document.getElementById("drawer");
+        d.innerHTML = "";
+        d.style.height = "520px";
+        d.style.overflowY = "auto";
+        window.__teardown = window.__setup(window.__ctx, { fetch: window.__fetch, Audio: window.__Audio });
+      });
+      await page.waitForTimeout(200);
+      await page.click('.af-tab[data-tab="settings"]');
+      await page.waitForTimeout(200);
+      await page.evaluate(() => (document.getElementById("drawer").scrollTop = 900));
+      await page.waitForTimeout(200);
+      const before = await page.evaluate(() => document.querySelector("[data-af-stick]").getBoundingClientRect().top);
+      for (const id of ["cast", "stage", "director", "settings"]) {
+        await page.click(`.af-tab[data-tab="${id}"]`);
+        await page.waitForTimeout(60);
+        const r = await page.evaluate(() => {
+          const bar = document.querySelector("[data-af-stick]").getBoundingClientRect();
+          const pg = document.querySelector('[data-af="page"]').getBoundingClientRect();
+          return { top: bar.top, gap: pg.top - bar.bottom };
+        });
+        const where = "zoom " + zoom + ", " + size.name + ", " + id;
+        check(Math.abs(r.top - before) < 1.5, where + ": the tab bar stays where it was (" + before.toFixed(1) + " then " + r.top.toFixed(1) + ")");
+        check(r.gap >= 0 && r.gap < 20, where + ": the new tab starts right under the bar (" + r.gap.toFixed(1) + " px)");
+      }
+      await context.close();
+    }
+  }
 }
 
 if (section("reduce")) {

@@ -2,17 +2,17 @@
 
 ## In short
 
-- Auto Foley speaks through your ElevenLabs connection in Lumiverse.
-- Pick **Eleven v3** or **Eleven v4** as the model, so voice tags work.
+- Auto Foley speaks through a TTS connection in Lumiverse: ElevenLabs, Fish Audio, Gemini, Chatterbox, Qwen3-TTS or another engine.
+- Pick a model that acts, so voice tags work. [Voice engines](engines.md) lists them.
 - Give each person in the Cast tab a voice.
 - Press the boom microphone button on a message.
 
 ## Steps
 
-1. **Add an ElevenLabs connection in Lumiverse**, if you do not have one. Open **Connections**, go to the TTS section, and add ElevenLabs with your key.
-2. **Pick the model.** On the connection, choose **Eleven v3** or **Eleven v4**. You can also pick a model for each person later, in the Cast tab.
-3. **Open the Foley tab** in the drawer. Go to **Settings** and check that **ElevenLabs connection** shows yours.
-4. **Press Check my setup** on the Settings tab. It says what is ready and what is missing. It spends no ElevenLabs credits.
+1. **Add a TTS connection in Lumiverse**, if you do not have one. Open **Connections**, go to the TTS section, and add one with your key. For Chatterbox on your own computer, see [Chatterbox](engines.md#chatterbox).
+2. **Pick the model.** On the connection, choose one that acts: Eleven v3 or v4, Fish Audio S2.1 Pro or Drama 3, or Gemini 3.8 Flash TTS. You can also pick a model for each person later, in the Cast tab.
+3. **Open the Foley tab** in the drawer. Go to **Settings** and check that **TTS connection** shows yours. The line under it says what its engine can do.
+4. **Press Check my setup** on the Settings tab. It says what is ready and what is missing. It speaks nothing, so it spends no voice credits.
 5. **Perform a message.** Press the boom microphone button on any message. The first time, the Director reads it, and the Stage tab shows the script.
 6. **Give voices.** Open the **Cast** tab. Everyone who spoke is there now. Pick a voice for each, and press **Hear a sample**.
 
@@ -23,8 +23,8 @@
 3. If the Decision model is on, it picks who says each quoted line.
 4. The Director marks each line with voice tags and sounds.
 5. Auto Foley checks that no words changed. A line with changed words is read as written.
-6. Each line is spoken through your ElevenLabs connection, with the speaker's voice.
-7. Sounds play from your library, or are made by ElevenLabs.
+6. Each line is fitted to the speaker's engine and spoken through their connection, with their voice.
+7. Sounds play from your library, or are made by ElevenLabs sound effects.
 
 The Stage tab shows each step, with a time that counts up while it waits.
 
@@ -53,7 +53,7 @@ Thinking a model writes in the message is never read aloud. The same nine format
 
 ### Everything else left out
 
-- **Anything in square brackets**, such as an out-of-character note. Left in, ElevenLabs would read it as a voice tag.
+- **Anything in square brackets**, such as an out-of-character note. Left in, the voice would read it as a voice tag.
 - **HTML, code blocks and comments.**
 - **Text in double parentheses**, such as `((brb))`.
 
@@ -72,7 +72,7 @@ Your browser may block sound until you tap the page. Auto Foley then waits, and 
 
 ## What it costs
 
-- **ElevenLabs credits** for every line spoken, the same as Lumiverse's own TTS.
+- **Voice credits** for every line spoken, the same as Lumiverse's own TTS. A local engine, such as Chatterbox, costs nothing.
 - **One call to the Director** for each message. A fast, low-cost model works well. A message played again uses the copy already directed, and asks nothing.
 - **One call to the Decision model** for each message, when it is on.
 - **ElevenLabs credits for each new sound effect**, when sounds are made as effects. A sound is saved after it is made, so the same sound is free the next time.

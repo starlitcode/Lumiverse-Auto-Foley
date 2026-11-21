@@ -14,7 +14,7 @@ On the Director tab, under **Sounds**, pick **How sounds are made**:
 
 | Choice | What happens | Needs |
 | --- | --- | --- |
-| **In the voice** | The Director puts one `[sound of ...]` tag in a line. ElevenLabs performs the sound with the speech. | Eleven v3 or v4 |
+| **In the voice** | The Director puts one `[sound of ...]` tag in a line. ElevenLabs performs the sound with the speech. | Eleven v3 or v4. Every other engine plays the sound as a sound effect instead. |
 | **Sound effects** | The Director names a sound before or after a line. Auto Foley plays a separate clip. | A library clip, or an ElevenLabs key in the Sounds tab |
 | **Both** | Short sounds during speech go in the voice. Bigger sounds, or sounds between lines, are effects. | Both of the above |
 

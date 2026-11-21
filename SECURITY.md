@@ -2,7 +2,7 @@
 
 ## What Auto Foley can reach
 
-- **Lumiverse's own routes, as you.** The panel runs in your Lumiverse page. It lists your TTS connections and their voices, reads the message you perform, speaks lines through your ElevenLabs connection, and, when you turn it on, saves the finished audio to the message. These are the same routes Lumiverse's own TTS uses.
+- **Lumiverse's own routes, as you.** The panel runs in your Lumiverse page. It lists your TTS connections and their voices, reads the message you perform, speaks lines through your TTS connections, and, when you turn it on, saves the finished audio to the message. These are the same routes Lumiverse's own TTS uses.
 - **Generation.** It asks the Director, through a connection you pick.
 - **Decision models.** It asks the Decision model, through a connection you pick.
 - **One outside host:** `api.elevenlabs.io`, through Lumiverse's CORS proxy, for sound effects and for testing the key. No other host is ever called.

@@ -3,7 +3,7 @@
 ## In short
 
 - Everyone who speaks has a card on the Cast tab: the narrator, your personas, the characters and the NPCs.
-- Each has their own ElevenLabs voice, model and settings.
+- Each has their own voice, model and settings, and can speak through a connection of their own.
 - People join the cast three ways: when they write a message, when the Director finds them, or when you add them.
 - The **How they speak** note tells the Director how to tag their lines.
 
@@ -22,10 +22,12 @@ Someone the AI added has no voice picked. The first time they speak, Auto Foley 
 - **Name** and **Also called.** Other names the story uses for this person, with commas, such as a first name or a title. The Director and the Decision model match a line to a person by any of these.
 - **Who they are.** Character, Persona or NPC.
 - **Voice type.** Any, Female or Male. Used to pick a voice for someone new.
-- **Voice.** From your ElevenLabs connection. Empty uses the connection's own voice. Designed or cloned voices act much better than the stock ones.
-- **Model.** Empty uses the connection's model. Voice tags work with Eleven v3 and v4. Other models read the line with the tags taken out.
-- **Stability.** Lower is more expressive. On Eleven v3 it has three settings: Creative, Natural and Robust.
-- **Similarity, Style, Speed.** Sent to ElevenLabs as they are.
+- **Connection.** Shown when you have more than one TTS connection. Empty uses Auto Foley's. See [Mixing engines](engines.md#mixing-engines).
+- **Voice.** From that connection. Empty uses the connection's own voice. Designed or cloned voices act much better than the stock ones. Each connection keeps its own voice for this person.
+- **Model.** Empty uses the connection's model. The line under it names the engine and what it can do. See [Voice engines](engines.md).
+- **Stability.** ElevenLabs only. Lower is more expressive. On Eleven v3 it has three settings: Creative, Natural and Robust.
+- **Similarity and Style.** ElevenLabs only. Sent to ElevenLabs as they are.
+- **Speed.** Sent to every engine but Gemini, which has no speed.
 - **How they speak.** A short note for the Director, such as "soft-spoken and dry, rarely raises their voice".
 - **Do not voice.** Their lines are skipped.
 - **Hear a sample** speaks a test line with these settings. It costs a few credits.
