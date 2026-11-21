@@ -87,6 +87,24 @@ The Director tab has a note for each engine. It says how that engine reads tags,
 - The note for the engine in use is shown first. The rest are under a fold.
 - **Back to built-in** puts the built-in note back. It asks first.
 
+## How speakers are found
+
+Before the Director is asked, Auto Foley reads the message for clues. A sure clue fixes the speaker. A likely one is passed to the Director as a hint, and it can choose someone else when the text points elsewhere.
+
+**Sure:**
+
+- A speech verb next to the quote, such as `"Not tonight," Odile said.` or `said Odile`.
+- A name and a colon before the quote, such as `Odile: "Not tonight."`
+- A line in script style, such as `Odile: Not tonight.`, for someone in the cast. The name is not read aloud.
+
+**Likely:**
+
+- An action just before the quote, in the same paragraph, such as `Odile set the cup down. "Not tonight."`
+- The same speaker going on in a paragraph, when nobody else is named in between.
+- Two people taking turns: a paragraph that opens with a quote nobody is named for goes to whoever did not speak in the paragraph before.
+
+Then the Decision model, when it is on, picks speakers for the quotes still open. The Director picks the rest.
+
 ## The Decision model
 
 A Decision model answers questions with a choice or a chance. It writes no text. Lumiverse keeps its address and key, under **Decision models** in the **Connections** panel.

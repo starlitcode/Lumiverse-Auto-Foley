@@ -422,6 +422,16 @@ describe("directing a message, end to end", () => {
     expect(h.calls.generate[0].messages[0].content).toContain("<the_director>");
   });
 
+  test("a line in script style is spoken by that person, and the label is not read", async () => {
+    const h = host();
+    await h.ask({ type: "save", settings: { directorOn: false, cast: [{ name: "Tamsin Reyes", kind: "character", aliases: ["Tamsin"] }] } });
+    const out = await h.ask({ type: "direct", chatId: "c1", messageId: "m5", swipeId: 0, name: "Tamsin Reyes", text: "Tamsin: Keep the lantern low." });
+    const line = out.find((m) => m.type === "script").script.lines[0];
+    expect(line.kind).toBe("speech");
+    expect(line.speaker).toBe("Tamsin Reyes");
+    expect(line.text).toBe("Keep the lantern low.");
+  });
+
   test("the Director is not asked when it is off", async () => {
     const h = host({ answers: [good] });
     await h.ask({ type: "save", settings: { directorOn: false } });
@@ -839,6 +849,32 @@ describe("who is in the scene, read on this device", () => {
     const got = read('"Tickets," Barnaby said.');
     expect(got.found).toEqual(["Barnaby"]);
     expect(got.named).toEqual({ 0: "Barnaby" });
+  });
+
+  test("a name and a colon before a quote names the speaker", () => {
+    expect(read('Odile: "The tide is turning."').named[1]).toBe("Odile");
+  });
+
+  test("a line in script style is that person speaking, and only for someone in the cast", () => {
+    const r = read("Odile: The tide is turning.\n\nNote: the ferry is late.");
+    expect(r.script[0]).toEqual({ name: "Odile", text: "The tide is turning." });
+    expect(r.script[1]).toBeUndefined();
+  });
+
+  test("the same speaker goes on in a paragraph until someone else is named", () => {
+    const segs = h.box.splitSegments('"Go," Odile said. She glanced back. "Now."\n\n"Wait," Odile said. Wren shook her head. "No."');
+    const r = h.box.readScene(segs, cast, "Odile");
+    expect(r.likely[segs.find((x: any) => x.text === "Now.").i]).toBe("Odile");
+    // Wren is named between them, so it is not Odile going on. The action
+    // points at Wren instead.
+    expect(r.likely[segs.find((x: any) => x.text === "No.").i]).toBe("Wren Halloway");
+  });
+
+  test("two people taking turns, paragraph by paragraph", () => {
+    const segs = h.box.splitSegments('"Ready?" Odile asked.\n\n"Always," Wren said.\n\n"Then follow me."\n\n"Lead on."');
+    const r = h.box.readScene(segs, cast, "Odile");
+    expect(r.likely[segs.find((x: any) => x.text === "Then follow me.").i]).toBe("Odile");
+    expect(r.likely[segs.find((x: any) => x.text === "Lead on.").i]).toBe("Wren Halloway");
   });
 
   test("everyone named in the message is in the scene, the author first", () => {

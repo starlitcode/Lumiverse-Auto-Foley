@@ -714,11 +714,12 @@ function splitSegments(raw, extra, bound) {
     const marks = o.marks || 'auto';
     const parts = [];
     let buf = '';
+    let para = 0;
     const flush = (kind) => {
         const text = buf.replace(/\*/g, ' ').replace(/[ \t]+/g, ' ').trim();
         buf = '';
         if (text && /[\p{L}\p{N}]/u.test(text))
-            parts.push({ kind, text });
+            parts.push({ kind, text, para });
     };
     if (marks === 'plain') {
         // *Actions* are narration. Everything else is said out loud.
@@ -732,6 +733,7 @@ function splitSegments(raw, extra, bound) {
             }
             if (ch === '\n' && t[k + 1] === '\n') {
                 flush(inStar ? 'narration' : 'speech');
+                para++;
                 continue;
             }
             buf += ch === '\n' ? ' ' : ch;
@@ -805,6 +807,7 @@ function splitSegments(raw, extra, bound) {
             }
             if (!closers && !dashLine && ch === '\n' && next === '\n') {
                 flush('narration');
+                para++;
                 continue;
             }
             buf += ch === '\n' ? ' ' : ch;
@@ -819,7 +822,7 @@ function splitSegments(raw, extra, bound) {
         if (!/[\p{L}\p{N}]/u.test(text))
             continue;
         for (const piece of splitLong(text)) {
-            const seg = { i: segs.length, kind: p.kind, text: piece };
+            const seg = { i: segs.length, kind: p.kind, text: piece, para: p.para };
             if (sung)
                 seg.sung = true;
             segs.push(seg);
@@ -2057,7 +2060,7 @@ function looksLikeName(t) {
     return words.every((w) => /^\p{Lu}[\p{L}'’-]{1,}$/u.test(w) && !NOT_NAMES.has(w.toLowerCase()));
 }
 function readScene(segs, cast, author) {
-    const out = { named: {}, likely: {}, inScene: [], found: [] };
+    const out = { named: {}, script: {}, likely: {}, inScene: [], found: [] };
     const NAME = '(\\p{Lu}[\\p{L}\'’-]+(?:\\s\\p{Lu}[\\p{L}\'’-]+){0,2})';
     const AFTER_A = new RegExp('^\\s*' + NAME + '\\s+(?:' + SPEECH_VERBS + ')\\b', 'u');
     const AFTER_B = new RegExp('^\\s*(?:' + SPEECH_VERBS + ')\\s+' + NAME + '\\b', 'u');
@@ -2075,12 +2078,29 @@ function readScene(segs, cast, author) {
             out.named[i] = name;
         }
     };
+    // A name and a colon at the start of a line, such as "Wren: Hold on.", is
+    // that person speaking, in script style. Only for someone in the cast, so a
+    // label such as "Note:" stays narration.
+    const LABEL = new RegExp('^' + NAME + ':\\s+(\\S[\\s\\S]*)$', 'u');
+    for (const g of segs) {
+        if (g.kind !== 'narration')
+            continue;
+        const m = g.text.match(LABEL);
+        const who = m ? findMember(cast, m[1]) : null;
+        if (m && who && who.kind !== 'narrator')
+            out.script[g.i] = { name: who.name, text: m[2].trim() };
+    }
     for (const g of segs) {
         if (g.kind !== 'speech')
             continue;
         const next = segs[g.i + 1];
         const prev = segs[g.i - 1];
         let m = null;
+        // A label right before the quote, such as Wren: "Hold on."
+        if (prev && prev.kind === 'narration' && (m = prev.text.match(new RegExp('(?:^|[.!?…]\\s+)' + NAME + ':\\s*$', 'u')))) {
+            take(g.i, m[1], true);
+            continue;
+        }
         if (next && next.kind === 'narration' && ((m = next.text.match(AFTER_A)) || (m = next.text.match(AFTER_B)))) {
             take(g.i, m[1], true);
             continue;
@@ -2090,13 +2110,61 @@ function readScene(segs, cast, author) {
             continue;
         }
         // An action just before a quote, such as "Wren set the cup down.", points
-        // at who speaks next. Only when the sentence starts with one cast name.
-        if (prev && prev.kind === 'narration') {
+        // at who speaks next. Only when the sentence starts with one cast name,
+        // and in the same paragraph: a new paragraph is often someone answering.
+        if (prev && prev.kind === 'narration' && prev.para === g.para) {
             const tail = prev.text.match(/[^.!?…]+[.!?…]*\s*$/);
             const last = tail ? tail[0].trim() : '';
             const first = last.match(new RegExp('^' + NAME, 'u'));
             if (first)
                 take(g.i, first[1], false);
+        }
+    }
+    // The same speaker goes on in a paragraph: a quote with no name of its own,
+    // after a quote whose speaker is known, in the same paragraph, with no other
+    // cast name in the narration between them.
+    const known = (i) => out.named[i] || out.likely[i] || (out.script[i] && out.script[i].name) || '';
+    const castNames = cast.filter((c) => c.kind !== 'narrator').map((c) => [c.name, c.name.split(/\s+/)[0]].concat(c.aliases).filter((n) => n && n.length >= 3));
+    const namesSomeone = (text, but) => castNames.some((ns, k) => cast.filter((c) => c.kind !== 'narrator')[k].name !== but && ns.some((n) => new RegExp('(^|[^\\p{L}])' + escapeRe(n) + '(?![\\p{L}])', 'u').test(text)));
+    for (const g of segs) {
+        if (g.kind !== 'speech' || known(g.i))
+            continue;
+        for (let k = g.i - 1; k >= 0 && segs[k].para === g.para; k--) {
+            const was = known(k);
+            if (segs[k].kind === 'speech' && was) {
+                let other = false;
+                for (let j = k + 1; j < g.i; j++)
+                    if (segs[j].kind === 'narration' && namesSomeone(segs[j].text, was))
+                        other = true;
+                if (!other)
+                    out.likely[g.i] = was;
+                break;
+            }
+        }
+    }
+    // Two people taking turns: when a paragraph opens with a quote nobody is
+    // named for, and the two paragraphs before were each one of two speakers,
+    // it is the one who did not speak last.
+    const paraSpeaker = {};
+    for (const g of segs) {
+        if (g.para === undefined)
+            continue;
+        const who = known(g.i);
+        if (who && !(g.para in paraSpeaker))
+            paraSpeaker[g.para] = who;
+    }
+    for (const g of segs) {
+        if (g.kind !== 'speech' || known(g.i) || g.para === undefined || g.para < 2)
+            continue;
+        const firstInPara = !segs.some((x) => x.para === g.para && x.i < g.i && x.kind === 'speech');
+        const narrated = segs.some((x) => x.para === g.para && x.i < g.i && x.kind === 'narration' && namesSomeone(x.text, ''));
+        if (!firstInPara || narrated)
+            continue;
+        const a = paraSpeaker[g.para - 1];
+        const b = paraSpeaker[g.para - 2];
+        if (a && b && a !== b) {
+            out.likely[g.i] = b;
+            paraSpeaker[g.para] = b;
         }
     }
     const all = segs.map((g) => g.text).join(' ').toLowerCase();
@@ -2274,6 +2342,12 @@ async function direct(userId, p) {
     // "said Wren", needs no model. The Decision model then picks the rest.
     const scene = readScene(segs, s.cast, author);
     const fixed = Object.assign({}, scene.named);
+    // A line in script style is that person speaking. The label is not read.
+    for (const k of Object.keys(scene.script)) {
+        const i = Number(k);
+        segs[i] = Object.assign({}, segs[i], { kind: 'speech', text: scene.script[i].text });
+        fixed[i] = scene.script[i].name;
+    }
     let hints = {};
     const namedCount = Object.keys(scene.named).length;
     if (namedCount)
