@@ -21,7 +21,7 @@ Someone the AI added has no voice picked. The first time they speak, Auto Foley 
 
 - **Name** and **Also called.** Other names the story uses for this person, with commas, such as a first name or a title. The Director and the Decision model match a line to a person by any of these.
 - **Who they are.** Character, Persona or NPC.
-- **Folder.** Shown when you have folders. See [Folders](#folders).
+- **Group.** Shown when you have groups. See [Groups](#groups).
 - **Voice type.** Any, Female or Male. Used to pick a voice for someone new.
 - **Connection.** Shown when you have more than one TTS connection. Empty uses Auto Foley's. See [Mixing engines](engines.md#mixing-engines).
 - **Voice.** From that connection. Empty uses the connection's own voice. Designed or cloned voices act much better than the stock ones. Each connection keeps its own voice for this person.
@@ -34,17 +34,17 @@ Someone the AI added has no voice picked. The first time they speak, Auto Foley 
 - **Hear a sample** speaks a test line with these settings. It costs a few credits.
 - **Remove** takes them out of the cast. The narrator cannot be removed.
 
-## Folders
+## Groups
 
-Folders sort the cast on the Cast tab, such as one folder for each story. They change nothing about how anyone sounds.
+Groups sort the cast on the Cast tab, such as one group for each story. They change nothing about how anyone sounds.
 
-1. Press **New folder**, type its name, and press **Save**.
-2. Open a person and pick the folder under **Folder**.
-3. Tap a folder's name to open or close it.
+1. Press **New group**, type its name, and press **Save**.
+2. Open a person and pick the group under **Group**.
+3. Tap a group's name to open or close it.
 
 - **Rename** changes its name.
-- **Delete** asks first. The people in it stay in the cast, outside any folder.
-- Folders follow your account, and go with the cast in an export and in **Start again**.
+- **Delete** asks first. The people in it stay in the cast, outside any group.
+- Groups follow your account, and go with the cast in an export and in **Start again**.
 
 ## Group chats
 

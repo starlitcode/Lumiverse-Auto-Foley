@@ -19,10 +19,10 @@
 - **The Stage tab.** Play, pause, stop, skip, and Direct again, with the script, a mixer for voices and sounds, and a Log.
 - **A button on each message** to perform it, and **Autoplay new replies**.
 - **Edited replies are directed again.** A reply changed after it was directed, such as one Auto Refine rewrote, is directed again, and one playing starts again with the new text. **Wait before autoplay** gives another extension time to change a reply first.
-- **Debug info**, on the Settings tab. Build a report to paste into a bug report. People in the cast are named by their role, and no message text is included. **Log to the browser console** writes each Log line there too.
+- **Debug info**, on the Settings tab. Build a report to paste into a bug report. People in the cast are named by their role, and no message text is included.
 - **Thinking is never read aloud.** The same nine thinking formats as Auto Retry and Auto Refine are taken out of a message before it is read, with **Extra thinking tag names** for more.
 - **Check my setup**, on the Settings tab. It checks the connection and its engine, the Director, the Decision model and the sounds key. It speaks nothing, so it spends no voice credits.
-- **Asking again.** A busy provider is waited out, and a Director answer that is empty, refused, in the wrong shape or with changed words is asked for again, with a note that says what went wrong. A fallback connection can be asked last. The notes can be changed on the Director tab.
+- **Asking again.** A busy provider is waited out, and a Director answer that is empty, refused, in the wrong shape or with changed words is asked for again, with a note that says what went wrong. The notes can be changed on the Director tab.
 - **Thinking, samplers and a time limit for the Director**, on the Director tab.
 - **Buttons.** A button on every message, one in the chat's row of controls, and entries in the Extras menu, each with its own switch.
 - **Applause.** An optional cheering crowd at the end of a message or after a big moment, for the AI's characters, for you, or both. The built-in cheer is a free recording from Pixabay.
@@ -35,5 +35,5 @@
 - **Speakers found from the text.** A speech verb, a name and a colon, script-style lines, an action in the same paragraph, the same speaker going on, and two people taking turns. The Director is told who it is, or who it likely is.
 - **Only sounds the text shows**, on by default. A sound the text around it gives no sign of is left out.
 - **Send the prompt as** system, user or assistant, and **the Decision model's questions** can be changed, with **Back to built-in**.
-- **Cast folders.** Sort the cast on the Cast tab into folders you name, open and close.
+- **Cast groups.** Sort the cast on the Cast tab into groups you name, open and close.
 - **A floating player.** A round button over the chat opens a small player, with the line being spoken, a strip of every part of the message, the volumes, quick switches, and who is voiced.

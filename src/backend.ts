@@ -44,8 +44,8 @@ interface CastMember {
   connection: string;
   // Their voice and model on each connection, by connection id.
   voices: Record<string, { voice: string; voiceName: string; model: string }>;
-  // The folder they are in on the Cast tab. Empty is none.
-  folder: string;
+  // The group they are in on the Cast tab. Empty is none.
+  group: string;
   stability: number;
   similarity: number;
   style: number;
@@ -104,7 +104,6 @@ interface Settings {
   askNote: boolean;
   askNotes: Record<string, string>;
   // A second connection to ask when the Director still refuses or fails.
-  fallbackConnection: string;
   // The look and the floating button, which follow the account like every
   // other setting.
   followScript: boolean;
@@ -145,8 +144,6 @@ interface Settings {
   // How speech is marked in the story: auto, single quotes too, or plain
   // text as speech with *asterisks* for actions.
   speechMarks: string;
-  // Also write each Log line to the browser's developer console.
-  debugConsole: boolean;
   // The engine a connection runs, by connection id, when it is said outright
   // rather than found from the connection.
   engines: Record<string, string>;
@@ -161,12 +158,12 @@ interface Settings {
   // Leave out a sound the text around it does not show.
   soundCheck: boolean;
   cast: CastMember[];
-  // Folders that sort the cast on the Cast tab. Only for the panel: they
+  // Groups that sort the cast on the Cast tab. Only for the panel: they
   // change nothing about how anyone sounds.
-  folders: CastFolder[];
+  groups: CastGroup[];
 }
 
-interface CastFolder {
+interface CastGroup {
   id: string;
   name: string;
   open: boolean;
@@ -200,7 +197,6 @@ const DEFAULT_SETTINGS: Settings = {
   soundSeconds: 0,
   autoplayDelay: 0,
   extraThinkTags: [],
-  debugConsole: false,
   engines: {},
   engineNotes: {},
   keepAudio: 100,
@@ -217,7 +213,6 @@ const DEFAULT_SETTINGS: Settings = {
   rateWaits: 2,
   askNote: true,
   askNotes: {},
-  fallbackConnection: '',
   followScript: true,
   applauseOn: false,
   applauseForAi: true,
@@ -239,7 +234,7 @@ const DEFAULT_SETTINGS: Settings = {
   importParts: ['settings', 'prompt', 'cast'],
   resetParts: ['settings', 'prompt', 'cast', 'sounds', 'audio', 'key'],
   cast: [],
-  folders: [],
+  groups: [],
 };
 
 const NARRATOR_ID = 'narrator';
@@ -256,7 +251,7 @@ function narrator(): CastMember {
     model: '',
     connection: '',
     voices: {},
-    folder: '',
+    group: '',
     stability: 0.5,
     similarity: 0.75,
     style: 0,
@@ -286,7 +281,7 @@ function pick<T extends string>(v: any, allowed: readonly T[], dflt: T): T {
 }
 
 const MAX_CAST = 80;
-const MAX_FOLDERS = 30;
+const MAX_GROUPS = 30;
 
 // A person's voice on each connection. Kept for at most 20 connections.
 function cleanVoices(v: any): Record<string, { voice: string; voiceName: string; model: string }> {
@@ -319,7 +314,7 @@ function cleanMember(m: any): CastMember | null {
     model: str(m.model, 64),
     connection: str(m.connection, 80),
     voices: cleanVoices(m.voices),
-    folder: str(m.folder, 64),
+    group: str(m.group, 64),
     stability: num(m.stability, 0, 1, base.stability),
     similarity: num(m.similarity, 0, 1, base.similarity),
     style: num(m.style, 0, 1, base.style),
@@ -443,18 +438,18 @@ function cleanSettings(raw: any): Settings {
     }
   }
   if (!cast.some((c) => c.kind === 'narrator')) cast.unshift(narrator());
-  const folders: CastFolder[] = [];
-  if (Array.isArray(r.folders)) {
-    for (const f of r.folders) {
+  const groups: CastGroup[] = [];
+  if (Array.isArray(r.groups)) {
+    for (const f of r.groups) {
       const id = str(f && f.id, 64);
       const name = str(f && f.name, 60).trim();
-      if (!id || !name || folders.some((x) => x.id === id)) continue;
-      folders.push({ id, name, open: bool(f.open, true) });
-      if (folders.length >= MAX_FOLDERS) break;
+      if (!id || !name || groups.some((x) => x.id === id)) continue;
+      groups.push({ id, name, open: bool(f.open, true) });
+      if (groups.length >= MAX_GROUPS) break;
     }
   }
-  // A person in a folder that is gone is in no folder.
-  for (const c of cast) if (c.folder && !folders.some((f) => f.id === c.folder)) c.folder = '';
+  // A person in a group that is gone is in no group.
+  for (const c of cast) if (c.group && !groups.some((f) => f.id === c.group)) c.group = '';
   return {
     enabled: bool(r.enabled, d.enabled),
     ttsConnection: str(r.ttsConnection, 80),
@@ -483,7 +478,6 @@ function cleanSettings(raw: any): Settings {
     soundSeconds: num(r.soundSeconds, 0, 30, d.soundSeconds),
     autoplayDelay: num(r.autoplayDelay, 0, 30, d.autoplayDelay),
     extraThinkTags: Array.isArray(r.extraThinkTags) ? r.extraThinkTags.map((x: any) => str(x, 40).trim()).filter(Boolean).slice(0, 20) : [],
-    debugConsole: bool(r.debugConsole, d.debugConsole),
     engines: cleanEngineChoices(r.engines),
     engineNotes: cleanEngineNotes(r.engineNotes),
     promptRole: pick(r.promptRole, ['system', 'user', 'assistant'] as const, 'system'),
@@ -500,7 +494,6 @@ function cleanSettings(raw: any): Settings {
     rateWaits: Math.round(num(r.rateWaits, 0, 5, d.rateWaits)),
     askNote: bool(r.askNote, d.askNote),
     askNotes: cleanNotes(r.askNotes),
-    fallbackConnection: str(r.fallbackConnection, 80),
     followScript: bool(r.followScript, d.followScript),
     applauseOn: bool(r.applauseOn, d.applauseOn),
     applauseForAi: bool(r.applauseForAi, d.applauseForAi),
@@ -522,7 +515,7 @@ function cleanSettings(raw: any): Settings {
     importParts: partList(r.importParts, TRANSFER_PARTS, d.importParts),
     resetParts: partList(r.resetParts, RESET_PARTS, d.resetParts),
     cast: cast,
-    folders: folders,
+    groups: groups,
   };
 }
 
@@ -2706,16 +2699,9 @@ async function direct(userId: string | undefined, p: any): Promise<Script> {
   // - A refusal, an empty answer, an answer in the wrong shape, or one that
   //   changed most words is asked for again, up to Ask again when the
   //   Director's answer fails, with a note saying what went wrong.
-  // - Still nothing usable, and a fallback connection is picked: it is asked
-  //   the same way.
   // Whatever happens, the message is still read, as written if need be.
   const firstTry = await askDirector(userId, s, payload, s.directorConnection, script);
-  let answer = firstTry.answer;
-  if (!answer && s.fallbackConnection && s.fallbackConnection !== s.directorConnection) {
-    script.log.push('Asking the fallback connection instead.');
-    const second = await askDirector(userId, s, payload, s.fallbackConnection, script);
-    answer = second.answer;
-  }
+  const answer = firstTry.answer;
   if (!answer) script.log.push('The message is read as written.');
 
   const done = applyDirection(segs, answer, s.cast, author, fixed, rules);
@@ -3131,6 +3117,7 @@ async function listDecisionConnections(userId: string | undefined): Promise<{ li
       id: str(c && c.id, 80),
       name: str(c && c.name, 120),
       model: who(str(c && c.model, 120)),
+      provider: str(c && c.provider, 60),
       isDefault: !!(c && c.is_default),
       hasKey: !!(c && c.has_api_key),
     }));
@@ -3411,7 +3398,7 @@ async function onPanel(p: any, userId: string | undefined) {
         const s = await loadSettings(userId);
         const fresh = cleanSettings({});
         if (parts.indexOf('settings') >= 0) {
-          const keep = { cast: s.cast, folders: s.folders, prompt: s.prompt, promptRole: s.promptRole, askNotes: s.askNotes, engineNotes: s.engineNotes, decisionQuestions: s.decisionQuestions, exportParts: s.exportParts, importParts: s.importParts, resetParts: s.resetParts };
+          const keep = { cast: s.cast, groups: s.groups, prompt: s.prompt, promptRole: s.promptRole, askNotes: s.askNotes, engineNotes: s.engineNotes, decisionQuestions: s.decisionQuestions, exportParts: s.exportParts, importParts: s.importParts, resetParts: s.resetParts };
           Object.assign(s, fresh, keep);
         }
         if (parts.indexOf('prompt') >= 0) {
@@ -3423,7 +3410,7 @@ async function onPanel(p: any, userId: string | undefined) {
         }
         if (parts.indexOf('cast') >= 0) {
           s.cast = fresh.cast;
-          s.folders = [];
+          s.groups = [];
         }
         let ok = await saveSettings(userId, s);
         if (parts.indexOf('sounds') >= 0) {

@@ -813,17 +813,17 @@ button.af-chip-sound svg { width: 12px; height: 12px; flex: none; color: var(--a
 
 /* The Cast */
 .af-person { padding: 0; gap: 0; }
-.af-folder { display: flex; flex-direction: column; gap: 10px; }
-.af-folder-head { display: flex; align-items: center; gap: 6px; min-height: 44px; padding: 3px 6px 3px 4px; border: 1px solid var(--af-line); border-radius: var(--af-r-md); background: var(--af-fill-subtle); }
-.af-folder-toggle { flex: 1 1 auto; min-width: 0; display: flex; align-items: center; gap: 8px; min-height: 36px; padding: 0 6px; border: 0; border-radius: var(--af-r-sm); background: transparent; color: var(--af-text); font: inherit; font-weight: 600; text-align: left; cursor: pointer; }
-.af-folder-toggle > span:nth-child(2) { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.af-folder-toggle .af-chev { display: grid; place-items: center; width: 18px; height: 18px; color: var(--af-muted); transition: transform var(--af-fast); }
-.af-folder-toggle .af-chev svg { width: 14px; height: 14px; }
-.af-folder[data-open="true"] .af-folder-toggle .af-chev { transform: rotate(90deg); }
-.af-folder-count { flex: none; color: var(--af-muted); font-weight: 400; font-size: 12px; }
-.af-folder-name { flex: 1 1 auto; min-width: 0; }
-.af-folder-body > div { display: flex; flex-direction: column; gap: 12px; padding: 2px 0 2px 12px; margin-left: 10px; border-left: 2px solid var(--af-line); }
-.af-folder-empty { margin: 0; color: var(--af-muted); font-size: 12.5px; }
+.af-group { display: flex; flex-direction: column; gap: 10px; }
+.af-group-head { display: flex; align-items: center; gap: 6px; min-height: 44px; padding: 3px 6px 3px 4px; border: 1px solid var(--af-line); border-radius: var(--af-r-md); background: var(--af-fill-subtle); }
+.af-group-toggle { flex: 1 1 auto; min-width: 0; display: flex; align-items: center; gap: 8px; min-height: 36px; padding: 0 6px; border: 0; border-radius: var(--af-r-sm); background: transparent; color: var(--af-text); font: inherit; font-weight: 600; text-align: left; cursor: pointer; }
+.af-group-toggle > span:nth-child(2) { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.af-group-toggle .af-chev { display: grid; place-items: center; width: 18px; height: 18px; color: var(--af-muted); transition: transform var(--af-fast); }
+.af-group-toggle .af-chev svg { width: 14px; height: 14px; }
+.af-group[data-open="true"] .af-group-toggle .af-chev { transform: rotate(90deg); }
+.af-group-count { flex: none; color: var(--af-muted); font-weight: 400; font-size: 12px; }
+.af-group-name { flex: 1 1 auto; min-width: 0; }
+.af-group-body > div { display: flex; flex-direction: column; gap: 12px; padding: 2px 0 2px 12px; margin-left: 10px; border-left: 2px solid var(--af-line); }
+.af-group-empty { margin: 0; color: var(--af-muted); font-size: 12.5px; }
 .af-person-head { display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; align-items: center; gap: 8px; width: 100%; min-height: 48px; padding: 8px 10px; border: 0; border-radius: var(--af-r-md); background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
 @media (hover: hover) { .af-person-head:hover { background: var(--af-accent-faint); } }
 .af-person-head:focus-visible { outline: none; box-shadow: inset 0 0 0 2px var(--af-accent-soft); }
@@ -932,8 +932,8 @@ interface Member {
   connection: string;
   // Their voice and model on each connection, by connection id.
   voices: Record<string, { voice: string; voiceName: string; model: string }>;
-  // The folder they are in on the Cast tab. Empty is none.
-  folder?: string;
+  // The group they are in on the Cast tab. Empty is none.
+  group?: string;
   stability: number;
   similarity: number;
   style: number;
@@ -999,7 +999,6 @@ const DEFAULTS: any = {
   soundSeconds: 0,
   autoplayDelay: 0,
   extraThinkTags: [],
-  debugConsole: false,
   followScript: true,
   applauseOn: false,
   applauseForAi: true,
@@ -1007,7 +1006,7 @@ const DEFAULTS: any = {
   applauseWhen: 'message',
   engines: {},
   engineNotes: {},
-  folders: [],
+  groups: [],
   promptRole: 'system',
   decisionQuestions: {},
   soundCheck: true,
@@ -1031,7 +1030,6 @@ const DEFAULTS: any = {
   retryDirector: 1,
   askNote: true,
   askNotes: {},
-  fallbackConnection: '',
   messageButton: true,
   barButton: true,
   guideSeen: false,
@@ -1122,6 +1120,21 @@ export function setup(ctx: Ctx, overrides?: any) {
     save();
   }
 
+  // The heading a TTS connection is listed under: its service.
+  function engineGroup(c: any): string {
+    const p = String((c && c.provider) || '').toLowerCase();
+    if (p === 'elevenlabs') return 'ElevenLabs';
+    if (p === 'fish_audio') return 'Fish Audio';
+    if (p === 'google_tts' || p === 'google_vertex_tts') return 'Gemini';
+    return 'Chatterbox and other servers';
+  }
+
+  // A provider id as a heading, such as openai_compatible as Openai compatible.
+  function providerName(p: any): string {
+    const t = String(p || '').replace(/[_-]+/g, ' ').trim();
+    return t ? t.charAt(0).toUpperCase() + t.slice(1) : 'Other';
+  }
+
   // What an engine cannot do of what is switched on, said where the switch
   // is, so nobody waits for a tag or a sound that never comes.
   function engineWarnings(eng: Engine, conn?: any, model?: string): string[] {
@@ -1204,11 +1217,6 @@ export function setup(ctx: Ctx, overrides?: any) {
     const at = String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0') + ':' + String(d.getSeconds()).padStart(2, '0');
     logLines.push({ at, text: String(text), kind: kind || '' });
     while (logLines.length > 120) logLines.shift();
-    if (S.debugConsole) {
-      try {
-        console.info('[Auto Foley] ' + at + ' ' + text);
-      } catch (_) {}
-    }
     if (tab === 'stage') paintLog();
   }
 
@@ -2985,12 +2993,23 @@ export function setup(ctx: Ctx, overrides?: any) {
     }
   }
 
-  function select(label: string, options: { id: string; label: string }[], value: string, onChange: (v: string) => void, help?: string): HTMLElement {
+  // A dropdown. Options with a group are sorted under that heading, in the
+  // order the groups first come, the same as Auto Refine's lists.
+  function optionsHtml(options: { id: string; label: string; group?: string }[], value: string): string {
+    const one = (o: { id: string; label: string }) => '<option value="' + esc(o.id) + '"' + (o.id === value ? ' selected' : '') + '>' + esc(o.label) + '</option>';
+    let html = options.filter((o) => !o.group).map(one).join('');
+    const groups: string[] = [];
+    for (const o of options) if (o.group && groups.indexOf(o.group) < 0) groups.push(o.group);
+    for (const g of groups) html += '<optgroup label="' + esc(g) + '">' + options.filter((o) => o.group === g).map(one).join('') + '</optgroup>';
+    return html;
+  }
+
+  function select(label: string, options: { id: string; label: string; group?: string }[], value: string, onChange: (v: string) => void, help?: string): HTMLElement {
     const id = rid('sel');
     const f = el('<div class="af-col"></div>');
     f.setAttribute('data-af-row', id);
     f.appendChild(labelRow(label, help || '', id));
-    const wrap = el('<div class="af-selwrap"><select class="af-field" id="' + id + '">' + options.map((o) => '<option value="' + esc(o.id) + '"' + (o.id === value ? ' selected' : '') + '>' + esc(o.label) + '</option>').join('') + '</select></div>');
+    const wrap = el('<div class="af-selwrap"><select class="af-field" id="' + id + '">' + optionsHtml(options, value) + '</select></div>');
     const s = wrap.firstElementChild as HTMLSelectElement;
     s.addEventListener('change', () => onChange(s.value));
     f.appendChild(wrap);
@@ -4439,15 +4458,15 @@ export function setup(ctx: Ctx, overrides?: any) {
   const KIND_LABEL: Record<string, string> = { narrator: 'Narrator', character: 'Character', persona: 'Persona', npc: 'NPC' };
   const ADDED_LABEL: Record<string, string> = { ai: 'Added by AI', found: 'Found in the text' };
 
-  // Folders sort the cast on this tab. They change nothing about how anyone
+  // Groups sort the cast on this tab. They change nothing about how anyone
   // sounds. Which are open is kept with them, in the account.
-  interface Folder {
+  interface Group {
     id: string;
     name: string;
     open: boolean;
   }
-  const folders = (): Folder[] => (Array.isArray(S.folders) ? S.folders : []);
-  let renamingFolder = '';
+  const groups = (): Group[] => (Array.isArray(S.groups) ? S.groups : []);
+  let renamingGroup = '';
 
   function renderCast() {
     const top = card(
@@ -4458,7 +4477,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     row.appendChild(
       button('Add someone', () => {
         const m: Member = {
-          id: rid('c'), name: 'New person', kind: 'npc', addedBy: 'you', aliases: [], voice: '', voiceName: '', model: '', connection: '', voices: {}, folder: '',
+          id: rid('c'), name: 'New person', kind: 'npc', addedBy: 'you', aliases: [], voice: '', voiceName: '', model: '', connection: '', voices: {}, group: '',
           stability: 0.5, similarity: 0.75, style: 0, speed: 1, note: '', gender: 'unknown', muted: false,
         };
         S.cast.push(m);
@@ -4468,47 +4487,47 @@ export function setup(ctx: Ctx, overrides?: any) {
       }, 'af-primary'),
     );
     row.appendChild(
-      button('New folder', () => {
-        const f: Folder = { id: rid('f'), name: 'New folder', open: true };
-        S.folders = folders().concat([f]);
-        renamingFolder = f.id;
+      button('New group', () => {
+        const f: Group = { id: rid('f'), name: 'New group', open: true };
+        S.groups = groups().concat([f]);
+        renamingGroup = f.id;
         save();
         renderTab();
       }),
     );
     top.appendChild(row);
-    top.appendChild(hint('Folders sort the cast on this tab, such as one for each story. Pick a person’s folder in their settings.'));
+    top.appendChild(hint('Groups sort the cast on this tab, such as one for each story. Pick a person’s group in their settings.'));
     const conn = activeConnection();
     if (!conn) top.appendChild(notice('warn', ttsWhy || 'Pick your TTS connection in the Settings tab to choose voices.'));
     page.appendChild(top);
     const order: Record<string, number> = { narrator: 0, persona: 1, character: 2, npc: 3 };
     const people = (S.cast as Member[]).slice().sort((a, b) => (order[a.kind] ?? 9) - (order[b.kind] ?? 9));
-    const known = new Set(folders().map((f) => f.id));
-    for (const f of folders()) page.appendChild(folderSection(f, people.filter((m) => m.folder === f.id), conn));
-    for (const m of people) if (!m.folder || !known.has(m.folder)) page.appendChild(personCard(m, conn));
+    const known = new Set(groups().map((f) => f.id));
+    for (const f of groups()) page.appendChild(groupSection(f, people.filter((m) => m.group === f.id), conn));
+    for (const m of people) if (!m.group || !known.has(m.group)) page.appendChild(personCard(m, conn));
   }
 
-  function folderSection(f: Folder, people: Member[], conn: any): HTMLElement {
-    const sec = el('<section class="af-folder" data-folder="' + esc(f.id) + '" data-open="' + (f.open ? 'true' : 'false') + '"><div class="af-folder-head"></div><div class="af-sub af-folder-body"' + (f.open ? '' : ' hidden') + '><div></div></div></section>');
-    const head = sec.querySelector('.af-folder-head') as HTMLElement;
-    const body = sec.querySelector('.af-folder-body') as HTMLElement;
+  function groupSection(f: Group, people: Member[], conn: any): HTMLElement {
+    const sec = el('<section class="af-group" data-group="' + esc(f.id) + '" data-open="' + (f.open ? 'true' : 'false') + '"><div class="af-group-head"></div><div class="af-sub af-group-body"' + (f.open ? '' : ' hidden') + '><div></div></div></section>');
+    const head = sec.querySelector('.af-group-head') as HTMLElement;
+    const body = sec.querySelector('.af-group-body') as HTMLElement;
     const inner = body.firstElementChild as HTMLElement;
     const count = people.length === 1 ? '1 person' : people.length + ' people';
-    if (renamingFolder === f.id) {
-      const input = el('<input type="text" class="af-field af-folder-name" maxlength="60" aria-label="Folder name">') as HTMLInputElement;
+    if (renamingGroup === f.id) {
+      const input = el('<input type="text" class="af-field af-group-name" maxlength="60" aria-label="Group name">') as HTMLInputElement;
       input.value = f.name;
       const done = () => {
-        if (renamingFolder !== f.id) return;
-        renamingFolder = '';
+        if (renamingGroup !== f.id) return;
+        renamingGroup = '';
         f.name = input.value.trim().slice(0, 60) || f.name;
-        S.folders = folders().slice();
+        S.groups = groups().slice();
         save();
         renderTab();
       };
       input.addEventListener('keydown', (e: any) => {
         if (e.key === 'Enter') done();
         if (e.key === 'Escape') {
-          renamingFolder = '';
+          renamingGroup = '';
           renderTab();
         }
       });
@@ -4522,42 +4541,42 @@ export function setup(ctx: Ctx, overrides?: any) {
         } catch (_) {}
       }, 0);
     } else {
-      const toggle = el('<button type="button" class="af-folder-toggle" aria-expanded="' + (f.open ? 'true' : 'false') + '"><span class="af-chev">' + ICON_CHEVRON + '</span><span></span><span class="af-folder-count"></span></button>') as HTMLButtonElement;
+      const toggle = el('<button type="button" class="af-group-toggle" aria-expanded="' + (f.open ? 'true' : 'false') + '"><span class="af-chev">' + ICON_CHEVRON + '</span><span></span><span class="af-group-count"></span></button>') as HTMLButtonElement;
       (toggle.children[1] as HTMLElement).textContent = f.name;
       (toggle.children[2] as HTMLElement).textContent = count;
       toggle.addEventListener('click', () => {
         f.open = !f.open;
-        S.folders = folders().slice();
+        S.groups = groups().slice();
         save();
         sec.dataset.open = f.open ? 'true' : 'false';
         toggle.setAttribute('aria-expanded', f.open ? 'true' : 'false');
-        if (f.open && !inner.childElementCount) fillFolder();
+        if (f.open && !inner.childElementCount) fillGroup();
         reveal(body, f.open);
       });
       head.appendChild(toggle);
       head.appendChild(
         button('Rename', () => {
-          renamingFolder = f.id;
+          renamingGroup = f.id;
           renderTab();
         }),
       );
       head.appendChild(
         button('Delete', async () => {
-          const ok = await askSure('Delete the folder ' + f.name, 'The folder is deleted. ' + (people.length ? 'The ' + count + ' in it stay in the cast, outside any folder.' : 'It is empty.'), 'Delete', true);
+          const ok = await askSure('Delete the group ' + f.name, 'The group is deleted. ' + (people.length ? 'The ' + count + ' in it stay in the cast, outside any group.' : 'It is empty.'), 'Delete', true);
           if (!ok) return;
-          S.folders = folders().filter((x) => x.id !== f.id);
-          for (const m of S.cast as Member[]) if (m.folder === f.id) m.folder = '';
+          S.groups = groups().filter((x) => x.id !== f.id);
+          for (const m of S.cast as Member[]) if (m.group === f.id) m.group = '';
           save();
           renderTab();
         }, 'af-danger'),
       );
     }
-    const fillFolder = () => {
+    const fillGroup = () => {
       inner.innerHTML = '';
-      if (!people.length) inner.appendChild(el('<p class="af-folder-empty">Nobody is in this folder yet. Open a person and pick it under Folder.</p>'));
+      if (!people.length) inner.appendChild(el('<p class="af-group-empty">Nobody is in this group yet. Open a person and pick it under Group.</p>'));
       for (const m of people) inner.appendChild(personCard(m, conn));
     };
-    if (f.open) fillFolder();
+    if (f.open) fillGroup();
     return sec;
   }
 
@@ -4634,13 +4653,13 @@ export function setup(ctx: Ctx, overrides?: any) {
       inner.appendChild(g1);
     }
 
-    if (folders().length) {
+    if (groups().length) {
       inner.appendChild(
-        select('Folder', [{ id: '', label: 'No folder' }].concat(folders().map((f) => ({ id: f.id, label: f.name }))), m.folder || '', (v) => {
-          m.folder = v;
+        select('Group', [{ id: '', label: 'No group' }].concat(groups().map((f) => ({ id: f.id, label: f.name }))), m.group || '', (v) => {
+          m.group = v;
           save();
           renderTab();
-        }, 'Which folder they are in on this tab. It changes nothing about how they sound.'),
+        }, 'Which group they are in on this tab. It changes nothing about how they sound.'),
       );
     }
 
@@ -4654,8 +4673,8 @@ export function setup(ctx: Ctx, overrides?: any) {
       const cn = connOf(m);
       if (ttsConnections.length > 1 || m.connection) {
         const main = activeConnection();
-        const opts = [{ id: '', label: 'Auto Foley’s connection' + (main ? ' (' + main.name + ')' : '') }].concat(
-          ttsConnections.map((c) => ({ id: String(c.id), label: String(c.name || c.id) + ' · ' + (engineFor(c, c.model).supported ? engineFor(c, c.model).label : 'no tags') })),
+        const opts: { id: string; label: string; group?: string }[] = [{ id: '', label: 'Auto Foley’s connection' + (main ? ' (' + main.name + ')' : '') }].concat(
+          ttsConnections.map((c) => ({ id: String(c.id), label: String(c.name || c.id) + (engineFor(c, c.model).supported ? '' : ', no tags'), group: engineGroup(c) })),
         );
         if (m.connection && !connById(m.connection)) opts.push({ id: m.connection, label: 'A connection that is gone' });
         voiceBox.appendChild(
@@ -4923,7 +4942,13 @@ export function setup(ctx: Ctx, overrides?: any) {
     const connBox = el('<div></div>');
     const drawConn = () => {
       connBox.innerHTML = '';
-      const opts = [{ id: '', label: 'The connection you chat with' }].concat((llmConnections || []).map((c) => ({ id: c.id, label: c.name + (c.model ? ' (' + c.model + ')' : '') })));
+      const list = llmConnections || [];
+      // With one connection, the chat can only be using that one, so it is
+      // named in the first choice and not listed a second time.
+      const only = list.length === 1 && S.directorConnection !== list[0].id ? list[0] : null;
+      const opts: { id: string; label: string; group?: string }[] = [{ id: '', label: 'The connection you chat with' + (only ? ' (' + (only.name || only.model) + ')' : '') }].concat(
+        list.filter((c) => c !== only).map((c) => ({ id: c.id, label: c.name + (c.model ? ' (' + c.model + ')' : '') + (c.isDefault ? ', default' : ''), group: c.provider ? providerName(c.provider) : undefined })),
+      );
       if (S.directorConnection && !opts.some((o) => o.id === S.directorConnection)) opts.push({ id: S.directorConnection, label: 'A connection that is gone' });
       connBox.appendChild(select('Which connection', opts, S.directorConnection, (v) => set({ directorConnection: v }), 'Any connection you set up in Lumiverse. Empty uses the one you chat with. ' + (llmWhy || '')));
     };
@@ -5024,24 +5049,8 @@ export function setup(ctx: Ctx, overrides?: any) {
         }),
       ),
     );
-    const fbBox = el('<div></div>');
-    const drawFb = () => {
-      fbBox.innerHTML = '';
-      const opts = [{ id: '', label: 'None' }].concat((llmConnections || []).map((c) => ({ id: c.id, label: c.name + (c.model ? ' (' + c.model + ')' : '') })));
-      if (S.fallbackConnection && !opts.some((o) => o.id === S.fallbackConnection)) opts.push({ id: S.fallbackConnection, label: 'A connection that is gone' });
-      fbBox.appendChild(select('If the Director refuses, ask this connection', opts, S.fallbackConnection, (v) => set({ fallbackConnection: v }), 'None by default. When the Director still refuses, or fails, after every ask above, this connection is asked once more, the same way. A different model or provider is the surest way past a refusal made by mistake.'));
-    };
-    drawFb();
-    again.appendChild(fbBox);
     page.appendChild(again);
     page.appendChild(engineNotesCard());
-    if (!llmConnections) {
-      const t = setTimeout(() => {
-        timers.delete(t);
-        if (fbBox.isConnected) drawFb();
-      }, 1500);
-      timers.add(t);
-    }
 
     const dec = card('Decision model', 'An optional fast model that only answers questions. It picks who says each quoted line, and checks which lines describe a sound. Speakers the text already names, such as "said Wren", are taken from the text first.');
     if (!hostHasDecisions) dec.appendChild(notice('warn', 'This Lumiverse has no Decision connections for extensions. Update Lumiverse to use them.'));
@@ -5050,7 +5059,11 @@ export function setup(ctx: Ctx, overrides?: any) {
         const box = el('<div></div>');
         const draw = () => {
           box.innerHTML = '';
-          const opts = [{ id: '', label: 'Your default Decision connection' }].concat((decisionList || []).map((c) => ({ id: c.id, label: c.name + (c.model ? ' (' + c.model + ')' : '') + (c.hasKey ? '' : ', no key') })));
+          const dl = decisionList || [];
+          const only = dl.length === 1 && S.decisionConnection !== dl[0].id ? dl[0] : null;
+          const opts: { id: string; label: string; group?: string }[] = [{ id: '', label: 'Your default Decision connection' + (only ? ' (' + (only.name || only.model) + ')' : '') }].concat(
+            dl.filter((c) => c !== only).map((c) => ({ id: c.id, label: c.name + (c.model ? ' (' + c.model + ')' : '') + (c.hasKey ? '' : ', no key'), group: c.provider ? providerName(c.provider) : undefined })),
+          );
           if (S.decisionConnection && !opts.some((o) => o.id === S.decisionConnection)) opts.push({ id: S.decisionConnection, label: 'A connection that is gone' });
           box.appendChild(select('Which Decision connection', opts, S.decisionConnection, (v) => set({ decisionConnection: v }), 'Set these up under Decision models in Lumiverse’s Connections panel. ' + (decisionWhy || '')));
         };
@@ -5315,8 +5328,12 @@ export function setup(ctx: Ctx, overrides?: any) {
     const drawConn = () => {
       connBox.innerHTML = '';
       const hostPick = hostVoice && hostVoice.ttsConnectionId ? ttsConnections.find((c) => c.id === hostVoice.ttsConnectionId) : null;
-      const opts = [{ id: '', label: hostPick ? 'Lumiverse’s TTS connection (' + hostPick.name + ')' : 'Lumiverse’s TTS connection' }].concat(
-        ttsConnections.map((c) => ({ id: c.id, label: c.name + ' · ' + (engineFor(c, c.model).supported ? engineFor(c, c.model).label : 'no tags') })),
+      // The first choice follows Lumiverse's Voice settings. With one
+      // connection it names that one, and it is not listed a second time.
+      const only = ttsConnections.length === 1 && S.ttsConnection !== ttsConnections[0].id ? ttsConnections[0] : null;
+      const named = hostPick || only;
+      const opts: { id: string; label: string; group?: string }[] = [{ id: '', label: 'Lumiverse’s TTS connection' + (named ? ' (' + named.name + ')' : '') }].concat(
+        ttsConnections.filter((c) => c !== only).map((c) => ({ id: c.id, label: c.name + (engineFor(c, c.model).supported ? '' : ', no tags'), group: engineGroup(c) })),
       );
       if (S.ttsConnection && !opts.some((o) => o.id === S.ttsConnection)) opts.push({ id: S.ttsConnection, label: 'A connection that is gone' });
       connBox.appendChild(select('TTS connection', opts, S.ttsConnection, (v) => {
@@ -5535,7 +5552,7 @@ export function setup(ctx: Ctx, overrides?: any) {
   ]);
   // The setting keys each part covers. Which parts are ticked are settings
   // too, but they are never carried in a file or put back by a reset.
-  const NOT_SETTINGS = ['cast', 'folders', 'prompt', 'promptRole', 'askNotes', 'engineNotes', 'decisionQuestions', 'exportParts', 'importParts', 'resetParts', 'guideSeen'];
+  const NOT_SETTINGS = ['cast', 'groups', 'prompt', 'promptRole', 'askNotes', 'engineNotes', 'decisionQuestions', 'exportParts', 'importParts', 'resetParts', 'guideSeen'];
   const settingKeys = () => Object.keys(DEFAULTS).filter((k) => NOT_SETTINGS.indexOf(k) < 0);
   let transferSaid = '';
   let transferKind = '';
@@ -5588,7 +5605,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         }
         if (parts.indexOf('cast') >= 0) {
           body.cast = JSON.parse(JSON.stringify(S.cast || []));
-          body.folders = JSON.parse(JSON.stringify(S.folders || []));
+          body.groups = JSON.parse(JSON.stringify(S.groups || []));
         }
         let ok = false;
         try {
@@ -5713,7 +5730,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     }
     if (want.indexOf('cast') >= 0 && Array.isArray(body.cast)) {
       S.cast = body.cast;
-      S.folders = Array.isArray(body.folders) ? body.folders : [];
+      S.groups = Array.isArray(body.groups) ? body.groups : [];
       took.push('the cast');
     }
     if (!took.length) {
@@ -6097,7 +6114,6 @@ export function setup(ctx: Ctx, overrides?: any) {
     c.appendChild(row);
     c.appendChild(area);
     c.appendChild(status);
-    c.appendChild(toggle('Log to the browser console', 'Also writes each Log line to the browser\'s developer console.', 'debugConsole'));
     return c;
   }
 

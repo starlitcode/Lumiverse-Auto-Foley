@@ -145,7 +145,6 @@ About the report:
 - No message text is included.
 - Nothing leaves your device until you paste it.
 
-**Log to the browser console**, under it, also writes each Log line to the browser's developer console.
 
 ---
 

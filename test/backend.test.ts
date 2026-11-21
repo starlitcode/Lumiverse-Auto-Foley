@@ -575,23 +575,23 @@ describe("keeping made audio", () => {
   });
 });
 
-describe("cast folders", () => {
-  test("folders are kept, and a person in a folder that is gone is in none", async () => {
+describe("cast groups", () => {
+  test("groups are kept, and a person in a group that is gone is in none", async () => {
     const h = host();
-    await h.ask({ type: "save", settings: { folders: [{ id: "f1", name: "Harbor town", open: false }, { id: "", name: "No id" }], cast: [{ name: "Pell", folder: "f1" }, { name: "Odessa", folder: "f9" }] } });
+    await h.ask({ type: "save", settings: { groups: [{ id: "f1", name: "Harbor town", open: false }, { id: "", name: "No id" }], cast: [{ name: "Pell", group: "f1" }, { name: "Odessa", group: "f9" }] } });
     const saved = JSON.parse(h.files.get("u1/settings.json"));
-    expect(saved.folders).toEqual([{ id: "f1", name: "Harbor town", open: false }]);
-    expect(saved.cast.find((c: any) => c.name === "Pell").folder).toBe("f1");
-    expect(saved.cast.find((c: any) => c.name === "Odessa").folder).toBe("");
+    expect(saved.groups).toEqual([{ id: "f1", name: "Harbor town", open: false }]);
+    expect(saved.cast.find((c: any) => c.name === "Pell").group).toBe("f1");
+    expect(saved.cast.find((c: any) => c.name === "Odessa").group).toBe("");
   });
 
-  test("Start again on the cast takes the folders too, and on settings keeps them", async () => {
+  test("Start again on the cast takes the groups too, and on settings keeps them", async () => {
     const h = host();
-    await h.ask({ type: "save", settings: { folders: [{ id: "f1", name: "Harbor town", open: true }], cast: [{ name: "Pell", folder: "f1" }] } });
+    await h.ask({ type: "save", settings: { groups: [{ id: "f1", name: "Harbor town", open: true }], cast: [{ name: "Pell", group: "f1" }] } });
     await h.ask({ type: "reset", parts: ["settings"] });
-    expect(JSON.parse(h.files.get("u1/settings.json")).folders.length).toBe(1);
+    expect(JSON.parse(h.files.get("u1/settings.json")).groups.length).toBe(1);
     await h.ask({ type: "reset", parts: ["cast"] });
-    expect(JSON.parse(h.files.get("u1/settings.json")).folders).toEqual([]);
+    expect(JSON.parse(h.files.get("u1/settings.json")).groups).toEqual([]);
   });
 });
 
@@ -801,15 +801,6 @@ describe("a Director that refuses", () => {
     await h.ask(msg);
     const second = h.calls.generate[1].messages;
     expect(second[second.length - 1].content).toBe("Please just tag it.");
-  });
-
-  test("when it still refuses, the fallback connection is asked", async () => {
-    const h = host({ answers: ["I can't help with that.", "I won't do this.", good] });
-    await h.ask({ type: "save", settings: { fallbackConnection: "backup" } });
-    const out = await h.ask(msg);
-    expect(h.calls.generate.length).toBe(3);
-    expect(h.calls.generate[2].connection_id).toBe("backup");
-    expect(out.find((m) => m.type === "script").script.directed).toBe(true);
   });
 
   test("with nothing left to try, the message is still read as written", async () => {

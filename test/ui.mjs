@@ -750,37 +750,37 @@ if (section("steady")) {
   }
 }
 
-if (section("folders")) {
-  console.log("Folders in the Cast tab");
+if (section("groups")) {
+  console.log("Groups in the Cast tab");
   for (const size of SIZES) {
     const { context, page, errors } = await open(THEMES[0], size);
     const where = size.name;
     await page.click('.af-tab[data-tab="cast"]');
     await page.waitForTimeout(250);
-    await page.locator('.af-btn', { hasText: "New folder" }).click();
+    await page.locator('.af-btn', { hasText: "New group" }).click();
     await page.waitForTimeout(200);
-    const input = page.locator('.af-folder input[aria-label="Folder name"]');
-    check((await input.count()) === 1, where + ": a new folder opens with its name ready to type");
+    const input = page.locator('.af-group input[aria-label="Group name"]');
+    check((await input.count()) === 1, where + ": a new group opens with its name ready to type");
     await input.fill("Harbor town");
     await input.press("Enter");
     await page.waitForTimeout(250);
-    check((await page.locator(".af-folder-toggle", { hasText: "Harbor town" }).count()) === 1, where + ": the folder takes its name");
-    // Move the first person who is not in a folder into it.
+    check((await page.locator(".af-group-toggle", { hasText: "Harbor town" }).count()) === 1, where + ": the group takes its name");
+    // Move the first person who is not in a group into it.
     await page.locator(".af-page > .af-person .af-person-head").first().click();
     await page.waitForTimeout(350);
-    const sel = page.locator('.af-page > .af-person .af-col:has(label:text-is("Folder")) select').first();
+    const sel = page.locator('.af-page > .af-person .af-col:has(label:text-is("Group")) select').first();
     await sel.selectOption({ label: "Harbor town" });
     await page.waitForTimeout(300);
-    check((await page.locator(".af-folder .af-person").count()) === 1, where + ": a person moves into the folder");
-    check((await page.locator(".af-folder-count").textContent()).includes("1 person"), where + ": the folder says how many are in it");
-    await page.locator(".af-folder-toggle").click();
+    check((await page.locator(".af-group .af-person").count()) === 1, where + ": a person moves into the group");
+    check((await page.locator(".af-group-count").textContent()).includes("1 person"), where + ": the group says how many are in it");
+    await page.locator(".af-group-toggle").click();
     await page.waitForTimeout(400);
-    check(await page.evaluate(() => document.querySelector(".af-folder-body").hidden), where + ": a tap closes the folder");
+    check(await page.evaluate(() => document.querySelector(".af-group-body").hidden), where + ": a tap closes the group");
     const m = await page.evaluate(MEASURE, size.touch);
-    check(!m.overflow.length && !m.small.length, where + ": the folder row fits and its buttons are big enough. " + m.overflow.concat(m.small).slice(0, 3).join("; "));
-    await page.locator(".af-folder-head .af-btn", { hasText: "Delete" }).click();
+    check(!m.overflow.length && !m.small.length, where + ": the group row fits and its buttons are big enough. " + m.overflow.concat(m.small).slice(0, 3).join("; "));
+    await page.locator(".af-group-head .af-btn", { hasText: "Delete" }).click();
     await page.waitForTimeout(300);
-    check((await page.locator(".af-folder").count()) === 0 && (await page.locator(".af-page > .af-person").count()) >= 4, where + ": deleting the folder keeps its people in the cast");
+    check((await page.locator(".af-group").count()) === 0 && (await page.locator(".af-page > .af-person").count()) >= 4, where + ": deleting the group keeps its people in the cast");
     check(!errors.length, where + ": no console errors. " + errors.slice(0, 2).join("; "));
     await context.close();
   }
@@ -806,6 +806,29 @@ if (section("patterns")) {
     check(!errors.length, size.name + ": no console errors. " + errors.slice(0, 2).join("; "));
     await context.close();
   }
+}
+
+if (section("one connection")) {
+  console.log("With one TTS connection, it is listed once");
+  const { context, page, errors } = await open(THEMES[0], SIZES[0]);
+  await page.evaluate(() => window.__teardown());
+  await page.evaluate(() => {
+    const base = window.__fetch;
+    window.__fetch = async (url, init) => {
+      if (String(url).includes("/tts-connections?")) return new Response(JSON.stringify({ data: [{ id: "t1", name: "My ElevenLabs", provider: "elevenlabs", model: "eleven_v3", has_api_key: true }], total: 1 }), { status: 200, headers: { "Content-Type": "application/json" } });
+      if (String(url).includes("/settings/voiceSettings")) return new Response("{}", { status: 404 });
+      return base(url, init);
+    };
+    document.getElementById("drawer").innerHTML = "";
+    window.__teardown = window.__setup(window.__ctx, { fetch: window.__fetch, Audio: window.__Audio });
+  });
+  await page.waitForTimeout(250);
+  await page.click('.af-tab[data-tab="settings"]');
+  await page.waitForTimeout(400);
+  const opts = await page.locator('.af-col:has(> .af-between label:text-is("TTS connection")) select option, .af-col:has(label:text-is("TTS connection")) select option').allTextContents();
+  check(opts.length === 1 && opts[0].includes("My ElevenLabs"), "the only connection is named once (" + opts.join(" | ") + ")");
+  check(!errors.length, "no console errors. " + errors.slice(0, 2).join("; "));
+  await context.close();
 }
 
 if (section("taps")) {
