@@ -68,7 +68,7 @@ If the Director had sent line 3 as "Is it always this noisy?", the word check fa
 All on the Director tab:
 
 - **Use the Director.** Off: messages are read as written.
-- **Which connection.** Empty uses the connection you chat with.
+- **Which connection.** The first choice is your default connection in Lumiverse. It is named in the box.
 - **How much acting.** Subtle, Natural or Dramatic. At most 1, 2 or 4 tags in a line.
 - **Voice tags.** Delivery and emotion.
 - **Breaths, sighs and laughs.** Sounds a voice makes. Off takes them out of every line.

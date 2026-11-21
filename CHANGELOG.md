@@ -46,4 +46,4 @@
 - **Add a sound by link**, in the sound library. It is played from that address.
 - **The symbol** is a pair of headphones with sound bars, on the drawer tab and on every Auto Foley button.
 - **Cast groups.** Sort the cast on the Cast tab into groups you name, open and close.
-- **A floating player.** A round button over the chat opens a small player, out of the button: who is speaking, the line, Play and the buttons around it, a bar through the part playing, a mark for each part, the volumes, quick switches, and who is voiced.
+- **A floating player.** A round button over the chat opens a small player, out of the button: who is speaking, the line, Play and the buttons around it, a bar through the part playing, a mark for each part, the volumes, quick switches, and who is voiced. Press and hold it, or right click it, for a menu in groups. It looks and holds like the floating buttons of Auto Retry and Auto Refine.

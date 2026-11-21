@@ -110,19 +110,36 @@ Your browser may block sound until you tap the page. Auto Foley then waits, and 
 
 ## The floating player
 
-Turn on **A floating player** in the Settings tab, under **Look**. A round button with the Auto Foley symbol sits over the chat. Drag it to move it. Tap it to open the player. It opens out of the button, and the arrow at the top closes it back into it.
+Turn on **A floating player** in the Settings tab, under **Look**. A round button with the Auto Foley symbol sits over the chat.
 
-- **The top** shows the chat. **More** has **Open the Auto Foley tab** and **Hide the player**.
+- **Tap** it to open the player. It opens out of the button, and the arrow at the top closes it back into it.
+- **Drag** it to move it.
+- **Press and hold** it, or right click it, for the menu. A ring fills round the edge while you hold. When it closes, the menu opens.
+
+The button takes your theme's accent color while a message plays. While the Director works on a message, a ring also grows out of its edge and fades, until it is done.
+
+The menu is in three groups, with a line between them:
+
+1. **Open the player** and **Open the Auto Foley tab**.
+2. **Perform the latest reply** and **Perform my latest message**. While something plays: **Pause** or **Go on playing**, and **Stop**.
+3. **Hide the floating player**.
+
+**More**, at the top of the player, opens the same menu.
+
+In the player:
+
+- **The top** shows the chat.
 - **Now playing** shows who is speaking, with their picture or first letter, which part is playing, and bars that move while a voice plays.
 - **The box under it** shows the line being spoken, or the sound playing.
 - **The buttons**: **Prepare replies ahead** on the left, a switch that lights up while it is on, then back one part, Play or Pause, the next part, and **Stop** on the right. Turning it on also prepares the latest reply at once.
 - **The bar** under them moves through the part playing. Drag it to go back or forward in that part.
 - **The strip** has a mark for each part of the message: lines, sounds and the cheer. Tap a mark to go to that part.
 - **Latest reply** and **My latest message** choose what Play performs when nothing is playing.
+- A line divides these from the options under them.
 - **Voices** and **Sounds** set the two volumes.
 - **Autoplay**, **Sounds**, **Narrator** and **Applause** turn those settings on or off.
 - **Who is voiced** lists the cast. The microphone beside a name is the same as **Do not voice** in the Cast tab.
-- Where it sits, and whether it is open, are kept in this browser. With reduce motion on, it opens and closes at once.
+- Where it sits, and whether it is open, are kept in this browser. With reduce motion on, it opens and closes at once, and no ring is drawn.
 
 ## Playing a message again
 

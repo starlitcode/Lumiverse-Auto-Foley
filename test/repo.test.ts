@@ -107,6 +107,16 @@ describe("the writing rules", () => {
   });
 });
 
+describe("panel text", () => {
+  // Text shown in Lumiverse names no other extension. Comments may, so only
+  // quoted strings are read, with comment lines left out.
+  test("names neither sister extension", () => {
+    const code = read("src/frontend.ts").split("\n").filter((l) => !/^\s*(\/\/|\/\*|\*)/.test(l)).join("\n");
+    const found = code.match(/'[^'\n]*Auto (Refine|Retry)[^'\n]*'/g) || [];
+    expect(found).toEqual([]);
+  });
+});
+
 describe("links in the docs", () => {
   const slug = (h: string) => h.trim().toLowerCase().replace(/[^\p{L}\p{N} -]/gu, "").replace(/ /g, "-");
 

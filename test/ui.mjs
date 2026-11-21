@@ -128,8 +128,8 @@ function answer(msg) {
     case 'save': window.__settings = msg.settings; return reply({ type: 'saved', ok: true, settings: msg.settings });
     case 'direct': return reply({ type: 'script', script: SCRIPT });
     case 'sound': return reply({ type: 'sound', base64: 'AAAA', mime: 'audio/mpeg' });
-    case 'list_connections': return reply({ type: 'connections', list: [{ id: 'l1', name: 'Fast helper with a very long connection name for testing', model: 'maker/tiny-fast-model' }] });
-    case 'list_decision_connections': return reply({ type: 'decision_connections', list: [{ id: 'd1', name: 'Quick', model: 'fast-judge', isDefault: true, hasKey: true }], state: 'ok' });
+    case 'list_connections': return reply({ type: 'connections', list: window.__llmList || [{ id: 'l1', name: 'Fast helper with a very long connection name for testing', model: 'maker/tiny-fast-model' }] });
+    case 'list_decision_connections': return reply({ type: 'decision_connections', list: window.__decList || [{ id: 'd1', name: 'Quick', model: 'fast-judge', isDefault: true, hasKey: true }], state: 'ok' });
     case 'key_test': return reply({ type: 'key', hasKey: true, ok: true, text: 'The key works.' });
     case 'check_director': return reply({ type: 'check', ok: true, text: 'The Director answered.' });
     case 'check_decisions': return reply({ type: 'check', ok: true, text: 'Ready.' });
@@ -669,6 +669,106 @@ if (section("player")) {
   }
 }
 
+if (section("hold")) {
+  console.log("Press and hold on the floating player");
+  for (const size of SIZES) {
+    const { context, page, errors } = await open(THEMES[0], size, 1);
+    const where = size.name;
+    await page.click('.af-tab[data-tab="settings"]');
+    await page.waitForTimeout(200);
+    await page.evaluate(() => document.querySelector('[data-af-row="widgetOn"] .af-box').click());
+    await page.waitForTimeout(250);
+    const hold = await page.evaluate(async () => {
+      window.__menu = null;
+      const b = window.__widget.querySelector(".af-float");
+      const r = b.getBoundingClientRect();
+      const at = { clientX: r.left + r.width / 2, clientY: r.top + r.height / 2, bubbles: true };
+      b.dispatchEvent(new PointerEvent("pointerdown", at));
+      await new Promise((r2) => setTimeout(r2, 60));
+      const early = parseFloat(getComputedStyle(b.querySelector(".af-hold")).opacity);
+      await new Promise((r2) => setTimeout(r2, 280));
+      const mid = parseFloat(getComputedStyle(b.querySelector(".af-hold")).opacity);
+      await new Promise((r2) => setTimeout(r2, 300));
+      const menu = window.__menu;
+      window.dispatchEvent(new PointerEvent("pointerup", at));
+      b.click();
+      await new Promise((r2) => setTimeout(r2, 50));
+      return { early, mid, menu, opened: !!window.__widget.querySelector(".af-pl") };
+    });
+    check(hold.early < 0.2 && hold.mid > 0.8, where + ": the hold ring shows only once a press outlasts a tap (" + hold.early + ", " + hold.mid + ")");
+    check(!!hold.menu, where + ": a press and hold opens the menu");
+    const items = (hold.menu && hold.menu.items) || [];
+    const lines = items.filter((i) => i.type === "divider").length;
+    check(lines >= 1 && items[0].type !== "divider" && items[items.length - 1].type !== "divider", where + ": the menu is in groups, with a line between them (" + items.map((i) => i.type === "divider" ? "|" : i.key).join(" ") + ")");
+    check(["player", "open", "hide"].every((k) => items.some((i) => i.key === k)), where + ": the menu opens the player, the tab, and hides the button");
+    check(!hold.opened, where + ": letting go after the menu opened does not also open the player");
+    const drag = await page.evaluate(async () => {
+      window.__menu = null;
+      const b = window.__widget.querySelector(".af-float");
+      b.dispatchEvent(new PointerEvent("pointerdown", { clientX: 100, clientY: 100, bubbles: true }));
+      window.dispatchEvent(new PointerEvent("pointermove", { clientX: 130, clientY: 100 }));
+      await new Promise((r2) => setTimeout(r2, 620));
+      window.dispatchEvent(new PointerEvent("pointerup", { clientX: 130, clientY: 100 }));
+      return !!window.__menu;
+    });
+    check(!drag, where + ": dragging the button opens no menu");
+    const right = await page.evaluate(async () => {
+      window.__menu = null;
+      window.__widget.querySelector(".af-float").dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true }));
+      await new Promise((r2) => setTimeout(r2, 50));
+      return !!window.__menu;
+    });
+    check(right, where + ": a right click opens the menu");
+    const tap = await page.evaluate(async () => {
+      window.__menu = null;
+      const b = window.__widget.querySelector(".af-float");
+      b.dispatchEvent(new PointerEvent("pointerdown", { clientX: 100, clientY: 100, bubbles: true }));
+      window.dispatchEvent(new PointerEvent("pointerup", { clientX: 100, clientY: 100 }));
+      b.click();
+      await new Promise((r2) => setTimeout(r2, 650));
+      return { menu: !!window.__menu, opened: !!window.__widget.querySelector(".af-pl") };
+    });
+    check(tap.opened && !tap.menu, where + ": a tap opens the player and no menu");
+    const line = await page.evaluate(() => {
+      const hr = window.__widget.querySelector(".af-pl-line");
+      if (!hr) return null;
+      const r = hr.getBoundingClientRect();
+      const seg = window.__widget.querySelector(".af-pl .af-seg").getBoundingClientRect();
+      const mix = window.__widget.querySelector(".af-pl-mix").getBoundingClientRect();
+      return { w: r.width, top: parseFloat(getComputedStyle(hr).borderTopWidth), below: r.top >= seg.bottom - 0.5, above: r.bottom <= mix.top + 0.5 };
+    });
+    check(!!line && line.w > 100 && line.top >= 1 && line.below && line.above, where + ": a line divides playing from the options under it (" + JSON.stringify(line) + ")");
+    check(!errors.length, where + ": no page errors. " + errors.slice(0, 2).join(" | "));
+    await context.close();
+  }
+  {
+    const { context, page } = await open(THEMES[0], SIZES[0], 1);
+    await page.evaluate(() => (window.__settings.reduceMotion = true));
+    await page.evaluate(() => window.__teardown());
+    await page.evaluate(() => {
+      document.getElementById("drawer").innerHTML = "";
+      window.__teardown = window.__setup(window.__ctx, { fetch: window.__fetch, Audio: window.__Audio });
+    });
+    await page.waitForTimeout(150);
+    await page.click('.af-tab[data-tab="settings"]');
+    await page.waitForTimeout(200);
+    await page.evaluate(() => document.querySelector('[data-af-row="widgetOn"] .af-box').click());
+    await page.waitForTimeout(250);
+    const still = await page.evaluate(async () => {
+      window.__menu = null;
+      const b = window.__widget.querySelector(".af-float");
+      b.dispatchEvent(new PointerEvent("pointerdown", { clientX: 100, clientY: 100, bubbles: true }));
+      await new Promise((r2) => setTimeout(r2, 300));
+      const shown = getComputedStyle(b.querySelector(".af-hold")).display;
+      await new Promise((r2) => setTimeout(r2, 300));
+      window.dispatchEvent(new PointerEvent("pointerup", { clientX: 100, clientY: 100 }));
+      return { shown, menu: !!window.__menu };
+    });
+    check(still.shown === "none" && still.menu, "with Reduce motion on, a hold opens the menu with no ring drawn (" + still.shown + ")");
+    await context.close();
+  }
+}
+
 if (section("engines")) {
   console.log("Voice engines in the Cast and Settings tabs");
   for (const size of SIZES) {
@@ -880,6 +980,54 @@ if (section("one connection")) {
   await page.waitForTimeout(400);
   const opts = await page.locator('.af-col:has(> .af-between label:text-is("TTS connection")) select option, .af-col:has(label:text-is("TTS connection")) select option').allTextContents();
   check(opts.length === 1 && opts[0].includes("My ElevenLabs"), "the only connection is named once (" + opts.join(" | ") + ")");
+  check(!errors.length, "no console errors. " + errors.slice(0, 2).join("; "));
+  await context.close();
+}
+
+if (section("listed once")) {
+  console.log("A choice the first one already makes is not listed again");
+  const { context, page, errors } = await open(THEMES[0], SIZES[1]);
+  await page.evaluate(() => window.__teardown());
+  await page.evaluate(() => {
+    window.__llmList = [{ id: "l1", name: "Brisk", model: "maker/brisk-1", provider: "openai", isDefault: true }, { id: "l2", name: "Slowpoke", model: "maker/slow-2", provider: "openai" }];
+    window.__decList = [{ id: "d1", name: "Quick", model: "fast-judge", isDefault: true, hasKey: true }, { id: "d2", name: "Careful", model: "slow-judge", hasKey: true }];
+    window.__settings.decisionsOn = true;
+    const base = window.__fetch;
+    window.__fetch = async (url, init) => {
+      if (/\/tts-connections\/t1\/models/.test(String(url))) return new Response(JSON.stringify({ models: [{ id: "eleven_v3", label: "Eleven v3" }, { id: "eleven_v4", label: "Eleven v4" }], provider: "elevenlabs" }), { status: 200, headers: { "Content-Type": "application/json" } });
+      if (String(url).includes("/settings/voiceSettings")) return new Response("{}", { status: 404 });
+      return base(url, init);
+    };
+    document.getElementById("drawer").innerHTML = "";
+    window.__teardown = window.__setup(window.__ctx, { fetch: window.__fetch, Audio: window.__Audio });
+  });
+  await page.waitForTimeout(300);
+  const twice = (opts, name) => opts.filter((o) => o.includes(name)).length;
+  await page.click('.af-tab[data-tab="settings"]');
+  await page.waitForTimeout(400);
+  const tts = await page.locator('.af-col:has(label:text-is("TTS connection")) select option').allTextContents();
+  check(twice(tts, "My ElevenLabs") === 1 && tts[0].includes("My ElevenLabs") && tts.length === 4, "TTS connection: the default is named in the first choice only (" + tts.join(" | ") + ")");
+  await page.click('.af-tab[data-tab="director"]');
+  await page.waitForTimeout(400);
+  const dir = await page.locator('.af-col:has(label:text-is("Which connection")) select option').allTextContents();
+  check(twice(dir, "Brisk") === 1 && dir[0].includes("Brisk") && dir.some((o) => o.includes("Slowpoke")), "Which connection: the default is named in the first choice only (" + dir.join(" | ") + ")");
+  const dec = await page.locator('.af-col:has(label:text-is("Which Decision connection")) select option').allTextContents();
+  check(twice(dec, "Quick") === 1 && dec[0].includes("Quick") && dec.some((o) => o.includes("Careful")), "Which Decision connection: the default is named in the first choice only (" + dec.join(" | ") + ")");
+  await page.click('.af-tab[data-tab="cast"]');
+  await page.waitForTimeout(300);
+  await page.locator(".af-person-head").first().click();
+  await page.waitForTimeout(600);
+  // The options of the one box under the label with these words.
+  const box = (words) => page.evaluate((w) => {
+    const p = document.querySelector(".af-person");
+    const l = Array.from(p.querySelectorAll("label")).find((x) => x.textContent.trim() === w);
+    const sel = l && (l.htmlFor ? document.getElementById(l.htmlFor) : l.closest(".af-col").querySelector("select"));
+    return sel ? Array.from(sel.options).map((o) => o.textContent) : [];
+  }, words);
+  const conn = await box("Connection");
+  check(twice(conn, "My ElevenLabs") === 1 && conn[0].includes("My ElevenLabs"), "a person's Connection: Auto Foley's own is named in the first choice only (" + conn.join(" | ") + ")");
+  const models = await box("Model");
+  check(twice(models, "eleven_v3") + twice(models, "Eleven v3") === 1 && models.some((o) => o.includes("Eleven v4")), "a person's Model: the connection's model is named in the first choice only (" + models.join(" | ") + ")");
   check(!errors.length, "no console errors. " + errors.slice(0, 2).join("; "));
   await context.close();
 }

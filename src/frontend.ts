@@ -532,6 +532,20 @@ const ICON_SKIP = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="tru
 const ICON_REDO = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/></svg>';
 const ICON_SOUND = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 5 6 9H3v6h3l5 4V5Z"/><path d="M15.5 9.5a4 4 0 0 1 0 5"/></svg>';
 const ICON_BACK = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M18 6.5v11a1 1 0 0 1-1.55.83L9 13.2V17a1 1 0 0 1-2 0V7a1 1 0 0 1 2 0v3.8l7.45-5.13A1 1 0 0 1 18 6.5Z"/></svg>';
+// A press and hold on the floating button opens its menu, the same as on
+// Auto Retry's and Auto Refine's buttons. Long enough that a tap never
+// reaches it.
+const HOLD_MS = 500;
+// The ring lands a little before the menu opens: a CSS transition starts a
+// frame or more after the timer, and a ring cut off short reads as broken.
+const HOLD_RING_MS = HOLD_MS - 70;
+// How far a finger may drift and still be holding rather than dragging.
+const HOLD_SLOP = 10;
+// A tap is over before this, so tapping draws no ring.
+const HOLD_RING_WAIT = 150;
+const HOLD_RING_R = 47;
+const HOLD_RING_LEN = (2 * Math.PI * HOLD_RING_R).toFixed(1);
+const HOLD_RING_SVG = '<svg class="af-hold" viewBox="0 0 100 100" aria-hidden="true" focusable="false"><circle cx="50" cy="50" r="' + HOLD_RING_R + '" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" vector-effect="non-scaling-stroke"/></svg>';
 const ICON_MORE = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="6" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="18" cy="12" r="1.8"/></svg>';
 const ICON_DOWN = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>';
 const ICON_PREP = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 4h10l4 4v12H5Z"/><path d="M9 12h6M9 16h4"/></svg>';
@@ -3289,20 +3303,46 @@ export function setup(ctx: Ctx, overrides?: any) {
     // fills as a message plays. Open, it is a small card: who is speaking and
     // the line they are saying, a strip with every part of the message, the
     // transport, the two volumes, four switches, and who is voiced.
+    // The same button as Auto Retry's and Auto Refine's: a solid base, an
+    // edge that lights on hover, the accent while it works, and a ring that
+    // fills while it is held.
     '.af-float{position:relative;width:100%;height:100%;aspect-ratio:1;display:flex;align-items:center;justify-content:center;padding:0;cursor:pointer;border-radius:50%;' +
     'border:1px solid var(--lumiverse-border-hover,rgba(147,112,219,.25));background-color:var(--lumiverse-card-bg-solid,rgb(24,20,34));' +
     'background-image:linear-gradient(var(--lumiverse-bg-elevated,rgba(35,30,48,.9)),var(--lumiverse-bg-elevated,rgba(35,30,48,.9)));color:var(--lumiverse-text,rgba(255,255,255,.9));' +
-    'box-shadow:var(--lumiverse-shadow-md,0 8px 24px rgba(0,0,0,.4));transition:border-color 260ms cubic-bezier(.2,.7,.3,1),transform 260ms cubic-bezier(.2,.7,.3,1)}' +
+    'box-shadow:var(--lumiverse-shadow-md,0 8px 24px rgba(0,0,0,.4));' +
+    'transition:color 260ms cubic-bezier(.2,.7,.3,1),border-color 260ms cubic-bezier(.2,.7,.3,1),background-image 260ms cubic-bezier(.2,.7,.3,1),box-shadow 260ms cubic-bezier(.2,.7,.3,1),opacity 260ms cubic-bezier(.2,.7,.3,1),transform 260ms cubic-bezier(.2,.7,.3,1)}' +
     '.af-float:hover{border-color:var(--lumiverse-primary-050,rgba(147,112,219,.5))}' +
+    // No chat open: the edge goes quiet. The symbol keeps its color.
+    '.af-float.af-idle{border-color:var(--lumiverse-border,rgba(147,112,219,.12))}' +
+    // Playing: the accent goes on the fill and the edge.
+    '.af-float.af-playing,.af-float.af-working{border-color:var(--lumiverse-primary-050,rgba(147,112,219,.5));' +
+    'background-image:linear-gradient(var(--lumiverse-primary-020,rgba(147,112,219,.2)),var(--lumiverse-primary-020,rgba(147,112,219,.2))),linear-gradient(var(--lumiverse-bg-elevated,rgba(35,30,48,.9)),var(--lumiverse-bg-elevated,rgba(35,30,48,.9)))}' +
+    // Directing: a ring grows out of the edge and fades, while it lasts. The
+    // shadow is in every frame, since an animation on box-shadow replaces it.
+    '.af-float.af-working{box-shadow:var(--lumiverse-shadow-md,0 8px 24px rgba(0,0,0,.4)),0 0 0 3px var(--lumiverse-primary-020,rgba(147,112,219,.18));animation:af-pulse 1400ms ease-out infinite}' +
+    '@keyframes af-pulse{0%{box-shadow:var(--lumiverse-shadow-md,0 8px 24px rgba(0,0,0,.4)),0 0 0 0 var(--lumiverse-primary-050,rgba(147,112,219,.5))}' +
+    '70%{box-shadow:var(--lumiverse-shadow-md,0 8px 24px rgba(0,0,0,.4)),0 0 0 10px rgba(0,0,0,0)}100%{box-shadow:var(--lumiverse-shadow-md,0 8px 24px rgba(0,0,0,.4)),0 0 0 0 rgba(0,0,0,0)}}' +
+    // A press lightens the button and shrinks it a little.
+    '.af-float:active{filter:brightness(1.15)}' +
     // The symbol fills a layer the size of the button and sits in its middle,
     // so it is centered whatever size the button is.
     '.af-float .af-glyph{position:absolute;inset:0;display:grid;place-items:center;line-height:0;pointer-events:none}.af-float .af-glyph svg{width:50%;height:50%;min-width:16px;min-height:16px}' +
     '.af-float[data-af-on="true"] .af-glyph{color:var(--lumiverse-primary-text,var(--lumiverse-primary,#a78bfa))}' +
-    '.af-float .af-ring{position:absolute;inset:-1px;width:calc(100% + 2px);height:calc(100% + 2px);pointer-events:none;transform:rotate(-90deg);color:var(--lumiverse-primary,#a78bfa)}' +
+    // How far through the message it is, round the edge.
+    '.af-float .af-ring{position:absolute;inset:-1px;width:calc(100% + 2px);height:calc(100% + 2px);pointer-events:none;transform:rotate(-90deg);color:var(--lumiverse-primary,#a78bfa);opacity:.55}' +
     '.af-float .af-ring circle{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-dasharray:289;stroke-dashoffset:289;transition:stroke-dashoffset .4s ease-out}' +
+    // The hold ring. It starts at the top and fills clockwise, at one steady
+    // rate, so how far round it is is how far through the hold you are. It
+    // shows only once a press outlasts a tap.
+    '.af-float .af-hold{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;transform:rotate(-90deg);opacity:0;color:var(--lumiverse-primary,rgba(147,112,219,.9));transition:opacity 200ms ease-out}' +
+    '.af-float .af-hold circle{stroke-dasharray:' + HOLD_RING_LEN + ';stroke-dashoffset:' + HOLD_RING_LEN + ';transition:stroke-dashoffset 160ms ease-out}' +
+    '.af-float[data-af-holding] .af-hold{opacity:1;transition:opacity 90ms linear ' + HOLD_RING_WAIT + 'ms}' +
+    '.af-float[data-af-holding] .af-hold circle{stroke-dashoffset:0;transition:stroke-dashoffset ' + HOLD_RING_MS + 'ms linear}' +
     '@media (prefers-reduced-motion: no-preference){html:not([data-af-still]) .af-float:active{transform:scale(.94)}}' +
-    '@media (prefers-reduced-motion: reduce){.af-float,.af-float .af-ring circle{transition:none}}' +
-    'html[data-af-still] .af-float .af-ring circle{transition:none}' +
+    // Reduce motion: no ring grows, nothing pulses, and a hold opens the menu
+    // with nothing drawn.
+    '@media (prefers-reduced-motion: reduce){.af-float,.af-float .af-ring circle{transition:none}.af-float.af-working{animation:none}.af-float .af-hold{display:none}}' +
+    'html[data-af-still] .af-float,html[data-af-still] .af-float .af-ring circle{transition:none}html[data-af-still] .af-float.af-working{animation:none}html[data-af-still] .af-float .af-hold{display:none}' +
     // The open player is drawn with the panel's own parts: its switches,
     // sliders, Play button, two-way choice and fold, so it looks like the
     // rest of Auto Foley. It carries the panel's class for their colors.
@@ -3326,6 +3366,8 @@ export function setup(ctx: Ctx, overrides?: any) {
     '.af-pl-seek{display:flex;align-items:center;gap:8px;font-size:10.5px;color:var(--af-muted);font-variant-numeric:tabular-nums}' +
     '.af-pl-seek span{white-space:nowrap;min-width:30px}.af-pl-seek span:last-child{text-align:right}' +
     '.af-pl .af-parts{min-height:20px}.af-pl .af-parts button{height:20px;padding:7px 0}' +
+    // A line between playing and the options under it.
+    '.af-pl-line{border:0;border-top:1px solid var(--af-line);margin:2px 0;height:0;flex:none}' +
     '.af-pl-id{min-width:0;flex:1}' +
     '.af-pl-id b{display:block;font-size:14px;font-weight:650;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}' +
     '.af-pl-id small{display:block;font-size:11.5px;color:var(--af-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}' +
@@ -3451,6 +3493,8 @@ export function setup(ctx: Ctx, overrides?: any) {
   let widget: any = null;
   let floatBox: HTMLElement | null = null;
   let floatBtn: HTMLButtonElement | null = null;
+  // Takes away the window listeners of the round button's press and hold.
+  let pressOff: (() => void) | null = null;
   let widgetFailed = false;
   let widgetOff: (() => void) | null = null;
   let widgetSize = 0;
@@ -3482,6 +3526,8 @@ export function setup(ctx: Ctx, overrides?: any) {
     playerTick = null;
     if (widgetOff) widgetOff();
     widgetOff = null;
+    if (pressOff) pressOff();
+    pressOff = null;
     if (playerSeen) playerSeen.disconnect();
     playerSeen = null;
     try {
@@ -3646,8 +3692,16 @@ export function setup(ctx: Ctx, overrides?: any) {
     paintFloat();
   }
 
-  async function playerMenu(anchor: HTMLElement) {
-    if (!ctx.ui || typeof ctx.ui.showContextMenu !== 'function') return;
+  // The menu, from a press and hold or a right click on the round button, or
+  // from More in the player. It is in groups, with a line between them: where
+  // to go, what to play, and a way to put the button away.
+  let menuOpen = false;
+  async function floatMenu(anchor: HTMLElement) {
+    if (menuOpen) return;
+    if (!ctx.ui || typeof ctx.ui.showContextMenu !== 'function') {
+      notify('info', 'Everything is in the Foley tab in the drawer.');
+      return;
+    }
     let x = 40;
     let y = 40;
     try {
@@ -3655,24 +3709,56 @@ export function setup(ctx: Ctx, overrides?: any) {
       x = Math.round(r.left + r.width / 2);
       y = Math.round(r.bottom);
     } catch (_) {}
+    type Item = { key: string; label: string; type?: string };
+    const groups: Item[][] = [];
+    const go: Item[] = [];
+    if (!playerOpen) go.push({ key: 'player', label: 'Open the player' });
+    go.push({ key: 'open', label: 'Open the Auto Foley tab' });
+    groups.push(go);
+    const doing: Item[] = [];
+    if (show) doing.push({ key: 'pause', label: paused ? 'Go on playing' : 'Pause' });
+    if (show || busyMessage) doing.push({ key: 'stop', label: 'Stop' });
+    else if (chatInfo.kind !== 'none') {
+      doing.push({ key: 'latest', label: 'Perform the latest reply' });
+      doing.push({ key: 'mine', label: 'Perform my latest message' });
+    }
+    if (doing.length) groups.push(doing);
+    groups.push([{ key: 'hide', label: 'Hide the floating player' }]);
+    const items: Item[] = [];
+    for (const g of groups) {
+      if (items.length) items.push({ key: 'line' + items.length, label: '', type: 'divider' });
+      items.push(...g);
+    }
     let got: any = null;
+    menuOpen = true;
     try {
-      got = await ctx.ui.showContextMenu({
-        position: { x, y },
-        items: [
-          { key: 'open', label: 'Open the Auto Foley tab' },
-          { key: 'hide', label: 'Hide the player' },
-        ],
-      });
+      got = await ctx.ui.showContextMenu({ position: { x, y }, items });
     } catch (e: any) {
       log('The player’s menu could not open: ' + String((e && e.message) || e), 'bad');
+      notify('warning', 'The Auto Foley menu could not open. The Log says why.');
       return;
+    } finally {
+      menuOpen = false;
     }
     const key = got && got.selectedKey;
-    if (key === 'open') {
+    if (key === 'player') openPlayer(true);
+    else if (key === 'open') {
       try {
         if (drawer) drawer.activate();
       } catch (_) {}
+    } else if (key === 'pause') togglePause();
+    else if (key === 'stop') {
+      if (busyMessage) busyMessage = '';
+      stop('Stopped');
+    } else if (key === 'latest' || key === 'mine') {
+      stop();
+      const id = await latestId(key === 'mine');
+      if (id) perform(id);
+      else {
+        phase = key === 'mine' ? 'You have no message in this chat to perform.' : 'There is no reply in this chat to perform.';
+        log(phase);
+        notify('info', key === 'mine' ? 'Auto Foley found no message of yours in this chat to perform.' : 'Auto Foley found no reply in this chat to perform.');
+      }
     } else if (key === 'hide') {
       set({ widgetOn: false });
       syncWidget();
@@ -3695,17 +3781,70 @@ export function setup(ctx: Ctx, overrides?: any) {
     if (!floatBox) return;
     floatBox.innerHTML = '';
     floatBtn = null;
+    if (pressOff) pressOff();
+    pressOff = null;
     if (!playerOpen) {
       const b = document.createElement('button');
       b.type = 'button';
       b.className = 'af-float';
       b.innerHTML =
         '<span class="af-glyph">' + ICON + '</span>' +
-        '<svg class="af-ring" viewBox="0 0 100 100" aria-hidden="true" focusable="false"><circle cx="50" cy="50" r="46"/></svg>';
+        '<svg class="af-ring" viewBox="0 0 100 100" aria-hidden="true" focusable="false"><circle cx="50" cy="50" r="46"/></svg>' +
+        HOLD_RING_SVG;
+      // A tap opens the player. A press and hold, or a right click, opens the
+      // menu. The host captures the pointer to drag the widget, so the
+      // button's own pointerup never comes: letting go is heard on the
+      // window, and a drag of more than a few pixels is not a hold.
+      let held: any = null;
+      let downAt: { x: number; y: number } | null = null;
+      let menuShown = false;
+      const disarm = () => {
+        if (held) clearTimeout(held);
+        held = null;
+        downAt = null;
+        b.removeAttribute('data-af-holding');
+      };
+      const onMove = (e: any) => {
+        if (!downAt || !held) return;
+        if (Math.abs((e.clientX || 0) - downAt.x) > HOLD_SLOP || Math.abs((e.clientY || 0) - downAt.y) > HOLD_SLOP) disarm();
+      };
+      window.addEventListener('pointerup', disarm, true);
+      window.addEventListener('pointercancel', disarm, true);
+      window.addEventListener('pointermove', onMove, true);
+      pressOff = () => {
+        window.removeEventListener('pointerup', disarm, true);
+        window.removeEventListener('pointercancel', disarm, true);
+        window.removeEventListener('pointermove', onMove, true);
+        disarm();
+      };
+      b.addEventListener('pointerdown', (e: any) => {
+        menuShown = false;
+        downAt = { x: (e && e.clientX) || 0, y: (e && e.clientY) || 0 };
+        if (held) clearTimeout(held);
+        b.setAttribute('data-af-holding', '1');
+        held = setTimeout(() => {
+          held = null;
+          menuShown = true;
+          b.removeAttribute('data-af-holding');
+          floatMenu(b);
+        }, HOLD_MS);
+      });
       b.addEventListener('click', (e: any) => {
         e.preventDefault();
         e.stopPropagation();
+        disarm();
+        // A hold that opened the menu ends in a click too. It does nothing.
+        if (menuShown) {
+          menuShown = false;
+          return;
+        }
         openPlayer(true);
+      });
+      b.addEventListener('contextmenu', (e: any) => {
+        e.preventDefault();
+        disarm();
+        menuShown = true;
+        floatMenu(b);
       });
       floatBtn = b;
       floatBox.appendChild(b);
@@ -3737,6 +3876,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         '<div class="af-pl-seek"><span data-p="at">0:00</span><input type="range" data-p="seek" min="0" max="1000" value="0" aria-label="Where in this part"><span data-p="len">0:00</span></div>' +
         '<div class="af-parts" data-p="strip" role="group" aria-label="The parts of the message"></div>' +
         '<div class="af-seg" role="group" aria-label="What Play performs"><button type="button" class="af-segbtn" data-w="reply">Latest reply</button><button type="button" class="af-segbtn" data-w="mine">My latest message</button></div>' +
+        '<hr class="af-pl-line" aria-hidden="true">' +
         '<div class="af-pl-mix">' +
           '<label><span>Voices<b data-p="vv"></b></span><input type="range" data-p="vol" min="0" max="100" step="5" aria-label="Voices volume"></label>' +
           '<label><span>Sounds<b data-p="sv"></b></span><input type="range" data-p="svol" min="0" max="100" step="5" aria-label="Sounds volume"></label>' +
@@ -3750,7 +3890,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     );
     const q = (k: string) => c.querySelector('[data-p="' + k + '"]') as HTMLElement;
     q('close').addEventListener('click', () => openPlayer(false));
-    q('menu').addEventListener('click', () => playerMenu(q('menu')));
+    q('menu').addEventListener('click', () => floatMenu(q('menu')));
     c.querySelectorAll('[data-w]').forEach((b) =>
       b.addEventListener('click', () => {
         playerWhose = (b as HTMLElement).dataset.w === 'mine' ? 'mine' : 'reply';
@@ -3907,7 +4047,10 @@ export function setup(ctx: Ctx, overrides?: any) {
     const frac = show && total ? Math.min(1, show.index / total) : 0;
     if (floatBtn) {
       floatBtn.dataset.afOn = on ? 'true' : 'false';
-      const said = on ? 'Auto Foley is playing. Open the player' : 'Open the Auto Foley player';
+      floatBtn.classList.toggle('af-idle', !on && chatInfo.kind === 'none');
+      floatBtn.classList.toggle('af-playing', !!show);
+      floatBtn.classList.toggle('af-working', !show && !!busyMessage);
+      const said = (show ? 'Auto Foley is playing. ' : busyMessage ? 'Auto Foley is directing. ' : '') + 'Tap to open the player. Hold for the menu.';
       floatBtn.title = said;
       floatBtn.setAttribute('aria-label', said);
       const ring = floatBtn.querySelector('.af-ring circle') as SVGElement | null;
@@ -4150,7 +4293,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         set({ panelPattern: v });
         paintLook();
         renderTab();
-      }, 'None by default. A faint pattern in your theme’s color, drawn behind the cards. The same patterns as Auto Refine.'),
+      }, 'None by default. A faint pattern in your theme’s color, drawn behind the cards.'),
     );
     if (PATTERNS.indexOf(String(S.panelPattern)) > 0) {
       const under = el('<div class="af-sub"><div class="af-under"></div></div>');
@@ -4902,9 +5045,11 @@ export function setup(ctx: Ctx, overrides?: any) {
       voiceBox.innerHTML = '';
       const cn = connOf(m);
       if (ttsConnections.length > 1 || m.connection) {
+        // Auto Foley's own connection is named in the first choice and not
+        // listed a second time, unless it is the one picked.
         const main = activeConnection();
         const opts: { id: string; label: string; group?: string }[] = [{ id: '', label: 'Auto Foley’s connection' + (main ? ' (' + main.name + ')' : '') }].concat(
-          ttsConnections.map((c) => ({ id: String(c.id), label: String(c.name || c.id) + (engineFor(c, c.model).supported ? '' : ', no tags'), group: engineGroup(c) })),
+          ttsConnections.filter((c) => !main || c.id !== main.id || m.connection === c.id).map((c) => ({ id: String(c.id), label: String(c.name || c.id) + (engineFor(c, c.model).supported ? '' : ', no tags'), group: engineGroup(c) })),
         );
         if (m.connection && !connById(m.connection)) opts.push({ id: m.connection, label: 'A connection that is gone' });
         voiceBox.appendChild(
@@ -4979,7 +5124,9 @@ export function setup(ctx: Ctx, overrides?: any) {
       const fillModels = (list: { id: string; label: string }[]) => {
         // Only models that act are offered. One picked before that does not
         // is still shown, marked, so it can be changed.
-        const opts = list.filter((o) => modelActs(cn, o.id)).map((o) => (o.id === pick.model ? { id: o.id, label: pick.model } : o));
+        // The connection's own model is named in the first choice and not
+        // listed a second time, unless it is the one picked.
+        const opts = list.filter((o) => modelActs(cn, o.id) && (o.id !== cn.model || o.id === pick.model)).map((o) => (o.id === pick.model ? { id: o.id, label: pick.model } : o));
         if (pick.model && !opts.some((o) => o.id === pick.model)) opts.push({ id: pick.model, label: pick.model + (modelActs(cn, pick.model) ? '' : ' (no tags)') });
         ms.innerHTML = '<option value="">' + connModel + '</option>' + opts.map((o) => '<option value="' + esc(o.id) + '"' + (o.id === pick.model ? ' selected' : '') + '>' + esc(o.label) + '</option>').join('');
       };
@@ -5189,14 +5336,16 @@ export function setup(ctx: Ctx, overrides?: any) {
     const drawConn = () => {
       connBox.innerHTML = '';
       const list = llmConnections || [];
-      // With one connection, the chat can only be using that one, so it is
-      // named in the first choice and not listed a second time.
-      const only = list.length === 1 && S.directorConnection !== list[0].id ? list[0] : null;
-      const opts: { id: string; label: string; group?: string }[] = [{ id: '', label: 'The connection you chat with' + (only ? ' (' + (only.name || only.model) + ')' : '') }].concat(
-        list.filter((c) => c !== only).map((c) => ({ id: c.id, label: c.name + (c.model ? ' (' + c.model + ')' : '') + (c.isDefault ? ', default' : ''), group: c.provider ? providerName(c.provider) : undefined })),
+      // Empty asks with no connection named, and Lumiverse then uses your
+      // default one. It is named in the first choice and not listed a second
+      // time, unless it is the one picked.
+      const def = list.find((c) => c.isDefault) || (list.length === 1 ? list[0] : null);
+      const twin = def && S.directorConnection !== def.id ? def : null;
+      const opts: { id: string; label: string; group?: string }[] = [{ id: '', label: 'Your default connection' + (def ? ' (' + (def.name || def.model) + ')' : '') }].concat(
+        list.filter((c) => c !== twin).map((c) => ({ id: c.id, label: c.name + (c.model ? ' (' + c.model + ')' : ''), group: c.provider ? providerName(c.provider) : undefined })),
       );
       if (S.directorConnection && !opts.some((o) => o.id === S.directorConnection)) opts.push({ id: S.directorConnection, label: 'A connection that is gone' });
-      connBox.appendChild(select('Which connection', opts, S.directorConnection, (v) => set({ directorConnection: v }), 'Any connection you set up in Lumiverse. Empty uses the one you chat with. ' + (llmWhy || '')));
+      connBox.appendChild(select('Which connection', opts, S.directorConnection, (v) => set({ directorConnection: v }), 'Any connection you set up in Lumiverse. The first choice is your default connection. ' + (llmWhy || '')));
     };
     drawConn();
     if (!llmConnections) {
@@ -5312,9 +5461,12 @@ export function setup(ctx: Ctx, overrides?: any) {
         const draw = () => {
           box.innerHTML = '';
           const dl = decisionList || [];
-          const only = dl.length === 1 && S.decisionConnection !== dl[0].id ? dl[0] : null;
-          const opts: { id: string; label: string; group?: string }[] = [{ id: '', label: 'Your default Decision connection' + (only ? ' (' + (only.name || only.model) + ')' : '') }].concat(
-            dl.filter((c) => c !== only).map((c) => ({ id: c.id, label: c.name + (c.model ? ' (' + c.model + ')' : '') + (c.hasKey ? '' : ', no key'), group: c.provider ? providerName(c.provider) : undefined })),
+          // The default is named in the first choice and not listed a second
+          // time, unless it is the one picked.
+          const def = dl.find((c) => c.isDefault) || (dl.length === 1 ? dl[0] : null);
+          const twin = def && S.decisionConnection !== def.id ? def : null;
+          const opts: { id: string; label: string; group?: string }[] = [{ id: '', label: 'Your default Decision connection' + (def ? ' (' + (def.name || def.model) + ')' : '') }].concat(
+            dl.filter((c) => c !== twin).map((c) => ({ id: c.id, label: c.name + (c.model ? ' (' + c.model + ')' : '') + (c.hasKey ? '' : ', no key'), group: c.provider ? providerName(c.provider) : undefined })),
           );
           if (S.decisionConnection && !opts.some((o) => o.id === S.decisionConnection)) opts.push({ id: S.decisionConnection, label: 'A connection that is gone' });
           box.appendChild(select('Which Decision connection', opts, S.decisionConnection, (v) => set({ decisionConnection: v }), 'Set these up under Decision models in Lumiverse’s Connections panel. ' + (decisionWhy || '')));
@@ -5619,13 +5771,14 @@ export function setup(ctx: Ctx, overrides?: any) {
     const connBox = el('<div></div>');
     const drawConn = () => {
       connBox.innerHTML = '';
+      // The first choice follows Lumiverse's Voice settings. It names the
+      // connection that means, and that one is not listed a second time,
+      // unless it is the one picked.
       const hostPick = hostVoice && hostVoice.ttsConnectionId ? ttsConnections.find((c) => c.id === hostVoice.ttsConnectionId) : null;
-      // The first choice follows Lumiverse's Voice settings. With one
-      // connection it names that one, and it is not listed a second time.
-      const only = ttsConnections.length === 1 && S.ttsConnection !== ttsConnections[0].id ? ttsConnections[0] : null;
-      const named = hostPick || only;
+      const named = hostPick || ttsConnections.find((c) => c.is_default) || ttsConnections[0] || null;
+      const twin = named && S.ttsConnection !== named.id ? named : null;
       const opts: { id: string; label: string; group?: string }[] = [{ id: '', label: 'Lumiverse’s TTS connection' + (named ? ' (' + named.name + ')' : '') }].concat(
-        ttsConnections.filter((c) => c !== only).map((c) => ({ id: c.id, label: c.name + (engineFor(c, c.model).supported ? '' : ', no tags'), group: engineGroup(c) })),
+        ttsConnections.filter((c) => c !== twin).map((c) => ({ id: c.id, label: c.name + (engineFor(c, c.model).supported ? '' : ', no tags'), group: engineGroup(c) })),
       );
       if (S.ttsConnection && !opts.some((o) => o.id === S.ttsConnection)) opts.push({ id: S.ttsConnection, label: 'A connection that is gone' });
       connBox.appendChild(select('TTS connection', opts, S.ttsConnection, (v) => {
@@ -5701,7 +5854,7 @@ export function setup(ctx: Ctx, overrides?: any) {
           { id: '5', label: '5 seconds' },
           { id: '10', label: '10 seconds' },
           { id: '20', label: '20 seconds' },
-        ], String(S.autoplayDelay || 0), (v) => set({ autoplayDelay: Number(v) }), 'Play at once by default. Gives another extension time to change a reply first, such as Auto Refine. A reply changed while it plays starts again with the new text either way.'),
+        ], String(S.autoplayDelay || 0), (v) => set({ autoplayDelay: Number(v) }), 'Play at once by default. Gives another extension time to change a reply first. A reply changed while it plays starts again with the new text either way.'),
         toggle('Read your own messages', 'Off by default. Your own messages are performed too, in your persona’s voice. The button on a message always works.', 'readOwnMessages'),
       ].concat(bothAutoplayWarning())),
     );
@@ -5765,7 +5918,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     r.appendChild(
       area('Extra thinking tag names', (S.extraThinkTags || []).join('\n'), (v) => set({ extraThinkTags: v.split('\n').map((x) => x.trim()).filter(Boolean).slice(0, 20) }), {
         placeholder: 'musing',
-        help: 'More tag names that hold thinking, one per line, without the angle brackets. Text inside these tags is not read aloud. The same setting as in Auto Retry and Auto Refine.',
+        help: 'More tag names that hold thinking, one per line, without the angle brackets. Text inside these tags is not read aloud.',
       }),
     );
     page.appendChild(r);
