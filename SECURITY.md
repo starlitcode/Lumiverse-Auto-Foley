@@ -25,4 +25,4 @@
 
 ## Reporting a problem
 
-Open an issue at https://github.com/starlitcode/Lumiverse-Auto-Foley/issues. For something that should not be public, say so in the issue, with no details, and the owner will reply.
+Open an issue at https://github.com/starlitcode/Lumiverse-Auto-Foley/issues. For something that should not be public, say so in the issue, with no details, and I will reply.

@@ -47,7 +47,7 @@ You also need a TTS connection in Lumiverse, under **Connections**, in the TTS s
 
 ## Made for adults
 
-Auto Foley is for adults, 18 and older. It is not for sexual content involving minors, and the owner does not help anyone under 18 with anything. The details are in [The one thing it does not direct](docs/director.md#the-one-thing-it-does-not-direct).
+Auto Foley is for adults, 18 and older. It is not for sexual content involving minors, and I do not support anyone using it for that. I do not help anyone who tells me they are under 18, with anything. [The one thing it does not direct](docs/director.md#the-one-thing-it-does-not-direct) says exactly how the built-in prompt handles it.
 
 ## Credits
 
