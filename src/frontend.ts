@@ -540,9 +540,10 @@ function rateWait(attempt: number, err: any): number {
 // Icons
 // ---------------------------------------------------------------------------
 
-// A speech bubble with three sound bars in it: a voice, performed.
+// Headphones with three short sound bars between the ear cups: something
+// to listen to.
 const ICON =
-  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6.5 3h11A2.5 2.5 0 0 1 20 5.5v8a2.5 2.5 0 0 1-2.5 2.5H11l-4.5 4v-4A2.5 2.5 0 0 1 4 13.5v-8A2.5 2.5 0 0 1 6.5 3Z"/><path d="M9 8v3.5M12 6.5v6.5M15 8.5v2.5"/></svg>';
+  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 15v-3a8 8 0 0 1 16 0v3"/><rect x="3" y="14" width="4" height="7" rx="1.5"/><rect x="17" y="14" width="4" height="7" rx="1.5"/><path d="M10 16.5v2M12 15v5M14 16.5v2"/></svg>';
 const ICON_PLAY = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5.5v13a1 1 0 0 0 1.5.86l10.5-6.5a1 1 0 0 0 0-1.72L9.5 4.64A1 1 0 0 0 8 5.5Z"/></svg>';
 const ICON_PAUSE = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6.5" y="5" width="4" height="14" rx="1"/><rect x="13.5" y="5" width="4" height="14" rx="1"/></svg>';
 const ICON_STOP = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="1.5"/></svg>';
@@ -552,6 +553,7 @@ const ICON_SOUND = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" s
 const ICON_BACK = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M18 6.5v11a1 1 0 0 1-1.55.83L9 13.2V17a1 1 0 0 1-2 0V7a1 1 0 0 1 2 0v3.8l7.45-5.13A1 1 0 0 1 18 6.5Z"/></svg>';
 const ICON_MORE = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="6" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="18" cy="12" r="1.8"/></svg>';
 const ICON_DOWN = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>';
+const ICON_PREP = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 4h10l4 4v12H5Z"/><path d="M9 12h6M9 16h4"/></svg>';
 const ICON_MIC = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21"/></svg>';
 const ICON_MIC_OFF = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 9.5V6a3 3 0 0 0-5.7-1.3M9 9v2a3 3 0 0 0 4.7 2.5"/><path d="M5.5 11a6.5 6.5 0 0 0 10.6 5M18.5 11a6.4 6.4 0 0 1-.6 2.7M12 17.5V21M4 4l16 16"/></svg>';
 const ICON_CHEVRON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>';
@@ -3320,78 +3322,56 @@ export function setup(ctx: Ctx, overrides?: any) {
     '@media (prefers-reduced-motion: no-preference){html:not([data-af-still]) .af-float:active{transform:scale(.94)}}' +
     '@media (prefers-reduced-motion: reduce){.af-float,.af-float .af-ring circle{transition:none}}' +
     'html[data-af-still] .af-float .af-ring circle{transition:none}' +
-    '.af-pl{--pa:var(--lumiverse-primary,#a78bfa);--pa-text:var(--lumiverse-primary-text,var(--pa));--pa-on:var(--lumiverse-primary-contrast,#17122a);' +
-    '--pa-soft:var(--lumiverse-primary-015,rgba(147,112,219,.15));--pa-line:var(--lumiverse-primary-050,rgba(147,112,219,.5));--pw:var(--lumiverse-warning,#f59e0b);' +
-    '--pt:var(--lumiverse-text,rgba(255,255,255,.92));--pm:var(--lumiverse-text-muted,rgba(255,255,255,.65));--pl:var(--lumiverse-border,rgba(255,255,255,.08));' +
-    '--ph:var(--lumiverse-border-hover,rgba(255,255,255,.18));--pf:var(--lumiverse-fill-subtle,rgba(255,255,255,.03));' +
-    'box-sizing:border-box;width:100%;display:flex;flex-direction:column;gap:10px;padding:12px;overflow:hidden;color:var(--pt);font:13px/1.4 var(--lumiverse-font-family,system-ui,sans-serif);' +
-    'border:1px solid var(--ph);border-radius:var(--lumiverse-radius-lg,16px);background-color:var(--lumiverse-card-bg-solid,#1a1526);' +
-    'background-image:radial-gradient(120% 70% at 100% 0,var(--pa-soft),transparent 60%),linear-gradient(var(--lumiverse-bg-elevated,#1f1a2e),var(--lumiverse-bg-elevated,#1f1a2e));' +
-    'box-shadow:var(--lumiverse-shadow-lg,0 18px 48px rgba(0,0,0,.5));animation:af-pl-in .2s ease-out both}' +
-    '@keyframes af-pl-in{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}' +
-    '.af-pl *{box-sizing:border-box}' +
-    '.af-pl button{appearance:none;-webkit-appearance:none;border:0;background:transparent;color:inherit;font:inherit;padding:0;margin:0;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;transition:background-color .15s,color .15s,box-shadow .15s}' +
-    '.af-pl button svg{width:16px;height:16px;display:block}' +
-    '@media (hover:hover){.af-pl button:not(:disabled):hover{background-color:var(--lumiverse-bg-hover,rgba(255,255,255,.07))}}' +
-    '.af-pl button:disabled{opacity:.35;cursor:default}' +
-    '.af-pl button:focus-visible,.af-pl input:focus-visible{outline:2px solid var(--pa);outline-offset:2px}' +
-    '.af-pl-top{display:flex;align-items:center;gap:10px;min-width:0;cursor:grab;user-select:none;-webkit-user-select:none}' +
-    '.af-pl-face{width:38px;height:38px;border-radius:50%;display:grid;place-items:center;flex-shrink:0;font-size:13px;font-weight:700;letter-spacing:.02em;' +
-    'background:var(--pa-soft);color:var(--pa-text);box-shadow:inset 0 0 0 1.5px var(--pa-line)}' +
-    '.af-pl-face svg{width:18px;height:18px}' +
-    '.af-pl[data-af-state="playing"] .af-pl-face{box-shadow:inset 0 0 0 2px var(--pa)}' +
+    // The open player is drawn with the panel's own parts: its switches,
+    // sliders, Play button, two-way choice and fold, so it looks like the
+    // rest of Auto Foley. It carries the panel's class for their colors.
+    '.af.af-pl{max-width:none;margin:0;width:100%;gap:10px;padding:12px;overflow-x:hidden;overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin;border:1px solid var(--af-line-hover);border-radius:var(--lumiverse-radius-lg,16px);' +
+    'background-color:var(--lumiverse-card-bg-solid,#1a1526);background-image:linear-gradient(var(--lumiverse-bg-elevated,#1f1a2e),var(--lumiverse-bg-elevated,#1f1a2e));' +
+    'box-shadow:var(--lumiverse-shadow-lg,0 18px 48px rgba(0,0,0,.5));transform-origin:var(--af-from,22px 22px)}' +
+    '.af-pl-top{display:flex;align-items:center;gap:9px;min-width:0;margin:-2px -2px 0 0;cursor:grab;user-select:none;-webkit-user-select:none}' +
+    '.af-pl-mark{width:28px;height:28px;border-radius:8px;display:grid;place-items:center;flex:none;background:var(--af-accent-soft);color:var(--af-accent-text)}' +
+    '.af-pl-mark svg{width:17px;height:17px}' +
+    '.af-pl-now{display:flex;align-items:center;gap:9px;min-width:0}' +
+    '.af-pl-now .af-avatar{width:34px;height:34px;font-size:13px;flex:none}' +
+    '.af-pl-now .af-avatar svg{width:16px;height:16px}' +
+    '.af-pl-cap{display:block;font-size:9.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--af-muted)}' +
+    '.af-pl-bars{display:flex;align-items:center;gap:3px;height:20px;color:var(--af-accent-text);flex:none}' +
+    '.af-pl-bars i{display:block;width:3px;height:6px;border-radius:3px;background:currentColor;opacity:.35;transform-origin:center}' +
+    '.af-pl-bars i:nth-child(2){height:15px}.af-pl-bars i:nth-child(3){height:10px}.af-pl-bars i:nth-child(4){height:18px}' +
+    '.af-pl[data-af-state="playing"] .af-pl-bars i{opacity:1}' +
+    '@media (prefers-reduced-motion: no-preference){html:not([data-af-still]) .af-pl[data-af-state="playing"] .af-pl-bars i{animation:af-level .9s ease-in-out infinite alternate}' +
+    'html:not([data-af-still]) .af-pl[data-af-state="playing"] .af-pl-bars i:nth-child(2){animation-delay:-.5s}html:not([data-af-still]) .af-pl[data-af-state="playing"] .af-pl-bars i:nth-child(3){animation-delay:-.2s}html:not([data-af-still]) .af-pl[data-af-state="playing"] .af-pl-bars i:nth-child(4){animation-delay:-.7s}}' +
+    '@keyframes af-level{to{transform:scaleY(.35)}}' +
+    '.af-pl-seek{display:flex;align-items:center;gap:8px;font-size:10.5px;color:var(--af-muted);font-variant-numeric:tabular-nums}' +
+    '.af-pl-seek span{white-space:nowrap;min-width:30px}.af-pl-seek span:last-child{text-align:right}' +
+    '.af-pl .af-parts{min-height:20px}.af-pl .af-parts button{height:20px;padding:7px 0}' +
     '.af-pl-id{min-width:0;flex:1}' +
     '.af-pl-id b{display:block;font-size:14px;font-weight:650;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}' +
-    '.af-pl-id small{display:block;font-size:11px;color:var(--pm);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}' +
-    '.af-pl-icon{width:32px;height:32px;border-radius:50%;color:var(--pm)}' +
-    '.af-pl-said{min-height:40px;padding:8px 10px;border-radius:10px;background:var(--pf);border:1px solid var(--pl);font-size:12.5px;line-height:1.45;color:var(--pt);' +
+    '.af-pl-id small{display:block;font-size:11.5px;color:var(--af-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}' +
+    '.af-pl .af-round{width:34px;height:34px}' +
+    '.af-pl-said{min-height:44px;padding:8px 10px;border-radius:var(--af-r-md);background:var(--af-fill);border:1px solid var(--af-line);font-size:13px;line-height:1.45;' +
     'display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;overflow-wrap:anywhere}' +
-    '.af-pl-said[data-quiet]{color:var(--pm)}' +
-    '.af-pl-strip{display:flex;align-items:center;gap:2px;width:100%;height:32px;padding:0 1px}' +
-    '.af-pl-strip button{flex:1 1 0;min-width:3px;height:32px;padding:13px 0!important;border-radius:0!important;background:transparent!important}' +
-    '.af-pl-strip button i{display:block;width:100%;height:6px;border-radius:3px;background:var(--ph)}' +
-    '.af-pl-strip button[data-k="sound"] i,.af-pl-strip button[data-k="applause"] i{background:color-mix(in srgb,var(--pw) 35%,transparent)}' +
-    '.af-pl-strip button[data-done] i{background:var(--pa-line)}' +
-    '.af-pl-strip button[data-k="sound"][data-done] i,.af-pl-strip button[data-k="applause"][data-done] i{background:color-mix(in srgb,var(--pw) 70%,transparent)}' +
-    '.af-pl-strip button[aria-current="true"] i{background:var(--pa);height:10px;border-radius:5px}' +
-    '.af-pl-strip:empty{display:none}' +
-    '.af-pl-tr{display:flex;align-items:center;justify-content:center;gap:14px}' +
-    '.af-pl-tr button{width:36px;height:36px;border-radius:50%;color:var(--pt)}' +
-    '.af-pl-tr .af-pl-play{width:52px;height:52px;color:var(--pa-on);background:var(--pa)!important;box-shadow:0 0 0 5px var(--pa-soft)}' +
-    '.af-pl-tr .af-pl-play svg{width:22px;height:22px}' +
-    '.af-pl-tr .af-pl-stop{color:var(--pm)}' +
-    '.af-pl-whose{display:flex;justify-content:center;gap:4px}' +
-    '.af-pl-whose button{min-height:28px;padding:0 10px;border-radius:999px;font-size:11.5px;color:var(--pm);box-shadow:inset 0 0 0 1px var(--pl)}' +
-    '.af-pl-whose button[aria-pressed="true"]{color:var(--pt);background:var(--pa-soft);box-shadow:inset 0 0 0 1px var(--pa-line)}' +
-    '.af-pl-mix{display:grid;grid-template-columns:1fr 1fr;gap:10px}' +
-    '.af-pl-mix label{display:flex;flex-direction:column;gap:2px;font-size:10.5px;color:var(--pm);min-width:0}' +
+    '.af-pl-said[data-quiet]{color:var(--af-muted)}' +
+    '.af-pl-tr{position:relative;display:flex;align-items:center;justify-content:center;gap:12px;min-height:52px;padding:0 40px}' +
+    '.af-pl-tr .af-pl-side{position:absolute;top:50%;transform:translateY(-50%);width:32px;height:32px;border-radius:9px;background:transparent;color:var(--af-muted)}' +
+    '.af-pl-tr .af-pl-side:first-child{left:0}.af-pl-tr .af-pl-side:last-child{right:0}' +
+    '.af-pl-tr .af-play{width:48px;height:48px;border:0;background:var(--af-accent);color:var(--lumiverse-primary-contrast,#17122a);box-shadow:0 4px 14px var(--af-accent-soft)}' +
+    '.af-pl-tr .af-play svg{width:20px;height:20px}' +
+    '.af-pl-mix{display:grid;grid-template-columns:1fr 1fr;gap:12px}' +
+    '.af-pl-mix label{display:flex;flex-direction:column;gap:2px;font-size:12px;color:var(--af-muted);min-width:0}' +
     '.af-pl-mix label>span{display:flex;justify-content:space-between;gap:4px}' +
-    '.af-pl input[type=range].af-pl-range{-webkit-appearance:none;appearance:none;width:100%;min-width:0;height:24px;margin:0;padding:0;border:0;background:transparent;cursor:pointer;--lv:0%;' +
-    '--trk:linear-gradient(to right,var(--pa) 0%,var(--pa) var(--lv),var(--ph) var(--lv),var(--ph) 100%)}' +
-    '.af-pl input[type=range].af-pl-range::-webkit-slider-runnable-track{height:4px;border-radius:3px;background:var(--trk)}' +
-    '.af-pl input[type=range].af-pl-range::-moz-range-track{height:4px;border-radius:3px;background:var(--trk)}' +
-    '.af-pl input[type=range].af-pl-range::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:14px;height:14px;margin-top:-5px;border-radius:50%;border:2px solid var(--lumiverse-bg-elevated,#1f1a2e);background:var(--pa)}' +
-    '.af-pl input[type=range].af-pl-range::-moz-range-thumb{width:14px;height:14px;border-radius:50%;border:2px solid var(--lumiverse-bg-elevated,#1f1a2e);background:var(--pa)}' +
-    '.af-pl-sw{display:grid;grid-template-columns:1fr 1fr;gap:4px 10px}' +
-    '.af-pl-sw button{justify-content:space-between!important;gap:6px;min-height:32px;padding:0 2px!important;border-radius:8px;font-size:12px;color:var(--pt)}' +
-    '.af-pl-sw button b{position:relative;width:30px;height:18px;border-radius:999px;background:var(--ph);transition:background-color .2s}' +
-    '.af-pl-sw button b::after{content:"";position:absolute;top:3px;left:3px;width:12px;height:12px;border-radius:50%;background:var(--pt);transition:transform .25s cubic-bezier(.3,1.4,.5,1)}' +
-    '.af-pl-sw button[aria-pressed="true"] b{background:var(--pa)}' +
-    '.af-pl-sw button[aria-pressed="true"] b::after{transform:translateX(12px);background:var(--pa-on)}' +
-    '.af-pl-fold{display:flex;align-items:center;gap:6px;width:100%;min-height:32px;padding:0 2px!important;font-size:12px;color:var(--pm);justify-content:flex-start!important;border-top:1px solid var(--pl)!important;border-radius:0!important}' +
-    '.af-pl-fold svg{width:14px!important;height:14px!important;margin-left:auto;transition:transform .2s}' +
-    '.af-pl-fold[aria-expanded="true"] svg{transform:rotate(180deg)}' +
-    '.af-pl-cast{display:flex;flex-direction:column;gap:2px;max-height:210px;overflow:auto;overscroll-behavior:contain;scrollbar-width:thin;margin-top:-6px}' +
-    '.af-pl-ch{display:flex;align-items:center;gap:8px;padding:2px 4px;border-radius:8px;min-width:0}' +
-    '.af-pl-ch[aria-current="true"]{background:var(--pa-soft)}' +
-    '.af-pl-ch em{width:24px;height:24px;border-radius:50%;display:grid;place-items:center;font-style:normal;font-size:10px;font-weight:700;background:var(--pf);box-shadow:inset 0 0 0 1px var(--ph);flex-shrink:0}' +
-    '.af-pl-ch>span{flex:1;min-width:0;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}' +
-    '.af-pl-ch[data-off="true"]>span{color:var(--pm)}' +
-    '.af-pl-ch button{width:32px;height:32px;border-radius:50%;color:var(--pm)}' +
-    '.af-pl-ch button[aria-pressed="true"]{color:var(--pa-text)}' +
-    '@media (pointer:coarse){.af-pl-icon,.af-pl-tr button{min-width:40px;min-height:40px}.af-pl-tr .af-pl-play{width:56px;height:56px}.af-pl-whose button,.af-pl-sw button,.af-pl-fold{min-height:36px}.af-pl-ch button{width:36px;height:36px}}' +
-    '@media (prefers-reduced-motion: reduce){.af-pl{animation:none}.af-pl button,.af-pl-fold svg,.af-pl-sw button b,.af-pl-sw button b::after{transition:none}}' +
-    'html[data-af-still] .af-pl{animation:none}html[data-af-still] .af-pl-sw button b,html[data-af-still] .af-pl-sw button b::after{transition:none}' +
+    '.af-pl-mix b{font-weight:500;font-variant-numeric:tabular-nums}' +
+    '.af-pl-sw{display:grid;grid-template-columns:1fr 1fr;gap:6px 14px}' +
+    '.af-pl-sw label{display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:32px;font-size:13px;cursor:pointer}' +
+    '.af-pl-cast{display:flex;flex-direction:column;gap:2px;max-height:210px;overflow:auto;overscroll-behavior:contain;scrollbar-width:thin}' +
+    '.af-pl-ch{display:flex;align-items:center;gap:8px;padding:2px 4px;border-radius:var(--af-r-sm);min-width:0}' +
+    '.af-pl-ch[aria-current="true"]{background:var(--af-accent-faint)}' +
+    '.af-pl-ch .af-avatar{width:26px;height:26px;font-size:11px}' +
+    '.af-pl-ch>span:not(.af-avatar){flex:1;min-width:0;font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}' +
+    '.af-pl-ch[data-off="true"]>span:not(.af-avatar){color:var(--af-muted)}' +
+    '.af-pl-ch .af-round{width:32px;height:32px}' +
+    '.af-pl-ch .af-round[aria-pressed="true"]{color:var(--af-accent-text)}' +
+    '@media (pointer:coarse){.af-pl .af-round{width:40px;height:40px}.af-pl-tr .af-pl-side{width:40px;height:40px}.af-pl-tr{padding:0 46px}.af-pl-tr .af-play{width:54px;height:54px}.af-pl-sw label{min-height:40px}.af-pl-ch .af-round{width:36px;height:36px}}' +
     // The subtitles on the Stage.
     '.af-theater{display:flex;flex-direction:column;gap:8px;min-height:112px;padding:14px;border-radius:var(--lumiverse-radius-md,10px);' +
     'border:1px solid var(--lumiverse-border,rgba(147,112,219,.12));background:var(--lumiverse-fill,rgba(0,0,0,.15))}' +
@@ -3496,6 +3476,7 @@ export function setup(ctx: Ctx, overrides?: any) {
   let playerWhose: 'reply' | 'mine' = 'reply';
   let levelsOpen = false;
   let playerSeen: ResizeObserver | null = null;
+  let playerTick: any = null;
 
   function floatAt(): { x: number; y: number; open?: boolean; levels?: boolean } | null {
     try {
@@ -3515,6 +3496,8 @@ export function setup(ctx: Ctx, overrides?: any) {
   }
 
   function dropWidget() {
+    if (playerTick) clearInterval(playerTick);
+    playerTick = null;
     if (widgetOff) widgetOff();
     widgetOff = null;
     if (playerSeen) playerSeen.disconnect();
@@ -3544,6 +3527,8 @@ export function setup(ctx: Ctx, overrides?: any) {
     if (playerOpen) {
       const card = floatBox.querySelector('.af-pl') as HTMLElement | null;
       w = Math.min(PLAYER_W, vw - 16);
+      // A card taller than the screen scrolls inside itself.
+      if (card) card.style.maxHeight = Math.floor(vh - 16) + 'px';
       // One pixel spare, so a height with a fraction in it does not scroll.
       h = Math.min(vh - 16, Math.ceil(card ? card.offsetHeight : 320) + 1);
     }
@@ -3558,10 +3543,69 @@ export function setup(ctx: Ctx, overrides?: any) {
     } catch (_) {}
   }
 
+  // Opening draws the card out of the round button as a growing circle,
+  // and closing draws it back in, then shows the button. With reduce motion
+  // on, it opens and closes at once.
+  let playerMoving: any = null;
   function openPlayer(open: boolean) {
-    playerOpen = open;
-    keepFloat();
-    drawFloat();
+    if (playerMoving) {
+      try {
+        playerMoving.cancel();
+      } catch (_) {}
+      playerMoving = null;
+    }
+    const zoomNow = () => {
+      try {
+        return parseFloat(getComputedStyle(document.documentElement).zoom) || 1;
+      } catch (_) {
+        return 1;
+      }
+    };
+    const still = calm() || !floatBox || typeof (document.body as any).animate !== 'function';
+    if (open) {
+      const from = !still && floatBtn ? floatBtn.getBoundingClientRect() : null;
+      playerOpen = true;
+      keepFloat();
+      drawFloat();
+      const card = floatBox ? (floatBox.querySelector('.af-pl') as HTMLElement | null) : null;
+      if (!card || !from) return;
+      const z = zoomNow();
+      const r = card.getBoundingClientRect();
+      const x = (from.left + from.width / 2 - r.left) / z;
+      const y = (from.top + from.height / 2 - r.top) / z;
+      const r0 = from.width / 2 / z;
+      const far = Math.hypot(Math.max(x, card.offsetWidth - x), Math.max(y, card.offsetHeight - y)) + 2;
+      try {
+        playerMoving = card.animate(
+          [{ clipPath: 'circle(' + r0 + 'px at ' + x + 'px ' + y + 'px)' }, { clipPath: 'circle(' + far + 'px at ' + x + 'px ' + y + 'px)' }],
+          { duration: 320, easing: 'cubic-bezier(.2,.8,.2,1)' },
+        );
+        playerMoving.onfinish = () => (playerMoving = null);
+        Array.prototype.forEach.call(card.children, (kid: HTMLElement) => {
+          kid.animate([{ opacity: 0, transform: 'translateY(4px)' }, { opacity: 1, transform: 'none' }], { duration: 220, delay: 90, easing: 'ease-out', fill: 'backwards' });
+        });
+      } catch (_) {}
+      return;
+    }
+    const card = floatBox ? (floatBox.querySelector('.af-pl') as HTMLElement | null) : null;
+    const done = () => {
+      playerMoving = null;
+      playerOpen = false;
+      keepFloat();
+      drawFloat();
+    };
+    if (still || !card) return done();
+    const d = widgetSize;
+    const far = Math.hypot(card.offsetWidth, card.offsetHeight) + 2;
+    try {
+      playerMoving = card.animate(
+        [{ clipPath: 'circle(' + far + 'px at ' + d / 2 + 'px ' + d / 2 + 'px)', opacity: 1 }, { clipPath: 'circle(' + d / 2 + 'px at ' + d / 2 + 'px ' + d / 2 + 'px)', opacity: 0.6 }],
+        { duration: 240, easing: 'cubic-bezier(.4,0,.6,1)', fill: 'forwards' },
+      );
+      playerMoving.onfinish = done;
+    } catch (_) {
+      done();
+    }
   }
 
   async function latestId(mine: boolean): Promise<string> {
@@ -3611,14 +3655,11 @@ export function setup(ctx: Ctx, overrides?: any) {
       x = Math.round(r.left + r.width / 2);
       y = Math.round(r.bottom);
     } catch (_) {}
-    const busy = !!show || !!busyMessage;
     let got: any = null;
     try {
       got = await ctx.ui.showContextMenu({
         position: { x, y },
         items: [
-          { key: 'prep', label: playerWhose === 'mine' ? 'Direct my latest message ahead' : 'Direct the latest reply ahead', disabled: busy || chatInfo.kind === 'none' },
-          { key: 'divider1', label: '', type: 'divider' },
           { key: 'open', label: 'Open the Auto Foley tab' },
           { key: 'hide', label: 'Hide the player' },
         ],
@@ -3628,8 +3669,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       return;
     }
     const key = got && got.selectedKey;
-    if (key === 'prep') playerPrepare();
-    else if (key === 'open') {
+    if (key === 'open') {
       try {
         if (drawer) drawer.activate();
       } catch (_) {}
@@ -3682,27 +3722,31 @@ export function setup(ctx: Ctx, overrides?: any) {
       { key: 'applauseOn', label: 'Applause', title: 'A cheer at the end of a message or a big moment' },
     ];
     const c = el(
-      '<div class="af-pl" role="group" aria-label="Auto Foley player">' +
-        '<div class="af-pl-top"><span class="af-pl-face" data-p="face"></span><div class="af-pl-id"><b data-p="who"></b><small data-p="sub"></small></div>' +
-        '<button type="button" class="af-pl-icon" data-p="menu" aria-label="More" title="More">' + ICON_MORE + '</button>' +
-        '<button type="button" class="af-pl-icon" data-p="close" aria-label="Close the player" title="Close the player">' + ICON_DOWN + '</button></div>' +
+      '<div class="af af-pl" role="group" aria-label="Auto Foley player">' +
+        '<div class="af-pl-top"><span class="af-pl-mark">' + ICON + '</span><div class="af-pl-id"><b>Auto Foley</b><small data-p="sub"></small></div>' +
+        '<button type="button" class="af-round" data-p="menu" aria-label="More" title="More">' + ICON_MORE + '</button>' +
+        '<button type="button" class="af-round" data-p="close" aria-label="Close the player" title="Close the player">' + ICON_DOWN + '</button></div>' +
+        '<div class="af-pl-now"><span class="af-avatar" data-p="face"></span><div class="af-pl-id"><span class="af-pl-cap" data-p="cap">Now playing</span><b data-p="who"></b></div>' +
+        '<span class="af-pl-bars" aria-hidden="true"><i></i><i></i><i></i><i></i></span></div>' +
         '<div class="af-pl-said" data-p="said" aria-live="polite"></div>' +
-        '<div class="af-pl-strip" data-p="strip" role="group" aria-label="The parts of the message"></div>' +
         '<div class="af-pl-tr">' +
-          '<button type="button" data-p="back" aria-label="Back one line" title="Back one line">' + ICON_BACK + '</button>' +
-          '<button type="button" class="af-pl-play" data-p="play" aria-label="Play">' + ICON_PLAY + '</button>' +
-          '<button type="button" data-p="next" aria-label="Next line" title="Next line">' + ICON_SKIP + '</button>' +
-          '<button type="button" class="af-pl-stop" data-p="stop" aria-label="Stop" title="Stop">' + ICON_STOP + '</button>' +
+          '<button type="button" class="af-round af-pl-side" data-p="prep" aria-label="Direct it ahead, without playing" title="Direct it ahead, without playing">' + ICON_PREP + '</button>' +
+          '<button type="button" class="af-round" data-p="back" aria-label="Back one part" title="Back one part">' + ICON_BACK + '</button>' +
+          '<button type="button" class="af-play" data-p="play" aria-label="Play">' + ICON_PLAY + '</button>' +
+          '<button type="button" class="af-round" data-p="next" aria-label="Next part" title="Next part">' + ICON_SKIP + '</button>' +
+          '<button type="button" class="af-round af-pl-side" data-p="stop" aria-label="Stop" title="Stop">' + ICON_STOP + '</button>' +
         '</div>' +
-        '<div class="af-pl-whose" role="group" aria-label="What Play performs"><button type="button" data-w="reply">Latest reply</button><button type="button" data-w="mine">My latest message</button></div>' +
+        '<div class="af-pl-seek"><span data-p="at">0:00</span><input type="range" data-p="seek" min="0" max="1000" value="0" aria-label="Where in this part"><span data-p="len">0:00</span></div>' +
+        '<div class="af-parts" data-p="strip" role="group" aria-label="The parts of the message"></div>' +
+        '<div class="af-seg" role="group" aria-label="What Play performs"><button type="button" class="af-segbtn" data-w="reply">Latest reply</button><button type="button" class="af-segbtn" data-w="mine">My latest message</button></div>' +
         '<div class="af-pl-mix">' +
-          '<label><span>Voices<b data-p="vv"></b></span><input type="range" class="af-pl-range" data-p="vol" min="0" max="100" step="5" aria-label="Voices volume"></label>' +
-          '<label><span>Sounds<b data-p="sv"></b></span><input type="range" class="af-pl-range" data-p="svol" min="0" max="100" step="5" aria-label="Sounds volume"></label>' +
+          '<label><span>Voices<b data-p="vv"></b></span><input type="range" data-p="vol" min="0" max="100" step="5" aria-label="Voices volume"></label>' +
+          '<label><span>Sounds<b data-p="sv"></b></span><input type="range" data-p="svol" min="0" max="100" step="5" aria-label="Sounds volume"></label>' +
         '</div>' +
         '<div class="af-pl-sw" role="group" aria-label="Quick switches">' +
-          SWITCHES.map((w) => '<button type="button" data-sw="' + w.key + '" title="' + esc(w.title) + '"><span>' + esc(w.label) + '</span><b aria-hidden="true"></b></button>').join('') +
+          SWITCHES.map((w) => '<label title="' + esc(w.title) + '"><span>' + esc(w.label) + '</span><input type="checkbox" class="af-box" role="switch" data-sw="' + w.key + '" aria-label="' + esc(w.label) + '"></label>').join('') +
         '</div>' +
-        '<button type="button" class="af-pl-fold" data-p="fold" aria-expanded="false">Who is voiced' + ICON_DOWN + '</button>' +
+        '<button type="button" class="af-fold" data-p="fold" aria-expanded="false"><span class="af-caret">▶</span><span>Who is voiced</span></button>' +
         '<div class="af-pl-cast" data-p="cast" hidden></div>' +
       '</div>',
     );
@@ -3716,6 +3760,14 @@ export function setup(ctx: Ctx, overrides?: any) {
       }),
     );
     q('play').addEventListener('click', () => playerPlay());
+    q('prep').addEventListener('click', () => playerPrepare());
+    const seek = q('seek') as HTMLInputElement;
+    seek.addEventListener('input', () => {
+      if (!audio || !(Number(audio.duration) > 0)) return;
+      try {
+        audio.currentTime = (Number(seek.value) / 1000) * Number(audio.duration);
+      } catch (_) {}
+    });
     q('back').addEventListener('click', () => back());
     q('next').addEventListener('click', () => skip());
     q('stop').addEventListener('click', () => {
@@ -3738,11 +3790,11 @@ export function setup(ctx: Ctx, overrides?: any) {
     });
     svol.addEventListener('change', () => set({ soundVolume: Number(svol.value) / 100 }));
     c.querySelectorAll('[data-sw]').forEach((b) =>
-      b.addEventListener('click', () => {
+      b.addEventListener('change', () => {
         const k = (b as HTMLElement).dataset.sw as string;
-        if (k === 'narrate') set({ narration: S.narration === 'read' ? 'skip' : 'read' });
-        else set({ [k]: !S[k] });
-        paintFloat();
+        const on = (b as HTMLInputElement).checked;
+        if (k === 'narrate') set({ narration: on ? 'read' : 'skip' });
+        else set({ [k]: on });
         if (tab === 'settings' || tab === 'director') renderTab();
       }),
     );
@@ -3776,8 +3828,8 @@ export function setup(ctx: Ctx, overrides?: any) {
     const order: Record<string, number> = { narrator: 0, persona: 1, character: 2, npc: 3 };
     const people = (S.cast as Member[]).slice().sort((a, b) => (order[a.kind] ?? 9) - (order[b.kind] ?? 9));
     for (const m of people) {
-      const ch = el('<div class="af-pl-ch" data-person="' + esc(m.id) + '"><em>' + faceHtml(m, m.name) + '</em><span></span><button type="button"></button></div>');
-      (ch.querySelector('span') as HTMLElement).textContent = m.name;
+      const ch = el('<div class="af-pl-ch" data-person="' + esc(m.id) + '"><span class="af-avatar">' + faceHtml(m, m.name) + '</span><span></span><button type="button" class="af-round"></button></div>');
+      (ch.children[1] as HTMLElement).textContent = m.name;
       const b = ch.querySelector('button') as HTMLButtonElement;
       const paintB = () => {
         ch.dataset.off = m.muted ? 'true' : 'false';
@@ -3800,7 +3852,6 @@ export function setup(ctx: Ctx, overrides?: any) {
   }
 
   // What the player shows now. Called whenever the show changes.
-  let stripFor: Show | null = null;
   function paintFloat() {
     if (!floatBox) return;
     const on = !!show || !!busyMessage;
@@ -3829,40 +3880,29 @@ export function setup(ctx: Ctx, overrides?: any) {
       face.dataset.k = faceKey;
       face.innerHTML = it && it.kind === 'voice' ? faceHtml(who, name) : it ? ICON_SOUND : ICON;
     }
-    q('who').textContent = name || (busyMessage ? 'Directing the message' : 'Auto Foley');
-    const chat = chatInfo.kind === 'none' ? 'No chat open' : chatInfo.name || 'This chat';
-    q('sub').textContent = show ? (paused ? 'Paused' : 'Part ' + (Math.min(show.index, total - 1) + 1) + ' of ' + total) + ' · ' + chat : chat;
+    q('who').textContent = name || (busyMessage ? 'Directing the message' : playerWhose === 'mine' ? 'Your latest message' : 'The latest reply');
+    q('cap').textContent = show ? (paused ? 'Paused' : 'Now playing · part ' + (Math.min(show.index, total - 1) + 1) + ' of ' + total) : busyMessage ? 'Getting ready' : 'Ready';
+    q('sub').textContent = chatInfo.kind === 'none' ? 'No chat open' : chatInfo.name || 'This chat';
+    // The bar under Play, for where in the part playing it is. Painted on a
+    // short clock while it plays.
+    const seek = q('seek') as HTMLInputElement;
+    const dur = audio ? Number(audio.duration) : 0;
+    const tNow = audio ? Number(audio.currentTime) : 0;
+    const has = !!show && dur > 0 && Number.isFinite(dur);
+    seek.disabled = !has;
+    const at = has ? Math.min(1, Math.max(0, tNow / dur)) : 0;
+    if (document.activeElement !== seek) seek.value = String(Math.round(at * 1000));
+    seek.style.setProperty('--af-fill-to', (at * 100).toFixed(1) + '%');
+    q('at').textContent = has ? mmss(tNow) : '0:00';
+    q('len').textContent = has ? mmss(dur) : '0:00';
+    (q('prep') as HTMLButtonElement).disabled = on || chatInfo.kind === 'none';
     const said = q('said');
     const words = it && it.kind === 'voice' && line ? stripTags(line.text) : it && it.sound ? it.sound : '';
     const text = words || (busyMessage ? 'The Director is reading it.' : phase && !/^(Stopped|Finished)$/.test(phase) ? phase : playerWhose === 'mine' ? 'Press Play to perform your latest message.' : 'Press Play to perform the latest reply.');
     if (said.textContent !== text) said.textContent = text;
     if (words) said.removeAttribute('data-quiet');
     else said.setAttribute('data-quiet', '');
-    // The strip has one mark for each part. It is drawn again only for a new
-    // show, and its marks are updated as the show moves.
-    const strip = q('strip');
-    if (stripFor !== show || strip.childElementCount !== total) {
-      stripFor = show;
-      strip.innerHTML = show
-        ? show.items
-            .map(
-              (x, k) =>
-                '<button type="button" data-at="' + k + '" data-k="' + x.kind + '" aria-label="Part ' + (k + 1) +
-                (x.kind === 'voice' ? ', ' + esc(x.line.kind === 'narration' ? 'Narrator' : x.line.speaker) : x.kind === 'applause' ? ', the audience' : ', a sound') +
-                '"><i></i></button>',
-            )
-            .join('')
-        : '';
-    }
-    const sh = show;
-    if (sh)
-      strip.querySelectorAll('[data-at]').forEach((b) => {
-        const k = Number((b as HTMLElement).dataset.at);
-        if (k < sh.index) b.setAttribute('data-done', '');
-        else b.removeAttribute('data-done');
-        if (k === sh.index) b.setAttribute('aria-current', 'true');
-        else b.removeAttribute('aria-current');
-      });
+    paintParts(q('strip'), show ? show.script : null);
     c.querySelectorAll('[data-w]').forEach((b) => b.setAttribute('aria-pressed', (b as HTMLElement).dataset.w === playerWhose ? 'true' : 'false'));
     const play = q('play');
     const playing = !!show && !paused;
@@ -3875,19 +3915,29 @@ export function setup(ctx: Ctx, overrides?: any) {
     (q('stop') as HTMLButtonElement).disabled = !on;
     for (const [k, b] of [['vol', 'vv'], ['svol', 'sv']]) {
       const r = q(k) as HTMLInputElement;
-      r.style.setProperty('--lv', r.value + '%');
+      r.style.setProperty('--af-fill-to', r.value + '%');
       q(b).textContent = r.value + '%';
     }
     c.querySelectorAll('[data-sw]').forEach((b) => {
       const k = (b as HTMLElement).dataset.sw as string;
       const isOn = k === 'narrate' ? S.narration === 'read' : !!S[k];
-      b.setAttribute('aria-pressed', isOn ? 'true' : 'false');
+      if ((b as HTMLInputElement).checked !== isOn) (b as HTMLInputElement).checked = isOn;
     });
     c.querySelectorAll('.af-pl-ch').forEach((ch) => {
       const now = !!who && (ch as HTMLElement).dataset.person === who.id;
       if (now) ch.setAttribute('aria-current', 'true');
       else ch.removeAttribute('aria-current');
     });
+    if (playing && !playerTick) playerTick = setInterval(() => paintFloat(), 250);
+    if (!playing && playerTick) {
+      clearInterval(playerTick);
+      playerTick = null;
+    }
+  }
+
+  function mmss(secs: number): string {
+    const t = Math.max(0, Math.floor(Number(secs) || 0));
+    return Math.floor(t / 60) + ':' + String(t % 60).padStart(2, '0');
   }
 
   function raiseWidget() {
@@ -5573,7 +5623,7 @@ export function setup(ctx: Ctx, overrides?: any) {
               '<li><b>Auto-play responses</b> should be off while Auto Foley’s Autoplay is on, or each reply is read twice.</li>' +
               '<li><b>Connection</b> is the one Auto Foley uses, unless you pick another above.</li>' +
               '<li><b>Speed</b>, <b>Volume</b>, the separate narrator voice and Speech detection are Lumiverse’s own. Auto Foley uses the Cast tab and the Mixer instead.</li>' +
-              '<li>Lumiverse’s own play button on a message still reads it the plain way. The speech bubble with sound bars is Auto Foley’s.</li>' +
+              '<li>Lumiverse’s own play button on a message still reads it the plain way. The headphones button is Auto Foley’s.</li>' +
             '</ul>',
           ),
         );
@@ -5667,18 +5717,16 @@ export function setup(ctx: Ctx, overrides?: any) {
 
     const c = card('Check my setup', 'Checks your TTS connection, the Director, the Decision model and the sounds key. It speaks nothing, so it spends no voice credits.');
     const list = el('<ul class="af-checks"></ul>');
+    // The answers are gathered first and shown together, so the list and
+    // the cards under it change once, not once for every check. The last
+    // answers stay on screen until then.
     const run = button('Check my setup', async () => {
       run.disabled = true;
+      (run.lastElementChild as HTMLElement).textContent = 'Checking…';
       const ask = ++setupChecked;
-      list.innerHTML = '';
+      const found: { ok: boolean | null; words: string }[] = [];
       const add = (ok: boolean | null, words: string) => {
-        if (ask !== setupChecked) return;
-        const li = document.createElement('li');
-        li.dataset.ok = ok == null ? '' : ok ? 'true' : 'false';
-        const span = document.createElement('span');
-        span.textContent = words;
-        li.appendChild(span);
-        list.appendChild(li);
+        if (ask === setupChecked) found.push({ ok, words });
       };
       await Promise.all([loadTtsConnections(), loadHostVoice(), readChat()]);
       add(chatInfo.kind !== 'none', chatInfo.kind === 'none' ? 'No chat is open. Open one to perform its messages.' : chatInfo.kind === 'temporary' ? 'A temporary chat is open.' : 'A chat is open' + (chatInfo.name ? ', with ' + chatInfo.name : '') + '.');
@@ -5727,6 +5775,19 @@ export function setup(ctx: Ctx, overrides?: any) {
           add(false, 'The sound effects key could not be checked: ' + String((e && e.message) || ''));
         }
       } else add(null, !S.soundsOn ? 'Sounds are off.' : S.soundStyle === 'voice' ? 'Sounds are made in the voice, so no sound effects key is needed.' : 'Making new sounds is off. Your uploads still play.');
+      if (ask === setupChecked) {
+        const fresh = document.createDocumentFragment();
+        for (const f of found) {
+          const li = document.createElement('li');
+          li.dataset.ok = f.ok == null ? '' : f.ok ? 'true' : 'false';
+          const span = document.createElement('span');
+          span.textContent = f.words;
+          li.appendChild(span);
+          fresh.appendChild(li);
+        }
+        list.replaceChildren(fresh);
+      }
+      (run.lastElementChild as HTMLElement).textContent = 'Check my setup';
       run.disabled = false;
     }, 'af-primary');
     c.appendChild(run);

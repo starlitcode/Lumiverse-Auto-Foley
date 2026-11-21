@@ -589,8 +589,13 @@ if (section("player")) {
       await page.waitForTimeout(200);
       await page.evaluate(() => document.querySelector('[data-af-row="widgetOn"] .af-box').click());
       await page.waitForTimeout(250);
-      await page.evaluate(() => window.__widget.querySelector(".af-float").click());
-      await page.waitForTimeout(300);
+      const moving = await page.evaluate(() => {
+        window.__widget.querySelector(".af-float").click();
+        const card = window.__widget.querySelector(".af-pl");
+        return !!card && card.getAnimations().some((x) => /circle/.test(JSON.stringify(x.effect.getKeyframes())));
+      });
+      check(moving, where + ": the player opens out of the round button as a growing circle");
+      await page.waitForTimeout(400);
       check(await page.evaluate(() => !!window.__widget.querySelector(".af-pl")), where + ": a tap opens the player");
       const fit = await page.evaluate(() => {
         const w = window.__widget.getBoundingClientRect();
@@ -608,13 +613,14 @@ if (section("player")) {
       await page.evaluate(() => window.__widget.querySelector('[data-p="play"]').click());
       await page.waitForTimeout(600);
       check((await page.evaluate(() => (window.__sent || []).filter((m) => m.type === "direct").length)) > before, where + ": Play performs the latest reply");
-      const chip = await page.evaluate(() => {
+      const chip = await page.evaluate(async () => {
         const b = window.__widget.querySelector('[data-sw="soundsOn"]');
-        const was = b.getAttribute("aria-pressed");
+        const was = b.checked;
         b.click();
-        return [was, b.getAttribute("aria-pressed")];
+        await new Promise((r) => setTimeout(r, 50));
+        return [was, b.checked, window.__settings.soundsOn];
       });
-      check(chip[0] === "true" && chip[1] === "false", where + ": a quick switch turns its setting off and shows it");
+      check(chip[0] === true && chip[1] === false, where + ": a quick switch is the panel's own switch, and turns its setting off");
       await page.evaluate(() => window.__widget.querySelector('[data-p="fold"]').click());
       await page.waitForTimeout(250);
       const lv = await page.evaluate(() => {
@@ -631,9 +637,9 @@ if (section("player")) {
       }
       await page.evaluate(() => window.__widget.querySelector('[data-p="menu"]').click());
       await page.waitForTimeout(150);
-      check(await page.evaluate(() => !!window.__menu && ["hide", "open", "prep"].every((k) => window.__menu.items.some((i) => i.key === k))), where + ": More offers Direct ahead, Open the Auto Foley tab and Hide the player");
+      check(await page.evaluate(() => !!window.__menu && ["hide", "open"].every((k) => window.__menu.items.some((i) => i.key === k))), where + ": More offers Open the Auto Foley tab and Hide the player");
       await page.evaluate(() => window.__widget.querySelector('[data-p="close"]').click());
-      await page.waitForTimeout(250);
+      await page.waitForTimeout(450);
       check(await page.evaluate(() => !!window.__widget.querySelector(".af-float") && !window.__widget.querySelector(".af-pl")), where + ": closing it leaves the round button");
       check(!errors.length, where + ": no console errors. " + errors.slice(0, 2).join("; "));
       await context.close();
@@ -1021,6 +1027,30 @@ if (section("tab flicker")) {
     }
     await context.close();
   }
+}
+
+if (section("setup check")) {
+  console.log("Check my setup changes the page once");
+  const { context, page } = await open(THEMES[0], SIZES[0]);
+  await page.click('.af-tab[data-tab="settings"]');
+  await page.waitForTimeout(400);
+  const changes = await page.evaluate(async () => {
+    const btn = Array.from(document.querySelectorAll(".af-btn")).find((b) => b.textContent.trim() === "Check my setup");
+    const list = btn.closest(".af-card").querySelector(".af-checks");
+    btn.click();
+    const seen = [];
+    let last = "";
+    const t0 = performance.now();
+    while (performance.now() - t0 < 1500) {
+      const snap = String(list.children.length);
+      if (snap !== last) seen.push(snap);
+      last = snap;
+      await new Promise((r) => requestAnimationFrame(r));
+    }
+    return seen;
+  });
+  check(changes.length <= 2 && changes[changes.length - 1] !== "0", "the answers appear together, not one by one (" + changes.join(" > ") + ")");
+  await context.close();
 }
 
 if (section("taps")) {

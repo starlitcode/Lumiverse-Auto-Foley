@@ -5,7 +5,7 @@
 - Auto Foley speaks through a TTS connection in Lumiverse: ElevenLabs, Fish Audio, Gemini or Chatterbox.
 - It works only with a model that acts. [Voice engines](engines.md) lists them.
 - Give each person in the Cast tab a voice.
-- Press the Auto Foley button on a message: a speech bubble with sound bars in it.
+- Press the Auto Foley button on a message: a pair of headphones.
 
 ## Steps
 
@@ -110,18 +110,19 @@ Your browser may block sound until you tap the page. Auto Foley then waits, and 
 
 ## The floating player
 
-Turn on **A floating player** in the Settings tab, under **Look**. A round button sits over the chat. Drag it to move it. Tap it to open the player.
+Turn on **A floating player** in the Settings tab, under **Look**. A round button with the Auto Foley symbol sits over the chat. Drag it to move it. Tap it to open the player. It opens out of the button, and the arrow at the top closes it back into it.
 
-- **The top** shows who is speaking, which part of the message is playing, and the chat.
+- **The top** shows the chat. **More** has **Open the Auto Foley tab** and **Hide the player**.
+- **Now playing** shows who is speaking, with their picture or first letter, which part is playing, and bars that move while a voice plays.
 - **The box under it** shows the line being spoken, or the sound playing.
+- **The buttons**: **Direct it ahead** on the left, then back one part, Play or Pause, the next part, and **Stop** on the right.
+- **The bar** under them moves through the part playing. Drag it to go back or forward in that part.
 - **The strip** has a mark for each part of the message: lines, sounds and the cheer. Tap a mark to go to that part.
-- **The buttons**: back one line, Play or Pause, the next line, and Stop.
 - **Latest reply** and **My latest message** choose what Play performs when nothing is playing.
 - **Voices** and **Sounds** set the two volumes.
 - **Autoplay**, **Sounds**, **Narrator** and **Applause** turn those settings on or off.
 - **Who is voiced** lists the cast. The microphone beside a name is the same as **Do not voice** in the Cast tab.
-- **More** has **Direct ahead**, **Open the Auto Foley tab** and **Hide the player**.
-- The arrow at the top closes it back to the round button. Where it sits, and whether it is open, are kept in this browser.
+- Where it sits, and whether it is open, are kept in this browser. With reduce motion on, it opens and closes at once.
 
 ## Playing a message again
 

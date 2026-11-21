@@ -22,7 +22,7 @@ You also need a TTS connection in Lumiverse, under **Connections**, in the TTS s
 
 ## Where it is
 
-- **The drawer:** a tab called **Foley**, with a speech bubble icon that has sound bars in it. It has five tabs: Stage, Cast, Director, Sounds and Settings.
+- **The drawer:** a tab called **Foley**, with a headphones icon. It has five tabs: Stage, Cast, Director, Sounds and Settings.
 - **Each message:** the Auto Foley button in its row of buttons. Press it to perform the message. Press it again to stop.
 
 ## Documentation
