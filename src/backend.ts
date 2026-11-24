@@ -416,7 +416,7 @@ function cleanMember(m: any): CastMember | null {
     speed: num(m.speed, 0.5, 2, base.speed),
     params: cleanParams(m.params),
     note: str(m.note, 300),
-    gender: pick(m.gender, ['female', 'male', 'unknown'] as const, 'unknown'),
+    gender: pick(m.gender, ['female', 'male', 'nonbinary', 'unknown'] as const, 'unknown'),
     muted: bool(m.muted, false),
   };
 }
@@ -1460,7 +1460,7 @@ Set "sung": true on a line someone actually sings, like song lyrics or a lullaby
 </singing>
 
 <new_speakers>
-When "find_speakers" is true and someone speaks who isn't in the cast, use the name the text gives them, or a short plain one if it gives none, like "Bartender". List them in "new_speakers" with "gender" (female, male or unknown) and "about": a few words on how they sound, like "gravelly older man" or "bright, quick young woman". Anyone in a sex scene is an adult.
+When "find_speakers" is true and someone speaks who isn't in the cast, use the name the text gives them, or a short plain one if it gives none, like "Bartender". List them in "new_speakers" with "gender" (female, male, nonbinary or unknown), "role" (main or minor) and "about": a few words on how they sound, like "gravelly older man" or "bright, quick young woman". Use nonbinary only when the text says it, like "they" for one person or the word itself, and unknown when you can't tell. A main role is someone the story follows, and a minor one is a bartender or a passerby. Anyone in a sex scene is an adult.
 </new_speakers>
 
 <clean_run>
@@ -1574,7 +1574,7 @@ function applyDirection(
   author: string,
   fixed: Record<number, string>,
   rules: TagRules & { sounds: boolean; effects: boolean; narrationRead: boolean; findSpeakers: boolean; bigMoments: boolean; lineStyle?: boolean },
-): { lines: DirectedLine[]; newSpeakers: { name: string; gender: string; about: string }[]; log: string[] } {
+): { lines: DirectedLine[]; newSpeakers: { name: string; gender: string; about: string; role: string }[]; log: string[] } {
   const log: string[] = [];
   const byIndex: Record<number, any> = {};
   const got = answer && Array.isArray(answer.lines) ? answer.lines : [];
@@ -1582,7 +1582,7 @@ function applyDirection(
     const i = Number(l && l.i);
     if (Number.isInteger(i) && i >= 0 && i < segs.length && !byIndex[i]) byIndex[i] = l;
   }
-  const newSpeakers: { name: string; gender: string; about: string }[] = [];
+  const newSpeakers: { name: string; gender: string; about: string; role: string }[] = [];
   if (rules.findSpeakers && answer && Array.isArray(answer.new_speakers)) {
     for (const s of answer.new_speakers.slice(0, 6)) {
       const name = str(s && s.name, 60).replace(/[^\p{L}\p{N} .'-]/gu, '').trim();
@@ -1590,8 +1590,9 @@ function applyDirection(
       if (newSpeakers.some((x) => x.name.toLowerCase() === name.toLowerCase())) continue;
       newSpeakers.push({
         name,
-        gender: pick(String(s.gender || '').toLowerCase(), ['female', 'male', 'unknown'] as const, 'unknown'),
+        gender: pick(String(s.gender || '').toLowerCase(), ['female', 'male', 'nonbinary', 'unknown'] as const, 'unknown'),
         about: str(s.about, 120).trim(),
+        role: String(s.role || '').toLowerCase() === 'main' ? 'main' : 'minor',
       });
     }
   }
@@ -2463,7 +2464,8 @@ function settingsSig(s: Settings): string {
 
 // Settings change while a message is being directed. A new NPC is added to
 // the copy on disk, not to the copy read before the Director was asked.
-async function addSpeakers(userId: string | undefined, found: { name: string; gender: string; about: string }[], by: AddedBy = 'ai'): Promise<string[]> {
+// A main role is added as a character, and a minor one as an NPC.
+async function addSpeakers(userId: string | undefined, found: { name: string; gender: string; about: string; role?: string }[], by: AddedBy = 'ai'): Promise<string[]> {
   if (!found.length) return [];
   const s = await loadSettings(userId);
   const added: string[] = [];
@@ -2472,7 +2474,7 @@ async function addSpeakers(userId: string | undefined, found: { name: string; ge
     const m = narrator();
     m.id = newId();
     m.name = f.name;
-    m.kind = 'npc';
+    m.kind = f.role === 'main' ? 'character' : 'npc';
     m.addedBy = by;
     m.note = f.about;
     m.gender = f.gender;

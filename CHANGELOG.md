@@ -18,6 +18,9 @@ _Not yet released_
 - **More settings for each engine**, in the Cast tab, under each person's voice. Only the settings their engine takes are shown: speaker boost and language for ElevenLabs, voice direction, temperature, top P and steady loudness for Fish Audio, temperature, language and a usual way of speaking for Gemini, and exaggeration, CFG weight, temperature and seed for Chatterbox. **Back to defaults** clears them.
 - **A Chatterbox server, without a Lumiverse connection**, in the Settings tab. Auto Foley talks to a Chatterbox-TTS-Server itself, listed as **Chatterbox server (direct)**, so its own settings reach it. **Save and test** says which model it runs and how many voices it has.
 - **Speed in each engine's own range**: 0.7 to 1.2 for ElevenLabs, 0.5 to 2 for Fish Audio and Chatterbox.
+- **How they speak says what helps on each engine.** The line under the box changes with the engine the person speaks through.
+- **Nonbinary**, as a voice type in the Cast tab. The Director marks someone new as nonbinary only when the text says so, and a voice the provider marks neutral is picked for them when there is one.
+- **Main characters and minor ones.** The Director says which a new speaker is, and the Cast tab files a main one as a character and a minor one as an NPC.
 - **Back to defaults for the mixer.** It sets voices to 100% and sounds to 80%, and unmutes both.
 
 ### Changed
@@ -30,6 +33,8 @@ _Not yet released_
 
 ### Fixed
 
+- **A new speaker on Gemini got a voice of any gender.** Gemini lists its voices as masculine and feminine, which did not match. Every way a provider writes gender is understood now.
+- **Only minor characters got a voice picked for them.** Anyone new but the narrator gets one now. The pick also matches words in how they sound, such as gravelly or young, to each voice's own description.
 - **The words in Now playing were choppy.** The word being said now fills from left to right as it is spoken, and the timing is worked out on every frame.
 - **Now playing lost its place after you came back to the Lumiverse tab.** It now picks up from where the audio really is.
 - **A message button could perform the wrong message.** After a delete, Lumiverse can show another message in the same row, and the button there still performed the message that was deleted, with its kept audio. A button now performs the message its row shows when it is pressed.

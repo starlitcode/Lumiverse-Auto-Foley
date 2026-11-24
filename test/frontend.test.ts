@@ -228,3 +228,19 @@ describe("defaults that change after a release", () => {
   });
 });
 
+describe("picking a voice for someone new", () => {
+  const { voiceGender, describeWords } = __testing as any;
+  test("every way a voice list writes gender is understood", () => {
+    expect(voiceGender("female")).toBe("female");
+    expect(voiceGender("Feminine")).toBe("female");
+    expect(voiceGender("male")).toBe("male");
+    expect(voiceGender("masculine")).toBe("male");
+    expect(voiceGender("nonbinary")).toBe("neutral");
+    expect(voiceGender("Neutral")).toBe("neutral");
+    expect(voiceGender("")).toBe("");
+  });
+  test("a description gives the words worth matching", () => {
+    expect(Array.from(describeWords("Gravelly, textured voice.")).sort()).toEqual(["gravelly", "textured"]);
+  });
+});
+

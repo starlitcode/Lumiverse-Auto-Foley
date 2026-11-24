@@ -791,6 +791,21 @@ describe("more settings and Chatterbox, direct", () => {
   });
 });
 
+describe("new speakers", () => {
+  test("a nonbinary or main character is kept as the Director says", async () => {
+    const answer = JSON.stringify({ lines: [{ i: 0, speaker: "Narrator", text: "Rook nodded." }], new_speakers: [{ name: "Rook", gender: "nonbinary", role: "main", about: "low and steady" }, { name: "Porter", gender: "male", role: "minor", about: "tired" }] });
+    const h = host({ answers: [answer] });
+    await h.ask({ type: "save", settings: { findSpeakers: true } });
+    await h.ask({ type: "direct", chatId: "c1", messageId: "m1", swipeId: 0, name: "Ilse", text: 'Rook nodded. "Fine," said Porter.' });
+    const cast = (await h.ask({ type: "load" })).find((m) => m.type === "state").settings.cast;
+    const rook = cast.find((c: any) => c.name === "Rook");
+    const porter = cast.find((c: any) => c.name === "Porter");
+    expect(rook && rook.gender).toBe("nonbinary");
+    expect(rook && rook.kind).toBe("character");
+    expect(porter && porter.kind).toBe("npc");
+  });
+});
+
 describe("each account keeps its own", () => {
   test("settings, cast, sounds, kept audio, the key and scripts never cross accounts", async () => {
     const good = JSON.stringify({ lines: [{ i: 0, speaker: "Narrator", text: "Brin waved." }], new_speakers: [] });

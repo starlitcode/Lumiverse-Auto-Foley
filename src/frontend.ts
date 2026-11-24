@@ -434,6 +434,21 @@ function looksLikeDate(t: string): boolean {
 }
 
 // The first letter of a name, for a picture when someone has none.
+// A gender, as a voice list or the cast writes it: female, feminine, male,
+// masculine, nonbinary or neutral. Empty when it says none.
+function voiceGender(g: any): '' | 'female' | 'male' | 'neutral' {
+  const t = String(g || '').toLowerCase();
+  if (/fem|woman|girl/.test(t)) return 'female';
+  if (/\b(male|masc|man|boy)/.test(t) || /^masc/.test(t)) return 'male';
+  if (/neutral|non-?binary|androg/.test(t)) return 'neutral';
+  return '';
+}
+// The words of a description worth matching, such as gravelly or young.
+const DESCRIBE_SKIP = new Set(['and', 'the', 'a', 'an', 'with', 'of', 'voice', 'delivery', 'sounds', 'sound', 'very', 'bit', 'little']);
+function describeWords(text: string): Set<string> {
+  return new Set(String(text || '').toLowerCase().split(/[^a-z]+/).filter((w) => w.length > 2 && !DESCRIBE_SKIP.has(w)));
+}
+
 function firstLetter(name: string): string {
   const m = String(name || '').match(/\p{L}|\p{N}/u);
   return m ? m[0].toUpperCase() : '?';
@@ -1682,10 +1697,26 @@ export function setup(ctx: Ctx, overrides?: any) {
     if (!got.voices.length) return;
     const used = new Set((S.cast || []).map((c: Member) => pickOf(c, conn).voice).filter(Boolean));
     if (conn.voice) used.add(conn.voice);
-    const free = got.voices.filter((v: any) => !used.has(v.id));
-    const fits = free.filter((v: any) => m.gender !== 'unknown' && String(v.gender || '').toLowerCase() === m.gender);
-    const pickFrom = fits.length ? fits : free.length ? free : got.voices;
-    const v = pickFrom[Math.floor(Math.random() * pickFrom.length)];
+    // Each voice is scored: a gender that fits, words its description shares
+    // with how the person sounds, and nobody else using it. The best one is
+    // taken, and a tie is broken at random.
+    const want = voiceGender(m.gender);
+    const about = describeWords(m.note);
+    let best: any[] = [];
+    let top = -Infinity;
+    for (const v of got.voices) {
+      const has = voiceGender(v.gender);
+      let score = used.has(v.id) ? 0 : 4;
+      if (want && has) score += want === has ? 6 : -8;
+      else if (want === 'neutral' && !has) score += 1;
+      const theirs = describeWords(String(v.description || '') + ' ' + String(v.name || ''));
+      for (const w of about) if (theirs.has(w)) score += 2;
+      if (score > top) {
+        top = score;
+        best = [v];
+      } else if (score === top) best.push(v);
+    }
+    const v = best[Math.floor(Math.random() * best.length)];
     if (!v) return;
     setPick(m, conn, { voice: String(v.id), voiceName: String(v.name || v.id) });
     save();
@@ -1740,7 +1771,8 @@ export function setup(ctx: Ctx, overrides?: any) {
     const m = isNarr ? narratorMember() : memberFor(line.speaker);
     const conn = connOf(m);
     if (!conn) return { why: ttsWhy || 'Pick your TTS connection in the Settings tab.' };
-    if (m && m.kind === 'npc' && !pickOf(m, conn).voice) await voiceForNew(m, conn);
+    // Anyone but the narrator with no voice on this connection gets one.
+    if (m && m.kind !== 'narrator' && !pickOf(m, conn).voice) await voiceForNew(m, conn);
     const pick = pickOf(m, conn);
     const model = pick.model || conn.model || '';
     const eng = engineFor(conn, model);
@@ -5430,6 +5462,16 @@ export function setup(ctx: Ctx, overrides?: any) {
     return row;
   }
 
+  // What to write in How they speak, for the engine a person speaks through.
+  function speakHint(eng: Engine): string {
+    if (!eng.supported) return 'Pick a model that acts first. The note is used once their engine can take directions.';
+    if (eng.id === 'eleven_v3') return 'On ElevenLabs: describe their manner in a few words, such as dry, clipped, laughs at their own jokes. The Director turns it into tags like [deadpan] or [chuckles].';
+    if (eng.id === 'fish') return 'On Fish Audio: describe how they sound when calm and when upset, such as low and slow, sharp when angry. The Director turns it into tags like [calm] or [shouting].';
+    if (eng.id === 'gemini') return 'On Gemini 3.8: describe their voice in plain words, such as hushed, dry and unhurried. The Director writes notes like that for each line. Sounds are limited to Gemini\u2019s own list.';
+    if (eng.id === 'gemini_31') return 'On Gemini 2.5 or 3.1: say when they whisper, shout or sound sarcastic. Those are the only ways of speaking it can mark, so other detail is not used.';
+    return 'On Chatterbox: say when they laugh, sigh or gasp. It marks only sounds like those, so how they speak comes from the voice and the punctuation. With a Chatterbox server reached directly, Exaggeration under More settings makes the voice stronger.';
+  }
+
   // A switch for one person's setting, built like every other switch: only
   // the switch flips it.
   function personSwitch(label: string, help: string, on: boolean, onChange: (v: boolean) => void): HTMLElement {
@@ -5530,10 +5572,11 @@ export function setup(ctx: Ctx, overrides?: any) {
           { id: 'unknown', label: 'Any' },
           { id: 'female', label: 'Female' },
           { id: 'male', label: 'Male' },
+          { id: 'nonbinary', label: 'Nonbinary' },
         ], m.gender, (v) => {
           m.gender = v;
           save();
-        }, 'Used only when someone new has no voice yet: they get a voice of this type that nobody else uses.'),
+        }, 'Used only when someone new has no voice yet. Nonbinary picks a voice the provider marks neutral, when there is one.'),
       );
       inner.appendChild(g1);
     }
@@ -5747,12 +5790,19 @@ export function setup(ctx: Ctx, overrides?: any) {
       }
     };
     drawVoice();
-    inner.appendChild(
-      area('How they speak', m.note, (v) => {
-        m.note = v.slice(0, 300);
-        save();
-      }, { placeholder: 'Soft-spoken and dry. Rarely raises their voice.', help: 'A short note the Director reads when it tags this person’s lines, such as how loud they are, how they joke, or how they sound when upset.' }),
-    );
+    const speakBox = area('How they speak', m.note, (v) => {
+      m.note = v.slice(0, 300);
+      save();
+    }, { placeholder: 'Soft-spoken and dry. Rarely raises their voice.', help: 'A short note the Director reads when it marks this person’s lines. The line under the box says what helps most on their engine.' });
+    speakBox.setAttribute('data-af-speak', '');
+    // What to write depends on the engine the person speaks through, since
+    // each takes different directions.
+    {
+      const cn = connOf(m);
+      const eng = engineFor(cn, pickOf(m, cn).model || (cn && cn.model));
+      speakBox.appendChild(hint(esc(speakHint(eng))));
+    }
+    inner.appendChild(speakBox);
     const mutedRow = el('<div class="af-col"></div>');
     {
       const id = rid('mt');
@@ -7539,7 +7589,7 @@ export function setup(ctx: Ctx, overrides?: any) {
   };
 }
 
-export const __testing = { markText, movedFor, movedRowMark, MOVED_DEFAULTS, looksLikeDate, voicedFrames, wordWeight, partTimes, engineOf, fitTag, tagSound, textFor, styleFor, stripTags, stabilityFor, ENGINES };
+export const __testing = { voiceGender, describeWords, markText, movedFor, movedRowMark, MOVED_DEFAULTS, looksLikeDate, voicedFrames, wordWeight, partTimes, engineOf, fitTag, tagSound, textFor, styleFor, stripTags, stabilityFor, ENGINES };
 
 // The built-in cheer: "Cheering and clapping crowd 1" by freesound_community,
 // a free sound from Pixabay (pixabay.com/sound-effects/people-cheering-and-clapping-crowd-1-5995/),
