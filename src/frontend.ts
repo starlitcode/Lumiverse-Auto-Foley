@@ -59,6 +59,8 @@ interface Engine {
   eleven: boolean;
   // False for a model that cannot act, which Auto Foley does not use.
   supported: boolean;
+  // Delivery tags go again at the start of each sentence.
+  perSentence?: boolean;
 }
 
 // The inline tags Google's guide lists for Gemini 3.8 Flash TTS and
@@ -81,7 +83,7 @@ const CHATTERBOX_TAGS = ['clear throat', 'sigh', 'shush', 'cough', 'groan', 'sni
 
 const ENGINE_LIST: Engine[] = [
   { id: 'eleven_v3', label: 'ElevenLabs v3 or v4', tags: 'free', list: [], wrap: '[]', style: false, inVoiceSounds: true, singTag: 'sings', singStyle: false, eleven: true, supported: true },
-  { id: 'fish', label: 'Fish Audio S2 or Drama 3', tags: 'free', list: [], wrap: '[]', style: false, inVoiceSounds: false, singTag: 'singing', singStyle: false, eleven: false, supported: true },
+  { id: 'fish', label: 'Fish Audio S2 or Drama 3', tags: 'free', list: [], wrap: '[]', style: false, inVoiceSounds: false, singTag: 'singing', singStyle: false, eleven: false, supported: true, perSentence: true },
   { id: 'gemini', label: 'Gemini 3.8 TTS', tags: 'list', list: GEMINI_TAGS, wrap: '<>', style: true, inVoiceSounds: false, singTag: '', singStyle: true, eleven: false, supported: true },
   // Lumiverse sends these models the text alone, with no note on how it is
   // said, so the tags and the punctuation carry it.
@@ -92,7 +94,7 @@ const ENGINE_LIST: Engine[] = [
 const NO_TAGS: Engine = { id: 'none', label: 'A model with no tags', tags: 'none', list: [], wrap: '[]', style: false, inVoiceSounds: false, singTag: '', singStyle: false, eleven: false, supported: false };
 // The providers Auto Foley lists. Chatterbox runs behind an OpenAI-style
 // connection.
-const USABLE_PROVIDERS = ['elevenlabs', 'fish_audio', 'google_tts', 'google_vertex_tts', 'openai_tts'];
+const USABLE_PROVIDERS = ['elevenlabs', 'fish_audio', 'google_tts', 'google_vertex_tts', 'openrouter_tts', 'openai_tts'];
 const ENGINES: Record<string, Engine> = {};
 for (const e of ENGINE_LIST) ENGINES[e.id] = e;
 
@@ -106,7 +108,9 @@ function engineOf(conn: any, model?: string, chosen?: string): Engine {
   const hay = [m, conn && conn.name, conn && conn.api_url].map((x) => String(x || '').toLowerCase()).join(' ');
   if (provider === 'elevenlabs') return /^eleven_v(3|4)/.test(m) ? ENGINES.eleven_v3 : NO_TAGS;
   if (provider === 'fish_audio') return /^s1$/.test(m) ? NO_TAGS : ENGINES.fish;
-  if (provider === 'google_tts' || provider === 'google_vertex_tts') {
+  // OpenRouter serves Gemini's TTS models too, named such as
+  // google/gemini-3.8-flash-tts. Its other models take no tags.
+  if (provider === 'google_tts' || provider === 'google_vertex_tts' || provider === 'openrouter_tts') {
     if (/gemini-3\.8-flash(-lite)?-tts/.test(m)) return ENGINES.gemini;
     if (/gemini-(2\.5|3\.1)-[a-z0-9.-]*tts/.test(m)) return ENGINES.gemini_31;
     return NO_TAGS;
@@ -133,6 +137,7 @@ function noTagsWhy(conn: any, model?: string): string {
   const what = 'Auto Foley works only with models that act out tags. ';
   if (provider === 'elevenlabs') return what + (m || 'This model') + ' does not. Pick Eleven v3 or Eleven v4 on the connection, or for this person in the Cast tab.';
   if (provider === 'fish_audio') return what + 'Fish Audio S1 does not. Pick S2.1 Pro, S2 Pro or Drama 3.';
+  if (provider === 'openrouter_tts') return what + 'Through OpenRouter, only the Gemini TTS models do. Pick google/gemini-3.8-flash-tts, or a Gemini 2.5 or 3.1 TTS model, on the connection or for this person in the Cast tab.';
   if (provider === 'google_tts' || provider === 'google_vertex_tts') return what + (m || 'This Gemini model') + ' does not. Pick Gemini 3.8 Flash TTS, Gemini 3.8 Flash-Lite TTS, or a Gemini 2.5 or 3.1 TTS model.';
   if (provider === 'chatterbox_direct') return what + 'Your Chatterbox server runs the ' + (m || 'unknown') + ' model, which takes no tags. Load Chatterbox-Turbo on it, on its own web page or with model.repo_id set to chatterbox-turbo in its config.yaml.';
   if (provider === 'openai_tts' && /multilingual|\bmtl\b/.test(hay)) return what + 'Chatterbox-Multilingual does not. Run Chatterbox-Turbo on your server.';
@@ -247,6 +252,38 @@ function voicedFrames(samples: ArrayLike<number>, rate: number): boolean[] {
   return out;
 }
 
+// How loud a clip is while someone speaks, in dB below full scale. Only the
+// voiced frames count, so pauses and silence at the ends do not make a voice
+// read as quieter than it is. A clip with no voiced frames gives null.
+function clipLevel(samples: ArrayLike<number>, rate: number, voiced: boolean[]): number | null {
+  const per = Math.max(1, Math.round(rate * FRAME_SECS));
+  let sum = 0;
+  let n = 0;
+  voiced.forEach((on, k) => {
+    if (!on) return;
+    const end = Math.min(samples.length, (k + 1) * per);
+    for (let j = k * per; j < end; j++) {
+      sum += samples[j] * samples[j];
+      n++;
+    }
+  });
+  if (!n || !(sum > 0)) return null;
+  return 20 * Math.log10(Math.sqrt(sum / n));
+}
+
+// The most a voice is turned down to match the quietest voice, in dB. A
+// bigger gap is most likely a whisper or a shout the Director asked for.
+const LEVEL_MAX_DB = 6;
+
+// The volume factor for a voice at `mine` dB when the quietest voice in the
+// scene is at `quietest` dB. It only turns a voice down. An audio element
+// cannot play louder than its clip, so a quiet voice is never raised.
+function levelGain(mine: number, quietest: number): number {
+  const down = Math.min(LEVEL_MAX_DB, Math.max(0, Number(mine) - Number(quietest)));
+  if (!isFinite(down)) return 1;
+  return Math.round(Math.pow(10, -down / 20) * 1000) / 1000;
+}
+
 // How long a word takes to say, roughly: its groups of vowels, at least one.
 // Text with no Latin vowels, such as Japanese, is counted by its length.
 function wordWeight(word: string): number {
@@ -300,6 +337,47 @@ function tidy(text: string): string {
     .trim();
 }
 
+// A tag that is a sound or a pause, such as [sighs] or [short pause]. It
+// happens once, where it is written. Every other tag is how the words are
+// said, such as [whispering].
+const EVENT_TAG = /\b(laugh|chuckl|giggl|snicker|sigh|gasp|cough|sniff|sneez|groan|grunt|throat|inhal|exhal|breath|pause|sob|crie|cry|crying|yawn|hum|gulp|swallow|kiss|moan|pant|hiccup|snort|whimper|clap|knock|scream|shriek|wail|whistl|tsk|silence)/i;
+
+// The words before a sentence's period that are not the end of a sentence.
+const NOT_AN_END = /(?:^|\s)(?:mr|mrs|ms|dr|st|jr|sr|prof|vs|etc|e\.g|i\.e|no)\.$/i;
+
+// Fish Audio reads a delivery tag best at the start of the sentence it is
+// for, with one main delivery per sentence. A line of several sentences
+// gets its delivery tags again at the start of each sentence that has none
+// of its own, so the last sentence is said the same way as the first. A
+// sentence with its own delivery tag starts a new delivery for the ones
+// after it. Sounds and pauses are never repeated.
+function perSentence(text: string): string {
+  const t = String(text || '');
+  // A mark between sentences, then a split on it. A lookbehind would do this
+  // in one step, but an older Safari cannot read one and drops the file.
+  const parts = t.replace(/([.!?\u2026]+["'\u201d\u2019)]*)\s+(?=\S)/g, '$1\u0000').split('\u0000');
+  if (parts.length < 2) return t;
+  const delivery = (chunk: string) => (chunk.match(/\[[^\]]+\]/g) || []).filter((g) => !EVENT_TAG.test(g)).slice(-2);
+  const out: string[] = [];
+  let now: string[] = [];
+  for (const part of parts) {
+    if (out.length && NOT_AN_END.test(out[out.length - 1])) {
+      out[out.length - 1] += ' ' + part;
+      const own = delivery(part);
+      if (own.length) now = own;
+      continue;
+    }
+    const lead = (part.match(/^(?:\s*\[[^\]]+\])+/) || [''])[0];
+    const leadDelivery = delivery(lead);
+    let said = part;
+    if (out.length && now.length && !leadDelivery.length) said = now.join(' ') + ' ' + part;
+    const own = delivery(part);
+    if (own.length) now = own;
+    out.push(said);
+  }
+  return out.join(' ');
+}
+
 // The words sent for one line, fitted to the engine that speaks it.
 function textFor(line: { text: string; sung?: boolean }, eng: Engine): string {
   let t = String(line.text || '');
@@ -321,6 +399,7 @@ function textFor(line: { text: string; sung?: boolean }, eng: Engine): string {
         return eng.wrap === '<>' ? ' <' + fit + '> ' : ' [' + fit + '] ';
       }),
     );
+  if (eng.perSentence) t = perSentence(t);
   if (line.sung && eng.singTag && !/\[(sings?|singing)\b[^\]]*\]/i.test(t)) t = '[' + eng.singTag + '] ' + t;
   return t;
 }
@@ -468,12 +547,23 @@ function creditHtml(c: { title: string; by: string; license: string; page: strin
   return '<span class="af-note af-credit">From Freesound: ' + name + ' by ' + esc(c.by) + (c.license ? ', ' + esc(c.license) : '') + '</span>';
 }
 
+// Why the TTS connection list is empty, from what Lumiverse sent back. It
+// says whether the account has no TTS connection at all, or has some on a
+// service Auto Foley cannot use, and names them.
+function noConnectionWhy(seen: { name: string; provider: string }[]): string {
+  const where = 'Add one for ElevenLabs, Fish Audio, Gemini, or a Chatterbox-Turbo server in Lumiverse: open Connections, then the TTS tab. A key added under the LLM tab is not a TTS connection.';
+  if (!seen.length) return 'Lumiverse found no TTS connection on your account. ' + where;
+  const names = seen.slice(0, 4).map((c) => c.name + ' (' + (c.provider || 'unknown service') + ')').join(', ') + (seen.length > 4 ? ', and ' + (seen.length - 4) + ' more' : '');
+  return 'None of your TTS connections is on a service Auto Foley can use. Lumiverse sent: ' + names + '. ' + where;
+}
+
 // A name for the service a connection speaks through, for messages.
 function serviceName(conn: any): string {
   const p = String((conn && conn.provider) || '').toLowerCase();
   if (p === 'elevenlabs') return 'ElevenLabs';
   if (p === 'fish_audio') return 'Fish Audio';
   if (p === 'google_tts' || p === 'google_vertex_tts') return 'Gemini';
+  if (p === 'openrouter_tts') return 'OpenRouter';
   const hay = [conn && conn.model, conn && conn.name, conn && conn.api_url].map((x) => String(x || '').toLowerCase()).join(' ');
   if (/chatterbox/.test(hay)) return 'your Chatterbox server';
   return 'the voice service';
@@ -1114,6 +1204,7 @@ const DEFAULTS: any = {
   readOwnMessages: false,
   narration: 'read',
   saveAudio: false,
+  evenVoices: true,
   voiceVolume: 1,
   soundVolume: 0.8,
   reduceMotion: false,
@@ -1291,6 +1382,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     if (p === 'elevenlabs') return 'ElevenLabs';
     if (p === 'fish_audio') return 'Fish Audio';
     if (p === 'google_tts' || p === 'google_vertex_tts') return 'Gemini';
+    if (p === 'openrouter_tts') return 'Gemini through OpenRouter';
     if (p === 'chatterbox_direct') return 'Chatterbox, direct';
     return 'Chatterbox and other servers';
   }
@@ -1417,6 +1509,29 @@ export function setup(ctx: Ctx, overrides?: any) {
 
   let ttsConnections: any[] = [];
   let ttsWhy = '';
+  // Every TTS connection on the account, usable or not, for the message
+  // when none can be used and for Debug info.
+  let ttsSeen: { name: string; provider: string; model: string }[] = [];
+  let ttsListed = -1;
+
+  // When the list has nothing Auto Foley can use, the connection picked in
+  // Lumiverse's own voice settings is read on its own, by its id. A usable
+  // one is added. Either way it is named in the message.
+  async function addVoiceSettingsPick(all: any[]): Promise<void> {
+    try {
+      const res = await api('/settings/voiceSettings');
+      if (!res.ok) return;
+      const j = await res.json();
+      const id = j && j.value && typeof j.value === 'object' ? String(j.value.ttsConnectionId || '') : '';
+      if (!id || all.some((c: any) => c && c.id === id)) return;
+      const one = await api('/tts-connections/' + encodeURIComponent(id));
+      if (!one.ok) return;
+      const c = await one.json();
+      if (!c || !c.id) return;
+      ttsSeen.push({ name: String(c.name || 'Unnamed'), provider: String(c.provider || ''), model: String(c.model || '') });
+      if (USABLE_PROVIDERS.indexOf(String(c.provider || '').toLowerCase()) >= 0) ttsConnections.push(c);
+    } catch (_) {}
+  }
   // ---- Chatterbox, direct ----
   // A Chatterbox-TTS-Server whose address is saved in Settings is listed as
   // one more connection, Chatterbox server (direct). Lines for it go through
@@ -1453,11 +1568,12 @@ export function setup(ctx: Ctx, overrides?: any) {
       const j = await res.json();
       const all = Array.isArray(j && j.data) ? j.data : [];
       ttsConnections = all.filter((c: any) => c && c.id && USABLE_PROVIDERS.indexOf(String(c.provider || '').toLowerCase()) >= 0);
+      ttsSeen = all.filter((c: any) => c && c.id).map((c: any) => ({ name: String(c.name || 'Unnamed'), provider: String(c.provider || ''), model: String(c.model || '') }));
+      ttsListed = all.length;
+      if (!ttsConnections.length) await addVoiceSettingsPick(all);
       withChatterbox();
       if (S.chatterboxUrl && !cbxInfo) await readChatterbox();
-      ttsWhy = ttsConnections.length
-        ? ''
-        : 'You have no TTS connection Auto Foley can use. Add one for ElevenLabs, Fish Audio, Gemini or a Chatterbox-Turbo server in Lumiverse, under Connections, in the TTS section.';
+      ttsWhy = ttsConnections.length ? '' : noConnectionWhy(ttsSeen);
     } catch (e) {
       ttsWhy = netTrouble(e, 'Reading your TTS connections');
       ttsConnections = [];
@@ -1695,6 +1811,10 @@ export function setup(ctx: Ctx, overrides?: any) {
     failed: number[];
     // The voiced 20 ms frames of each voice clip, by part, for the words.
     voiced: Map<number, boolean[]>;
+    // Which voice says each voice clip, by part, once its level is known.
+    voiceKeys: Map<number, string>;
+    // The voices already said in the Log to be turned down.
+    toldLevel: Set<string>;
     // Set by Back, so the loop plays the part it was moved to.
     jumped?: boolean;
   }
@@ -1828,7 +1948,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         params.speed = Math.min(1.2, Math.max(0.7, speed));
       }
       if (has('lang')) params.language_code = own.lang;
-    } else if (speed !== 1 && provider !== 'google_tts' && provider !== 'google_vertex_tts') {
+    } else if (speed !== 1 && provider !== 'google_tts' && provider !== 'google_vertex_tts' && provider !== 'openrouter_tts') {
       params.speed = speed;
     }
     if (provider === 'fish_audio') {
@@ -2008,7 +2128,15 @@ export function setup(ctx: Ctx, overrides?: any) {
       if (it.kind === 'voice')
         p.then((r) => {
           if (r && r.blob && typeof r.blob !== 'string') voicedOf(r.blob).then((v) => {
-            if (v) sh.voiced.set(k, v);
+            if (!v) return;
+            sh.voiced.set(k, v.voiced);
+            if (v.level == null || sh.voiceKeys.has(k)) return;
+            const key = voiceKeyOf(it.line);
+            sh.voiceKeys.set(k, key);
+            const list = levels.get(key) || [];
+            list.push(v.level);
+            if (list.length > LEVEL_KEEP) list.shift();
+            levels.set(key, list);
           });
         });
     }
@@ -2018,7 +2146,7 @@ export function setup(ctx: Ctx, overrides?: any) {
   // Reads which parts of a clip are voiced. An offline audio context decodes
   // without asking to play, so it needs no tap first. Any failure leaves the
   // words spread over the clip by length.
-  async function voicedOf(blob: Blob): Promise<boolean[] | null> {
+  async function voicedOf(blob: Blob): Promise<{ voiced: boolean[]; level: number | null } | null> {
     try {
       const w: any = window as any;
       const Off = w.OfflineAudioContext || w.webkitOfflineAudioContext;
@@ -2030,11 +2158,60 @@ export function setup(ctx: Ctx, overrides?: any) {
         if (r && typeof r.then === 'function') r.then(done, fail);
       });
       if (!buf || !buf.length) return null;
-      return voicedFrames(buf.getChannelData(0), buf.sampleRate);
+      const samples = buf.getChannelData(0);
+      const voiced = voicedFrames(samples, buf.sampleRate);
+      return { voiced, level: clipLevel(samples, buf.sampleRate, voiced) };
     } catch (_) {
       return null;
     }
   }
+
+  // How loud each voice is, in dB, from its last few clips. It is kept for
+  // this page, so a voice heard in one message is known in the next.
+  const levels = new Map<string, number[]>();
+  const LEVEL_KEEP = 6;
+  const average = (list: number[]) => list.reduce((a, b) => a + b, 0) / list.length;
+
+  // The same voice is the same connection, voice and model.
+  function voiceKeyOf(line: Line): string {
+    const m = line.kind === 'narration' ? narratorMember() : memberFor(line.speaker);
+    const conn = connOf(m);
+    if (!conn) return '';
+    const pick = pickOf(m, conn);
+    return [conn.id, pick.voice || conn.voice || '', pick.model || conn.model || ''].join('|');
+  }
+
+  // The volume factor for part k. A voice louder than the quietest voice
+  // heard so far in this message is turned down to match it. A voice with
+  // no level yet plays as it is.
+  function levelFor(sh: Show, k: number): number {
+    if (!S.evenVoices) return 1;
+    const key = sh.voiceKeys.get(k);
+    const mine = key ? levels.get(key) : null;
+    if (!key || !mine || !mine.length) return 1;
+    let quietest = Infinity;
+    for (const other of new Set(sh.voiceKeys.values())) {
+      const l = levels.get(other);
+      if (l && l.length) quietest = Math.min(quietest, average(l));
+    }
+    const gain = levelGain(average(mine), quietest);
+    if (gain < 1 && !sh.toldLevel.has(key)) {
+      sh.toldLevel.add(key);
+      const it = sh.items[k];
+      const who = it && it.line ? (it.line.kind === 'narration' ? 'The narrator' : it.line.speaker || 'A voice') : 'A voice';
+      log(who + ' is louder than the quietest voice here, so it is turned down by ' + Math.round(-20 * Math.log10(gain)) + ' dB.');
+    }
+    return gain;
+  }
+
+  // The volume an audio element plays at: its mixer slider, its mute, and,
+  // for a voice, how much it is turned down to match the others.
+  function volumeFor(kind: string, gain?: number): number {
+    if (kind === 'voice') return muted.voice ? 0 : S.voiceVolume * Math.min(1, Math.max(0, Number(gain) || 1));
+    if (muted.sound) return 0;
+    return kind === 'applause' ? S.soundVolume * S.applauseVolume : S.soundVolume;
+  }
+  const liveVolume = (el: any) => volumeFor(el && el.dataset ? el.dataset.kind : 'voice', el && el.dataset ? Number(el.dataset.gain) : 1);
 
   // How many clips are fetched ahead of the one playing. Two hides the wait
   // between lines without spending credits on lines the reader may skip.
@@ -2102,11 +2279,10 @@ export function setup(ctx: Ctx, overrides?: any) {
         sh.index++;
         continue;
       }
-      const how = await playBlob(got.blob, sh.items[at].kind);
+      const how = await playBlob(got.blob, sh.items[at].kind, sh.items[at].kind === 'voice' ? levelFor(sh, at) : 1);
       if (show !== sh) return;
       // The cheer is not saved with the message: it is the audience, not
-      // the performance.
-      // The cheer is not saved with the message, and a linked sound cannot be.
+      // the performance. A linked sound cannot be saved.
       if (how === 'ended' && sh.items[at].kind !== 'applause' && typeof got.blob !== 'string') sh.played.push({ blob: got.blob });
       if (sh.jumped) {
         sh.jumped = false;
@@ -2124,7 +2300,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     }
   }
 
-  function playBlob(blob: Blob | string, kind: string): Promise<'ended' | 'cut'> {
+  function playBlob(blob: Blob | string, kind: string, gain = 1): Promise<'ended' | 'cut'> {
     return new Promise((resolve) => {
       stopAudio();
       if (!AudioCtor) {
@@ -2135,9 +2311,12 @@ export function setup(ctx: Ctx, overrides?: any) {
       audio = el;
       settle = resolve;
       el.src = typeof blob === 'string' ? blob : URL.createObjectURL(blob);
-      el.volume = kind === 'voice' ? (muted.voice ? 0 : S.voiceVolume) : muted.sound ? 0 : kind === 'applause' ? S.soundVolume * S.applauseVolume : S.soundVolume;
+      if (el.dataset) {
+        el.dataset.kind = kind;
+        el.dataset.gain = String(gain);
+      }
+      el.volume = volumeFor(kind, gain);
       if (kind === 'applause') fadeApplause(el);
-      if (el.dataset) el.dataset.kind = kind;
       const finish = () => {
         if (audio !== el) return;
         settle = null;
@@ -2282,6 +2461,8 @@ export function setup(ctx: Ctx, overrides?: any) {
       startedAt: Date.now(),
       waiting: new Map(),
       voiced: new Map(),
+      voiceKeys: new Map(),
+      toldLevel: new Set(),
       failed: [],
     };
     show = sh;
@@ -4227,7 +4408,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     vol.value = String(Math.round((Number(S.voiceVolume) || 0) * 100));
     vol.addEventListener('input', () => {
       S.voiceVolume = Number(vol.value) / 100;
-      if (audio && audio.dataset && audio.dataset.kind === 'voice') audio.volume = muted.voice ? 0 : S.voiceVolume;
+      if (audio && audio.dataset && audio.dataset.kind === 'voice') audio.volume = liveVolume(audio);
       paintFloat();
     });
     vol.addEventListener('change', () => set({ voiceVolume: Number(vol.value) / 100 }));
@@ -4703,20 +4884,21 @@ export function setup(ctx: Ctx, overrides?: any) {
       }
     });
 
-    const mix = card('Mixer', 'How loud the voices and the sounds are, apart from each other. Mute is for this page only. Back to defaults sets voices to 100% and sounds to 80%, and unmutes both.');
+    const mix = card('Mixer', 'How loud the voices and the sounds are, apart from each other. Mute is for this page only. Back to defaults sets voices to 100% and sounds to 80%, unmutes both, and turns on Even out voice levels.');
     const mixer = el('<div class="af-mixer"></div>');
     mixer.appendChild(strip('Voices', 'voice', 'voiceVolume'));
     mixer.appendChild(strip('Sounds', 'sound', 'soundVolume'));
     mix.appendChild(mixer);
+    mix.appendChild(toggle('Even out voice levels', 'On by default. A voice louder than the quietest one in the message is turned down, by 6 dB at most.', 'evenVoices'));
     const mixRow = el('<div class="af-row"></div>');
     mixRow.appendChild(
       button('Back to defaults', () => {
-        const same = Number(S.voiceVolume) === Number(DEFAULTS.voiceVolume) && Number(S.soundVolume) === Number(DEFAULTS.soundVolume) && !muted.voice && !muted.sound;
+        const same = Number(S.voiceVolume) === Number(DEFAULTS.voiceVolume) && Number(S.soundVolume) === Number(DEFAULTS.soundVolume) && !muted.voice && !muted.sound && S.evenVoices === DEFAULTS.evenVoices;
         if (same) return alreadyLine(mix, 'These are already the default volumes. Nothing changed.');
         muted.voice = false;
         muted.sound = false;
-        set({ voiceVolume: DEFAULTS.voiceVolume, soundVolume: DEFAULTS.soundVolume });
-        if (audio && audio.dataset) audio.volume = audio.dataset.kind === 'voice' ? S.voiceVolume : S.soundVolume;
+        set({ voiceVolume: DEFAULTS.voiceVolume, soundVolume: DEFAULTS.soundVolume, evenVoices: DEFAULTS.evenVoices });
+        if (audio && audio.dataset) audio.volume = liveVolume(audio);
         renderTab();
       }),
     );
@@ -4797,7 +4979,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     s.appendChild(
       slider('Volume', Math.round(S[key] * 100), 0, 100, 1, (v) => v + '%', (v) => {
         set({ [key]: v / 100 });
-        if (audio && audio.dataset && audio.dataset.kind === kind && !muted[kind]) audio.volume = v / 100;
+        if (audio && audio.dataset && audio.dataset.kind === kind) audio.volume = liveVolume(audio);
       }),
     );
     const m = s.querySelector('.af-btn') as HTMLElement;
@@ -4805,7 +4987,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       muted[kind] = !muted[kind];
       m.setAttribute('aria-pressed', muted[kind] ? 'true' : 'false');
       m.textContent = muted[kind] ? 'Unmute' : 'Mute';
-      if (audio && audio.dataset && audio.dataset.kind === kind) audio.volume = muted[kind] ? 0 : S[key];
+      if (audio && audio.dataset && audio.dataset.kind === kind) audio.volume = liveVolume(audio);
     });
     return s;
   }
@@ -5650,6 +5832,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       out.push(num('top_p', 'Top P', 0, 1, 0.05, 0.7, 'How wide the choice of sounds is. 0.70 by default.'));
       out.push(personSwitch('Steady loudness', 'On by default. Keeps lines at the same loudness.', own.normalize !== false, (v) => setP('normalize', v ? undefined : false)));
     }
+    if (prov === 'openrouter_tts' && eng.style) out.push(words('style_base', 'Their usual way of speaking', 'calm and dry', 'Sent with every line of theirs that has no note of its own, such as calm and dry. Empty uses the style saved on the connection.'));
     if (prov === 'google_tts' || prov === 'google_vertex_tts') {
       if (eng.style) out.push(words('style_base', 'Their usual way of speaking', 'calm and dry', 'Sent with every line of theirs that has no note of its own, such as calm and dry. Empty uses the style saved on the connection.'));
       out.push(num('temperature', 'Temperature', 0, 2, 0.05, 1, 'How much each take varies. 1.00 by default.'));
@@ -5765,27 +5948,30 @@ export function setup(ctx: Ctx, overrides?: any) {
       voiceField.appendChild(vh);
       voiceBox.appendChild(voiceField);
       // A voice the list does not show, such as one made or cloned on the
-      // provider's own site. The ID typed here is sent as it is.
+      // provider's own site, or one an engine names by a name, such as a
+      // Gemini voice or a file on a Chatterbox server. A name or ID that
+      // matches a voice in the list picks that voice. Anything else is sent
+      // as it is typed.
       if (cn) {
-        const idIn = text('Or paste a voice ID', '', (v) => {
-          const id = v.trim();
-          if (!id) return;
-          setPick(m, cn, { voice: id, voiceName: id });
+        const useTyped = (typed: string) => {
+          const t = typed.trim();
+          if (!t) return;
+          const listed = (voiceCache[cn.id] && voiceCache[cn.id].voices) || [];
+          const low = t.toLowerCase();
+          const hit = listed.find((v: any) => String(v.id || '') === t) || listed.find((v: any) => String(v.name || '').toLowerCase() === low);
+          setPick(m, cn, hit ? { voice: String(hit.id), voiceName: String(hit.name || hit.id) } : { voice: t, voiceName: t });
           save();
           paintName();
-        }, 'A voice ID from your provider', 'For a voice the list above does not show, such as one you made or cloned. Paste its ID from your provider. It replaces the voice picked above.');
+        };
+        const idIn = text('Or type a voice name or ID', '', () => {}, 'A voice name or ID', 'For a voice the list above does not show. Type its name or its ID from your provider. It replaces the voice picked above.');
         idIn.setAttribute('data-af-voiceid', '');
         const box = idIn.querySelector('input') as HTMLInputElement | null;
         if (box) {
           box.setAttribute('autocomplete', 'off');
           box.setAttribute('spellcheck', 'false');
-          // Saved when the box is left, so a half-typed ID is never used.
+          // Saved when the box is left, so a half-typed name is never used.
           box.addEventListener('change', () => {
-            const id = box.value.trim();
-            if (!id) return;
-            setPick(m, cn, { voice: id, voiceName: id });
-            save();
-            paintName();
+            useTyped(box.value);
             drawVoice();
           });
         }
@@ -7541,6 +7727,9 @@ export function setup(ctx: Ctx, overrides?: any) {
         lines.push('permissions:');
         for (const p of ['generation', 'decisions', 'cors_proxy', 'ui_panels']) lines.push('  ' + p + ' = ' + (granted.indexOf(p) >= 0 ? 'granted' : 'MISSING'));
       }
+      // Each TTS connection by its service and model only, not its name.
+      lines.push('tts connections: ' + (ttsListed < 0 ? 'not read' : ttsListed + ' listed by Lumiverse, ' + ttsConnections.filter((c) => c.id !== CBX_ID).length + ' usable'));
+      for (const c of ttsSeen) lines.push('  ' + (c.provider || 'no provider') + (c.model ? ', ' + c.model : '') + ' = ' + (USABLE_PROVIDERS.indexOf(c.provider.toLowerCase()) >= 0 ? 'usable' : 'not usable'));
       try {
         lines.push('browser: ' + (navigator.userAgent || 'unknown'));
       } catch (_) {}
@@ -7723,7 +7912,7 @@ export function setup(ctx: Ctx, overrides?: any) {
   };
 }
 
-export const __testing = { voiceGender, describeWords, markText, movedFor, movedRowMark, MOVED_DEFAULTS, looksLikeDate, voicedFrames, wordWeight, partTimes, engineOf, fitTag, tagSound, textFor, styleFor, stripTags, stabilityFor, ENGINES };
+export const __testing = { noConnectionWhy, perSentence, clipLevel, levelGain, voiceGender, describeWords, markText, movedFor, movedRowMark, MOVED_DEFAULTS, looksLikeDate, voicedFrames, wordWeight, partTimes, engineOf, fitTag, tagSound, textFor, styleFor, stripTags, stabilityFor, ENGINES };
 
 // The built-in cheer: "Cheering and clapping crowd 1" by freesound_community,
 // a free sound from Pixabay (pixabay.com/sound-effects/people-cheering-and-clapping-crowd-1-5995/),

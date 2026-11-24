@@ -151,6 +151,8 @@ function answer(msg) {
 window.__fetch = async (url, init) => {
   const u = String(url);
   const json = (o) => new Response(JSON.stringify(o), { status: 200, headers: { 'Content-Type': 'application/json' } });
+  if (u.includes('/tts-connections?') && window.__ttsList) return json({ data: window.__ttsList, total: window.__ttsList.length });
+  if (u.includes('/tts-connections/') && !u.includes('/voices') && !u.includes('/models')) return window.__ttsOne ? json(window.__ttsOne) : new Response('{"error":"not found"}', { status: 404 });
   if (u.includes('/tts-connections?')) return json({ data: [{ id: 't1', name: 'My ElevenLabs', provider: 'elevenlabs', model: 'eleven_v3', voice: 'v0', is_default: true, has_api_key: true }, { id: 't2', name: 'Fish on the side', provider: 'fish_audio', model: 's2.1-pro', has_api_key: true }, { id: 't3', name: 'Box at home', provider: 'openai_tts', api_url: 'http://192.0.2.10:8004/v1', model: 'chatterbox', has_api_key: true }, { id: 't4', name: 'Old flash', provider: 'elevenlabs', model: 'eleven_flash_v2_5', has_api_key: true }, { id: 't5', name: 'Kokoro here', provider: 'kokoro', has_api_key: true }], total: 5 });
   if (u.includes('/models')) return json({ models: [{ id: 's2.1-pro', label: 'Fish S2.1 Pro' }, { id: 'drama-3-preview', label: 'Drama 3 (Preview)' }], provider: 'fish_audio' });
   if (u.includes('/voices')) return json({ voices: [{ id: 'v1', name: 'Hollow Bell', gender: 'female' }, { id: 'v2', name: 'Grit', gender: 'male' }, { id: 'v3', name: 'Lark', gender: 'female' }], provider: 'elevenlabs' });
@@ -158,19 +160,19 @@ window.__fetch = async (url, init) => {
   if (u.includes('/characters/c')) return json({ id: 'c', name: 'Ysolde Marrow-Kestrel of the Lower Quays' });
   if (u.includes('/settings/voiceSettings')) return json({ key: 'voiceSettings', value: { ttsEnabled: true, ttsAutoPlay: true, ttsConnectionId: 't1' } });
   if (u.includes('/messages')) return json({ data: [{ id: 'm1', name: 'Ysolde Marrow-Kestrel of the Lower Quays', is_user: false, content: 'text', swipe_id: 0 }].concat(window.__moreMessages || []), total: 1 + (window.__moreMessages || []).length });
-  if (u.includes('/tts/synthesize')) { window.__synth = (window.__synth || []).concat(JSON.parse(init.body)); return new Response(window.__wav ? window.__makeWav(window.__wav[0], window.__wav[1]) : new Blob([new Uint8Array(64)], { type: 'audio/mpeg' }), { status: 200 }); }
+  if (u.includes('/tts/synthesize')) { window.__synth = (window.__synth || []).concat(JSON.parse(init.body)); const body = JSON.parse(init.body); return new Response(window.__wav ? window.__makeWav(window.__wav[0], window.__wav[1], (window.__amps || {})[body.voice || '']) : new Blob([new Uint8Array(64)], { type: 'audio/mpeg' }), { status: 200 }); }
   return new Response('{}', { status: 404 });
 };
 // A real WAV: some seconds of quiet, then some seconds of a tone, so the
 // panel can read where the voice is.
-window.__makeWav = (quiet, loud) => {
+window.__makeWav = (quiet, loud, amp = 12000) => {
   const rate = 8000, n = Math.round((quiet + loud) * rate);
   const buf = new ArrayBuffer(44 + n * 2), v = new DataView(buf);
   const ascii = (o, t) => { for (let k = 0; k < t.length; k++) v.setUint8(o + k, t.charCodeAt(k)); };
   ascii(0, 'RIFF'); v.setUint32(4, 36 + n * 2, true); ascii(8, 'WAVE'); ascii(12, 'fmt ');
   v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true); v.setUint32(24, rate, true);
   v.setUint32(28, rate * 2, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true); ascii(36, 'data'); v.setUint32(40, n * 2, true);
-  for (let k = 0; k < n; k++) v.setInt16(44 + k * 2, k < quiet * rate ? 0 : Math.round(12000 * Math.sin(k / 3)), true);
+  for (let k = 0; k < n; k++) v.setInt16(44 + k * 2, k < quiet * rate ? 0 : Math.round(amp * Math.sin(k / 3)), true);
   return new Blob([buf], { type: 'audio/wav' });
 };
 class FakeAudio {
@@ -862,6 +864,82 @@ if (section("sync")) {
   await context.close();
 }
 
+if (section("voice levels")) {
+  console.log("A louder voice is turned down to match the others");
+  for (const even of [true, false]) {
+    const { context, page, errors } = await open(THEMES[0], SIZES[1]);
+    // One voice four times as loud as every other, which is 12 dB, so it is
+    // turned down by the most, 6 dB.
+    await page.evaluate(() => {
+      window.__wav = [0.1, 0.5];
+      window.__clipMs = 300;
+      window.__amps = { v1: 12000, v2: 3000, v3: 3000, "": 3000 };
+    });
+    if (!even) {
+      await page.click('.af-tab[data-tab="stage"]');
+      await page.waitForTimeout(200);
+      await page.locator('[data-af-row="evenVoices"] .af-box').first().click();
+      await page.waitForTimeout(100);
+    }
+    // Twice, so every voice's level is known by the second time through.
+    for (let k = 0; k < 2; k++) {
+      await page.click('#mount [data-af-slot="message"]');
+      await page.waitForFunction(() => document.querySelector('#mount [data-af-slot="message"]').getAttribute("aria-busy") === null, null, { timeout: 10000 });
+      await page.waitForTimeout(200);
+    }
+    const seen = await page.evaluate(() => ({
+      voices: Array.from(new Set((window.__synth || []).map((b) => b.voice || ""))),
+      volumes: window.__Audio.all.filter((a) => a.dataset.kind === "voice").map((a) => Math.round(a.volume * 1000) / 1000),
+    }));
+    const down = seen.volumes.filter((v) => v < 0.99);
+    if (even) {
+      check(seen.voices.length > 1 && down.length > 0 && down.every((v) => Math.abs(v - 0.501) < 0.01), "the loud voice plays at half volume, 6 dB down (voices " + seen.voices.join(",") + "; volumes " + seen.volumes.join(",") + ")");
+      check(seen.volumes.some((v) => v === 1), "the quiet voices play at full volume");
+      await page.click('.af-tab[data-tab="stage"]');
+      await page.waitForTimeout(200);
+      check(/turned down by 6 dB/.test(await page.locator(".af-log").first().textContent()), "the Log says which voice was turned down, and by how much");
+    } else {
+      check(seen.volumes.length > 0 && !down.length, "with Even out voice levels off, every voice plays at its own volume (" + seen.volumes.join(",") + ")");
+    }
+    check(!errors.length, "no console errors. " + errors.slice(0, 2).join("; "));
+    await context.close();
+  }
+}
+
+if (section("connection list")) {
+  console.log("The TTS connection list says what Lumiverse sent");
+  const cases = [
+    { name: "no connections", list: [], one: null, want: /Lumiverse found no TTS connection on your account/, usable: false },
+    { name: "only an unusable service", list: [{ id: "k1", name: "Read aloud", provider: "kokoro" }], one: null, want: /Lumiverse sent: Read aloud \(kokoro\)/, usable: false },
+    { name: "the voice settings pick, read by its id", list: [], one: { id: "t1", name: "Fish by itself", provider: "fish_audio", model: "s2.1-pro", has_api_key: true }, want: /Fish by itself/, usable: true },
+    { name: "Gemini through OpenRouter", list: [{ id: "o1", name: "Router voices", provider: "openrouter_tts", model: "google/gemini-3.8-flash-tts", has_api_key: true }], one: null, want: /Router voices/, usable: true },
+  ];
+  for (const size of SIZES) {
+    for (const c of cases) {
+      const { context, page, errors } = await open(THEMES[0], size);
+      // Set before the panel starts, since it reads the list once at the start.
+      await page.evaluate((c) => {
+        window.__teardown();
+        document.getElementById("drawer").innerHTML = "";
+        window.__ttsList = c.list;
+        window.__ttsOne = c.one;
+        window.__teardown = window.__setup(window.__ctx, { fetch: window.__fetch, Audio: window.__Audio });
+      }, c);
+      await page.waitForTimeout(200);
+      await page.click('.af-tab[data-tab="settings"]');
+      await page.waitForTimeout(500);
+      const text = await page.evaluate(() => document.getElementById("drawer").innerText);
+      check(c.want.test(text), size.name + ", " + c.name + ": the Settings tab says so");
+      check(/no TTS connection|None of your TTS connections/.test(text) === !c.usable, size.name + ", " + c.name + ": " + (c.usable ? "no warning, since it can be used" : "the warning shows"));
+      if (c.name === "Gemini through OpenRouter") check(/Engine: Gemini 3\.8/.test(text), size.name + ": OpenRouter's Gemini 3.8 is read as Gemini 3.8");
+      const m = await page.evaluate(MEASURE, true);
+      check(!m.overflow.length, size.name + ", " + c.name + ": nothing runs off the side. " + m.overflow.slice(0, 2).join("; "));
+      check(!errors.length, size.name + ", " + c.name + ": no console errors. " + errors.slice(0, 2).join("; "));
+      await context.close();
+    }
+  }
+}
+
 if (section("kept")) {
   console.log("Kept audio plays again without being made again");
   const { context, page, errors } = await open(THEMES[0], SIZES[0]);
@@ -1500,7 +1578,7 @@ if (section("chat words")) {
 }
 
 if (section("more settings")) {
-  console.log("Each person gets a voice ID box and the settings their engine takes");
+  console.log("Each person gets a voice name or ID box and the settings their engine takes");
   for (const size of SIZES) {
     const { context, page, errors } = await open(THEMES[0], size);
     const where = size.name;
@@ -1516,6 +1594,12 @@ if (section("more settings")) {
       await new Promise((r) => setTimeout(r, 900));
       const cast = window.__settings.cast[0];
       const picked = cast.voices && Object.values(cast.voices).some((v) => v.voice === "my-cloned-voice-77");
+      // A name that is in the list, typed in another case, picks that voice.
+      const box2 = document.querySelector(".af-person [data-af-voiceid] input");
+      box2.value = "grit";
+      box2.dispatchEvent(new Event("change", { bubbles: true }));
+      await new Promise((r) => setTimeout(r, 900));
+      const named = Object.values(window.__settings.cast[0].voices || {}).some((v) => v.voice === "v2" && v.voiceName === "Grit");
       const fold = document.querySelector(".af-person [data-af-more]");
       const head = fold && fold.querySelector(".af-fold");
       if (head) head.click();
@@ -1523,9 +1607,10 @@ if (section("more settings")) {
       const labels = fold ? Array.from(fold.querySelectorAll(".af-lab")).map((x) => x.textContent.trim()) : [];
       const vw = document.documentElement.clientWidth;
       const wide = Array.from(document.querySelectorAll(".af-person *")).filter((e) => e.getBoundingClientRect().right > vw + 0.5).length;
-      return { picked, engine: fold && fold.getAttribute("data-af-more"), labels, wide };
+      return { picked, named, engine: fold && fold.getAttribute("data-af-more"), labels, wide };
     });
-    check(got.picked, where + ": a pasted voice ID is saved as the person's voice");
+    check(got.picked, where + ": a typed voice ID is saved as the person's voice");
+    check(got.named, where + ": a typed voice name that is in the list picks that voice");
     check(got.engine === "eleven_v3" && got.labels.indexOf("Speaker boost") >= 0 && got.labels.indexOf("Voice direction") < 0 && got.labels.indexOf("Exaggeration") < 0, where + ": an ElevenLabs voice shows only ElevenLabs settings (" + got.labels.join(", ") + ")");
     check(got.wide === 0, where + ": nothing runs off the side (" + got.wide + ")");
     check(!errors.length, where + ": no page errors. " + errors.slice(0, 2).join(" | "));

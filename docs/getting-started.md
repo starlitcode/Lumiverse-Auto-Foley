@@ -165,6 +165,17 @@ The Log on the Stage tab says what happened, newest last. Anything that went wro
 - **What the Log shows**, under it, has a switch for each kind of line: playing, what the Director did, voices given and people added, sounds made, settings, and problems. Every kind is shown by default.
 - **Copy** copies every line, shown or not. **Clear the log** empties it.
 
+## Even voice levels
+
+Voices from different providers, or different voices on one provider, can be louder or quieter than each other. **Even out voice levels**, in the **Mixer** on the Stage tab, is on by default.
+
+1. Each voice clip is measured while someone speaks. Silence is not counted.
+2. Each voice keeps the average of its last six clips, for as long as the page is open.
+3. A voice louder than the quietest voice in the message is turned down to match it, by 6 dB at most.
+4. The Log says which voice was turned down, and by how much.
+
+A quiet voice is never turned up, since the browser cannot play a clip louder than it is. Sounds and the cheer are not changed. A clip is measured once it is made, which is usually before it plays. A clip that is not measured yet plays as it is.
+
 ## Reporting a problem
 
 1. Open the **Settings** tab and find **Debug info**.
@@ -176,6 +187,7 @@ About the report:
 
 - People in your cast are named by their role, such as "persona 1", never by name. A Log line that names someone uses the role too.
 - No message text is included.
+- TTS connections are listed by their service and model, never by name.
 - Nothing leaves your device until you paste it.
 
 

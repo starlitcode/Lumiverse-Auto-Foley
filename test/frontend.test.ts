@@ -83,7 +83,7 @@ describe("fitting a line to its engine", () => {
   });
 
   test("Fish keeps free tags and drops the sound it cannot make", () => {
-    expect(textFor(line, ENGINES.fish)).toBe("[quietly] Stay down. [exhales] They are close.");
+    expect(textFor(line, ENGINES.fish)).toBe("[quietly] Stay down. [quietly] [exhales] They are close.");
   });
 
   test("Gemini keeps only its own tags, in angle brackets", () => {
@@ -244,3 +244,66 @@ describe("picking a voice for someone new", () => {
   });
 });
 
+
+describe("Fish delivery tags per sentence", () => {
+  const { perSentence, textFor, ENGINES } = __testing as any;
+  const fish = ENGINES.fish;
+
+  test("the leading delivery tag goes again at each sentence", () => {
+    expect(perSentence("[hushed] The lantern is out. Stay close to the wall.")).toBe("[hushed] The lantern is out. [hushed] Stay close to the wall.");
+  });
+
+  test("a sound or a pause is never repeated", () => {
+    expect(perSentence("[sighs] Fine. We go at dawn.")).toBe("[sighs] Fine. We go at dawn.");
+    expect(perSentence("[weary] [sighs] Fine. We go at dawn.")).toBe("[weary] [sighs] Fine. [weary] We go at dawn.");
+  });
+
+  test("a sentence with its own delivery tag starts a new one", () => {
+    expect(perSentence("[cheerful] Morning, Orrin. [worried] Where is Wren? She was here.")).toBe("[cheerful] Morning, Orrin. [worried] Where is Wren? [worried] She was here.");
+  });
+
+  test("a title with a period is not the end of a sentence", () => {
+    expect(perSentence("[tense] Ask Dr. Pell first. Then wait.")).toBe("[tense] Ask Dr. Pell first. [tense] Then wait.");
+  });
+
+  test("one sentence, or no tag, is left as it is", () => {
+    expect(perSentence("[calm] Sit down.")).toBe("[calm] Sit down.");
+    expect(perSentence("Sit down. Now.")).toBe("Sit down. Now.");
+  });
+
+  test("only Fish Audio repeats tags", () => {
+    expect(textFor({ text: "[hushed] Go. Now." }, fish)).toBe("[hushed] Go. [hushed] Now.");
+    expect(textFor({ text: "[hushed] Go. Now." }, ENGINES.eleven_v3)).toBe("[hushed] Go. Now.");
+  });
+});
+
+describe("Even out voice levels", () => {
+  const { clipLevel, levelGain, voicedFrames } = __testing as any;
+  const tone = (amp: number, secs: number, rate = 8000) => Array.from({ length: Math.round(secs * rate) }, (_, k) => amp * Math.sin((2 * Math.PI * 220 * k) / rate));
+
+  test("the level counts only voiced frames", () => {
+    const rate = 8000;
+    const spoken = tone(0.5, 0.5, rate);
+    const withSilence = [...new Array(rate).fill(0), ...spoken, ...new Array(rate).fill(0)];
+    const a = clipLevel(spoken, rate, voicedFrames(spoken, rate));
+    const b = clipLevel(withSilence, rate, voicedFrames(withSilence, rate));
+    expect(Math.abs(a - b)).toBeLessThan(0.5);
+    // A sine at 0.5 has an RMS of about 0.354, which is -9 dB.
+    expect(Math.round(a)).toBe(-9);
+  });
+
+  test("silence has no level", () => {
+    const quiet = new Array(4000).fill(0);
+    expect(clipLevel(quiet, 8000, voicedFrames(quiet, 8000))).toBe(null);
+  });
+
+  test("a louder voice is turned down, by 6 dB at most", () => {
+    expect(levelGain(-20, -20)).toBe(1);
+    expect(levelGain(-17, -20)).toBe(0.708);
+    expect(levelGain(-5, -20)).toBe(0.501);
+  });
+
+  test("a quieter voice is never turned up", () => {
+    expect(levelGain(-26, -20)).toBe(1);
+  });
+});

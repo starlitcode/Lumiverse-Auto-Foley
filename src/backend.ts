@@ -73,6 +73,8 @@ interface Settings {
   readOwnMessages: boolean;
   narration: NarrationMode;
   saveAudio: boolean;
+  // Turns a louder voice down to match the quietest one in a message.
+  evenVoices: boolean;
   voiceVolume: number;
   soundVolume: number;
   reduceMotion: boolean;
@@ -210,6 +212,7 @@ const DEFAULT_SETTINGS: Settings = {
   readOwnMessages: false,
   narration: 'read',
   saveAudio: false,
+  evenVoices: true,
   voiceVolume: 1,
   soundVolume: 0.8,
   reduceMotion: false,
@@ -562,6 +565,7 @@ function cleanSettings(raw: any): Settings {
     readOwnMessages: bool(r.readOwnMessages, d.readOwnMessages),
     narration: pick(r.narration, ['read', 'sounds', 'skip'] as const, d.narration),
     saveAudio: bool(r.saveAudio, d.saveAudio),
+    evenVoices: bool(r.evenVoices, d.evenVoices),
     voiceVolume: num(r.voiceVolume, 0, 1, d.voiceVolume),
     soundVolume: num(r.soundVolume, 0, 1, d.soundVolume),
     reduceMotion: bool(r.reduceMotion, d.reduceMotion),

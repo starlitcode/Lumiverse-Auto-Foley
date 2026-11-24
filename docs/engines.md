@@ -18,7 +18,7 @@
 | Gemini 2.5 or 3.1 TTS | Only its own eleven tags | No | No | No |
 | Chatterbox-Turbo | Only its nine sound tags | No | No | No |
 
-These are not used, since they cannot act: ElevenLabs models older than v3, Fish Audio S1, Gemini models older than 2.5, Chatterbox-Multilingual, Qwen3-TTS, and every other TTS provider. A line for someone on one of them is not spoken. The Stage tab, the Cast tab and **Check my setup** say which model to pick instead.
+These are not used, since they cannot act: ElevenLabs models older than v3, Fish Audio S1, Gemini models older than 2.5, OpenRouter models that are not Gemini, Chatterbox-Multilingual, Qwen3-TTS, and every other TTS provider. A line for someone on one of them is not spoken. The Stage tab, the Cast tab and **Check my setup** say which model to pick instead.
 
 "No" under **Sounds inside a line** means the engine cannot make the sound of a door or rain itself. Its sounds are played as separate sound effects instead. See [Sounds](sounds.md).
 
@@ -84,7 +84,11 @@ A person can speak through a connection of their own. Open them in the **Cast** 
 ### Fish Audio
 
 - Pick **S2.1 Pro**, **S2 Pro** or **Drama 3** on the connection for voice tags.
-- Fish reads free tags in square brackets, such as `[whispering]`. A tag works best at the start of a sentence, and it lasts until the next tag.
+- Fish reads free tags in square brackets, such as `[whispering]`.
+- Fish Audio's guide says a tag for how the words are said works best at the start of the sentence it is for, with one main feeling for each sentence.
+- So on a line of several sentences, Auto Foley puts that tag again at the start of each sentence that has none of its own. `[hushed] The lantern is out. Stay close.` is sent as `[hushed] The lantern is out. [hushed] Stay close.`
+- A sentence with its own tag starts a new way of speaking for the sentences after it.
+- Sounds and pauses, such as `[sighs]` or `[short pause]`, happen once and are never repeated.
 - S1 does not act, so Auto Foley does not use it. Fish Audio is retiring it.
 
 ### Gemini
@@ -107,6 +111,12 @@ Gemini 2.5 and 3.1:
 - Lumiverse sends these models the text alone, so a line gets no note on how it is said, and singing is spoken.
 - Google calls these tags a preview, so a tag may not always work.
 
+Gemini through OpenRouter:
+
+- An **OpenRouter TTS** connection in Lumiverse can run Gemini's TTS models, such as `google/gemini-3.8-flash-tts`. Auto Foley uses it the same as Gemini.
+- OpenRouter's other voice models do not act, so Auto Foley does not use them.
+- Through OpenRouter, a person's **More settings** has only their usual way of speaking, for Gemini 3.8. OpenRouter takes no temperature or language.
+
 ### Chatterbox
 
 Chatterbox runs on your own computer, through a server such as Chatterbox-TTS-Server.
@@ -126,6 +136,14 @@ Auto Foley says so in the Settings tab, the Director tab, the Cast tab and **Che
 
 - When the model cannot act. Nothing is spoken through it, and the message says which model to pick.
 - When sounds are made **In the voice** and the engine cannot make them. Its sounds become sound effects.
+- When your account has no TTS connection Auto Foley can use. The message says whether Lumiverse found no TTS connection at all, or names the ones it found and their service.
+
+### When your connection does not show
+
+1. Open **Connections** in Lumiverse, then the **TTS** tab. A key added under the **LLM** tab is not a TTS connection.
+2. Check that the connection's provider is ElevenLabs, Fish Audio, Google Gemini, Google Vertex, OpenRouter or OpenAI TTS.
+3. Open Auto Foley's **Settings** tab again. It reads the list each time the tab opens.
+4. If it still does not show, build **Debug info** with **Permissions, browser and screen** ticked. It lists the service and model of every TTS connection Lumiverse sent, and whether Auto Foley can use each one. It never lists their names. See [Reporting a problem](getting-started.md#reporting-a-problem).
 
 ---
 
