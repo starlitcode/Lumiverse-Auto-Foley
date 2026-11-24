@@ -806,6 +806,17 @@ describe("new speakers", () => {
   });
 });
 
+describe("a Personal install", () => {
+  test("is said in plain words, for the Director and the Decision model", () => {
+    const h = host();
+    const e = new Error("Extension is user-scoped and cannot access this user context");
+    expect(h.box.generationTrouble(e)).toContain("installed as Personal");
+    expect(h.box.generationTrouble(e)).toContain("install it as Operator");
+    expect(h.box.decisionTrouble(e)).toContain("installed as Personal");
+    expect(h.box.sentence("the Generation permission is refused")).toBe("The Generation permission is refused.");
+  });
+});
+
 describe("each account keeps its own", () => {
   test("settings, cast, sounds, kept audio, the key and scripts never cross accounts", async () => {
     const good = JSON.stringify({ lines: [{ i: 0, speaker: "Narrator", text: "Brin waved." }], new_speakers: [] });

@@ -1455,8 +1455,23 @@ function checkSounds(lines, segs, hints, line) {
     return dropped;
 }
 // What went wrong with a call to the Director, in plain words.
+// Lumiverse installs an extension as Personal, for the account that installed
+// it, or as Operator, for every account. A Personal one is refused for every
+// other account, with this message. Auto Retry and Auto Refine say the same.
+const PERSONAL_INSTALL = /user-scoped|cannot access this user context|Extension owner is not set/i;
+const PERSONAL_WORDS = 'Auto Foley is installed as Personal, so Lumiverse lets only the account that installed it use it. Ask whoever runs Lumiverse to install it as Operator, under Extensions, so every account can use it';
+// A phrase that follows "could not be asked:", turned into a sentence of its
+// own for a place that shows it alone.
+function sentence(t) {
+    const s = String(t || '').trim();
+    if (!s)
+        return '';
+    return s.charAt(0).toUpperCase() + s.slice(1) + (/[.!?]$/.test(s) ? '' : '.');
+}
 function generationTrouble(e) {
     const raw = String((e && e.message) || e || '').slice(0, 300);
+    if (PERSONAL_INSTALL.test(raw))
+        return PERSONAL_WORDS;
     if (/PERMISSION_DENIED/i.test(raw) || (/permission/i.test(raw) && /generation/i.test(raw)))
         return 'the Generation permission is refused. Grant it to Auto Foley in Lumiverse, under Extensions';
     if (/not found/i.test(raw) && /connection/i.test(raw))
@@ -1962,6 +1977,8 @@ function who(model) {
 // be read.
 function decisionTrouble(e) {
     const raw = String((e && e.message) || e || '').slice(0, 300);
+    if (PERSONAL_INSTALL.test(raw))
+        return PERSONAL_WORDS;
     if (/permission/i.test(raw) && /decision/i.test(raw))
         return 'the Decision models permission is refused. Grant it to Auto Foley in Lumiverse, under Extensions';
     if (/No default Decision connection/i.test(raw))
@@ -3417,7 +3434,7 @@ async function listConnections(userId) {
         return { list };
     }
     catch (e) {
-        return { list: [], why: generationTrouble(e) };
+        return { list: [], why: sentence(generationTrouble(e)) };
     }
 }
 async function listDecisionConnections(userId) {
@@ -3436,7 +3453,7 @@ async function listDecisionConnections(userId) {
         return { list, state: list.length ? 'ok' : 'none' };
     }
     catch (e) {
-        return { list: [], state: 'error', why: decisionTrouble(e) };
+        return { list: [], state: 'error', why: sentence(decisionTrouble(e)) };
     }
 }
 async function onPanel(p, userId) {
