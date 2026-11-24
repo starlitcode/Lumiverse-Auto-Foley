@@ -62,11 +62,15 @@ Why the limits are there:
 
 Groups sort the cast on the Cast tab, such as one group for each story. They change nothing about how anyone sounds.
 
-1. Press **New group**, type its name, and press **Save**.
-2. Open a person and pick the group under **Group**.
-3. Tap a group's name to open or close it.
+1. Press **New group**. The group editor opens.
+2. Type the group's name.
+3. Switch on each person who goes in it. A person is in one group at a time, so switching on someone from another group moves them.
+4. Press **Save**. **Cancel** closes the editor and changes nothing.
+5. Tap a group's name to open or close it.
 
-- **Rename** changes its name.
+- **Edit** opens the same editor, to change the name or who is in it.
+- You can also open a person and pick their group under **Group**.
+- Nothing in the editor is selected when it opens, so a phone keeps its keyboard down until you tap the name box.
 - **Delete** asks first. The people in it stay in the cast, outside any group.
 - Groups follow your account, and go with the cast in an export and in **Start again**.
 

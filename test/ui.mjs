@@ -1063,19 +1063,25 @@ if (section("groups")) {
     await page.click('.af-tab[data-tab="cast"]');
     await page.waitForTimeout(250);
     await page.locator('.af-btn', { hasText: "New group" }).click();
-    await page.waitForTimeout(200);
-    const input = page.locator('.af-group input[aria-label="Group name"]');
-    check((await input.count()) === 1, where + ": a new group opens with its name ready to type");
-    await input.fill("Harbor town");
-    await input.press("Enter");
-    await page.waitForTimeout(250);
-    check((await page.locator(".af-group-toggle", { hasText: "Harbor town" }).count()) === 1, where + ": the group takes its name");
-    // Move the first person who is not in a group into it.
-    await page.locator(".af-page > .af-person .af-person-head").first().click();
-    await page.waitForTimeout(350);
-    const sel = page.locator('.af-page > .af-person .af-col:has(label:text-is("Group")) select').first();
-    await sel.selectOption({ label: "Harbor town" });
     await page.waitForTimeout(300);
+    const ed = page.locator("[data-af-group-edit]");
+    check((await ed.count()) === 1, where + ": New group opens the group editor");
+    // Nothing is focused, so a phone does not raise its keyboard on its own.
+    check(await page.evaluate(() => !document.activeElement || !/^(INPUT|TEXTAREA)$/.test(document.activeElement.tagName)), where + ": no box is focused when the editor opens");
+    const people = await ed.locator('input[role="switch"]').count();
+    check(people >= 4, where + ": the editor has a switch for each person in the cast (" + people + ")");
+    // Save with no name says what is missing, and saves nothing.
+    await ed.locator(".af-btn", { hasText: "Save" }).click();
+    await page.waitForTimeout(200);
+    check((await ed.locator("[data-af-already]").textContent()) === "Type a name for the group first." && (await page.locator(".af-group").count()) === 0, where + ": Save with no name asks for one");
+    const m0 = await page.evaluate(MEASURE, size.touch);
+    check(!m0.overflow.length && !m0.small.length, where + ": the editor fits and its switches are big enough. " + m0.overflow.concat(m0.small).slice(0, 3).join("; "));
+    await ed.locator('input[type="text"]').fill("Harbor town");
+    // The second person goes in, by its switch.
+    await ed.locator('input[role="switch"]').nth(1).click();
+    await ed.locator(".af-btn", { hasText: "Save" }).click();
+    await page.waitForTimeout(300);
+    check((await page.locator(".af-group-toggle", { hasText: "Harbor town" }).count()) === 1, where + ": the group takes its name");
     check((await page.locator(".af-group .af-person").count()) === 1, where + ": a person moves into the group");
     check((await page.locator(".af-group-count").textContent()).includes("1 person"), where + ": the group says how many are in it");
     await page.locator(".af-group-toggle").click();
@@ -1083,6 +1089,17 @@ if (section("groups")) {
     check(await page.evaluate(() => document.querySelector(".af-group-body").hidden), where + ": a tap closes the group");
     const m = await page.evaluate(MEASURE, size.touch);
     check(!m.overflow.length && !m.small.length, where + ": the group row fits and its buttons are big enough. " + m.overflow.concat(m.small).slice(0, 3).join("; "));
+    // Edit opens the same editor, with the group as it is. Cancel changes
+    // nothing.
+    await page.locator(".af-group-head .af-btn", { hasText: "Edit" }).click();
+    await page.waitForTimeout(300);
+    const ed2 = page.locator("[data-af-group-edit]");
+    check((await ed2.locator('input[type="text"]').inputValue()) === "Harbor town" && (await ed2.locator('input[role="switch"]:checked').count()) === 1, where + ": Edit shows the group's name and who is in it");
+    check(await page.evaluate(() => !document.activeElement || !/^(INPUT|TEXTAREA)$/.test(document.activeElement.tagName)), where + ": no box is focused when Edit opens");
+    await ed2.locator('input[role="switch"]').nth(2).click();
+    await ed2.locator(".af-btn", { hasText: "Cancel" }).click();
+    await page.waitForTimeout(300);
+    check((await page.locator(".af-group-count").textContent()).includes("1 person"), where + ": Cancel changes nothing");
     await page.locator(".af-group-head .af-btn", { hasText: "Delete" }).click();
     await page.waitForTimeout(300);
     check((await page.locator(".af-group").count()) === 0 && (await page.locator(".af-page > .af-person").count()) >= 4, where + ": deleting the group keeps its people in the cast");

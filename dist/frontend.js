@@ -903,6 +903,7 @@ textarea.af-tall { min-height: 260px; }
 .af-good { background: color-mix(in srgb, var(--af-good) 12%, transparent); }
 .af-sign { flex: none; font-weight: 700; line-height: 1.45; }
 .af-crop { display: flex; flex-direction: column; gap: 8px; animation: af-in .2s ease-out both; }
+.af-group-edit { animation: af-in .2s ease-out both; }
 .af-crop-frame { position: relative; width: min(240px, 100%); aspect-ratio: 1; margin: 0 auto; overflow: hidden; border-radius: var(--af-r-md); background: #000; touch-action: none; cursor: grab; }
 .af-crop-frame:active { cursor: grabbing; }
 .af-crop-frame img { position: absolute; left: 0; top: 0; max-width: none; transform-origin: 0 0; pointer-events: none; user-select: none; -webkit-user-drag: none; }
@@ -980,7 +981,6 @@ button.af-chip-sound svg { width: 12px; height: 12px; flex: none; color: var(--a
 .af-group-toggle .af-chev svg { width: 14px; height: 14px; }
 .af-group[data-open="true"] .af-group-toggle .af-chev { transform: rotate(90deg); }
 .af-group-count { flex: none; color: var(--af-muted); font-weight: 400; font-size: 12px; }
-.af-group-name { flex: 1 1 auto; min-width: 0; }
 .af-group-body > div { display: flex; flex-direction: column; gap: 12px; padding: 2px 0 2px 12px; margin-left: 10px; border-left: 2px solid var(--af-line); }
 .af-group-empty { margin: 0; color: var(--af-muted); font-size: 12.5px; }
 .af-person-head { display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; align-items: center; gap: 8px; width: 100%; min-height: 48px; padding: 8px 10px; border: 0; border-radius: var(--af-r-md); background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
@@ -5659,7 +5659,78 @@ export function setup(ctx, overrides) {
     const KIND_LABEL = { narrator: 'Narrator', character: 'Character', persona: 'Persona', npc: 'NPC' };
     const ADDED_LABEL = { ai: 'Added by AI', found: 'Found in the text' };
     const groups = () => (Array.isArray(S.groups) ? S.groups : []);
-    let renamingGroup = '';
+    // The group being made or changed, while its editor is open: its id, or
+    // 'new', with the name and the people as they stand in the editor. Nothing
+    // is saved until Save.
+    let groupDraft = null;
+    // The editor for a group: its name, and a switch for each person in the
+    // cast. Nothing in it is focused when it opens, so a phone does not raise
+    // its keyboard until a box is tapped.
+    function groupEditor() {
+        const d = groupDraft;
+        const isNew = d.id === 'new';
+        const c = el('<section class="af-card af-group-edit" data-af-group-edit="' + esc(d.id) + '"></section>');
+        c.appendChild(el('<h3 class="af-cardh"><span></span></h3>'));
+        c.querySelector('.af-cardh span').textContent = isNew ? 'New group' : 'Edit the group';
+        const name = text('Group name', d.name, (v) => (d.name = v), 'Such as the name of a story');
+        const box = name.querySelector('input');
+        box.maxLength = 60;
+        box.setAttribute('enterkeyhint', 'done');
+        c.appendChild(name);
+        c.appendChild(hint('Who is in it. A person can be in one group at a time.'));
+        const list = el('<div class="af-col af-group-who"></div>');
+        for (const m of S.cast) {
+            const sw = el('<input type="checkbox" class="af-box" role="switch">');
+            sw.checked = d.members.has(m.id);
+            sw.setAttribute('aria-label', m.name);
+            sw.addEventListener('change', () => {
+                if (sw.checked)
+                    d.members.add(m.id);
+                else
+                    d.members.delete(m.id);
+            });
+            const other = m.group && m.group !== d.id ? groups().find((g) => g.id === m.group) : null;
+            list.appendChild(labelRow(m.name, other ? 'Now in ' + other.name + '. On moves them here.' : '', undefined, sw));
+        }
+        if (!S.cast.length)
+            list.appendChild(hint('Nobody is in the cast yet.'));
+        c.appendChild(list);
+        const row = el('<div class="af-row"></div>');
+        row.appendChild(button('Save', () => {
+            const nm = d.name.trim().slice(0, 60);
+            if (!nm)
+                return alreadyLine(name, 'Type a name for the group first.');
+            let id = d.id;
+            if (isNew) {
+                id = rid('f');
+                S.groups = groups().concat([{ id, name: nm, open: true }]);
+            }
+            else {
+                S.groups = groups().map((g) => (g.id === id ? Object.assign({}, g, { name: nm }) : g));
+            }
+            for (const m of S.cast) {
+                if (d.members.has(m.id))
+                    m.group = id;
+                else if (m.group === id)
+                    m.group = '';
+            }
+            groupDraft = null;
+            save();
+            renderTab();
+        }, 'af-primary'));
+        row.appendChild(button('Cancel', () => {
+            groupDraft = null;
+            renderTab();
+        }));
+        c.appendChild(row);
+        return c;
+    }
+    function editGroup(f) {
+        groupDraft = f
+            ? { id: f.id, name: f.name, members: new Set(S.cast.filter((m) => m.group === f.id).map((m) => m.id)) }
+            : { id: 'new', name: '', members: new Set() };
+        renderTab();
+    }
     function renderCast() {
         const top = card('Cast', 'Everyone who speaks gets their own voice: your personas, the characters and the NPCs. People join when they write a message, when the text names them speaking, when the Director finds them, or when you add them. Tap a person to open their settings.');
         const row = el('<div class="af-row"></div>');
@@ -5673,24 +5744,20 @@ export function setup(ctx, overrides) {
             save();
             renderTab();
         }, 'af-primary'));
-        row.appendChild(button('New group', () => {
-            const f = { id: rid('f'), name: 'New group', open: true };
-            S.groups = groups().concat([f]);
-            renamingGroup = f.id;
-            save();
-            renderTab();
-        }));
+        row.appendChild(button('New group', () => editGroup(null)));
         top.appendChild(row);
-        top.appendChild(hint('Groups sort the cast on this tab, such as one for each story. Pick a person’s group in their settings.'));
+        top.appendChild(hint('Groups sort the cast on this tab, such as one for each story. New group and Edit pick who is in each.'));
         const conn = activeConnection();
         if (!conn)
             top.appendChild(notice('warn', ttsWhy || 'Pick your TTS connection in the Settings tab to choose voices.'));
         page.appendChild(top);
+        if (groupDraft && groupDraft.id === 'new')
+            page.appendChild(groupEditor());
         const order = { narrator: 0, persona: 1, character: 2, npc: 3 };
         const people = S.cast.slice().sort((a, b) => (order[a.kind] ?? 9) - (order[b.kind] ?? 9));
         const known = new Set(groups().map((f) => f.id));
         for (const f of groups())
-            page.appendChild(groupSection(f, people.filter((m) => m.group === f.id)));
+            page.appendChild(groupDraft && groupDraft.id === f.id ? groupEditor() : groupSection(f, people.filter((m) => m.group === f.id)));
         for (const m of people)
             if (!m.group || !known.has(m.group))
                 page.appendChild(personCard(m));
@@ -5701,38 +5768,7 @@ export function setup(ctx, overrides) {
         const body = sec.querySelector('.af-group-body');
         const inner = body.firstElementChild;
         const count = people.length === 1 ? '1 person' : people.length + ' people';
-        if (renamingGroup === f.id) {
-            const input = el('<input type="text" class="af-field af-group-name" maxlength="60" aria-label="Group name">');
-            input.value = f.name;
-            const done = () => {
-                if (renamingGroup !== f.id)
-                    return;
-                renamingGroup = '';
-                f.name = input.value.trim().slice(0, 60) || f.name;
-                S.groups = groups().slice();
-                save();
-                renderTab();
-            };
-            input.addEventListener('keydown', (e) => {
-                if (e.key === 'Enter')
-                    done();
-                if (e.key === 'Escape') {
-                    renamingGroup = '';
-                    renderTab();
-                }
-            });
-            input.addEventListener('blur', done);
-            head.appendChild(input);
-            head.appendChild(button('Save', done, 'af-primary'));
-            setTimeout(() => {
-                try {
-                    input.focus();
-                    input.select();
-                }
-                catch (_) { }
-            }, 0);
-        }
-        else {
+        {
             const toggle = el('<button type="button" class="af-group-toggle" aria-expanded="' + (f.open ? 'true' : 'false') + '"><span class="af-chev">' + ICON_CHEVRON + '</span><span></span><span class="af-group-count"></span></button>');
             toggle.children[1].textContent = f.name;
             toggle.children[2].textContent = count;
@@ -5747,10 +5783,7 @@ export function setup(ctx, overrides) {
                 reveal(body, f.open);
             });
             head.appendChild(toggle);
-            head.appendChild(button('Rename', () => {
-                renamingGroup = f.id;
-                renderTab();
-            }));
+            head.appendChild(button('Edit', () => editGroup(f)));
             head.appendChild(button('Delete', async () => {
                 const ok = await askSure('Delete the group ' + f.name, 'The group is deleted. ' + (people.length ? 'The ' + count + ' in it stay in the cast, outside any group.' : 'It is empty.'), 'Delete', true);
                 if (!ok)
@@ -5766,7 +5799,7 @@ export function setup(ctx, overrides) {
         const fillGroup = () => {
             inner.innerHTML = '';
             if (!people.length)
-                inner.appendChild(el('<p class="af-group-empty">Nobody is in this group yet. Open a person and pick it under Group.</p>'));
+                inner.appendChild(el('<p class="af-group-empty">Nobody is in this group yet. Press Edit to pick who is in it.</p>'));
             for (const m of people)
                 inner.appendChild(personCard(m));
         };
@@ -7975,9 +8008,17 @@ export function setup(ctx, overrides) {
                 ok = true;
             }
             catch (_) {
+                // A hidden copy, read-only, so copying does not focus the box on
+                // screen and raise a phone's keyboard.
                 try {
-                    area.select();
+                    const ta = document.createElement('textarea');
+                    ta.value = area.value;
+                    ta.readOnly = true;
+                    ta.style.cssText = 'position:fixed;top:-1000px;left:-1000px;opacity:0';
+                    document.body.appendChild(ta);
+                    ta.select();
                     ok = document.execCommand('copy');
+                    ta.remove();
                 }
                 catch (_) { }
             }
