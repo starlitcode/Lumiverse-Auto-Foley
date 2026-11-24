@@ -605,7 +605,7 @@ const ICON_CHEVRON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
 
 // Colors are the host's theme variables. The extension's own names start with
 // --af- and only ever point at a host variable, so a theme recolors all of it.
-const CSS = `
+const PANEL_CSS = `
 .af {
   /* Auto Foley's own names point only at the host's theme variables, so the
      reader's theme recolors all of it. The status colors are pale on a light
@@ -1118,6 +1118,7 @@ const DEFAULTS: any = {
   applauseSeconds: 5,
   applauseVolume: 0.6,
   extrasMenu: false,
+  chatHighlight: true,
   panelPattern: '',
   boxSolid: 60,
   widgetOn: false,
@@ -1922,6 +1923,7 @@ export function setup(ctx: Ctx, overrides?: any) {
   function stop(why?: string) {
     const had = show;
     show = null;
+    clearChatWords();
     if (had) {
       try {
         had.abort.abort();
@@ -2744,7 +2746,7 @@ export function setup(ctx: Ctx, overrides?: any) {
   // ---------------------------------------------------------------------------
 
   try {
-    disposers.push(ctx.dom.addStyle(CSS));
+    disposers.push(ctx.dom.addStyle(PANEL_CSS));
   } catch (_) {}
 
   const root = document.createElement('div');
@@ -3555,8 +3557,14 @@ export function setup(ctx: Ctx, overrides?: any) {
     '.af-theater-who .af-avatar{width:28px;height:28px;font-size:11px}' +
     '.af-theater-line{font-size:17px;line-height:1.6;overflow-wrap:anywhere}' +
     '.af-theater-idle{font-size:13px;color:var(--lumiverse-text-muted,rgba(255,255,255,.65))}' +
-    '.af-w{color:var(--lumiverse-text-muted,rgba(255,255,255,.65));transition:color .25s ease}' +
-    '.af-w.af-said{color:var(--lumiverse-text,rgba(255,255,255,.92))}' +
+    '.af-w{color:var(--lumiverse-text-muted,rgba(255,255,255,.65));transition:color .12s linear}' +
+    '.af-w.af-said,.af-w.af-now{color:var(--lumiverse-text,rgba(255,255,255,.92))}' +
+    // The word being said fills from left to right as it is spoken. With
+    // reduce motion on, it is lit whole.
+    '@media (prefers-reduced-motion: no-preference){html:not([data-af-still]) .af-w.af-now{color:transparent;-webkit-text-fill-color:transparent;-webkit-background-clip:text;background-clip:text;' +
+    'background-image:linear-gradient(90deg,var(--lumiverse-text,rgba(255,255,255,.92)) var(--af-p,0%),var(--lumiverse-text-muted,rgba(255,255,255,.65)) var(--af-p,0%));transition:none}}' +
+    // The word being said, in the chat.
+    '::highlight(auto-foley-word){background-color:var(--lumiverse-primary-020,rgba(147,112,219,.3));color:inherit}' +
     '.af-theater-cue:empty{display:none}' +
     '.af-cue{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:999px;font-size:12.5px;color:var(--lumiverse-text,rgba(255,255,255,.9));' +
     'background:var(--lumiverse-warning-015,rgba(245,158,11,.15));box-shadow:inset 0 0 0 1px var(--lumiverse-warning,#f59e0b);animation:af-in .3s ease-out both}' +
@@ -4461,6 +4469,11 @@ export function setup(ctx: Ctx, overrides?: any) {
       c.appendChild(under);
     }
     c.appendChild(
+      toggle('Light up words in the chat', 'On by default. The word being spoken is lit in the message itself, as it is said. It changes nothing in the message. Some older browsers cannot light words.', 'chatHighlight', () => {
+        if (!S.chatHighlight) clearChatWords();
+      }),
+    );
+    c.appendChild(
       toggle('A floating player', 'Off by default. A round button over the chat that opens a small player: Play, the lines, the volume and quick switches. Drag it to move it. It needs the UI panels permission.', 'widgetOn', () => syncWidget(), () => [
         slider('How big it is', Number(S.widgetSize) || 44, 28, 96, 2, (v) => v + ' px', (v) => {
           set({ widgetSize: v });
@@ -4825,6 +4838,38 @@ export function setup(ctx: Ctx, overrides?: any) {
   // clip's own: how far through the audio it is, spread over the words by
   // their length. A sound between lines shows as a cue instead.
   let theaterRaf = 0;
+  // A line cut into its parts: each word, and each tag. Each part has a
+  // weight: a word by its vowels, and a tag the engine performs by the time a
+  // breath or a sound takes. A tag the engine was not sent takes no time. The
+  // Stage, the timing and the words lit in the chat all use these parts.
+  type Part = { kind: 'word' | 'tag' | 'sound'; text: string };
+  function lineParts(line: Line): { parts: Part[]; weights: number[] } {
+    const m = line.kind === 'narration' ? narratorMember() : memberFor(line.speaker);
+    const cn = connOf(m);
+    const eng = engineFor(cn, pickOf(m, cn).model || (cn && cn.model));
+    const parts: Part[] = [];
+    const weights: number[] = [];
+    for (const p of String(line.text || '').split(/(\[[^\]]*\])/g)) {
+      if (!p) continue;
+      if (/^\[[^\]]*\]$/.test(p)) {
+        const inner = p.slice(1, -1);
+        const isSound = /^sounds? of\b/i.test(inner);
+        const kept = eng.tags === 'free' ? (isSound ? eng.inVoiceSounds : true) : eng.tags === 'list' && !isSound && !!fitTag(inner, eng.list);
+        // A tag on how a line is said is heard in the words, not as a sound.
+        const heard = kept && (isSound || (!!tagSound(inner) && !TAG_MANNER.has(tagSound(inner))));
+        parts.push({ kind: isSound ? 'sound' : 'tag', text: inner });
+        weights.push(heard ? (isSound ? 4 : 2) : 0);
+      } else {
+        for (const w of p.split(/\s+/)) {
+          if (!w) continue;
+          parts.push({ kind: 'word', text: w });
+          weights.push(wordWeight(w));
+        }
+      }
+    }
+    return { parts, weights };
+  }
+
   function paintTheater() {
     if (!stageRefs) return;
     const q = stageRefs.q;
@@ -4853,36 +4898,10 @@ export function setup(ctx: Ctx, overrides?: any) {
     const name = line.kind === 'narration' ? 'Narrator' : line.speaker;
     const m = line.kind === 'narration' ? narratorMember() : memberFor(line.speaker);
     who.innerHTML = '<span class="af-avatar af-avatar-' + esc((m && m.kind) || 'character') + '">' + faceHtml(m, name) + '</span><span>' + esc(name) + '</span>';
-    // Each part has a weight: a word by its vowels, and a tag the engine
-    // performs by the time a breath or a sound takes. A tag the engine was
-    // not sent takes no time.
-    const cn = connOf(m);
-    const eng = engineFor(cn, pickOf(m, cn).model || (cn && cn.model));
-    const parts = String(line.text || '').split(/(\[[^\]]*\])/g);
-    let html = '';
-    const weights: number[] = [];
-    for (const p of parts) {
-      if (!p) continue;
-      if (/^\[[^\]]*\]$/.test(p)) {
-        const inner = p.slice(1, -1);
-        const isSound = /^sounds? of\b/i.test(inner);
-        const kept = eng.tags === 'free' ? (isSound ? eng.inVoiceSounds : true) : eng.tags === 'list' && !isSound && !!fitTag(inner, eng.list);
-        // A tag on how a line is said is heard in the words, not as a sound.
-        const heard = kept && (isSound || (!!tagSound(inner) && !TAG_MANNER.has(tagSound(inner))));
-        html += '<span class="af-chip ' + (isSound ? 'af-chip-insound' : 'af-chip-tag') + '" data-af-part="' + weights.length + '">' + esc(inner) + '</span> ';
-        weights.push(heard ? (isSound ? 4 : 2) : 0);
-      } else {
-        for (const w of p.split(/(\s+)/)) {
-          if (!w) continue;
-          if (/^\s+$/.test(w)) html += ' ';
-          else {
-            html += '<span class="af-w" data-af-part="' + weights.length + '">' + esc(w) + '</span>';
-            weights.push(wordWeight(w));
-          }
-        }
-      }
-    }
-    lineBox.innerHTML = html;
+    const { parts, weights } = lineParts(line);
+    lineBox.innerHTML = parts
+      .map((p, k) => (p.kind === 'word' ? '<span class="af-w" data-af-part="' + k + '">' + esc(p.text) + '</span>' : '<span class="af-chip ' + (p.kind === 'sound' ? 'af-chip-insound' : 'af-chip-tag') + '" data-af-part="' + k + '">' + esc(p.text) + '</span>'))
+      .join(' ');
     // The box keeps the tallest line of this message, so a short line after a
     // long one does not pull the rest of the tab up.
     const th = q('theater') as HTMLElement;
@@ -4891,45 +4910,189 @@ export function setup(ctx: Ctx, overrides?: any) {
       stageRefs.theaterTall = h;
       th.style.minHeight = h + 'px';
     }
-    stageRefs.weights = weights;
-    stageRefs.timed = '';
+    void weights;
   }
 
-  // Moves the spoken words along with the audio. Runs only while a voice
-  // clip plays, and writes only the words that changed.
+  // Where the voice is in the line playing: the part being spoken, how far
+  // through it it is, and the line's parts. Null while no voice plays. The
+  // start of each part is worked out once the clip's sound has been read, and
+  // again if it is read after the line began.
+  let syncCache: { mark: string; parts: Part[]; starts: number[] } | null = null;
+  function voiceNow(): { k: number; frac: number; parts: Part[]; item: number } | null {
+    const el2 = audio;
+    if (!show || !el2 || !el2.dataset || el2.dataset.kind !== 'voice') return null;
+    const it = show.items[show.index];
+    if (!it || it.kind !== 'voice') return null;
+    const dur = Number(el2.duration);
+    if (!(dur > 0) || !Number.isFinite(dur)) return null;
+    const voiced = show.voiced.get(show.index);
+    const mark = show.startedAt + ':' + show.index + ':' + (voiced ? 'v' : 'n') + ':' + Math.round(dur * 100);
+    if (!syncCache || syncCache.mark !== mark) {
+      const lp = lineParts(it.line);
+      syncCache = { mark, parts: lp.parts, starts: partTimes(lp.weights, voiced || [], dur) };
+    }
+    // A word is lit as it starts, a moment early, since the eye is slower
+    // than the ear.
+    const now = Number(el2.currentTime) + 0.08;
+    const st = syncCache.starts;
+    let k = -1;
+    for (let j = 0; j < st.length; j++) if (st[j] != null && st[j] <= now) k = j;
+    const next = k + 1 < st.length ? st[k + 1] : dur;
+    const frac = k < 0 ? 0 : Math.max(0, Math.min(1, (now - st[k]) / Math.max(0.05, next - st[k])));
+    return { k, frac, parts: syncCache.parts, item: show.index };
+  }
+
+  // Moves the spoken words along with the audio, on every frame while a
+  // message plays. Words already said are lit. The word being said fills from
+  // left to right as it is spoken. Only words that changed are written.
   function theaterTick() {
     theaterRaf = 0;
-    if (!alive || !stageRefs || tab !== 'stage') return;
-    paintTheater();
-    const el2 = audio;
-    const box = stageRefs.q('line') as HTMLElement;
-    if (el2 && el2.dataset && el2.dataset.kind === 'voice' && box && show) {
-      const words = box.querySelectorAll('.af-w');
-      const dur = Number(el2.duration);
-      const t = Number(el2.currentTime);
-      const weights: number[] = stageRefs.weights || [];
-      if (words.length && dur > 0 && Number.isFinite(dur) && weights.length) {
-        // The start of each part, worked out once the clip's sound has been
-        // read, and again if it is read after the line was drawn.
-        const voiced = show.voiced.get(show.index);
-        const mark = show.index + ':' + (voiced ? 'v' : 'n') + ':' + Math.round(dur * 100);
-        if (stageRefs.timed !== mark) {
-          stageRefs.timed = mark;
-          stageRefs.starts = partTimes(weights, voiced || [], dur);
-        }
-        const starts: number[] = stageRefs.starts || [];
-        // A word is lit as it starts, a moment early, since the eye is slower
-        // than the ear.
-        const now = t + 0.08;
-        words.forEach((w: Element) => {
-          const at = starts[Number((w as HTMLElement).dataset.afPart)];
-          const said = at != null && at <= now;
+    if (!alive) return;
+    const v = voiceNow();
+    if (stageRefs && tab === 'stage') {
+      paintTheater();
+      const box = stageRefs.q('line') as HTMLElement;
+      if (box)
+        box.querySelectorAll('.af-w').forEach((w: Element) => {
+          const n = Number((w as HTMLElement).dataset.afPart);
+          // A word whose fill has reached its end counts as said, so the last
+          // word of a line is lit whole when the voice stops.
+          const said = !!v && (n < v.k || (n === v.k && v.frac >= 1));
+          const cur = !!v && n === v.k && v.frac < 1;
           if (w.classList.contains('af-said') !== said) w.classList.toggle('af-said', said);
+          if (w.classList.contains('af-now') !== cur) w.classList.toggle('af-now', cur);
+          if (cur) (w as HTMLElement).style.setProperty('--af-p', (v!.frac * 100).toFixed(1) + '%');
+          else if ((w as HTMLElement).style.length) (w as HTMLElement).style.removeProperty('--af-p');
         });
-      }
     }
+    paintChatWords(v);
     if (show) theaterRaf = requestAnimationFrame(theaterTick);
   }
+
+  // ---- Words lit in the chat ----
+  // The word being spoken is lit in the message itself, in the chat. It uses
+  // the browser's highlight feature, which paints over text and changes
+  // nothing on the page, so Lumiverse's own message is never altered. A browser
+  // without the feature lights nothing.
+  const HIGHLIGHT_NAME = 'auto-foley-word';
+  const highlights: any = (globalThis as any).CSS && (globalThis as any).CSS.highlights ? (globalThis as any).CSS.highlights : null;
+  const HighlightCtor: any = typeof Highlight !== 'undefined' ? Highlight : null;
+  let chatWords: { key: string; ranges: (Range | null)[]; lit: number } | null = null;
+  // Where the last line found ended, in the message's text, so each line is
+  // looked for after the one before it.
+  let chatAt = { show: 0, item: -1, at: 0 };
+  function clearChatWords() {
+    chatWords = null;
+    try {
+      if (highlights) highlights.delete(HIGHLIGHT_NAME);
+    } catch (_) {}
+  }
+  disposers.push(clearChatWords);
+  // The visible text of a message, as one string, and the text node each part
+  // of it comes from. Buttons, edit boxes, folded blocks such as thinking, and
+  // other extensions' parts are left out.
+  const NOT_READ = 'button, textarea, input, select, script, style, details, summary, [contenteditable="true"], [data-af-slot], .af-slot-row';
+  function messageText(msg: Element): { text: string; at: { node: Text; start: number }[] } {
+    const at: { node: Text; start: number }[] = [];
+    let text = '';
+    const walk = document.createTreeWalker(msg, NodeFilter.SHOW_TEXT, {
+      acceptNode: (n: Node) => {
+        const p = (n as Text).parentElement;
+        if (!p || p.closest(NOT_READ) || p.closest(OTHER_UI)) return NodeFilter.FILTER_REJECT;
+        return NodeFilter.FILTER_ACCEPT;
+      },
+    });
+    for (let n = walk.nextNode(); n; n = walk.nextNode()) {
+      at.push({ node: n as Text, start: text.length });
+      text += (n as Text).data;
+    }
+    return { text, at };
+  }
+  function rangeAt(at: { node: Text; start: number }[], from: number, to: number): Range | null {
+    const find = (i: number) => {
+      let pick = at[0];
+      for (const one of at) {
+        if (one.start <= i) pick = one;
+        else break;
+      }
+      return pick;
+    };
+    try {
+      const a = find(from);
+      const b = find(to - 1);
+      const r = document.createRange();
+      r.setStart(a.node, from - a.start);
+      r.setEnd(b.node, to - b.start);
+      return r;
+    } catch (_) {
+      return null;
+    }
+  }
+  const wordCore = (w: string) => w.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, '').toLowerCase();
+  function paintChatWords(v: { k: number; parts: Part[]; item: number } | null) {
+    if (!highlights || !HighlightCtor || !S.chatHighlight || !v || !show) {
+      if (chatWords) clearChatWords();
+      return;
+    }
+    const key = show.startedAt + ':' + v.item;
+    if (!chatWords || chatWords.key !== key) {
+      const ranges: (Range | null)[] = [];
+      let msg: Element | null = null;
+      try {
+        msg = document.querySelector('[data-message-id="' + String(show.messageId).replace(/["\\]/g, '') + '"]');
+      } catch (_) {}
+      if (msg && msg.closest(OTHER_UI)) msg = null;
+      if (chatAt.show !== show.startedAt || v.item < chatAt.item) chatAt = { show: show.startedAt, item: v.item, at: 0 };
+      chatAt.item = v.item;
+      const flat = msg ? messageText(msg) : null;
+      const low = flat ? flat.text.toLowerCase() : '';
+      let cursor = chatAt.at;
+      let first = true;
+      for (const p of v.parts) {
+        const core = p.kind === 'word' ? wordCore(p.text) : '';
+        if (!flat || !core) {
+          ranges.push(null);
+          continue;
+        }
+        const i = low.indexOf(core, cursor);
+        // The first word of a line may come after narration that is not read.
+        // The words after it follow closely.
+        if (i < 0 || i - cursor > (first ? 4000 : 80)) {
+          ranges.push(null);
+          continue;
+        }
+        first = false;
+        ranges.push(rangeAt(flat.at, i, i + core.length));
+        cursor = i + core.length;
+      }
+      chatAt.at = cursor;
+      chatWords = { key, ranges, lit: -2 };
+    }
+    if (chatWords.lit === v.k) return;
+    chatWords.lit = v.k;
+    const r = v.k >= 0 ? chatWords.ranges[v.k] : null;
+    try {
+      if (r) highlights.set(HIGHLIGHT_NAME, new HighlightCtor(r));
+      else highlights.delete(HIGHLIGHT_NAME);
+    } catch (_) {}
+  }
+
+  // A tab left in the background draws no frames, and the browser slows its
+  // timers. Coming back, the words are worked out again from where the audio
+  // really is, at once.
+  try {
+    const onShown = () => {
+      if (document.visibilityState !== 'visible') return;
+      syncCache = null;
+      if (chatWords) chatWords.lit = -2;
+      if (theaterRaf) cancelAnimationFrame(theaterRaf);
+      theaterRaf = 0;
+      if (show) theaterRun();
+      paintFloat();
+    };
+    document.addEventListener('visibilitychange', onShown);
+    disposers.push(() => document.removeEventListener('visibilitychange', onShown));
+  } catch (_) {}
 
   function theaterRun() {
     if (!theaterRaf && typeof requestAnimationFrame === 'function') theaterRaf = requestAnimationFrame(theaterTick);

@@ -128,6 +128,8 @@ interface Settings {
   applauseVolume: number;
   // Entries in the Extras menu of the message box.
   extrasMenu: boolean;
+  // The word being spoken is lit in the message in the chat.
+  chatHighlight: boolean;
   panelPattern: string;
   boxSolid: number;
   widgetOn: boolean;
@@ -256,6 +258,7 @@ const DEFAULT_SETTINGS: Settings = {
   applauseSeconds: 5,
   applauseVolume: 0.6,
   extrasMenu: false,
+  chatHighlight: true,
   panelPattern: '',
   boxSolid: 60,
   widgetOn: false,
@@ -562,6 +565,7 @@ function cleanSettings(raw: any): Settings {
     applauseSeconds: num(r.applauseSeconds, 1, 15, d.applauseSeconds),
     applauseVolume: num(r.applauseVolume, 0, 1, d.applauseVolume),
     extrasMenu: bool(r.extrasMenu, d.extrasMenu),
+    chatHighlight: bool(r.chatHighlight, d.chatHighlight),
     panelPattern: pick(r.panelPattern, ['', 'diamonds', 'stripes', 'dots', 'hearts', 'stars'] as const, ''),
     boxSolid: Math.round(num(r.boxSolid, 0, 100, d.boxSolid)),
     widgetOn: bool(r.widgetOn, d.widgetOn),

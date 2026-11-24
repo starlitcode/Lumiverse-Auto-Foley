@@ -129,7 +129,7 @@ The menu is in three groups, with a line between them:
 In the player:
 
 - **The top** shows the chat.
-- **Now playing** shows who is speaking, with their picture or first letter, which part is playing, and bars that move while a voice plays.
+- **Now playing** shows who is speaking, with their picture or first letter, and which part is playing.
 - **The box under it** shows the line being spoken, or the sound playing.
 - **The buttons**: **Prepare replies ahead** on the left, a switch that lights up while it is on, then back one part, Play or Pause, the next part, and **Stop** on the right. Turning it on also prepares the latest reply at once.
 - **The bar** under them moves through the part playing. Drag it to go back or forward in that part.

@@ -833,13 +833,27 @@ if (section("sync")) {
   await page.click('#mount [data-af-slot="message"]');
   await page.waitForFunction(() => document.querySelector('[data-af="theater"]') && document.querySelector('[data-af="theater"]').dataset.state === "voice", null, { timeout: 8000 });
   const t0 = Date.now();
-  const lit = () => page.evaluate(() => [document.querySelectorAll('[data-af="line"] .af-w.af-said').length, document.querySelectorAll('[data-af="line"] .af-w').length]);
+  // A word filling as it is said counts as lit.
+  const lit = () => page.evaluate(() => [document.querySelectorAll('[data-af="line"] .af-w.af-said, [data-af="line"] .af-w.af-now').length, document.querySelectorAll('[data-af="line"] .af-w').length]);
   await page.waitForTimeout(Math.max(0, 450 - (Date.now() - t0)));
   const early = await lit();
   check(early[1] > 0 && early[0] === 0, "no word is lit while the clip is still quiet (" + early.join(" of ") + ")");
   await page.waitForTimeout(Math.max(0, 2250 - (Date.now() - t0)));
   const late = await lit();
   check(late[1] > 0 && late[0] === late[1], "every word is lit by the end of the voice (" + late.join(" of ") + ")");
+  // Part of the way through, one word is part filled: it fills smoothly as it
+  // is said, rather than turning on all at once.
+  await page.evaluate(() => { window.__clipMs = 2400; });
+  const fills = await page.evaluate(async () => {
+    const seen = new Set();
+    for (let k = 0; k < 40; k++) {
+      const w = document.querySelector('[data-af="line"] .af-w.af-now');
+      if (w) seen.add(Math.round(parseFloat(w.style.getPropertyValue("--af-p")) / 10));
+      await new Promise((r) => requestAnimationFrame(r));
+    }
+    return Array.from(seen);
+  });
+  check(fills.some((x) => x > 0 && x < 10), "a word fills part way as it is said (" + fills.join(",") + ")");
   check(!errors.length, "no console errors. " + errors.slice(0, 2).join("; "));
   await context.close();
 }
@@ -1435,6 +1449,37 @@ if (section("reused row")) {
   await page.waitForTimeout(300);
   const after = await page.evaluate(() => document.querySelector('[data-af="sub"]').textContent);
   check(/deleted, so it stopped/.test(after) || /Press the Auto Foley button/.test(after), "a message deleted while it plays stops, and its script is not kept for Play (" + after + ", playing before: " + playing + ")");
+  check(!errors.length, "no page errors. " + errors.slice(0, 2).join(" | "));
+  await context.close();
+}
+
+if (section("chat words")) {
+  console.log("The word being spoken is lit in the chat, without changing the message");
+  const { context, page, errors } = await open(THEMES[0], SIZES[1]);
+  await page.evaluate(() => {
+    window.__wav = [0.2, 2.2];
+    window.__clipMs = 2400;
+    document.querySelector('[data-message-id="m1"] p').innerHTML = 'She set the cup down on the long table by the window. <em>"You are late.</em> Again." "The tide does not wait for anyone, and neither does the boat that runs on it."';
+  });
+  const before = await page.evaluate(() => document.querySelector('[data-message-id="m1"]').innerHTML.replace(/<button[\s\S]*?<\/button>/g, ""));
+  await page.click('#mount [data-af-slot="message"]');
+  const seen = await page.evaluate(async () => {
+    const out = new Set();
+    for (let k = 0; k < 200; k++) {
+      const h = CSS.highlights.get("auto-foley-word");
+      if (h) for (const r of h) out.add(r.toString());
+      await new Promise((r) => setTimeout(r, 25));
+    }
+    return Array.from(out);
+  });
+  const after = await page.evaluate(() => document.querySelector('[data-message-id="m1"]').innerHTML.replace(/<button[\s\S]*?<\/button>/g, ""));
+  check(seen.length >= 3 && seen.every((w) => /^[A-Za-z]+$/.test(w)) && seen.some((w) => /^(set|cup|table|window|late|Again)$/.test(w)), "words of the line playing are lit in the chat, one at a time (" + seen.slice(0, 8).join(" ") + ")");
+  check(before === after, "the message itself is not changed");
+  await page.click('.af-tab[data-tab="settings"]');
+  await page.waitForTimeout(200);
+  await page.evaluate(() => document.querySelector('[data-af-row="chatHighlight"] .af-box').click());
+  await page.waitForTimeout(150);
+  check(await page.evaluate(() => !CSS.highlights.get("auto-foley-word")), "turning Light up words in the chat off clears it");
   check(!errors.length, "no page errors. " + errors.slice(0, 2).join(" | "));
   await context.close();
 }

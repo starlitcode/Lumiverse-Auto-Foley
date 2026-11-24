@@ -13,6 +13,7 @@ _Not yet released_
 ### Added
 
 - **Play from the drawer.** Play in Now playing, on the Stage tab, performs the latest reply or your latest message when nothing is playing. The same choice as in the floating player sits under it.
+- **Light up words in the chat**, on the Settings tab, on by default. The word being spoken is lit in the message itself, as it is said. Nothing in the message is changed.
 - **Back to defaults for the mixer.** It sets voices to 100% and sounds to 80%, and unmutes both.
 
 ### Changed
@@ -25,6 +26,8 @@ _Not yet released_
 
 ### Fixed
 
+- **The words in Now playing were choppy.** The word being said now fills from left to right as it is spoken, and the timing is worked out on every frame.
+- **Now playing lost its place after you came back to the Lumiverse tab.** It now picks up from where the audio really is.
 - **A message button could perform the wrong message.** After a delete, Lumiverse can show another message in the same row, and the button there still performed the message that was deleted, with its kept audio. A button now performs the message its row shows when it is pressed.
 - **Play could bring back a deleted message.** A message deleted while it plays stops, and its script is not played again.
 - **The floating player cut off the line being spoken.** The whole line shows now, up to eight lines, and a longer one scrolls inside its box.
