@@ -6,6 +6,31 @@ Versions follow [Semantic Versioning](https://semver.org). A new major version m
 
 ---
 
+## 1.1.0
+
+_Not yet released_
+
+### Added
+
+- **Play from the drawer.** Play in Now playing, on the Stage tab, performs the latest reply or your latest message when nothing is playing. The same choice as in the floating player sits under it.
+- **Back to defaults for the mixer.** It sets voices to 100% and sounds to 80%, and unmutes both.
+
+### Changed
+
+- **Buttons are off by default.** **A button on every message**, **A button in the chat's row of controls** and **In the Extras menu** start off. If you were on the old setting, a notice on every tab says so, with **Take it** and **Keep mine**.
+- **Notes for each voice engine** shows the engine in use first and open again. Every other engine has a fold of its own.
+- **The floating player's quick switches** flip only when the switch itself is pressed, the same as every other switch.
+- **The moving bars** next to the speaker in the floating player are gone.
+
+### Fixed
+
+- **The floating player cut off the line being spoken.** The whole line shows now, up to eight lines, and a longer one scrolls inside its box.
+- **The open floating player sometimes would not drag on a phone.** Its top bar now takes the drag instead of the page scrolling.
+- **Switching tabs moved the drawer back up.** It now stays exactly where you scrolled it.
+- **The seconds count could put its "s" on a line of its own.**
+
+---
+
 ## 1.0.0
 
 _2026-11-21_

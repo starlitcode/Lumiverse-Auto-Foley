@@ -1045,7 +1045,13 @@ function markText(text: string): string {
 // is added in the version that moves the default. A setting added in the
 // version being written has no old value, so it is not listed.
 type Moved = { key: string; was: any; label: string; why: string };
-const MOVED_DEFAULTS: Moved[] = [];
+const MOVED_DEFAULTS: Moved[] = [
+  // 1.0.0 turned on every button at once. Each is now off until it is wanted,
+  // and the Stage tab and the floating player can play a message without one.
+  { key: 'messageButton', was: true, label: 'A button on every message', why: 'it is now off by default, so a new install adds nothing to your messages until you turn it on.' },
+  { key: 'barButton', was: true, label: 'A button in the chat’s row of controls', why: 'it is now off by default.' },
+  { key: 'extrasMenu', was: true, label: 'In the Extras menu', why: 'it is now off by default.' },
+];
 // What a reader is marked with once told about a row: the setting and a mark
 // of its old value. A row added later is still told.
 const movedRowMark = (m: Moved): string => m.key + ':' + markText(JSON.stringify(m.was));
@@ -1111,7 +1117,7 @@ const DEFAULTS: any = {
   applauseSound: '',
   applauseSeconds: 5,
   applauseVolume: 0.6,
-  extrasMenu: true,
+  extrasMenu: false,
   panelPattern: '',
   boxSolid: 60,
   widgetOn: false,
@@ -1124,8 +1130,8 @@ const DEFAULTS: any = {
   retryDirector: 1,
   askNote: true,
   askNotes: {},
-  messageButton: true,
-  barButton: true,
+  messageButton: false,
+  barButton: false,
   guideSeen: false,
   exportParts: ['settings', 'prompt', 'cast'],
   importParts: ['settings', 'prompt', 'cast'],
@@ -2787,24 +2793,32 @@ export function setup(ctx: Ctx, overrides?: any) {
   // tab starts right under the bar. With the bar in its own place, the scroll
   // is left as it is. The page keeps enough height for the bar to stay where
   // it was, so a short tab does not pull the panel back down.
+  // A tab switch keeps the drawer exactly where it was scrolled to, the same
+  // as Auto Retry and Auto Refine. Every box that can scroll is read before
+  // the new tab is drawn and put back after, once now and again over the next
+  // two frames in case the page was still growing. The later passes only
+  // correct a scroll that came up short, so a reader who scrolls in between is
+  // left alone.
   function switchTab() {
-    const box = root.isConnected ? scrollBoxOf(root) : null;
-    const stick = root.querySelector('[data-af-stick]') as HTMLElement | null;
-    if (!box || !stick) {
-      renderTab();
-      return;
+    const held: { node: any; at: number }[] = [];
+    let node: any = root;
+    for (let hops = 0; node && hops < 12; hops++) {
+      if (node.scrollTop > 0) held.push({ node, at: node.scrollTop });
+      node = node.parentElement;
     }
-    // Lumiverse's UI Scale: rectangles are read in zoomed pixels, and the
-    // scroll and the height are written in CSS pixels.
-    const zoom = box.offsetHeight ? box.getBoundingClientRect().height / box.offsetHeight || 1 : 1;
-    const gap = parseFloat(getComputedStyle(root).rowGap) || 0;
-    const boxTop = box.getBoundingClientRect().top;
-    const barBottom = stick.getBoundingClientRect().bottom;
-    const pageTop = page.getBoundingClientRect().top;
-    const target = Math.max(0, box.scrollTop + (pageTop - barBottom) / zoom - gap);
-    page.style.minHeight = Math.ceil(box.clientHeight - (barBottom - boxTop) / zoom - gap) + 'px';
+    const putBack = (onlyShort: boolean) => {
+      for (const one of held) {
+        const now = one.node.scrollTop;
+        if (now === one.at || (onlyShort && now > one.at)) continue;
+        one.node.scrollTop = one.at;
+      }
+    };
     renderTab();
-    box.scrollTop = target;
+    putBack(false);
+    requestAnimationFrame(() => {
+      putBack(true);
+      requestAnimationFrame(() => putBack(true));
+    });
   }
 
   function paintHead() {
@@ -4434,7 +4448,10 @@ export function setup(ctx: Ctx, overrides?: any) {
         '<div class="af-theater" data-af="theater"><div class="af-theater-who" data-af="who"></div><div class="af-theater-line" data-af="line"></div><div class="af-theater-cue" data-af="cue"></div></div>' +
         '<div class="af-parts" data-af="parts" role="group" aria-label="The parts of the message"></div>' +
         '<div class="af-scene" data-af="scene"></div>' +
-        '<p class="af-note" data-af="used" hidden></p>',
+        '<p class="af-note" data-af="used" hidden></p>' +
+        // What Play performs when nothing is playing, the same choice as in
+        // the floating player, so the drawer alone can start a message.
+        '<div class="af-seg" data-af="whose" role="group" aria-label="What Play performs"><button type="button" class="af-segbtn" data-w="reply">Latest reply</button><button type="button" class="af-segbtn" data-w="mine">My latest message</button></div>',
     );
     // A new take of the part playing, or of the whole message.
     const againRow = el('<div class="af-row" data-af="againrow"></div>');
@@ -4462,7 +4479,16 @@ export function setup(ctx: Ctx, overrides?: any) {
     now.appendChild(retryRow);
     page.appendChild(now);
     const q = (k: string) => now.querySelector('[data-af="' + k + '"]') as HTMLElement;
-    q('play').addEventListener('click', () => togglePause());
+    // Playing or paused, Play pauses or goes on. With nothing playing, it
+    // performs the latest reply, or your latest message.
+    q('play').addEventListener('click', () => (show ? togglePause() : playerPlay()));
+    q('whose').querySelectorAll('[data-w]').forEach((b) =>
+      b.addEventListener('click', () => {
+        playerWhose = (b as HTMLElement).dataset.w === 'mine' ? 'mine' : 'reply';
+        paintStage();
+        paintFloat();
+      }),
+    );
     q('stop').addEventListener('click', () => {
       if (busyMessage) busyMessage = '';
       stop('Stopped');
@@ -4482,11 +4508,24 @@ export function setup(ctx: Ctx, overrides?: any) {
       }
     });
 
-    const mix = card('Mixer', 'How loud the voices and the sounds are, apart from each other. Mute is for this page only.');
+    const mix = card('Mixer', 'How loud the voices and the sounds are, apart from each other. Mute is for this page only. Back to defaults sets voices to 100% and sounds to 80%, and unmutes both.');
     const mixer = el('<div class="af-mixer"></div>');
     mixer.appendChild(strip('Voices', 'voice', 'voiceVolume'));
     mixer.appendChild(strip('Sounds', 'sound', 'soundVolume'));
     mix.appendChild(mixer);
+    const mixRow = el('<div class="af-row"></div>');
+    mixRow.appendChild(
+      button('Back to defaults', () => {
+        const same = Number(S.voiceVolume) === Number(DEFAULTS.voiceVolume) && Number(S.soundVolume) === Number(DEFAULTS.soundVolume) && !muted.voice && !muted.sound;
+        if (same) return alreadyLine(mix, 'These are already the default volumes. Nothing changed.');
+        muted.voice = false;
+        muted.sound = false;
+        set({ voiceVolume: DEFAULTS.voiceVolume, soundVolume: DEFAULTS.soundVolume });
+        if (audio && audio.dataset) audio.volume = audio.dataset.kind === 'voice' ? S.voiceVolume : S.soundVolume;
+        renderTab();
+      }),
+    );
+    mix.appendChild(mixRow);
     page.appendChild(mix);
 
     const lg = card('Log', 'What happened, newest last. Anything that went wrong says why here.', '<button type="button" class="af-btn" data-af="copy">Copy</button><button type="button" class="af-btn af-danger" data-af="clear">Clear the log</button>');
@@ -4643,9 +4682,22 @@ export function setup(ctx: Ctx, overrides?: any) {
     const script = currentScript();
     const playing = !!show && !paused;
     setIcon(playBtn, playing ? 'pause' : 'play', playing ? ICON_PAUSE : ICON_PLAY);
-    playBtn.setAttribute('aria-label', playing ? 'Pause' : 'Play');
-    playBtn.title = playing ? 'Pause' : 'Play';
-    playBtn.disabled = !show && !script;
+    const startWords = playerWhose === 'mine' ? 'Play my latest message' : 'Play the latest reply';
+    const playSaid = playing ? 'Pause' : show ? 'Go on' : startWords;
+    if (playBtn.title !== playSaid) {
+      playBtn.setAttribute('aria-label', playSaid);
+      playBtn.title = playSaid;
+    }
+    playBtn.disabled = !show && (!!busyMessage || chatInfo.kind === 'none');
+    // The choice of what Play performs stays in place, so nothing below it
+    // moves, and is disabled while something plays.
+    const whose = q('whose');
+    const locked = !!show || !!busyMessage;
+    whose.querySelectorAll('[data-w]').forEach((b) => {
+      const on = (b as HTMLElement).dataset.w === playerWhose ? 'true' : 'false';
+      if (b.getAttribute('aria-pressed') !== on) b.setAttribute('aria-pressed', on);
+      if ((b as HTMLButtonElement).disabled !== locked) (b as HTMLButtonElement).disabled = locked;
+    });
     (q('stop') as HTMLButtonElement).disabled = !show && !busyMessage;
     (q('skip') as HTMLButtonElement).disabled = !show;
     (q('back') as HTMLButtonElement).disabled = !show;
@@ -6018,9 +6070,9 @@ export function setup(ctx: Ctx, overrides?: any) {
     page.appendChild(a);
 
     const btns = card('Buttons', 'Where the Auto Foley button appears.');
-    btns.appendChild(toggle('A button on every message', 'On by default. One tap performs that message, an older one or the greeting too. It sits in each message\u2019s own row of buttons, in the space Lumiverse leaves for extensions.', 'messageButton', () => syncSlots()));
-    btns.appendChild(toggle('A button in the chat\u2019s row of controls', 'On by default. One tap performs the newest reply. It goes in Lumiverse\u2019s own row of chat buttons, in the place the app leaves there for extensions.', 'barButton', () => syncSlots()));
-    btns.appendChild(toggle('In the Extras menu', 'On by default. Adds Perform the latest reply to the Extras menu of the message box, and Stop Auto Foley while something plays.', 'extrasMenu', () => syncExtras()));
+    btns.appendChild(toggle('A button on every message', 'Off by default. One tap performs that message, an older one or the greeting too. It sits in each message\u2019s own row of buttons, in the space Lumiverse leaves for extensions.', 'messageButton', () => syncSlots()));
+    btns.appendChild(toggle('A button in the chat\u2019s row of controls', 'Off by default. One tap performs the newest reply. It goes in Lumiverse\u2019s own row of chat buttons, in the place the app leaves there for extensions.', 'barButton', () => syncSlots()));
+    btns.appendChild(toggle('In the Extras menu', 'Off by default. Adds Perform the latest reply to the Extras menu of the message box, and Stop Auto Foley while something plays.', 'extrasMenu', () => syncExtras()));
     page.appendChild(btns);
 
     const p = card('Playing');
@@ -6497,11 +6549,20 @@ export function setup(ctx: Ctx, overrides?: any) {
         { id: 'assistant', label: 'Assistant' },
       ], S.engineNoteRole || 'rules', (v) => set({ engineNoteRole: v }), 'In the rules by default, as engine_note in the JSON. The others send the note as its own message, right after the prompt.'),
     );
-    // Every engine is listed the same way, each under its own fold, in the
-    // order of the engine table. The one Auto Foley's connection runs says so.
+    // The engine Auto Foley's connection runs is shown first and open, so its
+    // note is the one in view. Every other engine has a fold of its own, in
+    // the order of the engine table.
+    if (now.supported) {
+      const head = el('<div class="af-col" data-af-engine-now></div>');
+      head.appendChild(el('<span class="af-lab">In use now: ' + esc(now.label) + '</span>'));
+      head.appendChild(hint(esc(engineAbility(now))));
+      head.appendChild(noteField(now));
+      c.appendChild(head);
+    }
     for (const e of ENGINE_LIST) {
+      if (now.supported && e.id === now.id) continue;
       c.appendChild(
-        fold(e.label + (now.supported && e.id === now.id ? ' (in use)' : ''), (body) => {
+        fold(e.label, (body) => {
           body.appendChild(hint(esc(engineAbility(e))));
           body.appendChild(noteField(e));
         }),

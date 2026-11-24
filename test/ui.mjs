@@ -101,6 +101,8 @@ window.__settings = {
   enabled: true, ttsConnection: '', autoplay: false, prepareAhead: true, narration: 'read', soundsOn: true, soundStyle: 'both',
   directorOn: true, decisionsOn: true, strength: 'natural', tagsOn: true, breathsOn: true, findSpeakers: true, bigMoments: true,
   makeSounds: true, soundSeconds: 0, voiceVolume: 1, soundVolume: 0.8, prompt: '',
+  // Off by default. On here, since most checks press them.
+  messageButton: true, barButton: true, extrasMenu: true,
   cast: [
     { id: 'n', name: 'Narrator', kind: 'narrator', addedBy: 'you', aliases: [], voice: '', voiceName: '', model: '', stability: 0.5, similarity: 0.75, style: 0, speed: 1, note: 'Calm and clear.', gender: 'unknown', muted: false },
     { id: 'a', name: 'Ysolde Marrow-Kestrel of the Lower Quays', kind: 'character', addedBy: 'chat', aliases: ['Ysolde'], voice: 'v1', voiceName: 'Hollow Bell', model: 'eleven_v3', stability: 0.5, similarity: 0.75, style: 0.2, speed: 1, note: 'Dry and low.', gender: 'female', muted: false },
@@ -124,7 +126,7 @@ window.__sounds = [
 function answer(msg) {
   const reply = (m) => setTimeout(() => backendFns.forEach((fn) => fn(Object.assign({ requestId: msg.requestId }, m))), 5);
   switch (msg.type) {
-    case 'load': return reply({ type: 'state', settings: window.__settings, sounds: window.__sounds, hasKey: true, builtInPrompt: '<the_director>\\nYou direct.\\n</the_director>', builtInSkips: '^[ \\\\t]*\\\\|.*\\\\|[ \\\\t]*$\\n【[^】\\\\n]*】', version: '0', decisions: true });
+    case 'load': return reply({ type: 'state', fresh: window.__fresh !== false, settings: window.__settings, sounds: window.__sounds, hasKey: true, builtInPrompt: '<the_director>\\nYou direct.\\n</the_director>', builtInSkips: '^[ \\\\t]*\\\\|.*\\\\|[ \\\\t]*$\\n【[^】\\\\n]*】', version: '0', decisions: true });
     case 'save': window.__settings = msg.settings; return reply({ type: 'saved', ok: true, settings: msg.settings });
     case 'direct': return reply({ type: 'script', script: SCRIPT });
     case 'sound': return reply({ type: 'sound', base64: 'AAAA', mime: 'audio/mpeg' });
@@ -805,13 +807,13 @@ if (section("engines")) {
     check((await page.locator(".af-note", { hasText: "Engine: Chatterbox-Turbo" }).count()) === 1, size.name + ": a server named Chatterbox is found as Chatterbox-Turbo");
     await page.click('.af-tab[data-tab="director"]');
     await page.waitForTimeout(300);
-    const folds = await page.evaluate(() => {
+    const notes = await page.evaluate(() => {
       const card = Array.from(document.querySelectorAll(".af-card")).find((c) => /Notes for each voice engine/.test(c.textContent));
-      return Array.from(card.querySelectorAll(".af-fold")).map((f) => ({ t: f.textContent.replace("▶", "").trim(), open: f.getAttribute("aria-expanded") }));
+      const now = card.querySelector("[data-af-engine-now]");
+      const folds = Array.from(card.querySelectorAll(".af-fold")).map((f) => f.textContent.replace("▶", "").trim());
+      return { now: now ? now.textContent : "", first: card.querySelector("[data-af-engine-now], .af-fold") === now, folds };
     });
-    check(folds.length === 5 && folds.every((f) => f.open === "false") && folds.filter((f) => /\(in use\)$/.test(f.t)).length === 1 && /^Chatterbox-Turbo \(in use\)$/.test(folds.find((f) => /in use/.test(f.t)).t), size.name + ": every engine has its own closed fold, and the one in use is marked (" + folds.map((f) => f.t).join(" | ") + ")");
-    await page.locator(".af-fold", { hasText: "Chatterbox-Turbo (in use)" }).click();
-    await page.waitForTimeout(400);
+    check(/In use now: Chatterbox-Turbo/.test(notes.now) && notes.first && notes.folds.length === 4 && notes.folds.indexOf("Chatterbox-Turbo") < 0, size.name + ": the engine in use is first and open, and every other engine has its own fold (" + notes.folds.join(" | ") + ")");
     check((await page.locator('[data-af-engine-note="chatterbox_turbo"] textarea').count()) === 1, size.name + ": the note for the engine in use can be read and changed");
     check(!errors.length, size.name + ": no console errors. " + errors.slice(0, 2).join("; "));
     await context.close();
@@ -1265,6 +1267,28 @@ if (section("freesound")) {
 
 if (section("reminders")) {
   console.log("A change to the built-in text is said once, to someone with their own version");
+  {
+    const { context, page, errors } = await open(THEMES[0], SIZES[0]);
+    await page.evaluate(() => {
+      window.__teardown();
+      window.__fresh = false;
+      Object.assign(window.__settings, { movedSeen: "", messageButton: true, barButton: true, extrasMenu: true });
+      document.getElementById("drawer").innerHTML = "";
+      window.__teardown = window.__setup(window.__ctx, { fetch: window.__fetch, Audio: window.__Audio });
+    });
+    await page.waitForTimeout(300);
+    const said = await page.evaluate(() => (document.querySelector("[data-af-moved]") || {}).textContent || "");
+    check(/Some default settings have changed in this update/.test(said) && /A button on every message/.test(said), "someone still on the old button defaults is told (" + said.slice(0, 70) + ")");
+    const took = await page.evaluate(async () => {
+      Array.from(document.querySelectorAll("[data-af-moved] button")).find((b) => b.textContent.trim() === "Take it").click();
+      await new Promise((r) => setTimeout(r, 1500));
+      return { gone: !document.querySelector("[data-af-moved]"), s: window.__settings };
+    });
+    check(took.gone && took.s.messageButton === false && took.s.barButton === false && took.s.extrasMenu === false && took.s.movedSeen.split(" ").length === 3, "Take it turns the three buttons off and marks the rows as answered");
+    await page.evaluate(() => { window.__fresh = true; });
+    check(!errors.length, "no page errors. " + errors.slice(0, 2).join(" | "));
+    await context.close();
+  }
   for (const size of SIZES) {
     const { context, page, errors } = await open(THEMES[0], size);
     const where = size.name;
@@ -1340,6 +1364,38 @@ if (section("widget fixes")) {
     check(!got.bars, where + ": no moving bars symbol");
     check(!errors.length, where + ": no page errors. " + errors.slice(0, 2).join(" | "));
     await context.close();
+  }
+}
+
+if (section("scroll kept")) {
+  console.log("Switching tabs keeps the drawer where it was scrolled to");
+  for (const size of SIZES) {
+    for (const zoom of [0.85, 1, 1.25]) {
+      const { context, page, errors } = await open(THEMES[0], size, zoom);
+      const where = size.name + ", zoom " + zoom;
+      // Lumiverse's drawer is a box of its own that scrolls, not the page.
+      await page.evaluate(() => { const d = document.getElementById("drawer"); d.style.height = "100vh"; d.style.overflowY = "auto"; });
+      await page.click('.af-tab[data-tab="settings"]');
+      await page.waitForTimeout(300);
+      const got = await page.evaluate(async () => {
+        let box = document.querySelector(".af");
+        while (box && !(box.scrollHeight > box.clientHeight + 4 && /(auto|scroll)/.test(getComputedStyle(box).overflowY))) box = box.parentElement;
+        // The test page has no drawer box, so the page itself scrolls.
+        if (!box) box = document.scrollingElement;
+        box.scrollTop = 400;
+        const at = box.scrollTop;
+        await new Promise((r) => setTimeout(r, 50));
+        document.querySelector('.af-tab[data-tab="director"]').click();
+        await new Promise((r) => setTimeout(r, 300));
+        const director = box.scrollTop;
+        document.querySelector('.af-tab[data-tab="sounds"]').click();
+        await new Promise((r) => setTimeout(r, 300));
+        return { at, director, sounds: box.scrollTop };
+      });
+      check(!!got && got.at > 100 && Math.abs(got.director - got.at) <= 1 && Math.abs(got.sounds - got.at) <= 1, where + ": the scroll stays where it was on every tab switch (" + JSON.stringify(got) + ")");
+      check(!errors.length, where + ": no page errors. " + errors.slice(0, 2).join(" | "));
+      await context.close();
+    }
   }
 }
 

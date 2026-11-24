@@ -87,7 +87,7 @@ All on the Director tab:
 The Director tab has a note for each engine. It says how that engine reads tags, and it is sent with the rules.
 
 - **Send the notes as** puts the note in the rules, the default, or sends it as its own message from system, user or assistant, right after the prompt.
-- Every engine has its own fold, in the same order as the table in [Voice engines](engines.md). The one your connection runs says **(in use)**. Open a fold to read or change its note.
+- The engine your connection runs is shown first, open, under **In use now**. Every other engine has its own fold, in the same order as the table in [Voice engines](engines.md).
 - **Back to built-in** puts the built-in note back. It asks first.
 
 ## How speakers are found
