@@ -749,6 +749,48 @@ describe("what an account has been told", () => {
   });
 });
 
+describe("more settings and Chatterbox, direct", () => {
+  test("a person keeps only known settings, in range, and a server address is cleaned", () => {
+    const h = host();
+    const s = h.box.cleanSettings({ chatterboxUrl: "http://192.0.2.4:8004/v1/", cast: [{ name: "Oriel", params: { exaggeration: 9, cfg_weight: 0.3, direction: "[soft] and low", boost: "yes", rogue: 1 } }] });
+    const oriel = s.cast.find((c: any) => c.name === "Oriel");
+    expect(oriel.params).toEqual({ exaggeration: 2, cfg_weight: 0.3, direction: "soft and low" });
+    expect(s.chatterboxUrl).toBe("http://192.0.2.4:8004");
+    expect(h.box.cleanSettings({ chatterboxUrl: "javascript:alert(1)" }).chatterboxUrl).toBe("");
+  });
+
+  test("the server is read, and a line is spoken with its own settings", async () => {
+    const mp3 = Buffer.from(new Uint8Array(300).fill(5)).toString("base64");
+    const h = host({
+      cors: (url: string, init: any) => {
+        if (url.endsWith("/api/model-info")) return { status: 200, body: JSON.stringify({ loaded: true, type: "turbo" }) };
+        if (url.endsWith("/get_predefined_voices")) return { status: 200, body: JSON.stringify([{ display_name: "Tamsin", filename: "tamsin.wav" }]) };
+        if (url.endsWith("/get_reference_files")) return { status: 200, body: JSON.stringify(["pell.mp3"]) };
+        if (url.endsWith("/tts")) return { status: 200, body: mp3, encoding: "base64" };
+        return { status: 404, body: "" };
+      },
+    });
+    await h.ask({ type: "save", settings: { chatterboxUrl: "http://192.0.2.4:8004" } });
+    const info = (await h.ask({ type: "cbx_info" })).find((m) => m.type === "cbx");
+    expect(info.ok).toBe(true);
+    expect(info.model).toBe("turbo");
+    expect(info.voices.map((v: any) => v.id)).toEqual(["p:tamsin.wav", "c:pell.mp3"]);
+    const said = (await h.ask({ type: "cbx_speak", text: "[sigh] Fine.", voice: "c:pell.mp3", params: { exaggeration: 0.9, speed: 1.4, seed: 7 } })).find((m) => m.type === "cbx_audio");
+    expect(said.base64).toBe(mp3);
+    const sent = JSON.parse(h.calls.cors.find((c) => c.url.endsWith("/tts")).init.body);
+    expect(sent).toMatchObject({ text: "[sigh] Fine.", voice_mode: "clone", reference_audio_filename: "pell.mp3", exaggeration: 0.9, speed_factor: 1.4, seed: 7, output_format: "mp3" });
+  });
+
+  test("a server that is not running, or runs a model with no tags, says so", async () => {
+    const down = host({ cors: () => { throw new Error("connect ECONNREFUSED 192.0.2.4:8004"); } });
+    await down.ask({ type: "save", settings: { chatterboxUrl: "http://192.0.2.4:8004" } });
+    expect((await down.ask({ type: "cbx_info" })).find((m) => m.type === "cbx").why).toContain("nothing answered");
+    const orig = host({ cors: (url: string) => (url.endsWith("/api/model-info") ? { status: 200, body: JSON.stringify({ loaded: true, type: "original" }) } : { status: 200, body: "[]" }) });
+    await orig.ask({ type: "save", settings: { chatterboxUrl: "http://192.0.2.4:8004" } });
+    expect((await orig.ask({ type: "cbx_info" })).find((m) => m.type === "cbx").why).toContain("Load Chatterbox-Turbo");
+  });
+});
+
 describe("each account keeps its own", () => {
   test("settings, cast, sounds, kept audio, the key and scripts never cross accounts", async () => {
     const good = JSON.stringify({ lines: [{ i: 0, speaker: "Narrator", text: "Brin waved." }], new_speakers: [] });
@@ -1271,7 +1313,9 @@ describe("settings", () => {
     expect(s.cast[0].kind).toBe("narrator");
     const ana = s.cast.find((c: any) => c.name === "Ana");
     expect(ana.stability).toBe(0.5);
-    expect(ana.speed).toBe(1.2);
+    // Fish Audio and Chatterbox take up to 2. The panel keeps an ElevenLabs
+    // voice to 1.2.
+    expect(ana.speed).toBe(2);
   });
 
   test("one account never sees another's settings", async () => {

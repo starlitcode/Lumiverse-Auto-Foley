@@ -1495,6 +1495,40 @@ if (section("chat words")) {
   await context.close();
 }
 
+if (section("more settings")) {
+  console.log("Each person gets a voice ID box and the settings their engine takes");
+  for (const size of SIZES) {
+    const { context, page, errors } = await open(THEMES[0], size);
+    const where = size.name;
+    await page.click('.af-tab[data-tab="cast"]');
+    await page.waitForTimeout(300);
+    await page.locator(".af-person-head").first().click();
+    await page.waitForTimeout(600);
+    const got = await page.evaluate(async () => {
+      const p = document.querySelector(".af-person");
+      const idBox = p.querySelector("[data-af-voiceid] input");
+      idBox.value = "my-cloned-voice-77";
+      idBox.dispatchEvent(new Event("change", { bubbles: true }));
+      await new Promise((r) => setTimeout(r, 900));
+      const cast = window.__settings.cast[0];
+      const picked = cast.voices && Object.values(cast.voices).some((v) => v.voice === "my-cloned-voice-77");
+      const fold = document.querySelector(".af-person [data-af-more]");
+      const head = fold && fold.querySelector(".af-fold");
+      if (head) head.click();
+      await new Promise((r) => setTimeout(r, 400));
+      const labels = fold ? Array.from(fold.querySelectorAll(".af-lab")).map((x) => x.textContent.trim()) : [];
+      const vw = document.documentElement.clientWidth;
+      const wide = Array.from(document.querySelectorAll(".af-person *")).filter((e) => e.getBoundingClientRect().right > vw + 0.5).length;
+      return { picked, engine: fold && fold.getAttribute("data-af-more"), labels, wide };
+    });
+    check(got.picked, where + ": a pasted voice ID is saved as the person's voice");
+    check(got.engine === "eleven_v3" && got.labels.indexOf("Speaker boost") >= 0 && got.labels.indexOf("Voice direction") < 0 && got.labels.indexOf("Exaggeration") < 0, where + ": an ElevenLabs voice shows only ElevenLabs settings (" + got.labels.join(", ") + ")");
+    check(got.wide === 0, where + ": nothing runs off the side (" + got.wide + ")");
+    check(!errors.length, where + ": no page errors. " + errors.slice(0, 2).join(" | "));
+    await context.close();
+  }
+}
+
 if (section("switch rows")) {
   console.log("Rows under a switch open in place, over several frames");
   const { context, page } = await open(THEMES[0], SIZES[1]);

@@ -76,6 +76,10 @@ function engineOf(conn, model, chosen) {
             return ENGINES.gemini_31;
         return NO_TAGS;
     }
+    // A Chatterbox server Auto Foley talks to itself. Its model is read from
+    // the server, and only Turbo takes tags.
+    if (provider === 'chatterbox_direct')
+        return m === 'turbo' ? ENGINES.chatterbox_turbo : NO_TAGS;
     if (provider !== 'openai_tts')
         return NO_TAGS;
     if (chosen === 'chatterbox_turbo')
@@ -100,6 +104,8 @@ function noTagsWhy(conn, model) {
         return what + 'Fish Audio S1 does not. Pick S2.1 Pro, S2 Pro or Drama 3.';
     if (provider === 'google_tts' || provider === 'google_vertex_tts')
         return what + (m || 'This Gemini model') + ' does not. Pick Gemini 3.8 Flash TTS, Gemini 3.8 Flash-Lite TTS, or a Gemini 2.5 or 3.1 TTS model.';
+    if (provider === 'chatterbox_direct')
+        return what + 'Your Chatterbox server runs the ' + (m || 'unknown') + ' model, which takes no tags. Load Chatterbox-Turbo on it, on its own web page or with model.repo_id set to chatterbox-turbo in its config.yaml.';
     if (provider === 'openai_tts' && /multilingual|\bmtl\b/.test(hay))
         return what + 'Chatterbox-Multilingual does not. Run Chatterbox-Turbo on your server.';
     if (provider === 'openai_tts')
@@ -1029,6 +1035,7 @@ const DEFAULTS = {
     applauseVolume: 0.6,
     extrasMenu: false,
     chatHighlight: true,
+    chatterboxUrl: '',
     panelPattern: '',
     boxSolid: 60,
     widgetOn: false,
@@ -1154,6 +1161,8 @@ export function setup(ctx, overrides) {
             return 'Fish Audio';
         if (p === 'google_tts' || p === 'google_vertex_tts')
             return 'Gemini';
+        if (p === 'chatterbox_direct')
+            return 'Chatterbox, direct';
         return 'Chatterbox and other servers';
     }
     // A provider id as a heading, such as openai_compatible as Openai compatible.
@@ -1265,6 +1274,32 @@ export function setup(ctx, overrides) {
     }
     let ttsConnections = [];
     let ttsWhy = '';
+    // ---- Chatterbox, direct ----
+    // A Chatterbox-TTS-Server whose address is saved in Settings is listed as
+    // one more connection, Chatterbox server (direct). Lines for it go through
+    // the backend to the server's own route, with its own settings.
+    const CBX_ID = 'af-chatterbox';
+    let cbxInfo = null;
+    function withChatterbox() {
+        ttsConnections = ttsConnections.filter((c) => c.id !== CBX_ID);
+        if (S.chatterboxUrl)
+            ttsConnections.push({ id: CBX_ID, name: 'Chatterbox server (direct)', provider: 'chatterbox_direct', model: cbxInfo ? cbxInfo.model : '', api_url: S.chatterboxUrl });
+    }
+    async function readChatterbox() {
+        if (!S.chatterboxUrl) {
+            cbxInfo = null;
+            withChatterbox();
+            return;
+        }
+        try {
+            cbxInfo = await rpc({ type: 'cbx_info' }, 20000);
+        }
+        catch (_) {
+            cbxInfo = { ok: false, model: '', voices: [], why: 'The backend did not answer.' };
+        }
+        delete voiceCache[CBX_ID];
+        withChatterbox();
+    }
     async function loadTtsConnections() {
         try {
             const res = await api('/tts-connections?limit=200');
@@ -1276,6 +1311,9 @@ export function setup(ctx, overrides) {
             const j = await res.json();
             const all = Array.isArray(j && j.data) ? j.data : [];
             ttsConnections = all.filter((c) => c && c.id && USABLE_PROVIDERS.indexOf(String(c.provider || '').toLowerCase()) >= 0);
+            withChatterbox();
+            if (S.chatterboxUrl && !cbxInfo)
+                await readChatterbox();
             ttsWhy = ttsConnections.length
                 ? ''
                 : 'You have no TTS connection Auto Foley can use. Add one for ElevenLabs, Fish Audio, Gemini or a Chatterbox-Turbo server in Lumiverse, under Connections, in the TTS section.';
@@ -1360,6 +1398,14 @@ export function setup(ctx, overrides) {
             return { voices: [], why: 'Pick your TTS connection in the Settings tab first.' };
         if (voiceCache[connId])
             return voiceCache[connId];
+        if (connId === CBX_ID) {
+            if (!cbxInfo)
+                await readChatterbox();
+            const out = { voices: (cbxInfo && cbxInfo.voices) || [], why: cbxInfo && !cbxInfo.voices.length ? cbxInfo.why || 'The Chatterbox server has no voices.' : '' };
+            if (out.voices.length)
+                voiceCache[connId] = out;
+            return out;
+        }
         try {
             const res = await api('/tts-connections/' + encodeURIComponent(connId) + '/voices');
             if (!res.ok)
@@ -1379,7 +1425,7 @@ export function setup(ctx, overrides) {
     // falls back to the models Lumiverse is known to offer.
     const modelCache = {};
     async function loadModels(conn) {
-        if (!conn)
+        if (!conn || conn.id === CBX_ID)
             return [];
         if (modelCache[conn.id])
             return modelCache[conn.id];
@@ -1608,22 +1654,48 @@ export function setup(ctx, overrides) {
         const provider = String(conn.provider || '').toLowerCase();
         const params = {};
         const speed = m ? Number(m.speed) || 1 : 1;
+        const own = (m && m.params) || {};
+        const has = (k) => own[k] !== undefined && own[k] !== '';
         if (eng.eleven) {
-            params.use_speaker_boost = true;
+            params.use_speaker_boost = own.boost !== false;
             if (m) {
                 params.stability = stabilityFor(model, m.stability, line.big);
                 params.similarity_boost = m.similarity;
                 params.style = m.style;
-                params.speed = speed;
+                // ElevenLabs takes 0.7 to 1.2.
+                params.speed = Math.min(1.2, Math.max(0.7, speed));
             }
+            if (has('lang'))
+                params.language_code = own.lang;
         }
         else if (speed !== 1 && provider !== 'google_tts' && provider !== 'google_vertex_tts') {
             params.speed = speed;
         }
-        // Gemini takes it as its speech style. With nothing to say, the
-        // connection's own speech style is used.
-        if (style)
-            params.speech_style = style;
+        if (provider === 'fish_audio') {
+            if (has('temperature'))
+                params.temperature = own.temperature;
+            if (has('top_p'))
+                params.top_p = own.top_p;
+            if (typeof own.normalize === 'boolean')
+                params.normalize_loudness = own.normalize;
+            if (has('direction'))
+                params.voice_direction = own.direction;
+        }
+        if (provider === 'google_tts' || provider === 'google_vertex_tts') {
+            if (has('temperature'))
+                params.temperature = own.temperature;
+            if (has('lang'))
+                params.language_code = own.lang;
+        }
+        if (provider === 'chatterbox_direct')
+            for (const k of ['exaggeration', 'cfg_weight', 'temperature', 'seed'])
+                if (has(k))
+                    params[k] = own[k];
+        // Gemini 3.8 takes it as its speech style. A line with no note uses the
+        // person's own style, and then the one saved on the connection.
+        const baseStyle = eng.style && has('style_base') ? String(own.style_base) : '';
+        if (style || baseStyle)
+            params.speech_style = style || baseStyle;
         const body = { connectionId: conn.id, text, parameters: params };
         if (pick.voice)
             body.voice = pick.voice;
@@ -1654,6 +1726,23 @@ export function setup(ctx, overrides) {
             catch (_) { }
         }
         const what = 'Speaking line ' + (line.i + 1);
+        if (conn && conn.provider === 'chatterbox_direct') {
+            try {
+                const r = await rpc({ type: 'cbx_speak', text: body.text, voice: body.voice || '', params: body.parameters || {} }, 180000);
+                if (signal.aborted)
+                    return { why: what + ' was stopped.' };
+                if (r && r.base64) {
+                    const blob = base64ToBlob(r.base64, r.mime || 'audio/mpeg');
+                    if (sig)
+                        keepClip(sig, blob);
+                    return { blob };
+                }
+                return { why: (r && r.why) || what + ' failed: the Chatterbox server sent no sound.' };
+            }
+            catch (e) {
+                return { why: what + ' failed: ' + String((e && e.message) || 'the backend did not answer.') };
+            }
+        }
         // A busy voice service, or a connection that dropped, is waited out up
         // to Wait out a provider that will not take the call. A refused key or an
         // empty account is said at once, since waiting cannot change it.
@@ -5494,6 +5583,65 @@ export function setup(ctx, overrides) {
         paint();
         return row;
     }
+    // A switch for one person's setting, built like every other switch: only
+    // the switch flips it.
+    function personSwitch(label, help, on, onChange) {
+        const id = rid('ps');
+        const box = document.createElement('input');
+        box.type = 'checkbox';
+        box.id = id;
+        box.className = 'af-box';
+        box.setAttribute('role', 'switch');
+        box.checked = on;
+        const row = labelRow(label, help, undefined, box);
+        const lab = row.querySelector('.af-lab');
+        lab.id = id + '-name';
+        box.setAttribute('aria-labelledby', lab.id);
+        box.addEventListener('change', () => onChange(box.checked));
+        return row;
+    }
+    // The more settings for a person's engine. Each is sent only to the engine
+    // that takes it, and the one left at its default is not sent at all, so the
+    // connection's own setting in Lumiverse applies.
+    function moreSettings(m, cn, eng) {
+        const own = m.params || {};
+        const setP = (k, v) => {
+            const next = Object.assign({}, m.params || {});
+            if (v === undefined || v === '')
+                delete next[k];
+            else
+                next[k] = v;
+            m.params = next;
+            save();
+        };
+        const prov = String((cn && cn.provider) || '').toLowerCase();
+        const out = [];
+        const num = (k, label, lo, hi, step, dflt, help) => slider(label, typeof own[k] === 'number' ? own[k] : dflt, lo, hi, step, (v) => (step >= 1 ? String(Math.round(v)) : v.toFixed(2)), (v) => setP(k, v), help);
+        const words = (k, label, ph, help) => text(label, String(own[k] || ''), (v) => setP(k, v.trim()), ph, help);
+        if (eng.eleven) {
+            out.push(personSwitch('Speaker boost', 'On by default. Makes the voice closer to the original. Off can be a little faster.', own.boost !== false, (v) => setP('boost', v ? undefined : false)));
+            out.push(words('lang', 'Language', 'en, de, ja', 'Empty lets ElevenLabs tell from the text. A two-letter code, such as en or fr, makes it read the text in that language.'));
+        }
+        if (prov === 'fish_audio') {
+            out.push(words('direction', 'Voice direction', 'warm and tired', 'Plain words on how every line of theirs is said, such as warm and tired. Empty sends none. A line\u2019s own tags still apply.'));
+            out.push(num('temperature', 'Temperature', 0, 1, 0.05, 0.7, 'How much each take varies. 0.70 by default. Lower is steadier.'));
+            out.push(num('top_p', 'Top P', 0, 1, 0.05, 0.7, 'How wide the choice of sounds is. 0.70 by default.'));
+            out.push(personSwitch('Steady loudness', 'On by default. Keeps lines at the same loudness.', own.normalize !== false, (v) => setP('normalize', v ? undefined : false)));
+        }
+        if (prov === 'google_tts' || prov === 'google_vertex_tts') {
+            if (eng.style)
+                out.push(words('style_base', 'Their usual way of speaking', 'calm and dry', 'Sent with every line of theirs that has no note of its own, such as calm and dry. Empty uses the style saved on the connection.'));
+            out.push(num('temperature', 'Temperature', 0, 2, 0.05, 1, 'How much each take varies. 1.00 by default.'));
+            out.push(words('lang', 'Language', 'en-US', 'Empty lets Gemini tell from the text. A code such as en-US or fr-FR sets the language and accent.'));
+        }
+        if (prov === 'chatterbox_direct') {
+            out.push(num('exaggeration', 'Exaggeration', 0.25, 2, 0.05, 0.5, 'How strong the feeling is. 0.50 by default. Higher is more dramatic and a little faster.'));
+            out.push(num('cfg_weight', 'CFG weight', 0, 1, 0.05, 0.5, 'How closely it follows the voice\u2019s pace. 0.50 by default. Lower is slower and more deliberate.'));
+            out.push(num('temperature', 'Temperature', 0.05, 2, 0.05, 0.8, 'How much each take varies. 0.80 by default.'));
+            out.push(num('seed', 'Seed', 0, 999999, 1, 0, '0 by default, a new take each time. Any other number gives the same take for the same line.'));
+        }
+        return out;
+    }
     function fillPerson(inner, m, paintName) {
         inner.appendChild(pictureRow(m, () => paintName()));
         if (m.kind !== 'narrator') {
@@ -5583,6 +5731,35 @@ export function setup(ctx, overrides) {
             const vh = el('<p class="af-note" hidden></p>');
             voiceField.appendChild(vh);
             voiceBox.appendChild(voiceField);
+            // A voice the list does not show, such as one made or cloned on the
+            // provider's own site. The ID typed here is sent as it is.
+            if (cn) {
+                const idIn = text('Or paste a voice ID', '', (v) => {
+                    const id = v.trim();
+                    if (!id)
+                        return;
+                    setPick(m, cn, { voice: id, voiceName: id });
+                    save();
+                    paintName();
+                }, 'A voice ID from your provider', 'For a voice the list above does not show, such as one you made or cloned. Paste its ID from your provider. It replaces the voice picked above.');
+                idIn.setAttribute('data-af-voiceid', '');
+                const box = idIn.querySelector('input');
+                if (box) {
+                    box.setAttribute('autocomplete', 'off');
+                    box.setAttribute('spellcheck', 'false');
+                    // Saved when the box is left, so a half-typed ID is never used.
+                    box.addEventListener('change', () => {
+                        const id = box.value.trim();
+                        if (!id)
+                            return;
+                        setPick(m, cn, { voice: id, voiceName: id });
+                        save();
+                        paintName();
+                        drawVoice();
+                    });
+                }
+                voiceBox.appendChild(idIn);
+            }
             const fillVoices = (got) => {
                 const now = pickOf(m, cn);
                 const opts = [{ id: '', label: 'The connection’s voice' }].concat(got.voices.map((v) => ({ id: String(v.id), label: String(v.id) === now.voice ? firstLabel : String(v.name || v.id) + (v.gender ? ' (' + v.gender + ')' : '') })));
@@ -5685,14 +5862,37 @@ export function setup(ctx, overrides) {
                     save();
                 }, 'Exaggerates the voice’s own style. 0 by default. Higher can sound less stable.'));
             }
+            // Speed, in the range the engine takes. Gemini has no speed.
             if (!/^gemini/.test(eng.id)) {
-                g2.appendChild(slider('Speed', m.speed, 0.7, 1.2, 0.05, (v) => v.toFixed(2) + '×', (v) => {
+                const lo = eng.eleven ? 0.7 : 0.5;
+                const hi = eng.eleven ? 1.2 : 2;
+                const at = Math.min(hi, Math.max(lo, Number(m.speed) || 1));
+                g2.appendChild(slider('Speed', at, lo, hi, 0.05, (v) => v.toFixed(2) + '×', (v) => {
                     m.speed = v;
                     save();
-                }, 'How fast they speak, from 0.7 to 1.2. 1.00 by default.'));
+                }, 'How fast they speak, from ' + lo + ' to ' + hi + '. 1.00 by default.'));
             }
             if (g2.childElementCount)
                 voiceBox.appendChild(g2);
+            // More settings, only those the person's engine takes.
+            const more = moreSettings(m, cn, eng);
+            if (more.length) {
+                const f = fold('More settings for ' + eng.label, (body) => {
+                    for (const x of more)
+                        body.appendChild(x);
+                    const row = el('<div class="af-row"></div>');
+                    row.appendChild(button('Back to defaults', () => {
+                        if (!m.params || !Object.keys(m.params).length)
+                            return alreadyLine(body, 'These are already the defaults. Nothing changed.');
+                        m.params = {};
+                        save();
+                        drawVoice();
+                    }));
+                    body.appendChild(row);
+                });
+                f.setAttribute('data-af-more', eng.id);
+                voiceBox.appendChild(f);
+            }
         };
         drawVoice();
         inner.appendChild(area('How they speak', m.note, (v) => {
@@ -6347,6 +6547,66 @@ export function setup(ctx, overrides) {
                 drawConn();
         });
         a.appendChild(connBox);
+        // A Chatterbox-TTS-Server Auto Foley talks to itself.
+        a.appendChild(fold('A Chatterbox server, without a Lumiverse connection', (body) => {
+            body.appendChild(hint('Auto Foley talks to the server itself, so its own settings, such as exaggeration, can be set for each person in the Cast tab. It needs the CORS proxy permission.'));
+            const field = text('Chatterbox server address', S.chatterboxUrl || '', () => { }, 'http://localhost:8004', 'The address of a Chatterbox-TTS-Server, the same one its web page opens at. Run Chatterbox-Turbo on it for tags.');
+            const box = field.querySelector('input');
+            box.setAttribute('inputmode', 'url');
+            box.setAttribute('spellcheck', 'false');
+            box.setAttribute('autocomplete', 'off');
+            body.appendChild(field);
+            const st = el('<p class="af-status" role="status"></p>');
+            const say = () => {
+                if (!S.chatterboxUrl) {
+                    st.textContent = 'No address is saved. Chatterbox server (direct) is not listed.';
+                    st.dataset.kind = '';
+                }
+                else if (!cbxInfo) {
+                    st.textContent = 'Saved. Press Test to read the server.';
+                    st.dataset.kind = '';
+                }
+                else {
+                    st.textContent = cbxInfo.ok
+                        ? 'The server runs Chatterbox-' + (cbxInfo.model === 'turbo' ? 'Turbo' : cbxInfo.model) + ', with ' + cbxInfo.voices.length + (cbxInfo.voices.length === 1 ? ' voice. ' : ' voices. ') + (cbxInfo.why || 'Pick Chatterbox server (direct) as a connection.')
+                        : cbxInfo.why;
+                    st.dataset.kind = cbxInfo.ok && !cbxInfo.why ? 'good' : 'bad';
+                }
+            };
+            const row = el('<div class="af-row"></div>');
+            const go = async () => {
+                const url = box.value.trim();
+                st.textContent = 'Reading the server…';
+                st.dataset.kind = '';
+                let r = null;
+                try {
+                    r = await rpc({ type: 'cbx_info', url }, 20000);
+                }
+                catch (_) {
+                    r = { ok: false, model: '', voices: [], why: 'The backend did not answer.' };
+                }
+                // The address is kept only once it answers, or when it is cleared.
+                if (!url || r.model) {
+                    set({ chatterboxUrl: url ? url.replace(/\/+$/, '').replace(/\/v1$/i, '') : '' });
+                    cbxInfo = url ? r : null;
+                    delete voiceCache[CBX_ID];
+                    withChatterbox();
+                }
+                say();
+                if (r && !r.model && url) {
+                    st.textContent = r.why || 'The server could not be read.';
+                    st.dataset.kind = 'bad';
+                }
+            };
+            row.appendChild(button('Save and test', go, 'af-primary'));
+            row.appendChild(button('Forget', () => {
+                box.value = '';
+                go();
+            }));
+            body.appendChild(row);
+            body.appendChild(st);
+            say();
+        }));
         a.appendChild(fold('How Auto Foley works with Lumiverse’s own voice settings', (body) => {
             body.appendChild(hint('Auto Foley does its own reading, so most of Lumiverse’s Voice settings do not change it:'));
             body.appendChild(el('<ul class="af-steps">' +

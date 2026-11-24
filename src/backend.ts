@@ -53,6 +53,9 @@ interface CastMember {
   similarity: number;
   style: number;
   speed: number;
+  // More settings for the person's engine, sent only to the engine that
+  // takes each one. PARAM_SPEC says which keys there are.
+  params: Record<string, number | string | boolean>;
   // How this person speaks, for the Director, such as "soft-spoken, rarely shouts".
   note: string;
   // female, male or unknown. Used to pick a voice for someone the AI added.
@@ -130,6 +133,9 @@ interface Settings {
   extrasMenu: boolean;
   // The word being spoken is lit in the message in the chat.
   chatHighlight: boolean;
+  // The address of a Chatterbox-TTS-Server Auto Foley talks to itself, with
+  // no Lumiverse connection between, so its own settings can be sent.
+  chatterboxUrl: string;
   panelPattern: string;
   boxSolid: number;
   widgetOn: boolean;
@@ -259,6 +265,7 @@ const DEFAULT_SETTINGS: Settings = {
   applauseVolume: 0.6,
   extrasMenu: false,
   chatHighlight: true,
+  chatterboxUrl: '',
   panelPattern: '',
   boxSolid: 60,
   widgetOn: false,
@@ -294,6 +301,7 @@ function narrator(): CastMember {
     similarity: 0.75,
     style: 0,
     speed: 1,
+    params: {},
     note: 'Calm and clear. Reads what happens between the lines of dialogue.',
     gender: 'unknown',
     muted: false,
@@ -340,6 +348,46 @@ function cleanVoices(v: any): Record<string, { voice: string; voiceName: string;
   return out;
 }
 
+// The more settings a person can have, by key: its type, and its range or
+// length. The panel has the same list and shows each one only for the engines
+// that take it.
+const PARAM_SPEC: Record<string, { type: 'num' | 'text' | 'bool'; lo?: number; hi?: number; max?: number }> = {
+  boost: { type: 'bool' },
+  lang: { type: 'text', max: 12 },
+  temperature: { type: 'num', lo: 0, hi: 2 },
+  top_p: { type: 'num', lo: 0, hi: 1 },
+  normalize: { type: 'bool' },
+  direction: { type: 'text', max: 120 },
+  style_base: { type: 'text', max: 120 },
+  exaggeration: { type: 'num', lo: 0.25, hi: 2 },
+  cfg_weight: { type: 'num', lo: 0, hi: 1 },
+  seed: { type: 'num', lo: 0, hi: 2147483647 },
+};
+function cleanParams(v: any): Record<string, number | string | boolean> {
+  const out: Record<string, number | string | boolean> = {};
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return out;
+  for (const k of Object.keys(PARAM_SPEC)) {
+    if (!(k in v)) continue;
+    const spec = PARAM_SPEC[k];
+    const x = v[k];
+    if (spec.type === 'bool' && typeof x === 'boolean') out[k] = x;
+    else if (spec.type === 'num' && typeof x === 'number' && Number.isFinite(x)) out[k] = Math.min(spec.hi as number, Math.max(spec.lo as number, x));
+    else if (spec.type === 'text' && typeof x === 'string') {
+      const t = x.replace(/[\u0000-\u001f\[\]]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, spec.max);
+      if (t) out[k] = t;
+    }
+  }
+  return out;
+}
+
+// A server address: http or https, a host, and an optional port and path,
+// with no slash at the end. An address pasted with /v1, as an OpenAI-style
+// connection takes it, has the /v1 taken off.
+function cleanServer(v: any): string {
+  const t = str(v, 200).trim().replace(/\/+$/, '').replace(/\/v1$/i, '');
+  return /^https?:\/\/[a-z0-9.\-\[\]:]+(\/[\w.\-\/]*)?$/i.test(t) ? t : '';
+}
+
 function cleanMember(m: any): CastMember | null {
   if (!m || typeof m !== 'object') return null;
   const name = str(m.name, 80).trim();
@@ -363,7 +411,10 @@ function cleanMember(m: any): CastMember | null {
     stability: num(m.stability, 0, 1, base.stability),
     similarity: num(m.similarity, 0, 1, base.similarity),
     style: num(m.style, 0, 1, base.style),
-    speed: num(m.speed, 0.7, 1.2, base.speed),
+    // Fish Audio and Chatterbox take 0.5 to 2. ElevenLabs takes 0.7 to 1.2,
+    // and the panel keeps its slider in that range for an ElevenLabs voice.
+    speed: num(m.speed, 0.5, 2, base.speed),
+    params: cleanParams(m.params),
     note: str(m.note, 300),
     gender: pick(m.gender, ['female', 'male', 'unknown'] as const, 'unknown'),
     muted: bool(m.muted, false),
@@ -566,6 +617,7 @@ function cleanSettings(raw: any): Settings {
     applauseVolume: num(r.applauseVolume, 0, 1, d.applauseVolume),
     extrasMenu: bool(r.extrasMenu, d.extrasMenu),
     chatHighlight: bool(r.chatHighlight, d.chatHighlight),
+    chatterboxUrl: cleanServer(r.chatterboxUrl),
     panelPattern: pick(r.panelPattern, ['', 'diamonds', 'stripes', 'dots', 'hearts', 'stars'] as const, ''),
     boxSolid: Math.round(num(r.boxSolid, 0, 100, d.boxSolid)),
     widgetOn: bool(r.widgetOn, d.widgetOn),
@@ -3282,6 +3334,100 @@ async function testFreesound(userId: string | undefined): Promise<{ ok: boolean;
   return { ok: false, text: freesoundTrouble(status, String((res && res.body) || '')) };
 }
 
+// ---- Chatterbox, direct ----
+// Chatterbox-TTS-Server's own routes: /api/model-info says which model is
+// loaded, /get_predefined_voices and /get_reference_files list the voices,
+// and /tts speaks. Its own settings, such as exaggeration, only reach it this
+// way: an OpenAI-style connection in Lumiverse sends speed alone.
+function chatterboxTrouble(e: any, what: string): string {
+  const raw = String((e && e.message) || e || '');
+  if (/PERMISSION_DENIED|cors_proxy/i.test(raw)) return 'The CORS proxy permission is refused, so the Chatterbox server cannot be reached. Grant it to Auto Foley in Lumiverse, under Extensions.';
+  if (/timed? ?out|timeout/i.test(raw)) return what + ': the Chatterbox server did not answer in time.';
+  if (/ECONNREFUSED|refused|ENOTFOUND|fetch failed|unable to connect/i.test(raw)) return what + ': nothing answered at the Chatterbox server address. Check that the server is running and the address is right.';
+  return what + ': the Chatterbox server could not be reached. ' + raw.slice(0, 200);
+}
+
+async function chatterboxJson(base: string, path: string): Promise<any> {
+  const res = await cors(base + path, { method: 'GET', headers: { Accept: 'application/json' } });
+  const status = Number(res && res.status);
+  if (status < 200 || status >= 300) throw new Error('HTTP ' + status);
+  return JSON.parse(String((res && res.body) || 'null'));
+}
+
+async function chatterboxInfo(base: string): Promise<{ ok: boolean; model: string; voices: { id: string; name: string }[]; why: string }> {
+  if (!base) return { ok: false, model: '', voices: [], why: 'No Chatterbox server address is saved.' };
+  let info: any;
+  try {
+    info = await chatterboxJson(base, '/api/model-info');
+  } catch (e: any) {
+    if (/^HTTP 404/.test(String(e && e.message))) return { ok: false, model: '', voices: [], why: 'Something answered at that address, but it is not a Chatterbox-TTS-Server. Its /api/model-info was not found.' };
+    return { ok: false, model: '', voices: [], why: chatterboxTrouble(e, 'Reading the Chatterbox server') };
+  }
+  const model = str(info && info.type, 20).toLowerCase();
+  const voices: { id: string; name: string }[] = [];
+  try {
+    const pre = await chatterboxJson(base, '/get_predefined_voices');
+    for (const v of Array.isArray(pre) ? pre.slice(0, 300) : []) {
+      const file = str(v && v.filename, 200);
+      if (file) voices.push({ id: 'p:' + file, name: str(v.display_name, 120) || file });
+    }
+  } catch (_) {}
+  try {
+    const refs = await chatterboxJson(base, '/get_reference_files');
+    for (const f of Array.isArray(refs) ? refs.slice(0, 300) : []) {
+      const file = str(f, 200);
+      if (file) voices.push({ id: 'c:' + file, name: file.replace(/\.[a-z0-9]+$/i, '') + ' (cloned from a clip)' });
+    }
+  } catch (_) {}
+  if (!(info && info.loaded)) return { ok: false, model, voices, why: 'The Chatterbox server has no model loaded yet. Open its web page and load one.' };
+  return { ok: true, model, voices, why: model === 'turbo' ? '' : 'The server runs the ' + (model || 'unknown') + ' model, which takes no tags. Load Chatterbox-Turbo on it.' };
+}
+
+// One line from the Chatterbox server, as MP3. A voice id starts with p: for
+// one of the server's own voices and c: for one cloned from a clip.
+async function chatterboxSpeak(base: string, p: any): Promise<{ base64?: string; mime?: string; why?: string }> {
+  if (!base) return { why: 'No Chatterbox server address is saved.' };
+  const text = str(p.text, 5000);
+  if (!text.trim()) return { why: 'There is nothing to say.' };
+  let voice = str(p.voice, 220);
+  if (!voice) {
+    const info = await chatterboxInfo(base);
+    voice = (info.voices.find((v) => v.id.indexOf('p:') === 0) || info.voices[0] || { id: '' }).id;
+    if (!voice) return { why: 'The Chatterbox server has no voices. Add a voice on its web page, or pick one in the Cast tab.' };
+  }
+  const body: any = { text, output_format: 'mp3', split_text: true, chunk_size: 250 };
+  if (voice.indexOf('c:') === 0) {
+    body.voice_mode = 'clone';
+    body.reference_audio_filename = voice.slice(2);
+  } else {
+    body.voice_mode = 'predefined';
+    body.predefined_voice_id = voice.indexOf('p:') === 0 ? voice.slice(2) : voice;
+  }
+  const params = p.params && typeof p.params === 'object' ? p.params : {};
+  const put = (k: string, lo: number, hi: number, as = k) => {
+    const v = Number(params[k]);
+    if (params[k] !== undefined && Number.isFinite(v)) body[as] = Math.min(hi, Math.max(lo, v));
+  };
+  put('exaggeration', 0.25, 2);
+  put('cfg_weight', 0, 1);
+  put('temperature', 0.05, 2);
+  put('speed', 0.5, 2, 'speed_factor');
+  const seed = Math.round(Number(params.seed));
+  if (Number.isFinite(seed) && seed > 0) body.seed = seed;
+  let res: any;
+  try {
+    res = await cors(base + '/tts', { method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'audio/mpeg' }, body: JSON.stringify(body), responseType: 'arraybuffer', mediaType: 'audio' });
+  } catch (e: any) {
+    if (/only serves audio|does not match/i.test(String((e && e.message) || ''))) return { why: 'The Chatterbox server answered with an error instead of a sound. Its own window or log says why.' };
+    return { why: chatterboxTrouble(e, 'Speaking the line') };
+  }
+  const status = Number(res && res.status);
+  if (status < 200 || status >= 300) return { why: 'The Chatterbox server answered with an error (' + status + ').' };
+  const b64 = String(res.body || '');
+  if (fromBase64(b64).length < 64) return { why: 'The Chatterbox server sent back no sound.' };
+  return { base64: b64, mime: 'audio/mpeg' };
+}
+
 // One sound for a description: from the library when one fits, otherwise
 // found on Freesound or made by ElevenLabs and added to the library, so the
 // same sound is free the next time. With again set to a library id, a new
@@ -3826,6 +3972,18 @@ async function onPanel(p: any, userId: string | undefined) {
           }
         }
         answer({ type: 'check', part: 'decisions', ok, text });
+        return;
+      }
+      case 'cbx_info': {
+        const s = await loadSettings(userId);
+        const base = p.url !== undefined ? cleanServer(p.url) : s.chatterboxUrl;
+        if (p.url !== undefined && String(p.url || '').trim() && !base) return answer({ type: 'cbx', ok: false, model: '', voices: [], why: 'That does not look like a server address. It looks like http://localhost:8004.' });
+        answer(Object.assign({ type: 'cbx' }, await chatterboxInfo(base)));
+        return;
+      }
+      case 'cbx_speak': {
+        const s = await loadSettings(userId);
+        answer(Object.assign({ type: 'cbx_audio' }, await chatterboxSpeak(s.chatterboxUrl, p)));
         return;
       }
       case 'reset_check': {

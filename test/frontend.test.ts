@@ -39,6 +39,12 @@ describe("which engine a connection runs", () => {
     expect(engineOf({ provider: "kokoro" }, "").supported).toBe(false);
   });
 
+  test("a Chatterbox server reached directly acts only while it runs Turbo", () => {
+    expect(engineOf({ provider: "chatterbox_direct" }, "turbo").id).toBe("chatterbox_turbo");
+    expect(engineOf({ provider: "chatterbox_direct" }, "original").supported).toBe(false);
+    expect(engineOf({ provider: "chatterbox_direct" }, "multilingual").supported).toBe(false);
+  });
+
   test("an OpenAI-style connection can be named a Chatterbox-Turbo server in Settings", () => {
     expect(engineOf({ provider: "openai_tts", name: "Box" }, "tts-1", "chatterbox_turbo").id).toBe("chatterbox_turbo");
     // It names only that. A model with no tags stays unused.
