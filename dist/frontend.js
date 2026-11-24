@@ -625,6 +625,14 @@ const PANEL_CSS = `
   --af-accent-line: var(--lumiverse-primary-050, rgba(147,112,219,.5));
   --af-sound: var(--lumiverse-warning, #f59e0b);
   --af-sound-soft: var(--lumiverse-warning-015, rgba(245,158,11,.15));
+  /* One fixed color for each kind of part, the same in every theme, so a
+     narrator line, a character, you, an NPC, a sound and a voice tag can be
+     told apart at a glance. Used for rings, marks and chips, never for text. */
+  --af-k-narrator: #8b9cb8;
+  --af-k-character: #a78bfa;
+  --af-k-persona: #2dd4bf;
+  --af-k-npc: #f472b6;
+  --af-k-tag: #60a5fa;
   --af-good: var(--lumiverse-success, #22c55e);
   --af-bad: var(--lumiverse-danger, #ef4444);
   --af-text: var(--lumiverse-text, rgba(255,255,255,.9));
@@ -856,7 +864,7 @@ textarea.af-tall { min-height: 260px; }
 .af-parts button[aria-current="true"] i { height: 10px; background: var(--af-accent); }
 .af-parts button:focus-visible { outline: none; box-shadow: inset 0 0 0 2px var(--af-accent); border-radius: 6px; }
 .af-chip { display: inline-flex; align-items: center; gap: 4px; margin: 0 2px; padding: 0 7px; border-radius: 999px; font-size: 11px; font-weight: 600; line-height: 19px; vertical-align: 1px; white-space: nowrap; }
-.af-chip-tag { background: var(--af-accent-soft); color: var(--af-text); }
+.af-chip-tag { background: rgba(96,165,250,.16); color: var(--af-text); box-shadow: inset 0 0 0 1px var(--af-k-tag); }
 .af-chip-insound { background: var(--af-sound-soft); color: var(--af-text); box-shadow: inset 0 0 0 1px var(--af-sound); white-space: normal; }
 button.af-chip-sound svg { width: 12px; height: 12px; flex: none; color: var(--af-sound); }
 .af-empty { padding: 14px 10px; color: var(--af-muted); text-align: center; font-size: 12.5px; }
@@ -888,8 +896,16 @@ button.af-chip-sound svg { width: 12px; height: 12px; flex: none; color: var(--a
 .af-pic { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .af-pic .af-avatar { width: 48px; height: 48px; font-size: 18px; }
 .af-avatar { overflow: hidden; display: grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; background: var(--af-accent-soft); color: var(--af-text); font-size: 12px; font-weight: 700; box-shadow: inset 0 0 0 1.5px var(--af-accent); }
-.af-person[data-kind="narrator"] .af-avatar { background: var(--af-fill); box-shadow: inset 0 0 0 1.5px var(--af-line-hover); }
-.af-person[data-kind="persona"] .af-avatar { background: var(--af-sound-soft); box-shadow: inset 0 0 0 1.5px var(--af-sound); }
+.af-person[data-kind="narrator"] .af-avatar { background: var(--af-fill); box-shadow: inset 0 0 0 2px var(--af-k-narrator); }
+.af-person[data-kind="character"] .af-avatar { box-shadow: inset 0 0 0 2px var(--af-k-character); }
+.af-person[data-kind="persona"] .af-avatar { background: rgba(45,212,191,.14); box-shadow: inset 0 0 0 2px var(--af-k-persona); }
+.af-person[data-kind="npc"] .af-avatar { background: rgba(244,114,182,.14); box-shadow: inset 0 0 0 2px var(--af-k-npc); }
+.af-parts button[data-who="narrator"] { --af-k: var(--af-k-narrator); }
+.af-parts button[data-who="character"] { --af-k: var(--af-k-character); }
+.af-parts button[data-who="persona"] { --af-k: var(--af-k-persona); }
+.af-parts button[data-who="npc"] { --af-k: var(--af-k-npc); }
+.af-parts button[data-who] i { background: var(--af-k); opacity: .4; }
+.af-parts button[data-who][data-done] i, .af-parts button[data-who][aria-current="true"] i { opacity: 1; }
 .af-person-name { display: flex; flex-direction: column; min-width: 0; }
 .af-person-name b { font-size: 13px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .af-person-name span { color: var(--af-muted); font-size: 11.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -3754,8 +3770,10 @@ export function setup(ctx, overrides) {
         '.af-cue{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:999px;font-size:12.5px;color:var(--lumiverse-text,rgba(255,255,255,.9));' +
         'background:var(--lumiverse-warning-015,rgba(245,158,11,.15));box-shadow:inset 0 0 0 1px var(--lumiverse-warning,#f59e0b);animation:af-in .3s ease-out both}' +
         '.af-cue svg{width:14px;height:14px;color:var(--lumiverse-warning,#f59e0b)}' +
-        '.af-avatar-persona{background:var(--lumiverse-warning-015,rgba(245,158,11,.15))!important;box-shadow:inset 0 0 0 1.5px var(--lumiverse-warning,#f59e0b)!important}' +
-        '.af-avatar-narrator{background:var(--lumiverse-fill,rgba(0,0,0,.15))!important;box-shadow:inset 0 0 0 1.5px var(--lumiverse-border-hover,rgba(147,112,219,.25))!important}';
+        '.af-avatar-character{box-shadow:inset 0 0 0 2px #a78bfa!important}' +
+        '.af-avatar-persona{background:rgba(45,212,191,.14)!important;box-shadow:inset 0 0 0 2px #2dd4bf!important}' +
+        '.af-avatar-npc{background:rgba(244,114,182,.14)!important;box-shadow:inset 0 0 0 2px #f472b6!important}' +
+        '.af-avatar-narrator{background:var(--lumiverse-fill,rgba(0,0,0,.15))!important;box-shadow:inset 0 0 0 2px #8b9cb8!important}';
     try {
         disposers.push(ctx.dom.addStyle(PATTERN_CSS));
     }
@@ -4476,6 +4494,7 @@ export function setup(ctx, overrides) {
         if (face.dataset.k !== faceKey) {
             face.dataset.k = faceKey;
             face.innerHTML = it && it.kind === 'voice' ? faceHtml(who, name) : it ? ICON_SOUND : ICON;
+            face.className = 'af-avatar' + (it && it.kind === 'voice' && line ? ' af-avatar-' + partWho(line) : '');
         }
         setText(q('who'), name || (busyMessage ? 'Directing the message' : playerWhose === 'mine' ? 'Your latest message' : 'The latest reply'));
         setText(q('cap'), show ? (paused ? 'Paused' : 'Now playing · part ' + (Math.min(show.index, total - 1) + 1) + ' of ' + total) : busyMessage ? 'Getting ready' : 'Ready');
@@ -5070,13 +5089,21 @@ export function setup(ctx, overrides) {
     // One mark for each part of the message: lines, sounds and the cheer. The
     // part playing is wider, and the parts played are filled. A tap goes there.
     let partsFor = null;
+    // Whose line a voice part is, for its color: narrator, character, persona
+    // or NPC.
+    function partWho(line) {
+        if (line.kind === 'narration')
+            return 'narrator';
+        const m = memberFor(line.speaker);
+        return m && /^(character|persona|npc)$/.test(m.kind) ? m.kind : 'character';
+    }
     function paintParts(box, script) {
         const items = show ? show.items : script ? buildItems(script) : [];
         const key = show || script;
         if (partsFor !== key || box.childElementCount !== items.length) {
             partsFor = key;
             box.innerHTML = items
-                .map((x, k) => '<button type="button" data-at="' + k + '" data-k="' + x.kind + '" aria-label="Part ' + (k + 1) +
+                .map((x, k) => '<button type="button" data-at="' + k + '" data-k="' + x.kind + '"' + (x.kind === 'voice' ? ' data-who="' + esc(partWho(x.line)) + '"' : '') + ' aria-label="Part ' + (k + 1) +
                 (x.kind === 'voice' ? ', ' + esc(x.line.kind === 'narration' ? 'Narrator' : x.line.speaker) : x.kind === 'applause' ? ', the audience' : ', a sound') +
                 '" title="' + esc(x.kind === 'voice' ? stripTags(x.line.text).slice(0, 80) : x.kind === 'applause' ? 'The audience cheers' : x.sound || '') + '"><i></i></button>')
                 .join('');

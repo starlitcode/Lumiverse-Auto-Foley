@@ -31,6 +31,7 @@ _Not yet released_
 - **Notes for each voice engine** shows the engine in use first and open again. Every other engine has a fold of its own.
 - **The floating player's quick switches** flip only when the switch itself is pressed, the same as every other switch.
 - **The moving bars** next to the speaker in the floating player are gone.
+- **A color for each kind of part.** The narrator is slate, characters violet, you teal, NPCs pink, sounds amber and voice tags blue, on the pictures, the marks for each part and the tags in Now playing. The colors are the same in every theme.
 - **Warnings that fit the engine.** The Director tab says when Big moments change only the audience on an engine other than ElevenLabs, and when an engine cannot sing.
 - **Scripts.** The panel calls what the Director makes from a message its script, such as **Kept audio and scripts** in **Start again**.
 
