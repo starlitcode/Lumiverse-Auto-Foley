@@ -3474,20 +3474,15 @@ export function setup(ctx, overrides) {
         '.af.af-pl{max-width:none;margin:0;width:100%;gap:10px;padding:12px;overflow-x:hidden;overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin;border:1px solid var(--af-line-hover);border-radius:var(--lumiverse-radius-lg,16px);' +
         'background-color:var(--lumiverse-card-bg-solid,#1a1526);background-image:linear-gradient(var(--lumiverse-bg-elevated,#1f1a2e),var(--lumiverse-bg-elevated,#1f1a2e));' +
         'box-shadow:var(--lumiverse-shadow-lg,0 18px 48px rgba(0,0,0,.5));transform-origin:var(--af-from,22px 22px)}' +
-        '.af-pl-top{display:flex;align-items:center;gap:9px;min-width:0;margin:-2px -2px 0 0;cursor:grab;user-select:none;-webkit-user-select:none}' +
+        // The top bar is where the open player is dragged from. touch-action keeps
+        // a phone from taking the press as a scroll and canceling the drag.
+        '.af-pl-top{display:flex;align-items:center;gap:9px;min-width:0;margin:-2px -2px 0 0;cursor:grab;user-select:none;-webkit-user-select:none;touch-action:none}' +
         '.af-pl-mark{width:28px;height:28px;border-radius:8px;display:grid;place-items:center;flex:none;background:var(--af-accent-soft);color:var(--af-accent-text)}' +
         '.af-pl-mark svg{width:17px;height:17px}' +
         '.af-pl-now{display:flex;align-items:center;gap:9px;min-width:0}' +
         '.af-pl-now .af-avatar{width:34px;height:34px;font-size:13px;flex:none}' +
         '.af-pl-now .af-avatar svg{width:16px;height:16px}' +
         '.af-pl-cap{display:block;font-size:9.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--af-muted)}' +
-        '.af-pl-bars{display:flex;align-items:center;gap:3px;height:20px;color:var(--af-accent-text);flex:none}' +
-        '.af-pl-bars i{display:block;width:3px;height:6px;border-radius:3px;background:currentColor;opacity:.35;transform-origin:center}' +
-        '.af-pl-bars i:nth-child(2){height:15px}.af-pl-bars i:nth-child(3){height:10px}.af-pl-bars i:nth-child(4){height:18px}' +
-        '.af-pl[data-af-state="playing"] .af-pl-bars i{opacity:1}' +
-        '@media (prefers-reduced-motion: no-preference){html:not([data-af-still]) .af-pl[data-af-state="playing"] .af-pl-bars i{animation:af-level .9s ease-in-out infinite alternate}' +
-        'html:not([data-af-still]) .af-pl[data-af-state="playing"] .af-pl-bars i:nth-child(2){animation-delay:-.5s}html:not([data-af-still]) .af-pl[data-af-state="playing"] .af-pl-bars i:nth-child(3){animation-delay:-.2s}html:not([data-af-still]) .af-pl[data-af-state="playing"] .af-pl-bars i:nth-child(4){animation-delay:-.7s}}' +
-        '@keyframes af-level{to{transform:scaleY(.35)}}' +
         '.af-pl-seek{display:flex;align-items:center;gap:8px;font-size:10.5px;color:var(--af-muted);font-variant-numeric:tabular-nums}' +
         '.af-pl-seek span{white-space:nowrap;min-width:30px}.af-pl-seek span:last-child{text-align:right}' +
         '.af-pl .af-parts{min-height:20px}.af-pl .af-parts button{height:20px;padding:7px 0}' +
@@ -3498,7 +3493,9 @@ export function setup(ctx, overrides) {
         '.af-pl-id small{display:block;font-size:11.5px;color:var(--af-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}' +
         '.af-pl .af-round{width:34px;height:34px}' +
         '.af-pl-said{min-height:44px;padding:8px 10px;border-radius:var(--af-r-md);background:var(--af-fill);border:1px solid var(--af-line);font-size:13px;line-height:1.45;' +
-        'display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;overflow-wrap:anywhere}' +
+        // The whole line shows. A long one scrolls inside the box, up to eight
+        // lines tall, so nothing is cut off at the bottom.
+        'max-height:calc(1.45em * 8 + 18px);overflow-x:hidden;overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin;overflow-wrap:anywhere;white-space:pre-line}' +
         '.af-pl-said[data-quiet]{color:var(--af-muted)}' +
         '.af-pl-tr{position:relative;display:flex;align-items:center;justify-content:center;gap:12px;min-height:52px;padding:0 40px}' +
         '.af-pl-tr .af-pl-side{position:absolute;top:50%;transform:translateY(-50%);width:32px;height:32px;border-radius:9px;background:transparent;color:var(--af-muted)}' +
@@ -3511,7 +3508,7 @@ export function setup(ctx, overrides) {
         '.af-pl-mix label>span{display:flex;justify-content:space-between;gap:4px}' +
         '.af-pl-mix b{font-weight:500;font-variant-numeric:tabular-nums}' +
         '.af-pl-sw{display:grid;grid-template-columns:1fr 1fr;gap:6px 14px}' +
-        '.af-pl-sw label{display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:32px;font-size:13px;cursor:pointer}' +
+        '.af-pl-sw>div{display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:32px;font-size:13px}' +
         '.af-pl-cast{display:flex;flex-direction:column;gap:2px;max-height:210px;overflow:auto;overscroll-behavior:contain;scrollbar-width:thin}' +
         '.af-pl-ch{display:flex;align-items:center;gap:8px;padding:2px 4px;border-radius:var(--af-r-sm);min-width:0}' +
         '.af-pl-ch[aria-current="true"]{background:var(--af-accent-faint)}' +
@@ -3520,7 +3517,7 @@ export function setup(ctx, overrides) {
         '.af-pl-ch[data-off="true"]>span:not(.af-avatar){color:var(--af-muted)}' +
         '.af-pl-ch .af-round{width:32px;height:32px}' +
         '.af-pl-ch .af-round[aria-pressed="true"]{color:var(--af-accent-text)}' +
-        '@media (pointer:coarse){.af-pl .af-round{width:40px;height:40px}.af-pl-tr .af-pl-side{width:40px;height:40px}.af-pl-tr{padding:0 46px}.af-pl-tr .af-play{width:54px;height:54px}.af-pl-sw label{min-height:40px}.af-pl-ch .af-round{width:36px;height:36px}}' +
+        '@media (pointer:coarse){.af-pl .af-round{width:40px;height:40px}.af-pl-tr .af-pl-side{width:40px;height:40px}.af-pl-tr{padding:0 46px}.af-pl-tr .af-play{width:54px;height:54px}.af-pl-sw>div{min-height:40px}.af-pl-ch .af-round{width:36px;height:36px}}' +
         // The subtitles on the Stage.
         '.af-theater{display:flex;flex-direction:column;gap:8px;min-height:112px;padding:14px;border-radius:var(--lumiverse-radius-md,10px);' +
         'border:1px solid var(--lumiverse-border,rgba(147,112,219,.12));background:var(--lumiverse-fill,rgba(0,0,0,.15))}' +
@@ -4035,7 +4032,7 @@ export function setup(ctx, overrides) {
             '<button type="button" class="af-round" data-p="menu" aria-label="More" title="More">' + ICON_MORE + '</button>' +
             '<button type="button" class="af-round" data-p="close" aria-label="Close the player" title="Close the player">' + ICON_DOWN + '</button></div>' +
             '<div class="af-pl-now"><span class="af-avatar" data-p="face"></span><div class="af-pl-id"><span class="af-pl-cap" data-p="cap">Now playing</span><b data-p="who"></b></div>' +
-            '<span class="af-pl-bars" aria-hidden="true"><i></i><i></i><i></i><i></i></span></div>' +
+            '</div>' +
             '<div class="af-pl-said" data-p="said" aria-live="polite"></div>' +
             '<div class="af-pl-tr">' +
             '<button type="button" class="af-round af-pl-side" data-p="prep" aria-pressed="false">' + ICON_PREP + '</button>' +
@@ -4053,7 +4050,10 @@ export function setup(ctx, overrides) {
             '<label><span>Sounds<b data-p="sv"></b></span><input type="range" data-p="svol" min="0" max="100" step="5" aria-label="Sounds volume"></label>' +
             '</div>' +
             '<div class="af-pl-sw" role="group" aria-label="Quick switches">' +
-            SWITCHES.map((w) => '<label title="' + esc(w.title) + '"><span>' + esc(w.label) + '</span><input type="checkbox" class="af-box" role="switch" data-sw="' + w.key + '" aria-label="' + esc(w.label) + '"></label>').join('') +
+            // Only the switch flips it, the same as every switch in the panel.
+            // The words beside it name it for a screen reader, and are not a
+            // second place to press.
+            SWITCHES.map((w) => '<div title="' + esc(w.title) + '"><span id="af-plsw-' + w.key + '">' + esc(w.label) + '</span><input type="checkbox" class="af-box" role="switch" data-sw="' + w.key + '" aria-labelledby="af-plsw-' + w.key + '"></div>').join('') +
             '</div>' +
             '<button type="button" class="af-fold" data-p="fold" aria-expanded="false"><span class="af-caret">▶</span><span>Who is voiced</span></button>' +
             '<div class="af-sub" data-p="cast" hidden><div class="af-pl-cast"></div></div>' +
@@ -4400,7 +4400,7 @@ export function setup(ctx, overrides) {
                 { id: 'message', label: 'End of a message' },
                 { id: 'big', label: 'Big moments' },
             ], S.applauseWhen, (v) => set({ applauseWhen: v }), 'End of a message is the default: one cheer when a message finishes. Big moments cheers after a line the Director marks as a peak, which needs Big moments on in the Director tab.'),
-            slider('How long they cheer', Number(S.applauseSeconds) || 5, 1, 15, 1, (v) => v + ' s', (v) => set({ applauseSeconds: v }), '5 seconds by default. The cheer fades out at the end, so the next part is not held up.'),
+            slider('How long they cheer', Number(S.applauseSeconds) || 5, 1, 15, 1, (v) => v + '\u00a0s', (v) => set({ applauseSeconds: v }), '5 seconds by default. The cheer fades out at the end, so the next part is not held up.'),
             slider('How loud they cheer', Math.round((Number(S.applauseVolume) || 0) * 100), 0, 100, 5, (v) => v + '%', (v) => set({ applauseVolume: v / 100 }), '60% by default, of the Sounds volume on the Stage tab.'),
             select('Applause sound', [{ id: '', label: 'The built-in cheering crowd' }].concat(sounds.map((x) => ({ id: String(x.id), label: String(x.name) }))), S.applauseSound, (v) => set({ applauseSound: v }), 'The built-in cheer by default. Any sound in your library can be used instead. Upload one in the Sounds tab.'),
             (() => {
@@ -4784,9 +4784,11 @@ export function setup(ctx, overrides) {
             setText(title, show.script.author ? show.script.author + '’s message' : 'This message');
             const w = show.waiting.get(show.index);
             const said = w
-                ? 'The voice service is busy. Trying again in ' + Math.max(0, Math.ceil((w.until - Date.now()) / 1000)) + ' s (wait ' + w.n + ' of ' + S.rateWaits + ')'
+                ? 'The voice service is busy. Trying again in ' + Math.max(0, Math.ceil((w.until - Date.now()) / 1000)) + '\u00a0s (wait ' + w.n + ' of ' + S.rateWaits + ')'
                 : phase || 'Playing';
-            setText(sub, said + ' · part ' + Math.min(show.index + 1, show.items.length) + ' of ' + show.items.length + ' · ' + secs + ' s');
+            // A no-break space keeps the s with its number, so it never wraps to a
+            // line of its own as the number grows.
+            setText(sub, said + ' · part ' + Math.min(show.index + 1, show.items.length) + ' of ' + show.items.length + ' · ' + secs + '\u00a0s');
         }
         else {
             setText(title, script ? (script.author ? script.author + '’s message' : 'This message') : 'Nothing playing');

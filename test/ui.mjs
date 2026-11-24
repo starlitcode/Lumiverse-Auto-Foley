@@ -1297,6 +1297,52 @@ if (section("reminders")) {
   }
 }
 
+if (section("widget fixes")) {
+  console.log("The open player shows the whole line, and only a switch flips a switch");
+  for (const size of SIZES) {
+    const { context, page, errors } = await open(THEMES[0], size);
+    const where = size.name;
+    await page.click('.af-tab[data-tab="settings"]');
+    await page.waitForTimeout(200);
+    await page.evaluate(() => document.querySelector('[data-af-row="widgetOn"] .af-box').click());
+    await page.waitForTimeout(250);
+    await page.evaluate(() => window.__widget.querySelector(".af-float").click());
+    await page.waitForTimeout(700);
+    const got = await page.evaluate(async () => {
+      const w = window.__widget;
+      const said = w.querySelector('[data-p="said"]');
+      said.textContent = "Brin set the lantern on the step and waited for the gulls to settle before she spoke again, slow and low.";
+      await new Promise((r) => setTimeout(r, 50));
+      const fits = said.scrollHeight <= said.clientHeight + 1;
+      said.textContent = Array.from({ length: 30 }, (_, k) => "Line " + k + " of a very long passage that keeps going.").join(" ");
+      await new Promise((r) => setTimeout(r, 50));
+      said.scrollTop = 1e6;
+      const scrolls = said.scrollTop > 0;
+      const sw = w.querySelector('[data-sw="soundsOn"]');
+      const words = sw.parentElement.querySelector("span");
+      const before = sw.checked;
+      words.click();
+      await new Promise((r) => setTimeout(r, 50));
+      const afterWords = sw.checked;
+      sw.click();
+      await new Promise((r) => setTimeout(r, 50));
+      return {
+        fits, scrolls, wordsLeft: afterWords === before, boxFlips: sw.checked !== before,
+        label: sw.closest("label") === null && !!sw.getAttribute("aria-labelledby"),
+        drag: getComputedStyle(w.querySelector(".af-pl-top")).touchAction,
+        bars: !!w.querySelector(".af-pl-bars"),
+      };
+    });
+    check(got.fits, where + ": a three-line line shows in full, with nothing cut off");
+    check(got.scrolls, where + ": a very long line scrolls inside its box instead of being cut off");
+    check(got.wordsLeft && got.boxFlips && got.label, where + ": pressing a quick switch's words does nothing, pressing the switch flips it (" + JSON.stringify(got) + ")");
+    check(got.drag === "none", where + ": the top bar can be dragged on a phone without the page scrolling (" + got.drag + ")");
+    check(!got.bars, where + ": no moving bars symbol");
+    check(!errors.length, where + ": no page errors. " + errors.slice(0, 2).join(" | "));
+    await context.close();
+  }
+}
+
 if (section("switch rows")) {
   console.log("Rows under a switch open in place, over several frames");
   const { context, page } = await open(THEMES[0], SIZES[1]);
