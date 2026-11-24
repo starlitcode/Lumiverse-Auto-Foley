@@ -130,6 +130,19 @@ Chatterbox runs on your own computer, through a server such as Chatterbox-TTS-Se
 - Chatterbox-Turbo knows nine tags: `[clear throat]`, `[sigh]`, `[shush]`, `[cough]`, `[groan]`, `[sniff]`, `[gasp]`, `[chuckle]` and `[laugh]`. It reads English only.
 - Chatterbox-Multilingual takes no tags, so Auto Foley does not use it. A connection with "multilingual" in its name is taken to run it.
 
+## Proxies
+
+Auto Foley never calls a voice service itself. Lumiverse makes the call, to the address saved on the connection. So a proxy set up in Lumiverse works with Auto Foley.
+
+- **TTS connections.** An ElevenLabs, Fish Audio, Gemini or OpenRouter connection can point at a proxy address in Lumiverse. Auto Foley reads only the connection's provider and model to find the engine, never its address.
+- **The Director and the Decision model.** They are asked through your Lumiverse connections, so a proxy on those works too.
+- **OpenAI TTS connections.** Auto Foley takes one to be Chatterbox only when "Chatterbox" is in its name, or when you pick **Chatterbox-Turbo** under **What this connection runs**. A proxy address does not change that.
+
+Two things do not go through a Lumiverse connection:
+
+- **Chatterbox server (direct)** talks to the server address you type in Settings. That address can be a proxy in front of the server, as long as it passes on the server's own routes.
+- **Sound effects from Freesound or ElevenLabs** go only to `freesound.org` and `api.elevenlabs.io`, with your own key. These addresses are fixed, so a key is only ever sent to its own service. They cannot go through a proxy. See [Sounds](sounds.md).
+
 ## When something cannot be done
 
 Auto Foley says so in the Settings tab, the Director tab, the Cast tab and **Check my setup**:
