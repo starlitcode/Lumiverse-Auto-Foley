@@ -1293,6 +1293,17 @@ if (section("reminders")) {
     await page.waitForTimeout(300);
     const said = await page.evaluate(() => (document.querySelector("[data-af-moved]") || {}).textContent || "");
     check(/Some default settings have changed in this update/.test(said) && /A button on every message/.test(said), "someone still on the old button defaults is told (" + said.slice(0, 70) + ")");
+    for (const z of [0.85, 1, 1.25]) {
+      const fit = await page.evaluate((zoom) => {
+        document.documentElement.style.zoom = String(zoom);
+        const n = document.querySelector("[data-af-moved]");
+        const box = n.getBoundingClientRect();
+        const out = Array.from(n.querySelectorAll("button")).filter((b) => { const r = b.getBoundingClientRect(); return r.right > box.right + 0.5 || r.left < box.left - 0.5; }).length;
+        document.documentElement.style.zoom = "";
+        return { out, vw: document.documentElement.clientWidth, right: box.right };
+      }, z);
+      check(fit.out === 0 && fit.right <= fit.vw * 1.25 + 1, "phone, zoom " + z + ": the notice's buttons stay inside it (" + JSON.stringify(fit) + ")");
+    }
     const took = await page.evaluate(async () => {
       Array.from(document.querySelectorAll("[data-af-moved] button")).find((b) => b.textContent.trim() === "Take it").click();
       await new Promise((r) => setTimeout(r, 1500));

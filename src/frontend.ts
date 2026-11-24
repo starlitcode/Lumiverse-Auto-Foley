@@ -793,6 +793,7 @@ textarea.af-tall { min-height: 260px; }
 .af-good { border-color: var(--af-good); background: rgba(34,197,94,.12); }
 .af-good { background: color-mix(in srgb, var(--af-good) 12%, transparent); }
 .af-sign { flex: none; font-weight: 700; line-height: 1.45; }
+.af-notice-body { display: flex; flex-direction: column; gap: 8px; flex: 1; min-width: 0; }
 .af-warn .af-sign { color: var(--af-sound); }
 .af-bad .af-sign { color: var(--af-bad); }
 .af-good .af-sign { color: var(--af-good); }
@@ -6826,6 +6827,19 @@ export function setup(ctx: Ctx, overrides?: any) {
     return out;
   }
 
+  // A notice with buttons. The buttons sit under the words, inside the
+  // notice, so on a narrow screen they wrap there instead of running off the
+  // side.
+  function noticeWithButtons(kind: 'warn' | 'bad' | 'good', text: string, row: HTMLElement): HTMLElement {
+    const n = notice(kind, text);
+    const words = n.lastElementChild as HTMLElement;
+    const body = el('<div class="af-notice-body"></div>');
+    n.replaceChild(body, words);
+    body.appendChild(words);
+    body.appendChild(row);
+    return n;
+  }
+
   // Said on every tab: a default that changed while this reader was on it,
   // and built-in text that changed while they have their own version.
   function changeNotices(): HTMLElement[] {
@@ -6833,15 +6847,12 @@ export function setup(ctx: Ctx, overrides?: any) {
     if (!accountAnswered) return out;
     const moved = movedFor(S, S.movedSeen || '', MOVED_DEFAULTS);
     if (moved.length) {
-      const n = notice(
-        'warn',
+      const text =
         (moved.length === 1
           ? 'A default setting has changed in this update, and you were on the old one. '
           : 'Some default settings have changed in this update, and you were on the old ones. ') +
           moved.map((m) => m.label + ': ' + m.why).join(' ') +
-          ' Yours is still the old value until you take the new one.',
-      );
-      n.setAttribute('data-af-moved', '');
+          ' Yours is still the old value until you take the new one.';
       const row = el('<div class="af-row"></div>');
       const answered = () => [S.movedSeen || ''].concat(moved.map(movedRowMark)).join(' ').trim();
       row.appendChild(
@@ -6858,18 +6869,16 @@ export function setup(ctx: Ctx, overrides?: any) {
           renderTab();
         }),
       );
-      n.appendChild(row);
+      const n = noticeWithButtons('warn', text, row);
+      n.setAttribute('data-af-moved', '');
       out.push(n);
     }
     const mark = builtInMark();
     const own = ownBuiltIns();
     if (S.builtInSeen && S.builtInSeen !== mark && own.length) {
-      const n = notice(
-        'warn',
+      const text =
         'The built-in text has changed in this update. You have your own version of ' + own.join(', ') +
-          '. Yours is untouched. To take the new wording, press Back to built-in on it, or Use defaults for the patterns.',
-      );
-      n.setAttribute('data-af-builtin-moved', '');
+        '. Yours is untouched. To take the new wording, press Back to built-in on it, or Use defaults for the patterns.';
       const row = el('<div class="af-row"></div>');
       row.appendChild(
         button('Got it', () => {
@@ -6877,7 +6886,8 @@ export function setup(ctx: Ctx, overrides?: any) {
           renderTab();
         }),
       );
-      n.appendChild(row);
+      const n = noticeWithButtons('warn', text, row);
+      n.setAttribute('data-af-builtin-moved', '');
       out.push(n);
     }
     return out;
