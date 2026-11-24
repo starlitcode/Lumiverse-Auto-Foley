@@ -1288,8 +1288,21 @@ export function setup(ctx: Ctx, overrides?: any) {
       out.push(noTagsWhy(conn || activeConnection(), model));
       return out;
     }
-    if (S.directorOn && S.soundsOn && S.soundStyle !== 'effects' && !eng.inVoiceSounds)
-      out.push('This engine cannot make sounds inside a line. Its sounds are played as separate sound effects instead, which come from Freesound, ElevenLabs or your own uploads, in the Sounds tab.');
+    // Both already plays every sound as an effect on an engine that cannot
+    // make one in the voice, so only In the voice is worth a warning.
+    if (S.directorOn && S.soundsOn && S.soundStyle === 'voice' && !eng.inVoiceSounds)
+      out.push('This engine cannot make sounds inside a line, so In the voice does nothing here. Its sounds are played as separate sound effects instead, which come from Freesound, ElevenLabs or your own uploads, in the Sounds tab.');
+    return out;
+  }
+
+  // What a setting cannot do on the engine in use. Not a fault, so these
+  // show on the Director tab beside the settings they are about, and Check
+  // my setup leaves them out.
+  function engineLimits(eng: Engine): string[] {
+    const out: string[] = [];
+    if (!eng.supported || !S.directorOn) return out;
+    if (S.bigMoments && !eng.eleven) out.push('Big moments make the voice looser only on ElevenLabs. On this engine they only mark when the audience can cheer.');
+    if (!eng.singTag && !eng.singStyle) out.push('This engine cannot sing, so a sung line is spoken.');
     return out;
   }
 
@@ -5919,6 +5932,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         const paintWarn = () => {
           warnBox.innerHTML = '';
           for (const w of engineWarnings(mainEngine())) warnBox.appendChild(notice(mainEngine().supported ? 'warn' : 'bad', w));
+          for (const w of engineLimits(mainEngine())) warnBox.appendChild(notice('warn', w));
           warnBox.hidden = !warnBox.childElementCount;
         };
         paintWarn();

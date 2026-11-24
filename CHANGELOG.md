@@ -29,10 +29,12 @@ _Not yet released_
 - **Notes for each voice engine** shows the engine in use first and open again. Every other engine has a fold of its own.
 - **The floating player's quick switches** flip only when the switch itself is pressed, the same as every other switch.
 - **The moving bars** next to the speaker in the floating player are gone.
+- **Warnings that fit the engine.** The Director tab says when Big moments change only the audience on an engine other than ElevenLabs, and when an engine cannot sing.
 - **Scripts.** The panel calls what the Director makes from a message its script, such as **Kept audio and scripts** in **Start again**.
 
 ### Fixed
 
+- **Sounds made with Both warned on every engine but ElevenLabs.** Both plays every sound as an effect on those engines, so only In the voice warns now.
 - **A new speaker on Gemini got a voice of any gender.** Gemini lists its voices as masculine and feminine, which did not match. Every way a provider writes gender is understood now.
 - **Only minor characters got a voice picked for them.** Anyone new but the narrator gets one now. The pick also matches words in how they sound, such as gravelly or young, to each voice's own description.
 - **The words in Now playing were choppy.** The word being said now fills from left to right as it is spoken, and the timing is worked out on every frame.
