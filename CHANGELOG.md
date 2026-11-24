@@ -22,7 +22,7 @@ _Not yet released_
 - **Nonbinary**, as a voice type in the Cast tab. The Director marks someone new as nonbinary only when the text says so, and a voice the provider marks neutral is picked for them when there is one.
 - **Main characters and minor ones.** The Director says which a new speaker is, and the Cast tab files a main one as a character and a minor one as an NPC.
 - **Crop a cast picture.** After you choose a picture, drag it and zoom so the circle frames the face, then press **Use this**.
-- **What the Decision model answered**, in the Log. Each answer says who it picked and how sure it was, the next two it considered, each line's chance of being a sound, and whether each was used. **How sure it must be**, under **Use a Decision model**, sets when an answer is used.
+- **The Decision model's next two choices.** **What the Decision model answered**, in the Log, now also lists the next two people it considered for each quote, with their chances, so you can see how close the call was.
 - **Back to defaults for the mixer.** It sets voices to 100% and sounds to 80%, and unmutes both.
 
 ### Changed
@@ -36,6 +36,7 @@ _Not yet released_
 
 ### Fixed
 
+- **The notice that a built-in text changed could run off the side of a phone.** Its button now sits under the words, inside the notice.
 - **Other accounts saw no connections to pick, with no reason given.** Lumiverse refuses an extension installed as Personal for every account but the one that installed it. The panel now says so, and that it has to be installed as Operator, under Extensions, for every account to use it.
 - **Sounds made with Both warned on every engine but ElevenLabs.** Both plays every sound as an effect on those engines, so only In the voice warns now.
 - **A new speaker on Gemini got a voice of any gender.** Gemini lists its voices as masculine and feminine, which did not match. Every way a provider writes gender is understood now.
