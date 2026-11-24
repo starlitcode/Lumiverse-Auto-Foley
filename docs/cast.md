@@ -31,10 +31,32 @@ Someone the AI added has no voice picked. The first time they speak, Auto Foley 
 - **Stability.** ElevenLabs only. Lower is more expressive. On Eleven v3 it has three settings: Creative, Natural and Robust.
 - **Similarity and Style.** ElevenLabs only. Sent to ElevenLabs as they are.
 - **Speed.** Sent to every engine but Gemini, which has no speed.
-- **How they speak.** A note for the Director, such as "soft-spoken and dry, rarely raises their voice". It holds up to 1000 characters. The count under the box shows how many are used, and the box stops taking text at the limit.
+- **More settings.** A fold under the voice, with only the settings their engine takes. **Back to defaults** clears them.
+- **How they speak.** A note for the Director, such as "soft-spoken and dry, rarely raises their voice". It holds up to 1000 characters. See [How much a box holds](#how-much-a-box-holds).
 - **Do not voice.** Their lines are skipped.
 - **Hear a sample** speaks a test line with these settings. It costs a few credits.
 - **Remove** takes them out of the cast. The narrator cannot be removed.
+
+## How much a box holds
+
+Three boxes on a card have a limit:
+
+- **How they speak**: 1000 characters.
+- **Voice direction**, for Fish Audio, in **More settings**: 300 characters.
+- **Their usual way of speaking**, for Gemini 3.8, in **More settings**: 300 characters.
+
+How it works:
+
+- A count under each box shows how many characters are used, such as "700 of 1000 characters".
+- The count turns bold near the limit.
+- The box stops taking text at the limit. What you see in the box is what is saved.
+- **Expand** has the same limit and count.
+
+Why the limits are there:
+
+- **How they speak** is read only by the Director. It is never sent to the voice engine, so the limit is the same for every model.
+- Each time the Director writes a script, it gets the note for every person in the cast. Long notes for a big cast make each script slower to write and cost more.
+- **Voice direction** and **Their usual way of speaking** are sent to the voice service with every line that person says, so Auto Foley keeps them short.
 
 ## Groups
 
