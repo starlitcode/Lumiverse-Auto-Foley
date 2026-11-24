@@ -145,7 +145,7 @@ In the player:
 
 With **Keep made audio** on, in the Settings tab:
 
-- Each spoken line is kept in your account, with the directed message.
+- Each spoken line is kept in your account, with the message's script: the lines, who says each one, and the tags and sounds the Director added.
 - Going back to a chat later, even after closing Lumiverse, and pressing the button plays the kept lines. Nothing is spent on them, and the Log says how many were kept.
 - A line is made again only when something about it changed, such as the voice, the model or the words.
 - **Up to 100 MB** is the default. When the total passes it, the oldest lines go first.

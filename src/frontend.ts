@@ -2261,7 +2261,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     if (got.script) {
       for (const line of got.script.log || []) log(line, '', 'director');
       for (const line of got.script.decided || []) log(line, '', 'decision');
-      log('A new reply is directed and ready to play.', '', 'director');
+      log('The script for the new reply is ready to play.', '', 'director');
       lastScript = got.script;
       lastMeta = got.meta;
       if (tab === 'stage' && !show) renderTab();
@@ -2283,6 +2283,18 @@ export function setup(ctx: Ctx, overrides?: any) {
   const MSG_FOOT = '[data-spindle-mount="message_footer"]';
   const MSG_SLOT = MSG_ACTIONS + ',' + MSG_FOOT;
   const SETTLE_MS = 260;
+
+  // The id of the message a button sits in, read when it is pressed, so a
+  // row Lumiverse reused for another message performs that message.
+  function messageIdAt(b: Element): string {
+    try {
+      const msg = b.closest('[data-message-id]');
+      if (msg) return String(msg.getAttribute('data-message-id') || '');
+      const slot = b.closest('[data-spindle-scope]');
+      if (slot) return slotId(slot);
+    } catch (_) {}
+    return '';
+  }
 
   function slotId(node: Element): string {
     const parts = String(node.getAttribute('data-spindle-scope') || '').split(':');
@@ -2527,8 +2539,14 @@ export function setup(ctx: Ctx, overrides?: any) {
                 if (n !== into && !n.querySelector('[data-af-slot]')) n.remove();
               });
             } catch (_) {}
-          if (!into.querySelector('[data-af-slot="message"]')) {
-            const b = slotButton('message', () => pressMessage(id), like);
+          // Lumiverse can reuse a message's row for another message, such as
+          // after a delete. A button left from the message that was there
+          // before would perform that one, so a button for another id is
+          // replaced.
+          const had = into.querySelector('[data-af-slot="message"]') as HTMLElement | null;
+          if (had && had.getAttribute('data-af-message') !== id) had.remove();
+          if (!had || !had.isConnected) {
+            const b = slotButton('message', () => pressMessage(messageIdAt(b) || id), like);
             b.setAttribute('data-af-message', id);
             into.appendChild(b);
           }
@@ -2656,6 +2674,28 @@ export function setup(ctx: Ctx, overrides?: any) {
           lastScript = null;
           prepare(id);
         }
+      }),
+    );
+  } catch (_) {}
+  // A deleted message stops if it is playing, and its script is dropped, so
+  // Play never brings back the performance of a message that is gone.
+  try {
+    disposers.push(
+      ctx.events.on('MESSAGE_DELETED', (p: any) => {
+        if (!alive) return;
+        const id = String((p && (p.messageId || p.id)) || '');
+        if (!id) return;
+        directedText.delete(id);
+        if (show && show.messageId === id) stop('The message was deleted, so it stopped.');
+        if (busyMessage === id) busyMessage = '';
+        if (lastMeta.messageId === id) {
+          lastScript = null;
+          lastMeta = Object.assign({}, lastMeta, { messageId: '' });
+        }
+        if (lastFailed && lastFailed.meta && lastFailed.meta.messageId === id) lastFailed = null;
+        paintButtons();
+        if (tab === 'stage') renderTab();
+        else paintFloat();
       }),
     );
   } catch (_) {}
@@ -4712,7 +4752,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     used.hidden = !n;
     if (n) {
       const word = (x: number) => (sc0!.counted === false ? 'about ' : '') + x.toLocaleString();
-      setText(used, 'The Director read ' + word(n) + ' tokens for this message and wrote ' + word(Number(sc0!.back) || 0) + '.' + (Number(sc0!.cost) > 0 ? ' It cost ' + money(Number(sc0!.cost)) + '.' : ''));
+      setText(used, 'For this script, the Director read ' + word(n) + ' tokens and wrote ' + word(Number(sc0!.back) || 0) + '.' + (Number(sc0!.cost) > 0 ? ' It cost ' + money(Number(sc0!.cost)) + '.' : ''));
     }
     stageRefs.retryRow.hidden = !(lastFailed && !show && !busyMessage);
     const title = q('title');
@@ -6257,7 +6297,7 @@ export function setup(ctx: Ctx, overrides?: any) {
   ];
   const RESETS: { id: string; label: string }[] = TRANSFER.concat([
     { id: 'sounds', label: 'The sound library' },
-    { id: 'audio', label: 'Kept audio and directed messages' },
+    { id: 'audio', label: 'Kept audio and scripts' },
     { id: 'key', label: 'The sound keys, for Freesound and ElevenLabs' },
   ]);
   // The setting keys each part covers. Which parts are ticked are settings
@@ -6481,7 +6521,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     const row = el('<div class="af-row"></div>');
     const said = el('<span class="af-note af-grow" data-af="kept"></span>');
     const clear = button('Clear kept audio', async () => {
-      if (!(await askSure('Clear kept audio', 'Every kept line and every directed message is deleted. Playing them again makes them again, which costs voice credits and a Director call. There is no undo.', 'Clear', true))) return;
+      if (!(await askSure('Clear kept audio', 'Every kept line and every script is deleted. Playing them again makes them again, which costs voice credits and a Director call. There is no undo.', 'Clear', true))) return;
       clear.disabled = true;
       try {
         const r = await rpc({ type: 'clips_clear' }, 60000);

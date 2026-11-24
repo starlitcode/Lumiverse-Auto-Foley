@@ -5,7 +5,7 @@
 - Your messages are sent to the Director's connection and, when it is on, to your Decision connection. Both are connections you set up in Lumiverse.
 - Spoken lines go to your TTS engine through your TTS connection in Lumiverse.
 - The key words of a sound description go to Freesound when a new sound is searched for. A description goes to ElevenLabs only when a new sound is made there.
-- Your settings, cast and sound library are kept in Lumiverse, under your account. With **Keep made audio** on, so are the lines it spoke and the directed messages.
+- Your settings, cast and sound library are kept in Lumiverse, under your account. With **Keep made audio** on, so are the lines it spoke and the scripts.
 
 ## What is sent, and where
 
@@ -29,7 +29,7 @@ All of this is kept by Lumiverse, under your account, with `spindle.userStorage`
 
 - Your settings and your cast, with any pictures you picked for it, made small on your device first.
 - Your sound library: sounds found on Freesound, with their credit, sounds made by ElevenLabs, your uploads, and your links.
-- With **Keep made audio** on, which it is by default: each spoken line, up to the size you pick, and the last 40 directed messages, with their text. **Clear kept audio** deletes them, and **Do not keep it** stops it.
+- With **Keep made audio** on, which it is by default: each spoken line, up to the size you pick, and the last 40 scripts, with their text. **Clear kept audio** deletes them, and **Do not keep it** stops it.
 
 Your Freesound and ElevenLabs keys are kept in Lumiverse's secure storage, under your account.
 
@@ -37,7 +37,7 @@ Your Freesound and ElevenLabs keys are kept in Lumiverse's secure storage, under
 
 Two things are kept in your browser: which tab of the panel was open, and a copy of your settings, so the panel draws at once. The copy in your account replaces it as soon as Lumiverse answers.
 
-A directed message is also kept in memory on the server, for up to 40 messages for each account, so playing one again asks nothing. With **Keep made audio** off, it is gone when Lumiverse restarts.
+A script is also kept in memory on the server, up to 40 for each account, so playing one again asks nothing. With **Keep made audio** off, it is gone when Lumiverse restarts.
 
 With **Save the performance to the message** on, the finished audio is saved to the message, the same way Lumiverse's own TTS saves it.
 

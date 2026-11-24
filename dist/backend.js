@@ -2064,7 +2064,7 @@ function keepScript(userId, script) {
         list.shift();
     void saveKeptScripts(userId);
 }
-// Directed messages are kept in the account too, with Keep made audio on, so
+// Scripts, the directed messages, are kept in the account too, with Keep made audio on, so
 // a message played again after Lumiverse restarts asks the Director nothing.
 const SCRIPTS_FILE = 'scripts.json';
 const scriptsRead = {};

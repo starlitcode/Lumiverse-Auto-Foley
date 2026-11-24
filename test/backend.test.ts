@@ -750,7 +750,7 @@ describe("what an account has been told", () => {
 });
 
 describe("each account keeps its own", () => {
-  test("settings, cast, sounds, kept audio, the key and directed messages never cross accounts", async () => {
+  test("settings, cast, sounds, kept audio, the key and scripts never cross accounts", async () => {
     const good = JSON.stringify({ lines: [{ i: 0, speaker: "Narrator", text: "Brin waved." }], new_speakers: [] });
     const h = host({ answers: [good, good] });
     await h.ask({ type: "save", settings: { strength: "dramatic", cast: [{ name: "Brin" }] } }, "alice");

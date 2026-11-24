@@ -14,7 +14,7 @@
 ## What it keeps
 
 - Settings, the cast with any pictures you picked, and the sound library, in `spindle.userStorage`, under your account.
-- With **Keep made audio** on, the lines it spoke and the last 40 directed messages, in the same place. **Clear kept audio** deletes them.
+- With **Keep made audio** on, the lines it spoke and the last 40 scripts, in the same place. **Clear kept audio** deletes them.
 - The Freesound and ElevenLabs keys, in Lumiverse's secure enclave, under your account. Neither is ever sent back to the panel or put in settings. The Freesound key is only sent to `freesound.org`, and the ElevenLabs key only to `api.elevenlabs.io`.
 
 ## How to check it

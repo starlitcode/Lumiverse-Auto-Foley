@@ -21,9 +21,12 @@ _Not yet released_
 - **Notes for each voice engine** shows the engine in use first and open again. Every other engine has a fold of its own.
 - **The floating player's quick switches** flip only when the switch itself is pressed, the same as every other switch.
 - **The moving bars** next to the speaker in the floating player are gone.
+- **Scripts.** The panel calls what the Director makes from a message its script, such as **Kept audio and scripts** in **Start again**.
 
 ### Fixed
 
+- **A message button could perform the wrong message.** After a delete, Lumiverse can show another message in the same row, and the button there still performed the message that was deleted, with its kept audio. A button now performs the message its row shows when it is pressed.
+- **Play could bring back a deleted message.** A message deleted while it plays stops, and its script is not played again.
 - **The floating player cut off the line being spoken.** The whole line shows now, up to eight lines, and a longer one scrolls inside its box.
 - **The open floating player sometimes would not drag on a phone.** Its top bar now takes the drag instead of the page scrolling.
 - **Switching tabs moved the drawer back up.** It now stays exactly where you scrolled it.

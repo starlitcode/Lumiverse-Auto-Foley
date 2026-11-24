@@ -157,7 +157,7 @@ window.__fetch = async (url, init) => {
   if (u.includes('/chats/chat1?messages=false')) return json({ id: 'chat1', name: 'Mar 3, 2026, 4:12:09 PM', character_id: 'c', metadata: {} });
   if (u.includes('/characters/c')) return json({ id: 'c', name: 'Ysolde Marrow-Kestrel of the Lower Quays' });
   if (u.includes('/settings/voiceSettings')) return json({ key: 'voiceSettings', value: { ttsEnabled: true, ttsAutoPlay: true, ttsConnectionId: 't1' } });
-  if (u.includes('/messages')) return json({ data: [{ id: 'm1', name: 'Ysolde Marrow-Kestrel of the Lower Quays', is_user: false, content: 'text', swipe_id: 0 }], total: 1 });
+  if (u.includes('/messages')) return json({ data: [{ id: 'm1', name: 'Ysolde Marrow-Kestrel of the Lower Quays', is_user: false, content: 'text', swipe_id: 0 }].concat(window.__moreMessages || []), total: 1 + (window.__moreMessages || []).length });
   if (u.includes('/tts/synthesize')) { window.__synth = (window.__synth || []).concat(JSON.parse(init.body)); return new Response(window.__wav ? window.__makeWav(window.__wav[0], window.__wav[1]) : new Blob([new Uint8Array(64)], { type: 'audio/mpeg' }), { status: 200 }); }
   return new Response('{}', { status: 404 });
 };
@@ -1397,6 +1397,46 @@ if (section("scroll kept")) {
       await context.close();
     }
   }
+}
+
+if (section("reused row")) {
+  console.log("A row Lumiverse reuses for another message performs that message");
+  const { context, page, errors } = await open(THEMES[0], SIZES[1]);
+  await page.waitForTimeout(400);
+  const got = await page.evaluate(async () => {
+    const msg = document.querySelector('[data-message-id="m1"]');
+    const btn = msg.querySelector('[data-af-slot="message"]');
+    if (!btn) return { none: true };
+    // The row now shows another message.
+    window.__moreMessages = [{ id: "m7", name: "Pell", is_user: false, content: "Pell shut the gate.", swipe_id: 0 }];
+    msg.setAttribute("data-message-id", "m7");
+    msg.querySelector("#mount").setAttribute("data-spindle-scope", "message:m7:actions");
+    window.__sent = [];
+    btn.click();
+    await new Promise((r) => setTimeout(r, 300));
+    const asked = (window.__sent.find((m) => m.type === "direct") || {}).messageId;
+    // The next placement pass replaces a button left with the old id.
+    msg.appendChild(document.createElement("span"));
+    await new Promise((r) => setTimeout(r, 700));
+    const now = msg.querySelector('[data-af-slot="message"]');
+    return { asked, id: now && now.getAttribute("data-af-message") };
+  });
+  check(got.asked === "m7", "pressing a button in a reused row performs the message now in that row (" + JSON.stringify(got) + ")");
+  check(got.id === "m7", "the button left with the old message id is replaced");
+  await page.evaluate(async () => {
+    window.__clipMs = 4000;
+    document.querySelector('[data-af-slot="message"]').click();
+    await new Promise((r) => setTimeout(r, 600));
+  });
+  const playing = await page.evaluate(() => !!document.querySelector('[data-af-slot="message"][aria-pressed="true"], [data-af-slot="message"][data-af-state="playing"]'));
+  await page.evaluate(() => window.__emit("MESSAGE_DELETED", { chatId: "chat1", messageId: "m7" }));
+  await page.waitForTimeout(300);
+  await page.click('.af-tab[data-tab="stage"]');
+  await page.waitForTimeout(300);
+  const after = await page.evaluate(() => document.querySelector('[data-af="sub"]').textContent);
+  check(/deleted, so it stopped/.test(after) || /Press the Auto Foley button/.test(after), "a message deleted while it plays stops, and its script is not kept for Play (" + after + ", playing before: " + playing + ")");
+  check(!errors.length, "no page errors. " + errors.slice(0, 2).join(" | "));
+  await context.close();
 }
 
 if (section("switch rows")) {
