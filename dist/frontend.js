@@ -677,6 +677,9 @@ const ICON_PAUSE = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="tr
 const ICON_STOP = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="1.5"/></svg>';
 const ICON_SKIP = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6 6.5v11a1 1 0 0 0 1.55.83L15 13.2V17a1 1 0 0 0 2 0V7a1 1 0 0 0-2 0v3.8L7.55 5.67A1 1 0 0 0 6 6.5Z"/></svg>';
 const ICON_REDO = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/></svg>';
+// The On air light, as in a recording studio: lit while a performance plays,
+// amber while it is paused, and dim the rest of the time. It does not blink.
+const AIR_HTML = '<span class="af-air" data-on="off" aria-hidden="true" title="Not playing"><i></i>On air</span>';
 const ICON_SOUND = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 5 6 9H3v6h3l5 4V5Z"/><path d="M15.5 9.5a4 4 0 0 1 0 5"/></svg>';
 const ICON_BACK = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M18 6.5v11a1 1 0 0 1-1.55.83L9 13.2V17a1 1 0 0 1-2 0V7a1 1 0 0 1 2 0v3.8l7.45-5.13A1 1 0 0 1 18 6.5Z"/></svg>';
 // A press and hold on the floating button opens its menu, the same as on
@@ -778,6 +781,29 @@ const PANEL_CSS = `
 
 .af-card { display: flex; flex-direction: column; gap: 11px; padding: 12px; min-width: 0; border-radius: var(--af-r-md); border: 1px solid var(--af-line); background: var(--af-fill-subtle); }
 .af-cardh { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 13.5px; font-weight: 600; color: var(--af-text); }
+/* The On air light. The words keep the text color in every theme, and only
+   the light itself is red, or amber while paused. It changes over most of a
+   second, once, and never blinks. */
+.af-air { display: inline-flex; align-items: center; gap: 6px; flex: none; margin-left: auto; padding: 2px 9px 2px 7px; border-radius: 999px; border: 1px solid var(--af-line); font-size: 10px; font-weight: 700; letter-spacing: .09em; text-transform: uppercase; color: var(--af-muted); white-space: nowrap; transition: color .6s ease, border-color .6s ease; }
+.af-air i { width: 7px; height: 7px; border-radius: 50%; background: var(--af-muted); opacity: .5; transition: background-color .6s ease, opacity .6s ease, box-shadow .6s ease; }
+.af-air[data-on="on"] { color: var(--af-text); border-color: rgba(239,68,68,.55); }
+.af-air[data-on="on"] i { background: #ef4444; opacity: 1; box-shadow: 0 0 7px 1px rgba(239,68,68,.6); }
+.af-air[data-on="paused"] { color: var(--af-text); border-color: rgba(245,158,11,.55); }
+.af-air[data-on="paused"] i { background: #f59e0b; opacity: 1; }
+/* The line being spoken is laid out as a page of a script, with a margin
+   rule in the color of whoever is speaking. A slate stripe runs along the top
+   of each player. */
+.af-pl-said[data-who], .af-theater[data-who] { border-left: 3px solid var(--af-rule, var(--af-line)); }
+[data-who="narrator"] { --af-rule: var(--af-k-narrator); }
+[data-who="character"] { --af-rule: var(--af-k-character); }
+[data-who="persona"] { --af-rule: var(--af-k-persona); }
+[data-who="npc"] { --af-rule: var(--af-k-npc); }
+[data-who="sound"] { --af-rule: var(--af-sound); }
+.af-theater[data-who="character"] .af-theater-line, .af-theater[data-who="persona"] .af-theater-line, .af-theater[data-who="npc"] .af-theater-line { padding: 0 6%; }
+.af-theater-who > span:last-child { font-size: 11.5px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; }
+.af.af-pl, .af-theater { position: relative; }
+.af.af-pl::before, .af-theater::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 4px; pointer-events: none; opacity: .5; background: repeating-linear-gradient(135deg, var(--af-accent) 0 6px, transparent 6px 12px); }
+.af-theater { overflow: hidden; }
 .af-cardh > span:first-child { flex: 1; min-width: 0; }
 .af-note { margin: 0; font-size: 12px; line-height: 1.45; color: var(--af-muted); }
 .af-count { text-align: right; font-variant-numeric: tabular-nums; }
@@ -3938,7 +3964,7 @@ export function setup(ctx, overrides) {
         '.af-pl-now{display:flex;align-items:center;gap:9px;min-width:0}' +
         '.af-pl-now .af-avatar{width:34px;height:34px;font-size:13px;flex:none}' +
         '.af-pl-now .af-avatar svg{width:16px;height:16px}' +
-        '.af-pl-cap{display:block;font-size:9.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--af-muted)}' +
+        '.af-pl-cap{display:block;font-size:9.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--af-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}' +
         '.af-pl-seek{display:flex;align-items:center;gap:8px;font-size:10.5px;color:var(--af-muted);font-variant-numeric:tabular-nums}' +
         '.af-pl-seek span{white-space:nowrap;min-width:30px}.af-pl-seek span:last-child{text-align:right}' +
         '.af-pl .af-parts{min-height:20px}.af-pl .af-parts button{height:20px;padding:7px 0}' +
@@ -4496,6 +4522,7 @@ export function setup(ctx, overrides) {
             '<button type="button" class="af-round" data-p="menu" aria-label="More" title="More">' + ICON_MORE + '</button>' +
             '<button type="button" class="af-round" data-p="close" aria-label="Close the player" title="Close the player">' + ICON_DOWN + '</button></div>' +
             '<div class="af-pl-now"><span class="af-avatar" data-p="face"></span><div class="af-pl-id"><span class="af-pl-cap" data-p="cap">Now playing</span><b data-p="who"></b></div>' +
+            AIR_HTML +
             '</div>' +
             '<div class="af-pl-said" data-p="said" aria-live="polite"></div>' +
             '<div class="af-pl-tr">' +
@@ -4720,7 +4747,9 @@ export function setup(ctx, overrides) {
             face.className = 'af-avatar' + (it && it.kind === 'voice' && line ? ' af-avatar-' + partWho(line) : '');
         }
         setText(q('who'), name || (busyMessage ? 'Directing the message' : playerWhose === 'mine' ? 'Your latest message' : 'The latest reply'));
-        setText(q('cap'), show ? (paused ? 'Paused' : 'Now playing · part ' + (Math.min(show.index, total - 1) + 1) + ' of ' + total) : busyMessage ? 'Getting ready' : 'Ready');
+        // The On air light says whether it is playing, so this says only where.
+        const partOf = show ? 'Part ' + (Math.min(show.index, total - 1) + 1) + ' of ' + total : '';
+        setText(q('cap'), show ? (paused ? 'Paused · ' + partOf.toLowerCase() : partOf) : busyMessage ? 'Getting ready' : 'Ready');
         setText(q('sub'), chatInfo.kind === 'none' ? 'No chat open' : chatInfo.name || 'This chat');
         // The bar under Play, for where in the part playing it is. Painted on a
         // short clock while it plays.
@@ -4751,6 +4780,11 @@ export function setup(ctx, overrides) {
             said.removeAttribute('data-quiet');
         else
             said.setAttribute('data-quiet', '');
+        // The page's margin rule takes the color of whoever is speaking.
+        const whoKind = it && it.kind === 'voice' && line ? partWho(line) : it ? 'sound' : '';
+        if ((said.dataset.who || '') !== whoKind)
+            said.dataset.who = whoKind;
+        paintAir(c);
         paintParts(q('strip'), show ? show.script : null);
         c.querySelectorAll('[data-w]').forEach((b) => b.setAttribute('aria-pressed', b.dataset.w === playerWhose ? 'true' : 'false'));
         const play = q('play');
@@ -4988,6 +5022,9 @@ export function setup(ctx, overrides) {
         if (!S.guideSeen)
             page.appendChild(guideCard());
         const now = card('Now playing');
+        const nowHead = now.querySelector('.af-cardh');
+        if (nowHead)
+            nowHead.insertAdjacentHTML('beforeend', AIR_HTML);
         now.insertAdjacentHTML('beforeend', '<div class="af-transport">' +
             '<button type="button" class="af-round" data-af="back" aria-label="Back one part" title="Back one part">' + ICON_BACK + '</button>' +
             '<button type="button" class="af-play" data-af="play" aria-label="Play">' + ICON_PLAY + '</button>' +
@@ -5228,9 +5265,23 @@ export function setup(ctx, overrides) {
         if (p && typeof p.catch === 'function')
             p.catch(() => log('The browser did not allow the sound to play. Tap the page and try again.', 'bad'));
     }
+    // Every On air light on the page, in step with the show.
+    function paintAir(root) {
+        const state = show ? (paused ? 'paused' : 'on') : 'off';
+        const title = state === 'on' ? 'Playing' : state === 'paused' ? 'Paused' : 'Not playing';
+        root.querySelectorAll('.af-air').forEach((n) => {
+            const a = n;
+            if (a.dataset.on !== state) {
+                a.dataset.on = state;
+                a.title = title;
+            }
+        });
+    }
     function paintStage() {
         // The floating player follows the show too, with the panel closed.
         paintFloat();
+        if (stageRefs && tab === 'stage')
+            paintAir(page);
         if (!stageRefs || tab !== 'stage')
             return;
         const q = stageRefs.q;
@@ -5394,6 +5445,7 @@ export function setup(ctx, overrides) {
             return;
         stageRefs.theaterItem = key;
         q('theater').dataset.state = it ? it.kind : 'idle';
+        q('theater').dataset.who = it && it.kind === 'voice' && it.line ? partWho(it.line) : it ? 'sound' : '';
         if (!it) {
             who.innerHTML = '';
             lineBox.innerHTML = '<span class="af-theater-idle">The line being spoken shows here, word by word.</span>';

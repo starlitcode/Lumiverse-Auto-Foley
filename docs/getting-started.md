@@ -130,7 +130,8 @@ In the player:
 
 - **The top** shows the chat.
 - **Now playing** shows who is speaking, with their picture or first letter, and which part is playing.
-- **The box under it** shows the line being spoken, or the sound playing.
+- **On air**, beside it, lights red while a message plays and amber while it is paused. It is dim the rest of the time. The **Now playing** card on the Stage tab has the same light.
+- **The box under it** shows the line being spoken, or the sound playing, like a page of a script. The line on its left side has the color of whoever is speaking: slate for the narrator, violet for characters, teal for you, pink for NPCs, and amber for sounds.
 - **The buttons**: **Prepare replies ahead** on the left, a switch that lights up while it is on, then back one part, Play or Pause, the next part, and **Stop** on the right. Turning it on also prepares the latest reply at once.
 - **The bar** under them moves through the part playing. Drag it to go back or forward in that part.
 - **The strip** has a mark for each part of the message: lines, sounds and the cheer. Tap a mark to go to that part.

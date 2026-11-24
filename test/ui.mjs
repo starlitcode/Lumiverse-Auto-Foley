@@ -590,6 +590,47 @@ if (section("perform")) {
   await context.close();
 }
 
+
+if (section("on air")) {
+  console.log("The On air light and the script page");
+  for (const size of SIZES) {
+    const { context, page, errors } = await open(THEMES[0], size);
+    const where = size.name;
+    await page.click('.af-tab[data-tab="settings"]');
+    await page.waitForTimeout(200);
+    await page.evaluate(() => document.querySelector('[data-af-row="widgetOn"] .af-box').click());
+    await page.waitForTimeout(250);
+    await page.evaluate(() => { window.__wav = [0.2, 3]; window.__clipMs = 6000; window.__widget.querySelector(".af-float").click(); });
+    await page.waitForTimeout(500);
+    const air = () => page.evaluate(() => Array.from(document.querySelectorAll(".af-air")).map((a) => a.dataset.on));
+    check((await air()).every((x) => x === "off"), where + ": the light is dim before anything plays");
+    await page.evaluate(() => window.__widget.querySelector('[data-p="play"]').click());
+    await page.waitForTimeout(1500);
+    await page.click('.af-tab[data-tab="stage"]');
+    await page.waitForTimeout(400);
+    const lit = await air();
+    check(lit.length === 2 && lit.every((x) => x === "on"), where + ": the light is on in the player and on the Stage while it plays (" + lit.join(",") + ")");
+    const page1 = await page.evaluate(() => ({
+      rule: getComputedStyle(window.__widget.querySelector('[data-p="said"]')).borderLeftWidth,
+      who: window.__widget.querySelector('[data-p="said"]').dataset.who,
+      cap: window.__widget.querySelector('[data-p="cap"]').textContent,
+      capFits: (() => { const c = window.__widget.querySelector('[data-p="cap"]'); return c.scrollWidth <= c.clientWidth + 1 && c.getBoundingClientRect().height < 16; })(),
+    }));
+    check(page1.rule === "3px" && page1.who === "narrator", where + ": the line has a margin rule in the speaker's color (" + JSON.stringify(page1) + ")");
+    check(/^Part 1 of \d+$/.test(page1.cap) && page1.capFits, where + ": the part count fits on one line beside the light (" + page1.cap + ")");
+    await page.evaluate(() => window.__widget.querySelector('[data-p="play"]').click());
+    await page.waitForTimeout(400);
+    check((await air()).every((x) => x === "paused"), where + ": the light turns amber while paused");
+    await page.evaluate(() => window.__widget.querySelector('[data-p="stop"]').click());
+    await page.waitForTimeout(400);
+    check((await air()).every((x) => x === "off"), where + ": the light goes dim when it stops");
+    const m = await page.evaluate(MEASURE, size.touch);
+    check(!m.overflow.length, where + ": nothing runs off the side. " + m.overflow.slice(0, 2).join("; "));
+    check(!errors.length, where + ": no console errors. " + errors.slice(0, 2).join("; "));
+    await context.close();
+  }
+}
+
 if (section("player")) {
   console.log("The floating player");
   for (const size of SIZES) {
