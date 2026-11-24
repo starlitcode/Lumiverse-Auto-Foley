@@ -19,7 +19,7 @@ Someone the AI added has no voice picked. The first time they speak, Auto Foley 
 
 ## A card
 
-- **Picture.** Optional. **Choose a picture** picks one from your device. It is cut to a square and made small before it is saved with the cast. With none, the first letter of the name is shown. **Take it out** asks first.
+- **Picture.** Optional. **Choose a picture** picks one from your device, then a crop box opens. Drag the picture to move it, and use **Zoom**, or the mouse wheel, to zoom in. The circle shows what the round picture shows. **Use this** saves it, made small, with the cast. **Cancel** keeps the picture you had. With none, the first letter of the name is shown. **Take it out** asks first.
 - **Name** and **Also called.** Other names the story uses for this person, with commas, such as a first name or a title. The Director and the Decision model match a line to a person by any of these.
 - **Who they are.** Character, Persona or NPC.
 - **Group.** Shown when you have groups. See [Groups](#groups).

@@ -21,6 +21,7 @@ _Not yet released_
 - **How they speak says what helps on each engine.** The line under the box changes with the engine the person speaks through.
 - **Nonbinary**, as a voice type in the Cast tab. The Director marks someone new as nonbinary only when the text says so, and a voice the provider marks neutral is picked for them when there is one.
 - **Main characters and minor ones.** The Director says which a new speaker is, and the Cast tab files a main one as a character and a minor one as an NPC.
+- **Crop a cast picture.** After you choose a picture, drag it and zoom so the circle frames the face, then press **Use this**.
 - **Back to defaults for the mixer.** It sets voices to 100% and sounds to 80%, and unmutes both.
 
 ### Changed

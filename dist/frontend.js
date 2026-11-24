@@ -800,6 +800,11 @@ textarea.af-tall { min-height: 260px; }
 .af-good { border-color: var(--af-good); background: rgba(34,197,94,.12); }
 .af-good { background: color-mix(in srgb, var(--af-good) 12%, transparent); }
 .af-sign { flex: none; font-weight: 700; line-height: 1.45; }
+.af-crop { display: flex; flex-direction: column; gap: 8px; animation: af-in .2s ease-out both; }
+.af-crop-frame { position: relative; width: min(240px, 100%); aspect-ratio: 1; margin: 0 auto; overflow: hidden; border-radius: var(--af-r-md); background: #000; touch-action: none; cursor: grab; }
+.af-crop-frame:active { cursor: grabbing; }
+.af-crop-frame img { position: absolute; left: 0; top: 0; max-width: none; transform-origin: 0 0; pointer-events: none; user-select: none; -webkit-user-drag: none; }
+.af-crop-ring { position: absolute; inset: 0; border-radius: 50%; box-shadow: 0 0 0 999px rgba(0,0,0,.5); border: 2px solid rgba(255,255,255,.85); pointer-events: none; }
 .af-notice-body { display: flex; flex-direction: column; gap: 8px; flex: 1; min-width: 0; }
 .af-warn .af-sign { color: var(--af-sound); }
 .af-bad .af-sign { color: var(--af-bad); }
@@ -5563,30 +5568,101 @@ export function setup(ctx, overrides) {
     }
     // A picture is made small on this device before it is saved, so the cast
     // stays light: 96 pixels square, cut from the middle.
-    async function smallPicture(bytes, mime) {
-        const blob = new Blob([bytes], { type: mime || 'image/png' });
-        const url = URL.createObjectURL(blob);
-        try {
-            const img = await new Promise((done, fail) => {
-                const i = new Image();
-                i.onload = () => done(i);
-                i.onerror = () => fail(new Error('not an image'));
-                i.src = url;
-            });
-            const side = 96;
-            const c = document.createElement('canvas');
-            c.width = side;
-            c.height = side;
-            const g = c.getContext('2d');
-            if (!g)
-                throw new Error('no canvas');
-            const cut = Math.min(img.naturalWidth, img.naturalHeight);
-            g.drawImage(img, (img.naturalWidth - cut) / 2, (img.naturalHeight - cut) / 2, cut, cut, 0, 0, side, side);
-            return c.toDataURL('image/jpeg', 0.82);
-        }
-        finally {
-            URL.revokeObjectURL(url);
-        }
+    // A square crop of a picture. Drag the picture to move it, and use Zoom, or
+    // the mouse wheel, to zoom in. The circle shows what a round picture shows.
+    // done gets the crop as a small JPEG, or null when it is canceled.
+    const PIC_SIDE = 128;
+    function cropPicture(src, w, h, done) {
+        const wrap = el('<div class="af-crop" data-af-crop><div class="af-crop-frame" role="img" aria-label="Drag to move the picture"><img alt=""><span class="af-crop-ring"></span></div></div>');
+        const frame = wrap.firstElementChild;
+        const pic = frame.querySelector('img');
+        pic.src = src;
+        let zoom = 1;
+        // The point of the picture at the middle of the frame, from 0 to 1.
+        let cx = 0.5;
+        let cy = 0.5;
+        const side = () => frame.clientWidth || 220;
+        // The scale at which the picture just covers the frame.
+        const scale = () => (side() / Math.min(w, h)) * zoom;
+        const clamp = () => {
+            const k = scale();
+            const hw = side() / 2 / (w * k);
+            const hh = side() / 2 / (h * k);
+            cx = Math.min(1 - hw, Math.max(hw, cx));
+            cy = Math.min(1 - hh, Math.max(hh, cy));
+        };
+        const paint = () => {
+            clamp();
+            const k = scale();
+            pic.style.width = w * k + 'px';
+            pic.style.height = h * k + 'px';
+            pic.style.transform = 'translate(' + (side() / 2 - cx * w * k) + 'px,' + (side() / 2 - cy * h * k) + 'px)';
+        };
+        // Lumiverse's UI Scale: a pointer moves in screen pixels, the frame is
+        // laid out in CSS pixels.
+        const uiScale = () => {
+            const r = frame.getBoundingClientRect();
+            return frame.offsetWidth ? r.width / frame.offsetWidth || 1 : 1;
+        };
+        let drag = null;
+        frame.addEventListener('pointerdown', (e) => {
+            drag = { id: e.pointerId, x: e.clientX, y: e.clientY, cx, cy };
+            try {
+                frame.setPointerCapture(e.pointerId);
+            }
+            catch (_) { }
+            e.preventDefault();
+        });
+        frame.addEventListener('pointermove', (e) => {
+            if (!drag || e.pointerId !== drag.id)
+                return;
+            const k = scale() * uiScale();
+            cx = drag.cx - (e.clientX - drag.x) / (w * k);
+            cy = drag.cy - (e.clientY - drag.y) / (h * k);
+            paint();
+        });
+        const end = (e) => {
+            if (drag && e.pointerId === drag.id)
+                drag = null;
+        };
+        frame.addEventListener('pointerup', end);
+        frame.addEventListener('pointercancel', end);
+        const zoomRow = slider('Zoom', 1, 1, 5, 0.05, (v) => v.toFixed(1) + '\u00d7', (v) => {
+            zoom = v;
+            paint();
+        }, 'Zoom in on the face, then drag the picture so the circle frames it.');
+        const range = zoomRow.querySelector('input[type="range"]');
+        frame.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            zoom = Math.min(5, Math.max(1, zoom * Math.exp(-e.deltaY * 0.0015)));
+            if (range) {
+                range.value = String(zoom);
+                range.dispatchEvent(new Event('input', { bubbles: true }));
+            }
+            paint();
+        }, { passive: false });
+        wrap.appendChild(zoomRow);
+        const row = el('<div class="af-row"></div>');
+        row.appendChild(button('Use this', () => {
+            try {
+                const c = document.createElement('canvas');
+                c.width = PIC_SIDE;
+                c.height = PIC_SIDE;
+                const g = c.getContext('2d');
+                if (!g)
+                    throw new Error('no canvas');
+                const cut = side() / scale();
+                g.drawImage(pic, cx * w - cut / 2, cy * h - cut / 2, cut, cut, 0, 0, PIC_SIDE, PIC_SIDE);
+                done(c.toDataURL('image/jpeg', 0.85));
+            }
+            catch (_) {
+                done(null);
+            }
+        }, 'af-primary'));
+        row.appendChild(button('Cancel', () => done(null)));
+        wrap.appendChild(row);
+        requestAnimationFrame(paint);
+        return wrap;
     }
     function pictureRow(m, paintName) {
         const row = el('<div class="af-col"></div>');
@@ -5611,17 +5687,37 @@ export function setup(ctx, overrides) {
             const f = files && files[0];
             if (!f)
                 return;
+            const url = URL.createObjectURL(new Blob([f.bytes], { type: f.mimeType || 'image/png' }));
+            let img;
             try {
-                m.picture = await smallPicture(f.bytes, f.mimeType || '');
-                said.textContent = '';
+                img = await new Promise((ok, fail) => {
+                    const i = new Image();
+                    i.onload = () => ok(i);
+                    i.onerror = () => fail(new Error('not an image'));
+                    i.src = url;
+                });
+            }
+            catch (_) {
+                URL.revokeObjectURL(url);
+                said.textContent = 'That file is not a picture Auto Foley can read. Use PNG, JPEG or WebP.';
+                said.dataset.kind = 'bad';
+                return;
+            }
+            said.textContent = '';
+            const old = row.querySelector('[data-af-crop]');
+            if (old)
+                old.remove();
+            const crop = cropPicture(url, img.naturalWidth, img.naturalHeight, (pic) => {
+                crop.remove();
+                URL.revokeObjectURL(url);
+                if (!pic)
+                    return;
+                m.picture = pic;
                 save();
                 paint();
                 paintName();
-            }
-            catch (_) {
-                said.textContent = 'That file is not a picture Auto Foley can read. Use PNG, JPEG or WebP.';
-                said.dataset.kind = 'bad';
-            }
+            });
+            row.insertBefore(crop, said);
         });
         const take = button('Take it out', async () => {
             if (!(await askSure('Take out the picture', 'The picture of ' + m.name + ' is taken out, and the first letter of the name is shown instead.', 'Take it out', true)))

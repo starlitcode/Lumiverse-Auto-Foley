@@ -220,11 +220,15 @@ window.__ctx = {
     pickFile: async (o) => {
       if (!o || !(o.accept || []).some((x) => /image/.test(x))) return [];
       const c = document.createElement('canvas');
-      c.width = 40;
-      c.height = 30;
+      // Red on the left, blue on the right, so a crop that moves can be told
+      // from one that does not.
+      c.width = 80;
+      c.height = 40;
       const g = c.getContext('2d');
-      g.fillStyle = '#3a7';
-      g.fillRect(0, 0, 40, 30);
+      g.fillStyle = '#e02020';
+      g.fillRect(0, 0, 40, 40);
+      g.fillStyle = '#2040e0';
+      g.fillRect(40, 0, 40, 40);
       const b = await new Promise((r) => c.toBlob(r, 'image/png'));
       return [{ name: 'face.png', mimeType: 'image/png', bytes: new Uint8Array(await b.arrayBuffer()) }];
     },
@@ -1623,7 +1627,37 @@ if (section("pictures")) {
     await page.waitForTimeout(350);
     await head.locator(".af-btn", { hasText: "Choose a picture" }).click();
     await page.waitForTimeout(400);
+    check((await head.locator("[data-af-crop]").count()) === 1, size.name + ": a chosen picture opens a crop first");
+    const m0 = await page.evaluate(MEASURE, size.touch);
+    // The picture inside the frame is larger than the frame on purpose: the
+    // frame clips it, so it is left out of this.
+    const spill = m0.overflow.filter((x) => !/^IMG /.test(x));
+    check(!spill.length, size.name + ": the crop fits. " + spill.slice(0, 2).join("; "));
+    const frameFits = await page.evaluate(() => { const r = document.querySelector(".af-crop-frame").getBoundingClientRect(); return r.left >= -0.5 && r.right <= document.documentElement.clientWidth + 0.5; });
+    check(frameFits, size.name + ": the crop frame stays on screen");
+    // Dragged right as far as it goes, the left, red half fills the frame.
+    const frame = head.locator(".af-crop-frame");
+    const box = await frame.boundingBox();
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(box.x + box.width / 2 + 200, box.y + box.height / 2, { steps: 6 });
+    await page.mouse.up();
+    await head.locator(".af-btn", { hasText: "Use this" }).click();
+    await page.waitForTimeout(300);
+    check((await head.locator("[data-af-crop]").count()) === 0, size.name + ": Use this closes the crop");
     check((await head.locator(".af-person-head .af-avatar img").count()) === 1, size.name + ": a chosen picture is shown");
+    const color = await page.evaluate(async () => {
+      const src = document.querySelector(".af-person-head .af-avatar img").src;
+      const i = new Image();
+      await new Promise((r) => { i.onload = r; i.src = src; });
+      const c = document.createElement("canvas");
+      c.width = i.naturalWidth; c.height = i.naturalHeight;
+      const g = c.getContext("2d");
+      g.drawImage(i, 0, 0);
+      const d = g.getImageData(Math.floor(c.width / 2), Math.floor(c.height / 2), 1, 1).data;
+      return { r: d[0], b: d[2], w: c.width };
+    });
+    check(color.r > 150 && color.b < 100 && color.w === 128, size.name + ": the saved picture is the part the crop showed (" + JSON.stringify(color) + ")");
     await page.waitForTimeout(600);
     const saved = await page.evaluate(() => (window.__settings.cast || []).some((m) => /^data:image\/jpeg;base64,/.test(m.picture || "")));
     check(saved, size.name + ": it is made small and saved with the cast");
