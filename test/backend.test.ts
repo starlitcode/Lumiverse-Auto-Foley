@@ -759,6 +759,16 @@ describe("more settings and Chatterbox, direct", () => {
     expect(h.box.cleanSettings({ chatterboxUrl: "javascript:alert(1)" }).chatterboxUrl).toBe("");
   });
 
+  test("How they speak keeps up to 1000 characters, and a direction up to 300", () => {
+    const h = host();
+    const long = "Low and unhurried, with a dry edge. ".repeat(20);
+    const s = h.box.cleanSettings({ cast: [{ name: "Pell", note: long.slice(0, 700), params: { direction: "slow ".repeat(50).trim() } }, { name: "Wren", note: long + long }] });
+    const pell = s.cast.find((c: any) => c.name === "Pell");
+    expect(pell.note.length).toBe(700);
+    expect(pell.params.direction.length).toBe(249);
+    expect(s.cast.find((c: any) => c.name === "Wren").note.length).toBe(1000);
+  });
+
   test("the server is read, and a line is spoken with its own settings", async () => {
     const mp3 = Buffer.from(new Uint8Array(300).fill(5)).toString("base64");
     const h = host({

@@ -354,14 +354,18 @@ function cleanVoices(v: any): Record<string, { voice: string; voiceName: string;
 // The more settings a person can have, by key: its type, and its range or
 // length. The panel has the same list and shows each one only for the engines
 // that take it.
+// The most How they speak can hold. The panel's box has the same limit and
+// counts it, so nothing is cut after it is typed.
+const NOTE_MAX = 1000;
+
 const PARAM_SPEC: Record<string, { type: 'num' | 'text' | 'bool'; lo?: number; hi?: number; max?: number }> = {
   boost: { type: 'bool' },
   lang: { type: 'text', max: 12 },
   temperature: { type: 'num', lo: 0, hi: 2 },
   top_p: { type: 'num', lo: 0, hi: 1 },
   normalize: { type: 'bool' },
-  direction: { type: 'text', max: 120 },
-  style_base: { type: 'text', max: 120 },
+  direction: { type: 'text', max: 300 },
+  style_base: { type: 'text', max: 300 },
   exaggeration: { type: 'num', lo: 0.25, hi: 2 },
   cfg_weight: { type: 'num', lo: 0, hi: 1 },
   seed: { type: 'num', lo: 0, hi: 2147483647 },
@@ -418,7 +422,7 @@ function cleanMember(m: any): CastMember | null {
     // and the panel keeps its slider in that range for an ElevenLabs voice.
     speed: num(m.speed, 0.5, 2, base.speed),
     params: cleanParams(m.params),
-    note: str(m.note, 300),
+    note: str(m.note, NOTE_MAX),
     gender: pick(m.gender, ['female', 'male', 'nonbinary', 'unknown'] as const, 'unknown'),
     muted: bool(m.muted, false),
   };

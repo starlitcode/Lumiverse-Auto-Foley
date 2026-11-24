@@ -55,6 +55,7 @@ _Not yet released_
 - **The open floating player sometimes would not drag on a phone.** Its top bar now takes the drag instead of the page scrolling.
 - **Switching tabs moved the drawer back up.** It now stays exactly where you scrolled it.
 - **The seconds count could put its "s" on a line of its own.**
+- **How they speak cut off anything after 300 characters, with no warning.** It now holds up to 1000 characters, and a count under the box shows how many are used. The box stops taking text at the limit, so what you see is what is saved. **Voice direction** and **Their usual way of speaking** have a count too, up to 300 characters.
 
 ---
 

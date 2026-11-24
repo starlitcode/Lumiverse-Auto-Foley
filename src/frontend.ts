@@ -790,6 +790,8 @@ const PANEL_CSS = `
 .af-cardh { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 13.5px; font-weight: 600; color: var(--af-text); }
 .af-cardh > span:first-child { flex: 1; min-width: 0; }
 .af-note { margin: 0; font-size: 12px; line-height: 1.45; color: var(--af-muted); }
+.af-count { text-align: right; font-variant-numeric: tabular-nums; }
+.af-count[data-near] { color: var(--af-text); font-weight: 600; }
 .af-note a { color: var(--af-accent-text); }
 .af-note b { color: var(--af-text); font-weight: 600; }
 .af-status { margin: 0; min-height: 18px; font-size: 12px; color: var(--af-muted); overflow-wrap: anywhere; }
@@ -1195,6 +1197,9 @@ function movedFor(cfg: any, seen: string, list: Moved[]): Moved[] {
   const told = String(seen || '').split(' ');
   return list.filter((m) => told.indexOf(movedRowMark(m)) < 0 && JSON.stringify(cfg[m.key]) === JSON.stringify(m.was));
 }
+
+// The most How they speak can hold, the same as the backend's.
+const NOTE_MAX = 1000;
 
 const DEFAULTS: any = {
   enabled: true,
@@ -3576,7 +3581,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     return f;
   }
 
-  function text(label: string, value: string, onChange: (v: string) => void, placeholder?: string, help?: string): HTMLElement {
+  function text(label: string, value: string, onChange: (v: string) => void, placeholder?: string, help?: string, max?: number): HTMLElement {
     const id = rid('tx');
     const f = el('<div class="af-col"></div>');
     f.setAttribute('data-af-row', id);
@@ -3586,10 +3591,29 @@ export function setup(ctx: Ctx, overrides?: any) {
     i.placeholder = placeholder || '';
     i.addEventListener('input', () => onChange(i.value));
     f.appendChild(i);
+    if (max) f.appendChild(counter(i, max).node);
     return f;
   }
 
-  function area(label: string, value: string, onChange: (v: string) => void, opts?: { placeholder?: string; help?: string; rows?: number; cls?: string }): HTMLElement {
+  // A count of the characters in a box that has a limit, under it, such as
+  // "120 of 1000 characters". The box stops taking text at the limit, so
+  // nothing is cut after it is typed. Near the limit the count is in the
+  // warning color.
+  function counter(box: HTMLInputElement | HTMLTextAreaElement, max: number): { node: HTMLElement; paint: () => void } {
+    box.maxLength = max;
+    const node = el('<p class="af-note af-count" aria-live="polite"></p>');
+    const paint = () => {
+      const n = box.value.length;
+      node.textContent = n + ' of ' + max + ' characters';
+      if (n >= Math.floor(max * 0.9)) node.setAttribute('data-near', '');
+      else node.removeAttribute('data-near');
+    };
+    box.addEventListener('input', paint);
+    paint();
+    return { node, paint };
+  }
+
+  function area(label: string, value: string, onChange: (v: string) => void, opts?: { placeholder?: string; help?: string; rows?: number; cls?: string; max?: number }): HTMLElement {
     const o = opts || {};
     const id = rid('ta');
     const f = el('<div class="af-col"></div>');
@@ -3599,9 +3623,14 @@ export function setup(ctx: Ctx, overrides?: any) {
     t.value = value;
     t.placeholder = o.placeholder || '';
     t.addEventListener('input', () => onChange(t.value));
-    const big = expandButton(label, t, onChange);
+    const count = o.max ? counter(t, o.max) : null;
+    const big = expandButton(label, t, (v) => {
+      if (count) count.paint();
+      onChange(v);
+    });
     (f.firstElementChild as HTMLElement).appendChild(big);
     f.appendChild(t);
+    if (count) f.appendChild(count.node);
     return f;
   }
 
@@ -3611,7 +3640,7 @@ export function setup(ctx: Ctx, overrides?: any) {
   // the box on the way in, since that raises the keyboard on a phone and
   // covers what was opened. Escape, a tap outside, or Cancel closes it.
   let closeBig: (() => void) | null = null;
-  function openBig(label: string, initial: string, done?: (v: string) => void) {
+  function openBig(label: string, initial: string, done?: (v: string) => void, max?: number) {
     if (closeBig) closeBig();
     const over = el('<div class="af-over"></div>');
     const box = el('<div class="af-bigbox af"></div>');
@@ -3622,6 +3651,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     ta.setAttribute('aria-label', label);
     if (!done) ta.readOnly = true;
     box.appendChild(ta);
+    if (max && done) box.appendChild(counter(ta, max).node);
     const row = el('<div class="af-row" style="justify-content:flex-end"></div>');
     row.appendChild(button('Copy', async () => {
       try {
@@ -3677,7 +3707,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         t.value = v;
         if (onChange) onChange(v);
         t.dispatchEvent(new Event('input', { bubbles: true }));
-      }),
+      }, t.maxLength > 0 ? t.maxLength : undefined),
     );
     big.setAttribute('aria-label', 'Open ' + label + ' at full size');
     return big;
@@ -5821,20 +5851,20 @@ export function setup(ctx: Ctx, overrides?: any) {
     const out: HTMLElement[] = [];
     const num = (k: string, label: string, lo: number, hi: number, step: number, dflt: number, help: string) =>
       slider(label, typeof own[k] === 'number' ? own[k] : dflt, lo, hi, step, (v) => (step >= 1 ? String(Math.round(v)) : v.toFixed(2)), (v) => setP(k, v), help);
-    const words = (k: string, label: string, ph: string, help: string) => text(label, String(own[k] || ''), (v) => setP(k, v.trim()), ph, help);
+    const words = (k: string, label: string, ph: string, help: string, max?: number) => text(label, String(own[k] || ''), (v) => setP(k, v.trim()), ph, help, max);
     if (eng.eleven) {
       out.push(personSwitch('Speaker boost', 'On by default. Makes the voice closer to the original. Off can be a little faster.', own.boost !== false, (v) => setP('boost', v ? undefined : false)));
       out.push(words('lang', 'Language', 'en, de, ja', 'Empty lets ElevenLabs tell from the text. A two-letter code, such as en or fr, makes it read the text in that language.'));
     }
     if (prov === 'fish_audio') {
-      out.push(words('direction', 'Voice direction', 'warm and tired', 'Plain words on how every line of theirs is said, such as warm and tired. Empty sends none. A line\u2019s own tags still apply.'));
+      out.push(words('direction', 'Voice direction', 'warm and tired', 'Plain words on how every line of theirs is said, such as warm and tired. Empty sends none. A line\u2019s own tags still apply.', 300));
       out.push(num('temperature', 'Temperature', 0, 1, 0.05, 0.7, 'How much each take varies. 0.70 by default. Lower is steadier.'));
       out.push(num('top_p', 'Top P', 0, 1, 0.05, 0.7, 'How wide the choice of sounds is. 0.70 by default.'));
       out.push(personSwitch('Steady loudness', 'On by default. Keeps lines at the same loudness.', own.normalize !== false, (v) => setP('normalize', v ? undefined : false)));
     }
-    if (prov === 'openrouter_tts' && eng.style) out.push(words('style_base', 'Their usual way of speaking', 'calm and dry', 'Sent with every line of theirs that has no note of its own, such as calm and dry. Empty uses the style saved on the connection.'));
+    if (prov === 'openrouter_tts' && eng.style) out.push(words('style_base', 'Their usual way of speaking', 'calm and dry', 'Sent with every line of theirs that has no note of its own, such as calm and dry. Empty uses the style saved on the connection.', 300));
     if (prov === 'google_tts' || prov === 'google_vertex_tts') {
-      if (eng.style) out.push(words('style_base', 'Their usual way of speaking', 'calm and dry', 'Sent with every line of theirs that has no note of its own, such as calm and dry. Empty uses the style saved on the connection.'));
+      if (eng.style) out.push(words('style_base', 'Their usual way of speaking', 'calm and dry', 'Sent with every line of theirs that has no note of its own, such as calm and dry. Empty uses the style saved on the connection.', 300));
       out.push(num('temperature', 'Temperature', 0, 2, 0.05, 1, 'How much each take varies. 1.00 by default.'));
       out.push(words('lang', 'Language', 'en-US', 'Empty lets Gemini tell from the text. A code such as en-US or fr-FR sets the language and accent.'));
     }
@@ -6110,9 +6140,9 @@ export function setup(ctx: Ctx, overrides?: any) {
     };
     drawVoice();
     const speakBox = area('How they speak', m.note, (v) => {
-      m.note = v.slice(0, 300);
+      m.note = v.slice(0, NOTE_MAX);
       save();
-    }, { placeholder: 'Soft-spoken and dry. Rarely raises their voice.', help: 'A short note the Director reads when it marks this person’s lines. The line under the box says what helps most on their engine.' });
+    }, { max: NOTE_MAX, placeholder: 'Soft-spoken and dry. Rarely raises their voice.', help: 'A short note the Director reads when it marks this person’s lines. The line under the box says what helps most on their engine.' });
     speakBox.setAttribute('data-af-speak', '');
     // What to write depends on the engine the person speaks through, since
     // each takes different directions.

@@ -940,6 +940,50 @@ if (section("connection list")) {
   }
 }
 
+if (section("note limit")) {
+  console.log("How they speak keeps what is typed, and counts it");
+  for (const size of SIZES) {
+    const { context, page, errors } = await open(THEMES[0], size);
+    const where = size.name;
+    await page.click('.af-tab[data-tab="cast"]');
+    await page.waitForTimeout(300);
+    await page.locator(".af-person-head").first().click();
+    await page.waitForTimeout(600);
+    const box = page.locator(".af-person [data-af-speak] textarea").first();
+    await box.click();
+    await page.keyboard.press("ControlOrMeta+A");
+    await page.keyboard.press("Delete");
+    // 14 times 50 characters is 700.
+    await page.keyboard.insertText("Slow and careful, like each word costs something. ".repeat(14));
+    await box.evaluate((t) => t.blur());
+    await page.waitForTimeout(900);
+    const a = await page.evaluate(() => ({
+      len: document.querySelector(".af-person [data-af-speak] textarea").value.length,
+      saved: (window.__settings.cast[0].note || "").length,
+      count: (document.querySelector(".af-person [data-af-speak] .af-count") || {}).textContent || "",
+    }));
+    check(a.len === 700 && a.saved === 700, where + ": a 700-character note is kept whole (" + a.len + " typed, " + a.saved + " saved)");
+    check(a.count === "700 of 1000 characters", where + ": the count under the box says how much is used (" + a.count + ")");
+    await box.click();
+    await page.keyboard.press("End");
+    await page.keyboard.insertText(" More words.".repeat(40));
+    await page.waitForTimeout(900);
+    const b = await page.evaluate(() => ({
+      len: document.querySelector(".af-person [data-af-speak] textarea").value.length,
+      saved: (window.__settings.cast[0].note || "").length,
+      count: document.querySelector(".af-person [data-af-speak] .af-count"),
+    })).then(async (r) => r);
+    const near = await page.locator(".af-person [data-af-speak] .af-count[data-near]").count();
+    const countText = await page.locator(".af-person [data-af-speak] .af-count").textContent();
+    check(b.len === 1000 && b.saved === 1000, where + ": typing stops at 1000 characters, and what shows is what is saved (" + b.len + ", " + b.saved + ")");
+    check(countText === "1000 of 1000 characters" && near === 1, where + ": the count stands out at the limit (" + countText + ")");
+    const m = await page.evaluate(MEASURE, true);
+    check(!m.overflow.length, where + ": nothing runs off the side. " + m.overflow.slice(0, 2).join("; "));
+    check(!errors.length, where + ": no console errors. " + errors.slice(0, 2).join("; "));
+    await context.close();
+  }
+}
+
 if (section("kept")) {
   console.log("Kept audio plays again without being made again");
   const { context, page, errors } = await open(THEMES[0], SIZES[0]);

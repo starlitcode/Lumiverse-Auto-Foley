@@ -31,7 +31,7 @@ Someone the AI added has no voice picked. The first time they speak, Auto Foley 
 - **Stability.** ElevenLabs only. Lower is more expressive. On Eleven v3 it has three settings: Creative, Natural and Robust.
 - **Similarity and Style.** ElevenLabs only. Sent to ElevenLabs as they are.
 - **Speed.** Sent to every engine but Gemini, which has no speed.
-- **How they speak.** A short note for the Director, such as "soft-spoken and dry, rarely raises their voice".
+- **How they speak.** A note for the Director, such as "soft-spoken and dry, rarely raises their voice". It holds up to 1000 characters. The count under the box shows how many are used, and the box stops taking text at the limit.
 - **Do not voice.** Their lines are skipped.
 - **Hear a sample** speaks a test line with these settings. It costs a few credits.
 - **Remove** takes them out of the cast. The narrator cannot be removed.
