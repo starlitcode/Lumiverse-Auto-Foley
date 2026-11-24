@@ -2347,13 +2347,25 @@ async function askDecisions(
       const k = choice.charAt(0) === 'p' ? Number(choice.slice(1)) : -1;
       const pickName = k >= 0 && people[k] ? people[k].name : 'someone not in the cast';
       const known = Number.isFinite(conf);
+      // The model gives a chance for every choice, not only the one it
+      // picked. The next two, at 1% or more, show how close the call was.
+      const probs = a.probabilities && typeof a.probabilities === 'object' ? a.probabilities : {};
+      const others = Object.keys(probs)
+        .filter((key) => key !== choice && Number(probs[key]) >= 0.01)
+        .sort((x, y) => Number(probs[y]) - Number(probs[x]))
+        .slice(0, 2)
+        .map((key) => {
+          const j = key.charAt(0) === 'p' ? Number(key.slice(1)) : -1;
+          return (j >= 0 && people[j] ? people[j].name : 'someone else') + ' ' + pct(Number(probs[key]));
+        });
+      const also = others.length ? ' Next: ' + others.join(', ') + '.' : '';
       if (k >= 0 && people[k] && known && conf >= sure) {
         out.speakers[i] = people[k].name;
         picked++;
-        out.decided.push('"' + textOf(i) + '" is ' + pickName + ', ' + pct(conf) + ' sure. Used.');
+        out.decided.push('"' + textOf(i) + '" is ' + pickName + ', ' + pct(conf) + ' sure. Used.' + also);
       } else {
         unsure++;
-        out.decided.push('"' + textOf(i) + '" is ' + pickName + (known ? ', ' + pct(conf) + ' sure' : '') + '. Left to the Director.');
+        out.decided.push('"' + textOf(i) + '" is ' + pickName + (known ? ', ' + pct(conf) + ' sure' : '') + '. Left to the Director.' + also);
       }
     } else if (key.indexOf('sound_') === 0) {
       const i = Number(key.slice(6));

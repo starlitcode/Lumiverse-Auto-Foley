@@ -22,6 +22,7 @@ _Not yet released_
 - **Nonbinary**, as a voice type in the Cast tab. The Director marks someone new as nonbinary only when the text says so, and a voice the provider marks neutral is picked for them when there is one.
 - **Main characters and minor ones.** The Director says which a new speaker is, and the Cast tab files a main one as a character and a minor one as an NPC.
 - **Crop a cast picture.** After you choose a picture, drag it and zoom so the circle frames the face, then press **Use this**.
+- **What the Decision model answered**, in the Log. Each answer says who it picked and how sure it was, the next two it considered, each line's chance of being a sound, and whether each was used. **How sure it must be**, under **Use a Decision model**, sets when an answer is used.
 - **Back to defaults for the mixer.** It sets voices to 100% and sounds to 80%, and unmutes both.
 
 ### Changed

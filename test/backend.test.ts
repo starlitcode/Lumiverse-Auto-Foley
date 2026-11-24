@@ -994,6 +994,26 @@ describe("the Decision model", () => {
     expect(second.log.join(" ")).toContain("picked the speaker for 0 of 2");
   });
 
+  test("the Log shows how close the call was", async () => {
+    const h = host({
+      answers: [JSON.stringify({ lines: [{ i: 0, speaker: "Narrator", text: "Mara looked at Tobin." }] })],
+      decide: (input: any) => {
+        const answers: any = {};
+        for (const k of Object.keys(input.questions)) {
+          if (!k.startsWith("who_")) continue;
+          const crit = input.questions[k].criteria;
+          const tobin = Object.keys(crit).find((c) => crit[c].startsWith("Tobin"))!;
+          const mara = Object.keys(crit).find((c) => crit[c].startsWith("Mara"))!;
+          answers[k] = { type: "choice", choice: tobin, confidence: 0.7, probabilities: { [tobin]: 0.7, [mara]: 0.25, other: 0.05 } };
+        }
+        return { model: "maker/fast-judge", answers };
+      },
+    });
+    await setup(h);
+    const script = (await h.ask(msg)).find((m) => m.type === "script").script;
+    expect(script.decided).toContain('"Go." is Tobin, 70% sure. Used. Next: Mara Vell 25%, someone else 5%.');
+  });
+
   test("a pick it is unsure of is left to the Director", async () => {
     const h = host({
       answers: [JSON.stringify({ lines: [{ i: 0, speaker: "Narrator", text: "Mara looked at Tobin." }] })],
