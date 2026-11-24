@@ -1922,17 +1922,22 @@ if (section("taps")) {
       await page.evaluate(() => (document.getElementById("drawer").scrollTop = 900));
       await page.waitForTimeout(200);
       const before = await page.evaluate(() => document.querySelector("[data-af-stick]").getBoundingClientRect().top);
+      let held = await page.evaluate(() => document.getElementById("drawer").scrollTop);
       for (const id of ["cast", "stage", "director", "settings"]) {
         await page.click(`.af-tab[data-tab="${id}"]`);
         await page.waitForTimeout(60);
         const r = await page.evaluate(() => {
+          const d = document.getElementById("drawer");
           const bar = document.querySelector("[data-af-stick]").getBoundingClientRect();
-          const pg = document.querySelector('[data-af="page"]').getBoundingClientRect();
-          return { top: bar.top, gap: pg.top - bar.bottom };
+          return { top: bar.top, at: d.scrollTop, most: d.scrollHeight - d.clientHeight };
         });
         const where = "zoom " + zoom + ", " + size.name + ", " + id;
         check(Math.abs(r.top - before) < 1.5, where + ": the tab bar stays where it was (" + before.toFixed(1) + " then " + r.top.toFixed(1) + ")");
-        check(r.gap >= 0 && r.gap < 20, where + ": the new tab starts right under the bar (" + r.gap.toFixed(1) + " px)");
+        // The drawer keeps its exact place, as in Auto Refine, unless the new
+        // tab is too short to scroll that far.
+        const want = Math.min(held, r.most);
+        check(Math.abs(r.at - want) < 1.5, where + ": the drawer stays where it was scrolled (" + want.toFixed(1) + " then " + r.at.toFixed(1) + ")");
+        held = r.at;
       }
       await context.close();
     }
