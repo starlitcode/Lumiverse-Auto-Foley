@@ -894,7 +894,7 @@ if (section("sync")) {
     const seen = new Set();
     for (let k = 0; k < 40; k++) {
       const w = document.querySelector('[data-af="line"] .af-w.af-now');
-      if (w) seen.add(Math.round(parseFloat(w.style.getPropertyValue("--af-p")) / 10));
+      if (w && w.children.length) seen.add(Math.round((w.querySelectorAll(".af-l.af-lit").length / w.children.length) * 10));
       if (w) {
         const cs = getComputedStyle(w);
         (window.__nowLooks = window.__nowLooks || []).push(cs.color + "|" + cs.webkitTextFillColor);
@@ -908,6 +908,40 @@ if (section("sync")) {
   // draw the fill still shows it.
   const shown = await page.evaluate(() => window.__nowLooks || []);
   check(shown.length > 0 && shown.every((x) => !/rgba\(0, 0, 0, 0\)|transparent/.test(x)), "the word being said is never see-through (" + shown.slice(0, 2).join(" ; ") + ")");
+  check(!errors.length, "no console errors. " + errors.slice(0, 2).join("; "));
+  await context.close();
+}
+
+if (section("words in place")) {
+  console.log("The word being said is drawn in its own place and font, whatever the theme sets");
+  const { context, page, errors } = await open(THEMES[0], SIZES[0]);
+  // A theme that styles every layer drawn on top of an element, and indents
+  // and centers text, would move a lit copy of the word away from the word.
+  await page.addStyleTag({ content: "*::after{font-family:serif!important;font-size:24px!important;line-height:3!important;top:12px!important}[data-af=line]{text-indent:2em;text-align:center}" });
+  await page.evaluate(() => {
+    window.__wav = [0.1, 3];
+    window.__clipMs = 3200;
+  });
+  await page.click('.af-tab[data-tab="stage"]');
+  await page.waitForTimeout(200);
+  await page.click('#mount [data-af-slot="message"]');
+  await page.waitForFunction(() => document.querySelector('[data-af="line"] .af-w.af-now'), null, { timeout: 8000 });
+  await page.waitForTimeout(150);
+  const looks = await page.evaluate(() => {
+    const w = document.querySelector('[data-af="line"] .af-w.af-now');
+    const wc = getComputedStyle(w);
+    const after = getComputedStyle(w, "::after").content;
+    const r = w.getBoundingClientRect();
+    const off = Array.from(w.querySelectorAll(".af-l")).filter((l) => {
+      const c = getComputedStyle(l);
+      const b = l.getBoundingClientRect();
+      return c.fontFamily !== wc.fontFamily || c.fontSize !== wc.fontSize || b.top < r.top - 1 || b.bottom > r.bottom + 1 || b.left < r.left - 1 || b.right > r.right + 1;
+    }).length;
+    return { after, off, text: w.textContent, letters: w.children.length };
+  });
+  if (shots) await page.locator('[data-af="theater"]').screenshot({ path: shots + "/word-in-place.png" });
+  check(looks.after === "none" || looks.after === "normal", "nothing is drawn on top of the word (" + looks.after + ")");
+  check(looks.letters === looks.text.length && looks.off === 0, "every letter sits inside the word, in the word's font (" + looks.off + " of " + looks.letters + " out of place)");
   check(!errors.length, "no console errors. " + errors.slice(0, 2).join("; "));
   await context.close();
 }

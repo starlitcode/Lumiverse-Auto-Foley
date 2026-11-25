@@ -326,3 +326,20 @@ describe("Download audio", () => {
     expect(b.type).toBe("audio/wav");
   });
 });
+
+const T = __testing;
+describe("letterSpans", () => {
+  test('splits a word into one span for each letter', () => {
+    const out = T.letterSpans('glass');
+    expect(out.split('class="af-l"').length - 1).toBe(5);
+    expect(out.replace(/<[^>]+>/g, '')).toBe('glass');
+  });
+  test('keeps a word whole when its letters join or carry marks', () => {
+    expect(T.letterSpans('سلام')).not.toContain('af-l');
+    expect(T.letterSpans('café')).not.toContain('af-l');
+    expect(T.letterSpans('שלום')).not.toContain('af-l');
+  });
+  test('escapes each letter', () => {
+    expect(T.letterSpans('a<b')).toContain('&lt;');
+  });
+});

@@ -43,7 +43,8 @@ _Not yet released_
 - **Warnings that fit the engine.** The Director tab says when Big moments change only the audience on an engine other than ElevenLabs, and when an engine cannot sing.
 - **A new look for the players.** The floating player and **Now playing** on the Stage tab show the line like a page of a script, with a line on its left side in the color of whoever is speaking. An **On air** light shows red while a message plays and amber while it is paused. A thin striped band runs along the top of each player.
 - **Groups have an editor.** **New group** and **Edit** open it, with the group's name and a switch for each person in the cast, so you can pick everyone in a group in one place. **Save** keeps it and **Cancel** changes nothing. **Edit** takes the place of **Rename**.
-- **Scripts.** The panel calls what the Director makes from a message its script, such as **Kept audio and scripts** in **Start again**. While it works, the status says "The Director is writing the script".
+- **Scripts.** The panel calls what the Director makes from a message its script, such as **Kept audio and scripts** in **Start again**. While it works, the status says "The Director is writing the script". **Now playing** and the floating player name what plays as a script, such as "Tamsin’s script".
+- **The Director's built-in prompt** says what each kind of person in the cast is, and to mark a big moment only while **Big moments** is on. If you use a prompt of your own, a notice says the built-in one has changed.
 - **Fish Audio tags are repeated for each sentence.** Fish Audio reads a tag for how the words are said best at the start of the sentence it is for. On a line of several sentences, that tag now goes again at the start of each sentence that has none of its own, so the last sentence is said the same way as the first. Sounds and pauses are not repeated.
 
 ### Fixed
@@ -54,7 +55,7 @@ _Not yet released_
 - **Sounds made with Both warned on every engine but ElevenLabs.** Both plays every sound as an effect on those engines, so only In the voice warns now.
 - **A new speaker on Gemini got a voice of any gender.** Gemini lists its voices as masculine and feminine, which did not match. Every way a provider writes gender is understood now.
 - **Only minor characters got a voice picked for them.** Anyone new but the narrator gets one now. The pick also matches words in how they sound, such as gravelly or young, to each voice's own description.
-- **The words in Now playing were choppy.** The word being said now fills from left to right as it is spoken, and the timing is worked out on every frame.
+- **The words in Now playing were choppy.** The word being said now lights from left to right, one letter at a time, as it is spoken. Each letter is lit in place, in your theme's font. The timing is worked out on every frame.
 - **Now playing lost its place after you came back to the Lumiverse tab.** It now picks up from where the audio really is.
 - **A message button could perform the wrong message.** After a delete, Lumiverse can show another message in the same row, and the button there still performed the message that was deleted, with its kept audio. A button now performs the message its row shows when it is pressed.
 - **Play could bring back a deleted message.** A message deleted while it plays stops, and its script is not played again.

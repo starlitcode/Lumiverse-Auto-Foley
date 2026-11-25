@@ -379,6 +379,10 @@ function tidy(text: string): string {
 // said, such as [whispering].
 const EVENT_TAG = /\b(laugh|chuckl|giggl|snicker|sigh|gasp|cough|sniff|sneez|groan|grunt|throat|inhal|exhal|breath|pause|sob|crie|cry|crying|yawn|hum|gulp|swallow|kiss|moan|pant|hiccup|snort|whimper|clap|knock|scream|shriek|wail|whistl|tsk|silence)/i;
 
+// Words in these scripts are drawn the same with each letter in a span of its
+// own. Inherited covers combining marks and joiners, which are left out.
+const LETTERS_SPLIT = /^[\p{Script=Latin}\p{Script=Greek}\p{Script=Cyrillic}\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}\p{Script=Common}]+$/u;
+
 // The words before a sentence's period that are not the end of a sentence.
 const NOT_AN_END = /(?:^|\s)(?:mr|mrs|ms|dr|st|jr|sr|prof|vs|etc|e\.g|i\.e|no)\.$/i;
 
@@ -479,6 +483,15 @@ function esc(text: any): string {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
+}
+
+// A word split into one span for each letter, so the word being said can
+// light letter by letter. A word in a script whose letters join or that
+// reads right to left is kept whole, since splitting it would change how it
+// is drawn. That word lights all at once.
+function letterSpans(word: string): string {
+  if (!LETTERS_SPLIT.test(word)) return esc(word);
+  return Array.from(word).map((c) => '<span class="af-l">' + esc(c) + '</span>').join('');
 }
 
 // A short, stable fingerprint of a text, the same as the backend's. It tells
@@ -4377,13 +4390,13 @@ export function setup(ctx: Ctx, overrides?: any) {
     '.af-theater-idle{font-size:13px;color:var(--lumiverse-text-muted,rgba(255,255,255,.65))}' +
     '.af-w{color:var(--lumiverse-text-muted,rgba(255,255,255,.65));transition:color .12s linear}' +
     '.af-w.af-said,.af-w.af-now{color:var(--lumiverse-text,rgba(255,255,255,.92))}' +
-    // The word being said fills from left to right as it is spoken: the word
-    // stays in the dim color, and a lit copy on top of it is shown as far as
-    // it has been said. The word itself is never made see-through, so a
-    // browser that cannot draw the copy still shows the word. With reduce
-    // motion on, it is lit whole.
-    '@media (prefers-reduced-motion: no-preference){html:not([data-af-still]) .af-w.af-now{position:relative;color:var(--lumiverse-text-muted,rgba(255,255,255,.65));transition:none}' +
-    'html:not([data-af-still]) .af-w.af-now::after{content:attr(data-w);content:attr(data-w) / "";position:absolute;left:0;top:0;width:var(--af-p,0%);overflow:hidden;white-space:nowrap;color:var(--lumiverse-text,rgba(255,255,255,.92));pointer-events:none}}' +
+    // The word being said lights from left to right as it is spoken, one
+    // letter at a time. Each letter is the word's own text in its own span,
+    // so it is drawn in the same place and font as the rest of the line,
+    // whatever the theme sets. With reduce motion on, it is lit whole.
+    '@media (prefers-reduced-motion: no-preference){html:not([data-af-still]) .af-w.af-now{color:var(--lumiverse-text-muted,rgba(255,255,255,.65));transition:none}' +
+    'html:not([data-af-still]) .af-w.af-now .af-l{transition:color .1s linear}' +
+    'html:not([data-af-still]) .af-w.af-now .af-l.af-lit{color:var(--lumiverse-text,rgba(255,255,255,.92))}}' +
     // The word being said, in the chat.
     '::highlight(auto-foley-word){background-color:var(--lumiverse-primary-020,rgba(147,112,219,.3));color:inherit}' +
     '.af-theater-cue:empty{display:none}' +
@@ -5101,7 +5114,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       face.innerHTML = it && it.kind === 'voice' ? faceHtml(who, name) : it ? ICON_SOUND : ICON;
       face.className = 'af-avatar' + (it && it.kind === 'voice' && line ? ' af-avatar-' + partWho(line) : '');
     }
-    setText(q('who'), name || (busyMessage ? 'Directing the message' : playerWhose === 'mine' ? 'Your latest message' : 'The latest reply'));
+    setText(q('who'), name || (busyMessage ? 'Writing the script' : playerWhose === 'mine' ? 'Your latest message' : 'The latest reply'));
     // The On air light says whether it is playing, so this says only where.
     const partOf = show ? 'Part ' + (Math.min(show.index, total - 1) + 1) + ' of ' + total : '';
     setText(q('cap'), show ? (paused ? 'Paused · ' + partOf.toLowerCase() : partOf) : busyMessage ? 'Getting ready' : 'Ready');
@@ -5748,7 +5761,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       setText(sub, phase);
     } else if (show) {
       const secs = Math.round((Date.now() - show.startedAt) / 1000);
-      setText(title, show.script.author ? show.script.author + '’s message' : 'This message');
+      setText(title, show.script.author ? show.script.author + '’s script' : 'This script');
       const w = show.waiting.get(show.index);
       const said = w
         ? 'The voice service is busy. Trying again in ' + Math.max(0, Math.ceil((w.until - Date.now()) / 1000)) + '\u00a0s (wait ' + w.n + ' of ' + S.rateWaits + ')'
@@ -5757,7 +5770,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       // line of its own as the number grows.
       setText(sub, said + ' · part ' + Math.min(show.index + 1, show.items.length) + ' of ' + show.items.length + ' · ' + secs + '\u00a0s');
     } else {
-      setText(title, script ? (script.author ? script.author + '’s message' : 'This message') : 'Nothing playing');
+      setText(title, script ? (script.author ? script.author + '’s script' : 'This script') : 'Nothing playing');
       setText(sub, phase || (script ? 'Ready. Press Play.' : chatInfo.kind === 'none' ? 'Open a chat, then press the Auto Foley button on a message.' : 'Press the Auto Foley button on a message.'));
     }
   }
@@ -5874,7 +5887,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     who.innerHTML = '<span class="af-avatar af-avatar-' + esc((m && m.kind) || 'character') + '">' + faceHtml(m, name) + '</span><span>' + esc(name) + '</span>';
     const { parts, weights } = lineParts(line);
     lineBox.innerHTML = parts
-      .map((p, k) => (p.kind === 'word' ? '<span class="af-w" data-af-part="' + k + '" data-w="' + esc(p.text) + '">' + esc(p.text) + '</span>' : '<span class="af-chip ' + (p.kind === 'sound' ? 'af-chip-insound' : 'af-chip-tag') + '" data-af-part="' + k + '">' + esc(p.text) + '</span>'))
+      .map((p, k) => (p.kind === 'word' ? '<span class="af-w" data-af-part="' + k + '">' + letterSpans(p.text) + '</span>' : '<span class="af-chip ' + (p.kind === 'sound' ? 'af-chip-insound' : 'af-chip-tag') + '" data-af-part="' + k + '">' + esc(p.text) + '</span>'))
       .join(' ');
     // The box keeps the tallest line of this message, so a short line after a
     // long one does not pull the rest of the tab up.
@@ -5935,8 +5948,16 @@ export function setup(ctx: Ctx, overrides?: any) {
           const cur = !!v && n === v.k && v.frac < 1;
           if (w.classList.contains('af-said') !== said) w.classList.toggle('af-said', said);
           if (w.classList.contains('af-now') !== cur) w.classList.toggle('af-now', cur);
-          if (cur) (w as HTMLElement).style.setProperty('--af-p', (v!.frac * 100).toFixed(1) + '%');
-          else if ((w as HTMLElement).style.length) (w as HTMLElement).style.removeProperty('--af-p');
+          const ls = w.children;
+          const lit = cur ? Math.round(v!.frac * ls.length) : 0;
+          const el = w as HTMLElement;
+          if (ls.length && el.dataset.lit !== String(lit)) {
+            el.dataset.lit = String(lit);
+            for (let j = 0; j < ls.length; j++) {
+              const on = j < lit;
+              if (ls[j].classList.contains('af-lit') !== on) ls[j].classList.toggle('af-lit', on);
+            }
+          }
         });
     }
     paintChatWords(v);
@@ -8618,7 +8639,7 @@ export function setup(ctx: Ctx, overrides?: any) {
   };
 }
 
-export const __testing = { wavBlob, noConnectionWhy, perSentence, clipLevel, levelGain, voiceGender, describeWords, markText, movedFor, movedRowMark, MOVED_DEFAULTS, looksLikeDate, voicedFrames, wordWeight, partTimes, engineOf, fitTag, tagSound, textFor, styleFor, stripTags, stabilityFor, ENGINES };
+export const __testing = { letterSpans, wavBlob, noConnectionWhy, perSentence, clipLevel, levelGain, voiceGender, describeWords, markText, movedFor, movedRowMark, MOVED_DEFAULTS, looksLikeDate, voicedFrames, wordWeight, partTimes, engineOf, fitTag, tagSound, textFor, styleFor, stripTags, stabilityFor, ENGINES };
 
 // The built-in cheer: "Cheering and clapping crowd 1" by freesound_community,
 // a free sound from Pixabay (pixabay.com/sound-effects/people-cheering-and-clapping-crowd-1-5995/),

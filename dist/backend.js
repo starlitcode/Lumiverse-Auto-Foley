@@ -1169,7 +1169,7 @@ Sex scenes are between adults, 18 and older. If one involves anyone younger than
 
 <what_you_get>
 A JSON object with:
-"cast": everyone who might speak, each with a "note" on how they talk. "also_called" lists other names the story uses for them.
+"cast": everyone who might speak, each with a "note" on how they talk. "kind" is "narrator", "character", "persona" (someone the user plays) or "npc" (a minor part). "also_called" lists other names the story uses for them.
 "author": who wrote this message.
 "in_scene": the people this message names, the author first.
 "lines": the message split into numbered lines, in order. Each has "i" (its number), "kind" and "text". A "speech" line is said out loud by someone, without its quote marks. A "narration" line is everything else, read by the narrator.
@@ -1247,7 +1247,7 @@ When "intimate" is true, sounds can include the noises of a sex scene between ad
 </sounds>
 
 <big_moments>
-Set "big": true on a line that's a real peak: a scream, or the confession that cracks somebody open. It lets the voice swing wider. A scene has one, maybe two. Most have none.
+When "big_moments" is true in the rules, set "big": true on a line that's a real peak: a scream, or the confession that cracks somebody open. It lets the voice swing wider. A scene has one, maybe two. Most have none.
 </big_moments>
 
 <singing>
@@ -1267,7 +1267,7 @@ Send back one JSON object and nothing else: no words before or after it, and no 
 Every line comes back, in order, with the same "i" it came with.
 "text" is the whole line: every word of it, exactly as written, with your tags added. Never just the tags.
 "speaker" is a name from the cast, a name from "new_speakers", or "Narrator".
-Leave "before" and "after" as "" when there's no sound, and "big" as false unless it's a real peak.
+Leave "before" and "after" as "" when there's no sound, and "big" as false unless it's a real peak and "big_moments" is on.
 Leave "style" as "" and "sung" as false unless the line needs them.
 Leave "new_speakers" as [] when nobody new speaks.
 
