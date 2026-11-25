@@ -1033,6 +1033,7 @@ button.af-chip-sound svg { width: 12px; height: 12px; flex: none; color: var(--a
 .af-log-line[data-kind="bad"] { color: var(--af-text); }
 .af-steps { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; font-size: 12.5px; }
 .af-steps li { padding-left: 2px; }
+.af-steps li > .af-row { margin-top: 6px; }
 .af-steps svg { width: 14px; height: 14px; vertical-align: -2px; }
 
 /* The Cast */
@@ -3655,11 +3656,6 @@ export function setup(ctx, overrides) {
             switchTab();
         });
     });
-    // A new tab is drawn with the tab bar left where it is on screen, the same
-    // as in Auto Refine. Scrolled down, with the bar held at the top, the new
-    // tab starts right under the bar. With the bar in its own place, the scroll
-    // is left as it is. The page keeps enough height for the bar to stay where
-    // it was, so a short tab does not pull the panel back down.
     // A tab switch keeps the drawer exactly where it was scrolled to, the same
     // as Auto Retry and Auto Refine. Every box that can scroll is read before
     // the new tab is drawn and put back after, once now and again over the next
@@ -3918,6 +3914,7 @@ export function setup(ctx, overrides) {
     // A card, with its title and an optional line of plain words under it.
     function card(title, note, extraHead) {
         const c = el('<section class="af-card"><h3 class="af-cardh"><span>' + esc(title) + '</span>' + (extraHead || '') + '</h3></section>');
+        c.setAttribute('data-af-card', title);
         if (note)
             c.appendChild(hint(note));
         return c;
@@ -5678,15 +5675,44 @@ export function setup(ctx, overrides) {
         paintTheater();
     }
     // The first thing a new reader sees: where the button is and what to do.
+    // Goes to a tab, the same as pressing it, and then does something there.
+    function goTo(id, then) {
+        const b = root.querySelector('.af-tab[data-tab="' + id + '"]');
+        if (b)
+            b.click();
+        if (then)
+            requestAnimationFrame(() => then());
+    }
+    // What to do first, in order. Each step that happens on another tab has a
+    // button that goes there.
     function guideCard() {
         const c = card('Start here');
-        c.appendChild(el('<ol class="af-steps">' +
-            '<li>Open the <b>Settings</b> tab and press <b>Check my setup</b>. It says what is ready and what is missing.</li>' +
-            '<li>In a chat, find the Auto Foley button ' + ICON + ' in the row of buttons on any message. Press it to perform that message. Press it again to stop.</li>' +
-            '<li>The same button sits in the chat’s own row of buttons, by the message box. It performs the newest reply.</li>' +
-            '<li>Open the <b>Cast</b> tab and pick a voice for each person. <b>Hear a sample</b> plays one line.</li>' +
-            '<li>Turn on <b>Autoplay new replies</b> in Settings to hear each reply as it finishes.</li>' +
-            '</ol>'));
+        const steps = el('<ol class="af-steps"></ol>');
+        const step = (html, act) => {
+            const li = el('<li><span>' + html + '</span></li>');
+            if (act) {
+                const r = el('<div class="af-row"></div>');
+                r.appendChild(act);
+                li.appendChild(r);
+            }
+            steps.appendChild(li);
+        };
+        step('<b>Check your setup.</b> It says what is ready and what is missing, and it spends nothing.', button('Check my setup', () => goTo('settings', () => {
+            const run = page.querySelector('[data-af-check]');
+            if (!run)
+                return;
+            run.scrollIntoView({ block: 'center' });
+            run.click();
+        })));
+        step('<b>Pick a voice for each person.</b> <b>Hear a sample</b> plays one line in that voice.', button('Open the Cast tab', () => goTo('cast')));
+        step('<b>Perform a message.</b> Press Play under <b>Now playing</b>, below. <b>Latest reply</b> and <b>My latest message</b> choose which one.');
+        step('<b>Pick where else Play can be.</b> A button on every message, one by the message box, and a floating player are all off by default.', button('Open the Settings tab', () => goTo('settings', () => {
+            const btns = page.querySelector('[data-af-card="Buttons"]');
+            if (btns)
+                btns.scrollIntoView({ block: 'start' });
+        })));
+        step('<b>Hear each reply as it finishes</b> by turning on <b>Autoplay new replies</b> in the Settings tab.');
+        c.appendChild(steps);
         c.appendChild(hint('Every setting has a <b>?</b> beside it that says what it does. The <a href="https://github.com/starlitcode/Lumiverse-Auto-Foley/blob/stable/docs/getting-started.md" target="_blank" rel="noopener">Getting started</a> page on GitHub has more.'));
         const row = el('<div class="af-row"></div>');
         row.appendChild(button('Got it', () => {
@@ -7837,6 +7863,7 @@ export function setup(ctx, overrides) {
             run.lastElementChild.textContent = 'Check my setup';
             run.disabled = false;
         }, 'af-primary');
+        run.setAttribute('data-af-check', '');
         c.appendChild(run);
         c.appendChild(list);
         page.appendChild(c);

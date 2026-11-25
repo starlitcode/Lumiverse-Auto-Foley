@@ -33,6 +33,7 @@ _Not yet released_
 
 ### Changed
 
+- **Start here says what to do first, with a button for each step.** **Check my setup** goes to the Settings tab and runs the check, **Open the Cast tab** goes to the cast, and it says to press Play under **Now playing**, since the buttons on messages now start off.
 - **Buttons are off by default.** **A button on every message**, **A button in the chat's row of controls** and **In the Extras menu** start off. If you were on the old setting, a notice on every tab says so, with **Take it** and **Keep mine**.
 - **Notes for each voice engine** shows the engine in use first and open again. Every other engine has a fold of its own.
 - **The floating player's quick switches** flip only when the switch itself is pressed, the same as every other switch.

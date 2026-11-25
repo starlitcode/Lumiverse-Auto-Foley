@@ -2081,6 +2081,33 @@ if (section("downloads")) {
   }
 }
 
+if (section("start here")) {
+  console.log("Start here takes you to each step");
+  for (const size of SIZES) {
+    const { context, page, errors } = await open(THEMES[0], size);
+    const where = size.name;
+    await page.click('.af-tab[data-tab="stage"]');
+    await page.waitForTimeout(300);
+    const card = page.locator('[data-af-card="Start here"]');
+    check((await card.count()) === 1, where + ": Start here is on the Stage tab");
+    const text = await card.textContent();
+    check(/Press Play under Now playing/.test(text) && /off by default/.test(text), where + ": it says Play performs a message, and that the other buttons start off");
+    const m = await page.evaluate(MEASURE, size.touch);
+    check(!m.overflow.length && !m.small.length, where + ": its steps and buttons fit. " + m.overflow.concat(m.small).slice(0, 3).join("; "));
+    await card.locator(".af-btn", { hasText: "Open the Cast tab" }).click();
+    await page.waitForTimeout(300);
+    check(await page.evaluate(() => document.querySelector('.af-tab[data-tab="cast"]').getAttribute("aria-selected") === "true"), where + ": Open the Cast tab goes there");
+    await page.click('.af-tab[data-tab="stage"]');
+    await page.waitForTimeout(300);
+    await card.locator(".af-btn", { hasText: "Check my setup" }).click();
+    await page.waitForTimeout(600);
+    const went = await page.evaluate(() => ({ tab: document.querySelector('.af-tab[data-tab="settings"]').getAttribute("aria-selected"), ran: /Checking|\u2713|ready|missing/i.test(document.querySelector('[data-af-card="Check my setup"]').textContent) }));
+    check(went.tab === "true" && went.ran, where + ": Check my setup goes to Settings and runs the check (" + JSON.stringify(went) + ")");
+    check(!errors.length, where + ": no console errors. " + errors.slice(0, 2).join("; "));
+    await context.close();
+  }
+}
+
 if (section("widget steady")) {
   console.log("The round button and the open player stay still");
   for (const zoom of [0.85, 1, 1.25]) {
