@@ -10,7 +10,7 @@
 // The key for speech stays in Lumiverse. Lines are spoken through
 // Lumiverse's own TTS route, as the signed-in reader, so this file never sees
 // that key.
-const VERSION = '1.0.0';
+const VERSION = '1.1.0';
 // The marks Lumiverse puts on another extension's part of the page. Nothing
 // inside one is read, written or pressed.
 const OTHER_UI = '[data-spindle-extension-root],[data-spindle-ext],[data-spindle-modal]';
@@ -2092,6 +2092,8 @@ export function setup(ctx, overrides) {
                 return { why: what + ' was stopped.' };
         }
     }
+    // The sounds already said to have nothing to play.
+    const soundMissSaid = new Set();
     // How many lines of the show playing came from kept audio, for the Log.
     let keptUsed = 0;
     let keptWarned = false;
@@ -2753,7 +2755,14 @@ export function setup(ctx, overrides) {
                 continue;
             if (!got.blob) {
                 sh.failed.push(at);
-                log(got.why || 'A line could not be played.', 'bad');
+                // A sound with nothing to play is said once, not on every play of
+                // the same message.
+                const why = got.why || 'A line could not be played.';
+                if (sh.items[at].kind !== 'sound' || !soundMissSaid.has(why)) {
+                    if (sh.items[at].kind === 'sound')
+                        soundMissSaid.add(why);
+                    log(why, 'bad');
+                }
                 if (!drawerOpen() && !warnedHidden) {
                     warnedHidden = true;
                     notify('warning', 'Auto Foley could not play part of a message: ' + String(got.why || '').slice(0, 300));
