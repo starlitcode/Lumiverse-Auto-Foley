@@ -13,7 +13,7 @@ _Not yet released_
 ### Added
 
 - **Saved audio**, on the Stage tab. It lists every message with a saved script, newest first, with whose script it is, the day and its first line. **Play**, **Download** and **Delete** are on each row. Play and Download use only saved audio, so nothing is spent.
-- **A player under each message**, on by default. A message Auto Foley has performed gets a small player under its text, where Lumiverse puts its own. It plays the saved audio again, says which part is playing, and follows your theme: its colors, the message font, and the side and alignment of the message text, centered too.
+- **A player under each message**, on by default. A message Auto Foley has performed gets a small player under its text, where Lumiverse puts its own. It has Back, Play, Next and Download, says which part is playing, and plays the saved audio again with nothing spent. It follows your theme: its colors, the message font, and the side and alignment of the message text, centered too.
 - **Voice price, per million characters**, in the Settings tab. Now playing says how many characters were sent to the voice service for new audio, and with a price set, what it cost. Saved audio adds nothing.
 - **Second Director**, on the Director tab. When the Director refuses or sends back nothing usable, a second connection you pick is asked. If it fails too, the message is read as written.
 - **Saved scripts and saved audio are named on screen.** Now playing says "Saved script" when the Director was not asked again, and how many lines played from saved audio. The floating player adds "saved" to the part number.

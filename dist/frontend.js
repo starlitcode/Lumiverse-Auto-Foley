@@ -3544,6 +3544,35 @@ export function setup(ctx, overrides) {
     // Reads the list again, for the card on screen. Called when a message has
     // been played, so a script saved just now shows.
     let savedRefresh = null;
+    // The saved audio of one message, as one WAV file, from the player under
+    // it. Nothing on screen says when it fails, so a failure warns.
+    async function downloadSavedOf(messageId) {
+        let key = '';
+        let who = '';
+        let at = 0;
+        try {
+            const r = await rpc({ type: 'kept_list' }, 15000);
+            const e = (r && Array.isArray(r.list) ? r.list : []).find((x) => x && x.messageId === messageId);
+            if (e) {
+                key = e.key;
+                who = e.author;
+                at = e.keptAt;
+            }
+        }
+        catch (_) { }
+        if (!key) {
+            notify('warning', 'This message has no saved audio to download yet. Play it once first.');
+            return;
+        }
+        const j = await joinedSaved(key);
+        if (!j.wav) {
+            notify('warning', j.why || 'The saved audio could not be joined.');
+            return;
+        }
+        const ok = saveFile(j.wav, 'auto-foley ' + fileName(who || 'script') + (at ? ' ' + new Date(at).toISOString().slice(0, 10) : '') + '.wav');
+        if (!ok)
+            notify('warning', 'The audio could not be saved. Some private windows block downloads.');
+    }
     function savedCard() {
         const c = card('Saved audio', 'Every message with a saved script, newest first. Play and Download use only saved audio, so nothing is spent.');
         c.setAttribute('data-af-saved', '');
@@ -3723,10 +3752,37 @@ export function setup(ctx, overrides) {
         box.setAttribute('data-af-message', id);
         box.innerHTML =
             '<div class="af-mp-in"><div class="af-mp-box">' +
+                '<button type="button" class="af-mp-ic" data-af-mp="back" aria-label="Back one part" title="Back one part">' + ICON_BACK + '</button>' +
                 '<button type="button" class="af-mp-play" data-af-mp="play">' + ICON_PLAY + '</button>' +
+                '<button type="button" class="af-mp-ic" data-af-mp="next" aria-label="Next part" title="Next part">' + ICON_SKIP + '</button>' +
                 '<span class="af-mp-bar" aria-hidden="true"><i></i></span>' +
                 '<span class="af-mp-text" data-af-mp="text"></span>' +
+                '<button type="button" class="af-mp-ic" data-af-mp="save" aria-label="Download the saved audio" title="Download the saved audio">' + ICON_DOWNLOAD + '</button>' +
                 '</div></div>';
+        const mineNow = () => !!show && show.messageId === (box.getAttribute('data-af-message') || id);
+        box.querySelector('[data-af-mp="back"]').addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (mineNow())
+                back();
+        });
+        box.querySelector('[data-af-mp="next"]').addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (mineNow())
+                skip();
+        });
+        const save = box.querySelector('[data-af-mp="save"]');
+        save.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            if (save.getAttribute('aria-busy') === 'true')
+                return;
+            save.setAttribute('aria-busy', 'true');
+            try {
+                await downloadSavedOf(box.getAttribute('data-af-message') || id);
+            }
+            finally {
+                save.removeAttribute('aria-busy');
+            }
+        });
         const btn = box.querySelector('[data-af-mp="play"]');
         btn.addEventListener('click', (e) => {
             e.stopPropagation();
@@ -3839,6 +3895,12 @@ export function setup(ctx, overrides) {
             const busy = busyMessage === id;
             const playing = mine && !paused;
             const btn = box.querySelector('[data-af-mp="play"]');
+            // Back and Next move through the message while it is the one playing.
+            for (const k of ['back', 'next']) {
+                const b = box.querySelector('[data-af-mp="' + k + '"]');
+                if (b && b.disabled !== !mine)
+                    b.disabled = !mine;
+            }
             const icon = playing ? 'pause' : busy ? 'stop' : 'play';
             if (btn.getAttribute('data-af-icon') !== icon) {
                 btn.setAttribute('data-af-icon', icon);
@@ -4980,8 +5042,13 @@ export function setup(ctx, overrides) {
         // The accent color is only the ring.
         'border:1.5px solid var(--lumiverse-primary,rgb(147,112,219));background:transparent;color:var(--lumiverse-text,rgba(255,255,255,.92))}' +
         '.af-mp-play svg{width:14px;height:14px}' +
+        '.af-mp-ic{flex:none;display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;padding:0;border:none;border-radius:50%;cursor:pointer;background:transparent;color:var(--lumiverse-text,rgba(255,255,255,.92))}' +
+        '.af-mp-ic svg{width:14px;height:14px}' +
+        '.af-mp-ic:disabled{opacity:.35;cursor:default}' +
+        '.af-mp-ic[aria-busy="true"]{opacity:.5}' +
+        '@media (hover:hover){.af-mp-ic:not(:disabled):hover{background:var(--lumiverse-primary-020,rgba(147,112,219,.2))}}' +
         '@media (hover:hover){.af-mp-play:hover{background:var(--lumiverse-primary-050,rgba(147,112,219,.5))}}' +
-        '@media (pointer:coarse){.af-mp-play{width:32px;height:32px}}' +
+        '@media (pointer:coarse){.af-mp-play,.af-mp-ic{width:32px;height:32px}}' +
         // The bar gives up its room before the words do. It has a width of its
         // own, since an empty element counts as no width when the browser sizes
         // the pill to fit.

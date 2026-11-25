@@ -1002,6 +1002,7 @@ if (section("message player")) {
       mount.style.display = "contents";
       content.after(mount);
       window.__clipMs = 4000;
+      window.__wav = [0.05, 0.5];
     }, mode);
     await page.waitForTimeout(400);
     check((await page.locator("[data-af-player]").count()) === 0, where + ": no player before the message is performed");
@@ -1047,6 +1048,27 @@ if (section("message player")) {
     check(!!got && got.inside && !got.sideways, where + ": it fits inside the message, with no sideways scrolling");
     check(!!got && !got.cut, where + ": with room to spare, its words are not cut off (" + (got && got.text) + ")");
     if (size.touch) check(!!got && got.btnH >= 32, where + ": its button is at least 32 pixels high (" + (got && got.btnH) + ")");
+    // Next and Back move through the message, and Download saves it.
+    const partNow = () => page.evaluate(() => (document.querySelector("[data-af-player] [data-af-mp=text]").textContent.match(/Part (\d+)/) || [])[1] || "");
+    const p0 = await partNow();
+    await page.evaluate(() => document.querySelector("[data-af-player] [data-af-mp=next]").click());
+    await page.waitForTimeout(300);
+    const p1 = await partNow();
+    await page.evaluate(() => document.querySelector("[data-af-player] [data-af-mp=back]").click());
+    await page.waitForTimeout(300);
+    const p2 = await partNow();
+    check(Number(p1) === Number(p0) + 1 && Number(p2) === Number(p0), where + ": Next moves on one part and Back returns (" + [p0, p1, p2].join(" ") + ")");
+    if (size.touch) {
+      const small = await page.evaluate(() => Array.from(document.querySelectorAll("[data-af-player] button")).filter((b) => b.getBoundingClientRect().height < 32).length);
+      check(small === 0, where + ": every button in the player is at least 32 pixels high");
+    }
+    await page.evaluate(() => {
+      window.__keptList = [{ key: "k1", messageId: "m1", chatId: "chat1", author: "Ysolde", keptAt: Date.UTC(2026, 10, 20, 15), lines: 3, first: "The quay was empty." }];
+    });
+    const dl = page.waitForEvent("download", { timeout: 8000 }).catch(() => null);
+    await page.evaluate(() => document.querySelector("[data-af-player] [data-af-mp=save]").click());
+    const file = await dl;
+    check(!!file && /\.wav$/.test(file.suggestedFilename()), where + ": Download saves the message's saved audio as one WAV (" + (file && file.suggestedFilename()) + ")");
     // A theme with centered text and a large font centers the player and
     // keeps it inside the message.
     await page.addStyleTag({ content: '[data-message-id="m1"]{font-size:26px} [data-message-id="m1"] p{text-align:center}' });

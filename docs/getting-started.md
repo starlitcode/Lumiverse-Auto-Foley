@@ -169,6 +169,8 @@ With **Keep made audio** on, in the Settings tab:
 - A message Auto Foley has performed gets a small player under its text.
 - It plays the saved script and saved audio, so playing it again spends nothing.
 - While it plays, it says which part is playing and how far through the message it is. **Pause** pauses it.
+- **Back** and **Next** move one part back or on while the message plays.
+- **Download** saves the message's saved audio as one WAV file, the same as in **Saved audio**.
 - It sits where Lumiverse puts its own audio player. It takes the side padding of the message text, and it is centered or to the right when your theme puts the text there.
 - It uses your theme's colors and the message's font.
 - It shows only on messages that have saved audio, so a new chat has none.
