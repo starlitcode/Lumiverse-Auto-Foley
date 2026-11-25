@@ -1302,6 +1302,30 @@ describe("who is in the scene, read on this device", () => {
   });
 });
 
+describe("a script is kept after people join the cast", () => {
+  // Someone found in the text joins the cast while the message is directed.
+  // The script is kept under the cast as it is after that, so the same
+  // message played again uses it, and nothing is directed or spoken again.
+  const answer = JSON.stringify({ lines: [{ i: 0, speaker: "Barnaby", text: "Tickets," }] });
+  const msg = { type: "direct", chatId: "c", messageId: "m", swipeId: 0, name: "Wren Halloway", text: '"Tickets," Barnaby said.' };
+
+  test("with the Director on", async () => {
+    const h = host({ answers: [answer, answer] });
+    await h.ask(msg);
+    const again = await h.ask(msg);
+    expect(h.calls.generate.length).toBe(1);
+    expect(again.find((m) => m.type === "script").script.log.join(" ")).toContain("Played from the copy directed before.");
+  });
+
+  test("with the Director off", async () => {
+    const h = host();
+    await h.ask({ type: "save", settings: { directorOn: false } });
+    await h.ask(msg);
+    const again = await h.ask(msg);
+    expect(again.find((m) => m.type === "script").script.log.join(" ")).toContain("Played from the copy directed before.");
+  });
+});
+
 describe("sounds", () => {
   const mp3 = new Uint8Array(200).fill(7);
 

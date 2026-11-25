@@ -2138,7 +2138,9 @@ async function askDecisions(userId, s, segs, author, known) {
 // ---------------------------------------------------------------------------
 // Directed scripts kept per account, so playing a message twice, or playing
 // one that was prepared ahead, asks nothing again.
-const SCRIPTS_KEPT = 40;
+// A script is a few KB, so this many is a small file, and enough for a long
+// chat to be played again without asking the Director.
+const SCRIPTS_KEPT = 300;
 const scripts = {};
 function keepScript(userId, script) {
     const list = scripts[userId] || (scripts[userId] = []);
@@ -2595,6 +2597,16 @@ async function direct(userId, p) {
     }
     const key = keyFor(s);
     await readKeptScripts(uid, s);
+    // Kept under the key it was asked for, and under the key as the settings
+    // are once it is done. People found in the text, or added by the
+    // Director, join the cast while it is directed, which changes the key, and
+    // the same message played again is looked up by the new one.
+    const keepNow = async (sc) => {
+        keepScript(uid, sc);
+        const now = keyFor(await loadSettings(userId));
+        if (now !== sc.key)
+            keepScript(uid, Object.assign({}, sc, { key: now }));
+    };
     if (!p.fresh) {
         const kept = keptScript(uid, key);
         if (kept)
@@ -2664,7 +2676,7 @@ async function direct(userId, p) {
         const plain = applyDirection(segs, null, s.cast, author, fixed, rules);
         script.lines = plain.lines;
         script.log.push('The Director is off, so the message is read as written.');
-        keepScript(uid, script);
+        await keepNow(script);
         return script;
     }
     const castForPrompt = s.cast
@@ -2737,13 +2749,9 @@ async function direct(userId, p) {
         script.log.push('Added to the cast: ' + added.join(', ') + '.');
     }
     // A script is kept only when it was directed. One that fell back because
-    // the Director failed is asked again next time. It is kept under the key
-    // as the settings are now too, since this message added to the cast.
-    if (answer) {
-        keepScript(uid, script);
-        if (added.length)
-            keepScript(uid, Object.assign({}, script, { key: keyFor(await loadSettings(userId)) }));
-    }
+    // the Director failed is asked again next time.
+    if (answer)
+        await keepNow(script);
     return script;
 }
 // ---------------------------------------------------------------------------
