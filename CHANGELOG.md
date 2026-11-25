@@ -22,7 +22,7 @@ _Not yet released_
 - **A Chatterbox server, without a Lumiverse connection**, in the Settings tab. Auto Foley talks to a Chatterbox-TTS-Server itself, listed as **Chatterbox server (direct)**, so its own settings reach it. **Save and test** says which model it runs and how many voices it has.
 - **Speed in each engine's own range**: 0.7 to 1.2 for ElevenLabs, 0.5 to 2 for Fish Audio and Chatterbox.
 - **How they speak says what helps on each engine.** The line under the box changes with the engine the person speaks through.
-- **Nonbinary**, as a voice type in the Cast tab. The Director marks someone new as nonbinary only when the text says so, and a voice the provider marks neutral is picked for them when there is one.
+- **Neutral**, as a voice type in the Cast tab. A voice the provider marks neutral is picked when there is one. The Director sets it for someone new only when the story says they are nonbinary.
 - **Main characters and minor ones.** The Director says which a new speaker is, and the Cast tab files a main one as a character and a minor one as an NPC.
 - **Crop a cast picture.** After you choose a picture, drag it and zoom so the circle frames the face, then press **Use this**.
 - **The Decision model's next two choices.** **What the Decision model answered**, in the Log, now also lists the next two people it considered for each quote, with their chances, so you can see how close the call was.
@@ -64,6 +64,7 @@ _Not yet released_
 - **Copying Debug info could raise a phone's keyboard.** When the browser did not allow the usual way to copy, the box on screen was selected to copy it. A hidden box that cannot be typed in is used instead.
 - **Opening the floating player from low on the screen moved it to the top.** The player now opens upward from the button when the button is low, and to the left when it is on the right. Closing it puts the button back where it was. If you drag the open player, the button stays where you dragged it.
 - **The settings under Let it think first and Pattern behind the panel appeared in one step.** **How much thinking** and **How solid the boxes are** now open and close smoothly, the same as the settings under a switch.
+- **{{user}} and {{char}} were read aloud as written.** A message that holds Lumiverse's name macros is now filled in the same way the chat shows it, before the Director reads it, so the voice says the names.
 - **A part taller than the screen seemed to snap open or shut.** Most of its movement happened below the edge, where it could not be seen. Now only the part you can see moves, and the rest is added or taken away out of sight. Auto Retry and Auto Refine have the same fix.
 - **Switching tabs flickered.** The highlight faded from one tab to the next, so for a moment two tabs looked picked. The tab you press is now marked at once.
 - **The seconds count could put its "s" on a line of its own.**

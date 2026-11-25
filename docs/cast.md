@@ -23,7 +23,11 @@ Someone the AI added has no voice picked. The first time they speak, Auto Foley 
 - **Name** and **Also called.** Other names the story uses for this person, with commas, such as a first name or a title. The Director and the Decision model match a line to a person by any of these.
 - **Who they are.** Character, Persona or NPC.
 - **Group.** Shown when you have groups. See [Groups](#groups).
-- **Voice type.** Any, Female, Male or Nonbinary. Used to pick a voice for someone new.
+- **Voice type.** Used only to pick a voice for someone new.
+  - **Any** picks from every voice, with no gender in mind.
+  - **Female** and **Male** pick a voice the provider marks that way.
+  - **Neutral** picks a voice the provider marks neutral. When there is none, it avoids voices marked female or male. Some providers, such as Gemini, mark every voice female or male, so there Neutral picks the same way as Any.
+  - The Director sets **Neutral** for someone new only when the story says they are nonbinary, such as "they" for one person.
 - **Connection.** Shown when you have more than one TTS connection. Empty uses Auto Foley's. See [Mixing engines](engines.md#mixing-engines).
 - **Voice.** From that connection. Empty uses the connection's own voice. Designed or cloned voices act much better than the stock ones. Each connection keeps its own voice for this person.
 - **Or type a voice name or ID.** For a voice the list does not show, such as one you made or cloned, a Gemini voice name, or a voice file on a Chatterbox server. A name or ID that matches a voice in the list picks that voice. Anything else is sent as you typed it. It is saved when you leave the box.

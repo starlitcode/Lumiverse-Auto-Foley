@@ -41,6 +41,14 @@ function host(opts: {
       sent.push({ msg: JSON.parse(JSON.stringify(msg)), userId });
     },
     log: { info() {}, warn() {} },
+    // Lumiverse fills in {{user}} and {{char}}. Here they are filled in with
+    // made-up names, and the call is kept so a test can read it.
+    macros: {
+      async resolve(text: string, o: any) {
+        (calls as any).macros = ((calls as any).macros || []).concat([{ text, o }]);
+        return { text: text.replace(/\{\{user\}\}/g, "Tamsin").replace(/\{\{char\}\}/g, "Orrin"), diagnostics: [] };
+      },
+    },
     toast: {
       success: (t: string, o: any) => toasts.push({ kind: "success", text: t, userId: o && o.userId }),
       info: (t: string, o: any) => toasts.push({ kind: "info", text: t, userId: o && o.userId }),
@@ -444,6 +452,24 @@ describe("directing a message, end to end", () => {
     expect(line.kind).toBe("speech");
     expect(line.speaker).toBe("Tamsin Reyes");
     expect(line.text).toBe("Keep the lantern low.");
+  });
+
+  test("{{user}} and {{char}} are filled in, with nothing changed by it", async () => {
+    const h = host();
+    await h.ask({ type: "save", settings: { directorOn: false } });
+    const out = await h.ask({ type: "direct", chatId: "c7", messageId: "m9", swipeId: 0, name: "Orrin", text: "{{char}} turned toward {{user}} and nodded." });
+    const lines = out.find((m) => m.type === "script").script.lines;
+    expect(lines.map((l: any) => l.text).join(" ")).toBe("Orrin turned toward Tamsin and nodded.");
+    const call = (h.calls as any).macros[0];
+    expect(call.o.chatId).toBe("c7");
+    expect(call.o.commit).toBe(false);
+  });
+
+  test("a message with no macros is not sent to be filled in", async () => {
+    const h = host();
+    await h.ask({ type: "save", settings: { directorOn: false } });
+    await h.ask({ type: "direct", chatId: "c7", messageId: "m10", swipeId: 0, name: "Orrin", text: "Orrin nodded." });
+    expect((h.calls as any).macros).toBeUndefined();
   });
 
   test("the Director is not asked when it is off", async () => {

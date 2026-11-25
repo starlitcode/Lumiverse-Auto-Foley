@@ -2548,9 +2548,29 @@ async function askDirector(userId, s, payload, connection, script) {
         return { answer: null };
     }
 }
+// A message can hold Lumiverse's macros, such as {{user}} and {{char}}. The
+// chat shows them with the names filled in, so they are filled in here the
+// same way before anything is directed or read aloud. Nothing is changed by
+// it: commit is off, so a macro that sets a variable does not set it. When
+// they cannot be filled in, the text is used as it is.
+async function fillMacros(text, chatId, userId) {
+    if (text.indexOf('{{') < 0)
+        return text;
+    try {
+        if (!spindle.macros || typeof spindle.macros.resolve !== 'function')
+            return text;
+        const out = await spindle.macros.resolve(text, { chatId: chatId || undefined, userId, commit: false });
+        const filled = typeof out === 'string' ? out : out && typeof out.text === 'string' ? out.text : '';
+        return filled || text;
+    }
+    catch (e) {
+        logWarn('Auto Foley: the macros in a message could not be filled in: ' + String((e && e.message) || e));
+        return text;
+    }
+}
 async function direct(userId, p) {
     const s = await loadSettings(userId);
-    const text = str(p.text, 40000);
+    const text = await fillMacros(str(p.text, 40000), str(p.chatId, 80), userId);
     const author = str(p.name, 80).trim() || 'Someone';
     const isUser = p.isUser === true;
     const messageId = str(p.messageId, 80);

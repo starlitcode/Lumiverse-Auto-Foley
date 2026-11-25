@@ -1670,6 +1670,34 @@ if (section("chat words")) {
   const after = await page.evaluate(() => document.querySelector('[data-message-id="m1"]').innerHTML.replace(/<button[\s\S]*?<\/button>/g, ""));
   check(seen.length >= 3 && seen.every((w) => /^[A-Za-z]+$/.test(w)) && seen.some((w) => /^(set|cup|table|window|late|Again)$/.test(w)), "words of the line playing are lit in the chat, one at a time (" + seen.slice(0, 8).join(" ") + ")");
   check(before === after, "the message itself is not changed");
+  // Lumiverse can draw the message again while it is read, as it does just
+  // after a reply finishes. The light finds the words in the new copy.
+  await page.waitForTimeout(8000);
+  await page.click('#mount [data-af-slot="message"]');
+  const redrawn = await page.evaluate(async () => {
+    const p = document.querySelector('[data-message-id="m1"] p');
+    const html = p.innerHTML;
+    const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+    // Played again from the start, and the copy swapped while a line is lit.
+    for (let k = 0; k < 120; k++) {
+      const h = CSS.highlights.get("auto-foley-word");
+      if (h && h.size) break;
+      await wait(25);
+    }
+    p.innerHTML = html;
+    const lit = [];
+    for (let k = 0; k < 12; k++) {
+      await wait(40);
+      const h = CSS.highlights.get("auto-foley-word");
+      let on = false;
+      // A word whose text was taken off the page shrinks to nothing, so a
+      // lit word is one with its text still in it.
+      if (h) for (const r of h) on = on || (!r.collapsed && r.startContainer.isConnected && r.toString().trim().length > 0);
+      lit.push(on);
+    }
+    return lit;
+  });
+  check(redrawn.slice(4).some((x) => x), "after the message is drawn again, the words are lit in the new copy (" + redrawn.join(",") + ")");
   await page.click('.af-tab[data-tab="settings"]');
   await page.waitForTimeout(200);
   await page.evaluate(() => document.querySelector('[data-af-row="chatHighlight"] .af-box').click());

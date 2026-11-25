@@ -2574,13 +2574,16 @@ export function setup(ctx, overrides) {
             g.fill();
             g.fillStyle = C.text;
             g.fillText('ON AIR', W - 64 - airW + 36, 61);
-            // A new part fades in over a third of a second as the last one fades
-            // out, rather than replacing it in one frame.
-            const FADE = 0.3;
-            const mix = i > 0 && local < FADE ? local / FADE : 1;
-            if (mix < 1)
-                drawPart(parts[i - 1], t - parts[i - 1].start, 1 - mix);
-            drawPart(p, local, mix);
+            // The last part fades out, then the new one fades in, over a third of
+            // a second in all. They are never drawn over each other, and nothing
+            // changes in one frame.
+            const HALF = 0.15;
+            if (i > 0 && local < HALF)
+                drawPart(parts[i - 1], t - parts[i - 1].start, 1 - local / HALF);
+            else if (i > 0 && local < HALF * 2)
+                drawPart(p, local, (local - HALF) / HALF);
+            else
+                drawPart(p, local, 1);
             // The strip of parts, in their colors, filled up to now.
             const y = H - 70;
             parts.forEach((q2) => {
@@ -6142,6 +6145,8 @@ export function setup(ctx, overrides) {
     const HIGHLIGHT_NAME = 'auto-foley-word';
     const highlights = globalThis.CSS && globalThis.CSS.highlights ? globalThis.CSS.highlights : null;
     const HighlightCtor = typeof Highlight !== 'undefined' ? Highlight : null;
+    // The words of the line being read, found in the message, and where in the
+    // message this line started.
     let chatWords = null;
     // Where the last line found ended, in the message's text, so each line is
     // looked for after the one before it.
@@ -6221,6 +6226,7 @@ export function setup(ctx, overrides) {
             chatAt.item = v.item;
             const flat = msg ? messageText(msg) : null;
             const low = flat ? flat.text.toLowerCase() : '';
+            const from = chatAt.at;
             let cursor = chatAt.at;
             let first = true;
             for (const p of v.parts) {
@@ -6241,7 +6247,22 @@ export function setup(ctx, overrides) {
                 cursor = i + core.length;
             }
             chatAt.at = cursor;
-            chatWords = { key, ranges, lit: -2 };
+            chatWords = { key, ranges, lit: -2, from };
+        }
+        // Lumiverse can draw the message again while it is read, such as just
+        // after a reply finishes, which is when Autoplay starts. The words found
+        // before are then no longer on the page, and the light would go out
+        // until the next line. They are found again in the new copy, from where
+        // this line started.
+        const was = v.k >= 0 ? chatWords.ranges[v.k] : null;
+        // A word's place shrinks to nothing when its text is taken off the page,
+        // since the browser moves it to the box the text was in. A copy just
+        // found has every word in place, so this happens once each time.
+        if (was && (was.collapsed || !was.startContainer.isConnected)) {
+            chatAt.at = chatWords.from;
+            chatWords = null;
+            paintChatWords(v);
+            return;
         }
         if (chatWords.lit === v.k)
             return;
@@ -6777,11 +6798,13 @@ export function setup(ctx, overrides) {
                 { id: 'unknown', label: 'Any' },
                 { id: 'female', label: 'Female' },
                 { id: 'male', label: 'Male' },
-                { id: 'nonbinary', label: 'Nonbinary' },
+                // Saved as nonbinary, the word the Director uses for the person.
+                // Shown as Neutral, which is the kind of voice it picks.
+                { id: 'nonbinary', label: 'Neutral' },
             ], m.gender, (v) => {
                 m.gender = v;
                 save();
-            }, 'Used only when someone new has no voice yet. Nonbinary picks a voice the provider marks neutral, when there is one.'));
+            }, 'Used only to pick a voice for someone new. Any picks from every voice. Neutral picks a voice the provider marks neutral, when there is one.'));
             inner.appendChild(g1);
         }
         if (groups().length) {
