@@ -5022,7 +5022,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     // edge that lights on hover, the accent while it works, and a ring that
     // fills while it is held.
     '.af-float{position:relative;width:100%;height:100%;aspect-ratio:1;display:flex;align-items:center;justify-content:center;padding:0;cursor:pointer;border-radius:50%;' +
-    'border:1px solid var(--lumiverse-border-hover,rgba(147,112,219,.25));background-color:var(--lumiverse-card-bg-solid,rgb(24,20,34));' +
+    'border:1px solid var(--lumiverse-border-hover,rgba(147,112,219,.25));background-color:var(--lumiverse-card-bg-solid,var(--lumiverse-bg,rgb(24,20,34)));' +
     'background-image:linear-gradient(var(--lumiverse-bg-elevated,rgba(35,30,48,.9)),var(--lumiverse-bg-elevated,rgba(35,30,48,.9)));color:var(--lumiverse-text,rgba(255,255,255,.9));' +
     'box-shadow:var(--lumiverse-shadow-md,0 8px 24px rgba(0,0,0,.4));' +
     'transition:color 260ms cubic-bezier(.2,.7,.3,1),border-color 260ms cubic-bezier(.2,.7,.3,1),background-image 260ms cubic-bezier(.2,.7,.3,1),box-shadow 260ms cubic-bezier(.2,.7,.3,1),opacity 260ms cubic-bezier(.2,.7,.3,1),transform 260ms cubic-bezier(.2,.7,.3,1)}' +
@@ -5132,8 +5132,10 @@ export function setup(ctx: Ctx, overrides?: any) {
     // words shrink, and only when there is no room left.
     '.af-mp-box{display:inline-grid;grid-template-columns:auto auto auto minmax(0,max-content);align-items:center;column-gap:6px;box-sizing:border-box;max-width:100%;min-width:0;margin:6px 0;padding:3px 12px 3px 3px;border-radius:999px;' +
     // Solid, the same as Auto Foley's other floating parts, so the words never
-    // sit on a picture or pattern behind the message.
-    'border:1px solid var(--lumiverse-border,rgba(147,112,219,.2));background-color:var(--af-mp-back,var(--lumiverse-card-bg-solid,rgb(24,20,34)));' +
+    // sit on a picture or pattern behind the message. Under the raised color
+    // is the card color, or the page's own color on a theme with no card
+    // color, so a light theme is light all the way through.
+    'border:1px solid var(--lumiverse-border,rgba(147,112,219,.2));background-color:var(--af-mp-back,var(--lumiverse-card-bg-solid,var(--lumiverse-bg,rgb(24,20,34))));' +
     'background-image:linear-gradient(var(--af-mp-back,var(--lumiverse-bg-elevated,rgba(35,30,48,.98))),var(--af-mp-back,var(--lumiverse-bg-elevated,rgba(35,30,48,.98))));' +
     'color:var(--af-mp-ink,var(--lumiverse-text,rgba(255,255,255,.92)));font:inherit;font-size:.85em;line-height:1.3;box-shadow:var(--lumiverse-shadow-sm,0 2px 8px rgba(0,0,0,.25))}' +
     '.af-mp .af-mp-box > *, .af-mp .af-mp-run > *{margin:0;min-width:0;box-sizing:border-box}' +
