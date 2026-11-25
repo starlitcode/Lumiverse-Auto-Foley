@@ -1011,16 +1011,16 @@ const PANEL_CSS = `
   --af-accent-soft: var(--lumiverse-primary-020, rgba(147,112,219,.2));
   --af-accent-faint: var(--lumiverse-primary-010, rgba(147,112,219,.1));
   --af-accent-line: var(--lumiverse-primary-050, rgba(147,112,219,.5));
-  --af-sound: var(--lumiverse-warning, #f59e0b);
-  --af-sound-soft: var(--lumiverse-warning-015, rgba(245,158,11,.15));
+  --af-sound: var(--af-kc-sound, var(--lumiverse-warning, #f59e0b));
+  --af-sound-soft: var(--af-kc-sound-soft, var(--lumiverse-warning-015, rgba(245,158,11,.15)));
   /* One fixed color for each kind of part, the same in every theme, so a
      narrator line, a character, you, an NPC, a sound and a voice tag can be
      told apart at a glance. Used for rings, marks and chips, never for text. */
-  --af-k-narrator: #8b9cb8;
-  --af-k-character: #a78bfa;
-  --af-k-persona: #2dd4bf;
-  --af-k-npc: #f472b6;
-  --af-k-tag: #60a5fa;
+  --af-k-narrator: var(--af-kc-narrator, #8b9cb8);
+  --af-k-character: var(--af-kc-character, #a78bfa);
+  --af-k-persona: var(--af-kc-persona, #2dd4bf);
+  --af-k-npc: var(--af-kc-npc, #f472b6);
+  --af-k-tag: var(--af-kc-tag, #60a5fa);
   --af-good: var(--lumiverse-success, #22c55e);
   --af-bad: var(--lumiverse-danger, #ef4444);
   --af-text: var(--lumiverse-text, rgba(255,255,255,.9));
@@ -1311,7 +1311,7 @@ textarea.af-tall { min-height: 260px; }
 .af-parts button[aria-current="true"] i { height: 10px; background: var(--af-accent); }
 .af-parts button:focus-visible { outline: none; box-shadow: inset 0 0 0 2px var(--af-accent); border-radius: 6px; }
 .af-chip { display: inline-flex; align-items: center; gap: 4px; margin: 0 2px; padding: 0 7px; border-radius: 999px; font-size: 11px; font-weight: 600; line-height: 19px; vertical-align: 1px; white-space: nowrap; }
-.af-chip-tag { background: rgba(96,165,250,.16); color: var(--af-text); box-shadow: inset 0 0 0 1px var(--af-k-tag); }
+.af-chip-tag { background: var(--af-kc-tag-soft, rgba(96,165,250,.16)); color: var(--af-text); box-shadow: inset 0 0 0 1px var(--af-k-tag); }
 .af-chip-insound { background: var(--af-sound-soft); color: var(--af-text); box-shadow: inset 0 0 0 1px var(--af-sound); white-space: normal; }
 .af-empty { padding: 14px 10px; color: var(--af-muted); text-align: center; font-size: 12.5px; }
 .af-log { display: flex; flex-direction: column; gap: 4px; max-height: 220px; overflow: auto; }
@@ -1369,8 +1369,8 @@ html[data-af-still] .af-making-room { transition: none; }
 .af-avatar { overflow: hidden; display: grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; background: var(--af-accent-soft); color: var(--af-text); font-size: 12px; font-weight: 700; box-shadow: inset 0 0 0 1.5px var(--af-accent); }
 .af-person[data-kind="narrator"] .af-avatar { background: var(--af-fill); box-shadow: inset 0 0 0 2px var(--af-k-narrator); }
 .af-person[data-kind="character"] .af-avatar { box-shadow: inset 0 0 0 2px var(--af-k-character); }
-.af-person[data-kind="persona"] .af-avatar { background: rgba(45,212,191,.14); box-shadow: inset 0 0 0 2px var(--af-k-persona); }
-.af-person[data-kind="npc"] .af-avatar { background: rgba(244,114,182,.14); box-shadow: inset 0 0 0 2px var(--af-k-npc); }
+.af-person[data-kind="persona"] .af-avatar { background: var(--af-kc-persona-soft, rgba(45,212,191,.14)); box-shadow: inset 0 0 0 2px var(--af-k-persona); }
+.af-person[data-kind="npc"] .af-avatar { background: var(--af-kc-npc-soft, rgba(244,114,182,.14)); box-shadow: inset 0 0 0 2px var(--af-k-npc); }
 .af-parts button[data-who="narrator"] { --af-k: var(--af-k-narrator); }
 .af-parts button[data-who="character"] { --af-k: var(--af-k-character); }
 .af-parts button[data-who="persona"] { --af-k: var(--af-k-persona); }
@@ -1648,6 +1648,12 @@ const DEFAULTS: any = {
   chatHighlight: true,
   wordColor: '',
   wordStrength: 20,
+  colorNarrator: '',
+  colorCharacter: '',
+  colorPersona: '',
+  colorNpc: '',
+  colorSound: '',
+  colorTag: '',
   playerAccent: '',
   playerBack: '',
   playerInk: '',
@@ -2885,7 +2891,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       text: pick('--lumiverse-text', '#ece8f6'),
       muted: pick('--lumiverse-text-muted', '#a49cb8'),
       accent: pick('--lumiverse-primary', '#9370db'),
-      narrator: '#8b9cb8', character: '#a78bfa', persona: '#2dd4bf', npc: '#f472b6', sound: '#f59e0b',
+      narrator: kindHex('narrator'), character: kindHex('character'), persona: kindHex('persona'), npc: kindHex('npc'), sound: kindHex('sound'),
     } as Record<string, string>;
     const font = css.fontFamily || 'sans-serif';
     // A theme's background can be see-through, and a frame drawn on a
@@ -4559,6 +4565,24 @@ export function setup(ctx: Ctx, overrides?: any) {
   // The colors picked for the player and the lit word, put on the page's
   // root, where the player and the chat can read them. An empty one is taken
   // off, so the theme's own is used.
+  // The built-in color for each kind of part, and the setting that holds a
+  // color of the reader's own for it.
+  const KIND_COLORS: { kind: string; key: string; label: string; built: string; help: string }[] = [
+    { kind: 'narrator', key: 'colorNarrator', label: 'Narrator', built: '#8b9cb8', help: 'The ring around the narrator\u2019s picture, and narration on the Stage tab. Slate gray by default.' },
+    { kind: 'character', key: 'colorCharacter', label: 'Characters', built: '#a78bfa', help: 'The ring around a character\u2019s picture, and their lines on the Stage tab. Violet by default.' },
+    { kind: 'persona', key: 'colorPersona', label: 'Personas (you)', built: '#2dd4bf', help: 'The ring around a persona\u2019s picture, and their lines on the Stage tab. Teal by default.' },
+    { kind: 'npc', key: 'colorNpc', label: 'NPCs', built: '#f472b6', help: 'The ring around an NPC\u2019s picture, and their lines on the Stage tab. Pink by default.' },
+    { kind: 'sound', key: 'colorSound', label: 'Sounds', built: '#f59e0b', help: 'Sounds on the Stage tab and in the players. Empty uses your theme\u2019s warning color.' },
+    { kind: 'tag', key: 'colorTag', label: 'Voice tags', built: '#60a5fa', help: 'The voice tags shown in Now playing. Blue by default.' },
+  ];
+  function kindHex(kind: string): string {
+    const k = KIND_COLORS.find((x) => x.kind === kind);
+    if (!k) return '#9370db';
+    const own = String(S[k.key] || '');
+    if (/^#[0-9a-f]{6}$/i.test(own)) return own.toLowerCase();
+    return kind === 'sound' ? themeHex('--lumiverse-warning', k.built) : k.built;
+  }
+
   function paintColors() {
     try {
       const st = document.documentElement.style;
@@ -4570,6 +4594,16 @@ export function setup(ctx: Ctx, overrides?: any) {
       put('--af-mp-accent', hex(S.playerAccent));
       put('--af-mp-back', hex(S.playerBack));
       put('--af-mp-ink', hex(S.playerInk));
+      // A color of the reader's own for each kind of part, with a soft tint
+      // of it for the fills behind pictures and chips.
+      for (const k of KIND_COLORS) {
+        const own = hex(S[k.key]);
+        put('--af-kc-' + k.kind, own);
+        if (own) {
+          const n = parseInt(own.slice(1), 16);
+          put('--af-kc-' + k.kind + '-soft', 'rgba(' + ((n >> 16) & 255) + ',' + ((n >> 8) & 255) + ',' + (n & 255) + ',' + (k.kind === 'tag' ? '.16' : '.14') + ')');
+        } else put('--af-kc-' + k.kind + '-soft', '');
+      }
       // Untouched, the lit word uses the theme's own accent at 20 per cent.
       const strength = Math.min(80, Math.max(10, Number(S.wordStrength) || 20));
       const own = hex(S.wordColor);
@@ -4584,6 +4618,10 @@ export function setup(ctx: Ctx, overrides?: any) {
   disposers.push(() => {
     try {
       for (const name of ['--af-mp-accent', '--af-mp-back', '--af-mp-ink', '--af-word']) document.documentElement.style.removeProperty(name);
+      for (const k of ['narrator', 'character', 'persona', 'npc', 'sound', 'tag']) {
+        document.documentElement.style.removeProperty('--af-kc-' + k);
+        document.documentElement.style.removeProperty('--af-kc-' + k + '-soft');
+      }
     } catch (_) {}
   });
 
@@ -5048,12 +5086,12 @@ export function setup(ctx: Ctx, overrides?: any) {
   // on a phone often has no way to type a code. The swatch opens the editor
   // under the row: a box for a code such as #ff0040, and sliders for hue,
   // saturation and lightness. Use the theme's color clears it.
-  function colorRow(key: string, label: string, help: string, themeVar: string, fallback: string): HTMLElement {
+  function colorRow(key: string, label: string, help: string, themeVar: string, fallback: string, backLabel = 'Use the theme\u2019s color'): HTMLElement {
     const wrap = el('<div class="af-col"></div>');
     wrap.setAttribute('data-af-row', key);
     const swatch = el('<button type="button" class="af-colorswatch" aria-expanded="false" title="Change the color"></button>') as HTMLButtonElement;
     swatch.setAttribute('data-af-colorswatch', key);
-    const back = button('Use the theme\u2019s color', () => {
+    const back = button(backLabel, () => {
       set({ [key]: '' });
       bad.textContent = '';
       paint();
@@ -5615,12 +5653,12 @@ export function setup(ctx: Ctx, overrides?: any) {
     'html[data-af-still] .af-mp{transition:none}' +
     '.af-theater-cue:empty{display:none}' +
     '.af-cue{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:999px;font-size:12.5px;color:var(--lumiverse-text,rgba(255,255,255,.9));' +
-    'background:var(--lumiverse-warning-015,rgba(245,158,11,.15));box-shadow:inset 0 0 0 1px var(--lumiverse-warning,#f59e0b);animation:af-in .3s ease-out both}' +
-    '.af-cue svg{width:14px;height:14px;color:var(--lumiverse-warning,#f59e0b)}' +
-    '.af-avatar-character{box-shadow:inset 0 0 0 2px #a78bfa!important}' +
-    '.af-avatar-persona{background:rgba(45,212,191,.14)!important;box-shadow:inset 0 0 0 2px #2dd4bf!important}' +
-    '.af-avatar-npc{background:rgba(244,114,182,.14)!important;box-shadow:inset 0 0 0 2px #f472b6!important}' +
-    '.af-avatar-narrator{background:var(--lumiverse-fill,rgba(0,0,0,.15))!important;box-shadow:inset 0 0 0 2px #8b9cb8!important}';
+    'background:var(--af-kc-sound-soft,var(--lumiverse-warning-015,rgba(245,158,11,.15)));box-shadow:inset 0 0 0 1px var(--af-kc-sound,var(--lumiverse-warning,#f59e0b));animation:af-in .3s ease-out both}' +
+    '.af-cue svg{width:14px;height:14px;color:var(--af-kc-sound,var(--lumiverse-warning,#f59e0b))}' +
+    '.af-avatar-character{box-shadow:inset 0 0 0 2px var(--af-kc-character,#a78bfa)!important}' +
+    '.af-avatar-persona{background:var(--af-kc-persona-soft,rgba(45,212,191,.14))!important;box-shadow:inset 0 0 0 2px var(--af-kc-persona,#2dd4bf)!important}' +
+    '.af-avatar-npc{background:var(--af-kc-npc-soft,rgba(244,114,182,.14))!important;box-shadow:inset 0 0 0 2px var(--af-kc-npc,#f472b6)!important}' +
+    '.af-avatar-narrator{background:var(--lumiverse-fill,rgba(0,0,0,.15))!important;box-shadow:inset 0 0 0 2px var(--af-kc-narrator,#8b9cb8)!important}';
   try {
     disposers.push(ctx.dom.addStyle(PATTERN_CSS));
   } catch (_) {}
@@ -6612,6 +6650,17 @@ export function setup(ctx: Ctx, overrides?: any) {
 
   function lookCard(): HTMLElement {
     const c = card('Look', 'How the panel looks. Your theme colors everything.');
+    // A color for each kind of part, behind a fold, since most people keep
+    // the built-in ones.
+    c.appendChild(
+      fold('Colors for each kind of part', (body) => {
+        body.appendChild(hint('Each kind of part has its own color, on pictures, on the Stage tab and in the players. Tap a swatch to pick another.'));
+        for (const k of KIND_COLORS)
+          body.appendChild(k.kind === 'sound'
+            ? colorRow(k.key, k.label, k.help, '--lumiverse-warning', k.built)
+            : colorRow(k.key, k.label, k.help, '--af-none', k.built, 'Use the built-in color'));
+      }),
+    );
     c.appendChild(
       select('Pattern behind the panel', [
         { id: '', label: 'None' },

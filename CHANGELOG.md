@@ -14,6 +14,7 @@ _2026-11-25_
 
 - **A display name for everyone in the cast**, on each person's card in the Cast tab. It is the name shown on the Cast tab and in the players, such as a nickname. The Director never sees it, and still finds lines by **Name**. The narrator has one too, while the Director still calls them the Narrator. **A to Z** and **Z to A** sort by the name shown.
 - **Pick several people at once**, with **Select** on the Cast tab. Put them all in a group, or remove them all after one question. The narrator cannot be picked, since it cannot be removed. See [Picking several people](docs/cast.md#picking-several-people).
+- **Colors for each kind of part**, in the **Look** card on the Settings tab. Pick your own color for the narrator, characters, personas, NPCs, sounds and voice tags. Each shows on pictures, on the Stage tab and in the players. **Use the built-in color** puts the first one back.
 
 ### Changed
 

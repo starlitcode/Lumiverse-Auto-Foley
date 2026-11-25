@@ -2449,6 +2449,66 @@ if (section("select several")) {
   }
 }
 
+if (section("kind colors")) {
+  console.log("Each kind of part can have a color of the reader's own");
+  // The color drawn at a point inside an element, read from a screenshot.
+  const drawnAt = async (page, sel, fx, fy) => {
+    const buf = await page.locator(sel).first().screenshot();
+    return page.evaluate(async ([b64, fx, fy]) => {
+      const img = await createImageBitmap(await (await fetch("data:image/png;base64," + b64)).blob());
+      const c = document.createElement("canvas");
+      c.width = img.width; c.height = img.height;
+      const g = c.getContext("2d");
+      g.drawImage(img, 0, 0);
+      return Array.from(g.getImageData(Math.floor(img.width * fx), Math.floor(img.height * fy), 1, 1).data).slice(0, 3);
+    }, [buf.toString("base64"), fx, fy]);
+  };
+  for (const size of SIZES) {
+    const where = size.name;
+    const { context, page, errors } = await open(THEMES[0], size);
+    // The NPC's ring, before: the built-in pink.
+    await page.click('.af-tab[data-tab="cast"]');
+    await page.waitForTimeout(400);
+    const ring = '.af-person[data-person="b"] .af-person-head .af-avatar';
+    const pink = await drawnAt(page, ring, 0.04, 0.5);
+    check(pink[0] > 200 && pink[1] < 160 && pink[2] > 140, where + ": an NPC's ring is pink at first (" + pink.join(",") + ")");
+    await page.click('.af-tab[data-tab="settings"]');
+    await page.waitForTimeout(300);
+    await page.evaluate(() => Array.from(document.querySelectorAll(".af-fold")).find((b) => /Colors for each kind of part/.test(b.textContent)).click());
+    await page.waitForTimeout(400);
+    const row = '[data-af-row="colorNpc"]';
+    check((await page.locator(row).count()) === 1 && (await page.locator('[data-af-row="colorNarrator"], [data-af-row="colorCharacter"], [data-af-row="colorPersona"], [data-af-row="colorSound"], [data-af-row="colorTag"]').count()) === 5, where + ": the fold has a color for each of the six kinds of part");
+    await page.locator(row + " [data-af-colorswatch]").scrollIntoViewIfNeeded();
+    await page.click(row + " [data-af-colorswatch]");
+    await page.waitForTimeout(400);
+    await page.fill(row + " [data-af-colorcode]", "#22cc44");
+    await page.locator(row + " [data-af-colorcode]").press("Enter");
+    await page.locator(row + " [data-af-colorcode]").blur();
+    await page.waitForTimeout(700);
+    check(await page.evaluate(() => window.__settings.colorNpc === "#22cc44"), where + ": the NPC color is saved");
+    await page.click('.af-tab[data-tab="cast"]');
+    await page.waitForTimeout(400);
+    const green = await drawnAt(page, ring, 0.04, 0.5);
+    check(green[1] > 150 && green[0] < 100 && green[2] < 120, where + ": the NPC's ring is drawn in the new color (" + green.join(",") + ")");
+    // The built-in color comes back.
+    await page.click('.af-tab[data-tab="settings"]');
+    await page.waitForTimeout(300);
+    await page.evaluate(() => Array.from(document.querySelectorAll(".af-fold")).find((b) => /Colors for each kind of part/.test(b.textContent)).click());
+    await page.waitForTimeout(400);
+    const back = await page.evaluate(() => { const b = document.querySelector('[data-af-row="colorNpc"] [data-af-colorback]'); return b ? b.textContent.trim() : ""; });
+    check(back === "Use the built-in color", where + ": its button says Use the built-in color (" + back + ")");
+    await page.click(row + " [data-af-colorback]");
+    await page.waitForTimeout(500);
+    await page.click('.af-tab[data-tab="cast"]');
+    await page.waitForTimeout(400);
+    const again = await drawnAt(page, ring, 0.04, 0.5);
+    check(again[0] > 200 && again[2] > 140 && (await page.evaluate(() => window.__settings.colorNpc === "")), where + ": Use the built-in color puts pink back (" + again.join(",") + ")");
+    check(!(await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1)), where + ": nothing runs off the side");
+    check(!errors.length, where + ": no page errors. " + errors.slice(0, 2).join(" | "));
+    await context.close();
+  }
+}
+
 if (section("reorder")) {
   console.log("People and groups can be picked up and moved");
   const order = (page, sel, attr) => page.evaluate(([sel, attr]) => Array.from(document.querySelectorAll(sel)).map((n) => n.getAttribute(attr)), [sel, attr]);

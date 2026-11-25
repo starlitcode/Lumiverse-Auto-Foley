@@ -207,6 +207,7 @@ The player under a message and the lit word use your theme's colors. You can pic
 
 - Under **A player under each message**: **Player accent** (the ring around Play and the line that fills), **Player background**, and **Player text and icons**. A small player under them shows the colors as you pick.
 - Under **Light up words in the chat**: **Color of the lit word**, and **How strong it is**, from 10% to 80%. It is 20% by default.
+- Under **Colors for each kind of part**, in the **Look** card: a color for the narrator, characters, personas, NPCs, sounds and voice tags. Each kind shows on pictures, on the Stage tab and in the players. **Use the built-in color** goes back to the one Auto Foley starts with. Sounds start with your theme's warning color.
 
 To pick a color:
 

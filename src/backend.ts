@@ -151,6 +151,14 @@ interface Settings {
   // The color of the lit word, as #rrggbb, and how strong it is, from 10 to
   // 80 per cent. Empty uses the theme's accent.
   wordColor: string;
+  // A color of the reader's own for each kind of part, or empty for the
+  // built-in one.
+  colorNarrator: string;
+  colorCharacter: string;
+  colorPersona: string;
+  colorNpc: string;
+  colorSound: string;
+  colorTag: string;
   wordStrength: number;
   // The player under a message: its accent, its background and its words, as
   // #rrggbb. Empty uses the theme's own.
@@ -301,6 +309,12 @@ const DEFAULT_SETTINGS: Settings = {
   extrasMenu: false,
   chatHighlight: true,
   wordColor: '',
+  colorNarrator: '',
+  colorCharacter: '',
+  colorPersona: '',
+  colorNpc: '',
+  colorSound: '',
+  colorTag: '',
   wordStrength: 20,
   playerAccent: '',
   playerBack: '',
@@ -681,6 +695,12 @@ function cleanSettings(raw: any): Settings {
     extrasMenu: bool(r.extrasMenu, d.extrasMenu),
     chatHighlight: bool(r.chatHighlight, d.chatHighlight),
     wordColor: hexColor(r.wordColor),
+    colorNarrator: hexColor(r.colorNarrator),
+    colorCharacter: hexColor(r.colorCharacter),
+    colorPersona: hexColor(r.colorPersona),
+    colorNpc: hexColor(r.colorNpc),
+    colorSound: hexColor(r.colorSound),
+    colorTag: hexColor(r.colorTag),
     wordStrength: Math.round(num(r.wordStrength, 10, 80, d.wordStrength)),
     playerAccent: hexColor(r.playerAccent),
     playerBack: hexColor(r.playerBack),
