@@ -14,7 +14,7 @@ type Host = {
   toasts: { kind: string; text: string; userId?: string }[];
   files: Map<string, any>;
   keys: Map<string, string>;
-  calls: { generate: any[]; decisions: any[]; cors: any[] };
+  calls: { generate: any[]; decisions: any[]; cors: any[]; counted: any[] };
   ask: (payload: any, userId?: string) => Promise<any[]>;
 };
 
@@ -27,12 +27,13 @@ function host(opts: {
   // Files already on disk, as after a restart.
   files?: Map<string, any>;
   hold?: boolean;
+  tokens?: boolean;
 } = {}): Host {
   const files = new Map<string, any>(opts.files || []);
   const keys = new Map<string, string>();
   const sent: { msg: any; userId?: string }[] = [];
   const toasts: { kind: string; text: string; userId?: string }[] = [];
-  const calls = { generate: [] as any[], decisions: [] as any[], cors: [] as any[] };
+  const calls = { generate: [] as any[], decisions: [] as any[], cors: [] as any[], counted: [] as any[] };
   const answers = (opts.answers || []).slice();
   let handler: any = null;
   const k = (path: string, userId?: string) => (userId || "-") + "/" + path;
@@ -113,6 +114,18 @@ function host(opts: {
         return opts.connections || [];
       },
     },
+    // Lumiverse's tokenizer, only when a check asks for it. It keeps which
+    // model each count was for.
+    ...(opts.tokens
+      ? {
+          tokens: {
+            async countText(text: string, o: any) {
+              calls.counted.push(o && o.model);
+              return { total_tokens: Math.ceil(String(text || "").length / 3), approximate: false };
+            },
+          },
+        }
+      : {}),
     async cors(url: string, init: any) {
       calls.cors.push({ url, init });
       if (!opts.cors) throw new Error("no cors in this test");
@@ -1380,6 +1393,24 @@ describe("a message is directed once", () => {
     const again = await h2.ask(msg);
     expect(h2.calls.generate.length).toBe(0);
     expect(said(again)).toContain("Played from the copy directed before.");
+  });
+});
+
+describe("counting the Director's tokens", () => {
+  test("uses the tokenizer of the Director's model, not the main one", async () => {
+    const good = JSON.stringify({ lines: [{ i: 0, speaker: "Oriel", text: "[quietly] Lanterns up." }] });
+    const h = host({
+      answers: [good],
+      tokens: true,
+      connections: [
+        { id: "main", name: "Main", provider: "anthropic", model: "big-model", is_default: true },
+        { id: "quick", name: "Quick", provider: "openai", model: "small-model", is_default: false },
+      ],
+    });
+    await h.ask({ type: "save", settings: { directorConnection: "quick" } });
+    await h.ask({ type: "direct", chatId: "c", messageId: "m12", swipeId: 0, name: "Oriel", text: '"Lanterns up."' });
+    expect(h.calls.counted.length).toBeGreaterThan(0);
+    expect(h.calls.counted.every((m: any) => m === "small-model")).toBe(true);
   });
 });
 

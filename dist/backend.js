@@ -522,8 +522,18 @@ async function boundPairs(userId) {
     if (kept && Date.now() - kept.at < BOUND_EVERY_MS)
         return kept.pairs;
     const pairs = [];
+    // The model behind each connection, for Lumiverse's tokenizer. '' is the
+    // default connection.
+    const models = {};
     try {
         const list = await spindle.connections.list(userId);
+        for (const c of Array.isArray(list) ? list : []) {
+            if (!c || !c.id)
+                continue;
+            models[String(c.id)] = String(c.model || '');
+            if (c.is_default)
+                models[''] = String(c.model || '');
+        }
         for (const c of Array.isArray(list) ? list.slice(0, 40) : []) {
             const b = c && c.reasoning_bindings && c.reasoning_bindings.settings;
             const open = String((b && b.prefix) || '');
@@ -539,8 +549,15 @@ async function boundPairs(userId) {
         }
     }
     catch (_) { }
-    boundCache[key] = { at: Date.now(), pairs };
+    boundCache[key] = { at: Date.now(), pairs, models };
     return pairs;
+}
+// The model a connection runs, read with the reasoning pairs. Empty when it
+// cannot be read, and Lumiverse then counts for the main connection's model.
+async function modelOfConnection(userId, id) {
+    await boundPairs(userId);
+    const kept = boundCache[userId || ''];
+    return (kept && kept.models[id]) || '';
 }
 // The markers a local backend can pass through around the reply. They are not
 // thinking, but read aloud they are noise.
@@ -2453,12 +2470,14 @@ function readScene(segs, cast, author) {
 // Log in plain words.
 // The tokens one ask used. The provider's own count when it sends one, or
 // Lumiverse's count of the text, or a guess from its length.
-async function countSaying(text, userId) {
+async function countSaying(text, userId, model) {
     const guess = Math.ceil(String(text || '').length / 4);
     try {
         if (!spindle.tokens || typeof spindle.tokens.countText !== 'function')
             return { n: guess, counted: false };
-        const got = await spindle.tokens.countText(text, { userId: userId });
+        // Lumiverse picks its tokenizer from the model. Named, it counts for the
+        // Director's model, not the main connection's.
+        const got = await spindle.tokens.countText(text, model ? { model: model, modelSource: 'explicit', userId: userId } : { userId: userId });
         if (got && got.approximate)
             return { n: guess, counted: false };
         const n = got && Number(got.total_tokens);
@@ -2468,7 +2487,7 @@ async function countSaying(text, userId) {
         return { n: guess, counted: false };
     }
 }
-async function addUsed(script, usage, sent, back, userId) {
+async function addUsed(script, usage, sent, back, userId, model) {
     const pin = Number(usage && (usage.prompt_tokens != null ? usage.prompt_tokens : usage.input_tokens));
     const pout = Number(usage && (usage.completion_tokens != null ? usage.completion_tokens : usage.output_tokens));
     if (Number.isFinite(pin) && pin > 0 && Number.isFinite(pout) && pout >= 0) {
@@ -2478,12 +2497,12 @@ async function addUsed(script, usage, sent, back, userId) {
     }
     let counted = true;
     for (const t of sent) {
-        const c = await countSaying(t, userId);
+        const c = await countSaying(t, userId, model);
         script.sent += c.n;
         if (!c.counted)
             counted = false;
     }
-    const b = await countSaying(back, userId);
+    const b = await countSaying(back, userId, model);
     script.back += b.n;
     if (!b.counted)
         counted = false;
@@ -2528,7 +2547,7 @@ async function askDirector(userId, s, payload, connection, script, run) {
             const cost = Number(res && res.usage && res.usage.cost);
             if (Number.isFinite(cost))
                 script.cost += cost;
-            await addUsed(script, res && res.usage, messages.map((m) => String(m.content || '')), content, userId);
+            await addUsed(script, res && res.usage, messages.map((m) => String(m.content || '')), content, userId, await modelOfConnection(userId, connection));
         }
         catch (e) {
             failed = String((e && e.message) || e || '');

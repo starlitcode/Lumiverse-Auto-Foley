@@ -33,7 +33,7 @@ Two messages, to the connection picked under **Which connection**:
 
 Nothing else from your chat is sent. The Director does not see earlier messages.
 
-Now playing says how many input and output tokens the Director used for the message, over every ask. The count comes from the provider when it sends one, or from Lumiverse. When neither can count, it is a guess from the length, and it says "about".
+Now playing says how many input and output tokens the Director used for the message, over every ask. The count comes from the provider when it sends one. If not, Lumiverse's own tokenizer counts it, for the Director's model. When neither can count, it is a guess from the length, and it says "about".
 
 ### What it costs
 
