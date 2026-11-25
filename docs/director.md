@@ -86,7 +86,9 @@ All on the Director tab:
 
 The Director tab has a note for each engine. It says how that engine reads tags, and it is sent with the rules.
 
-- **Send the notes as** puts the note in the rules, the default, or sends it as its own message from system, user or assistant, right after the prompt.
+- **Send the notes as** says where the note goes in the request:
+  - **In the rules**, the default: inside the rules sent with each message, as `engine_note`, beside the other rules the Director follows, such as whether sounds are on.
+  - **System**, **User** or **Assistant**: as a message of its own, with that role, right after the prompt. Some models follow a system message more closely. Most people can leave it on In the rules.
 - The engine your connection runs is shown first, open, under **In use now**. Every other engine has its own fold, in the same order as the table in [Voice engines](engines.md).
 - **Back to built-in** puts the built-in note back. It asks first.
 

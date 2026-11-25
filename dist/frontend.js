@@ -8241,7 +8241,7 @@ export function setup(ctx, overrides) {
             { id: 'system', label: 'System' },
             { id: 'user', label: 'User' },
             { id: 'assistant', label: 'Assistant' },
-        ], S.engineNoteRole || 'rules', (v) => set({ engineNoteRole: v }), 'In the rules by default, as engine_note in the JSON. The others send the note as its own message, right after the prompt.'));
+        ], S.engineNoteRole || 'rules', (v) => set({ engineNoteRole: v }), 'In the rules is the default: the note goes with the rules sent beside each message. System, User and Assistant send it as a message of its own, after the prompt.'));
         // The engine Auto Foley's connection runs is shown first and open, so its
         // note is the one in view. Every other engine has a fold of its own, in
         // the order of the engine table.
