@@ -48,12 +48,11 @@ Here is what each engine is sent:
 | Eleven v3 or v4 | `[gruffly] Tide turns at six. [sighs] Miss it, and we wait a whole day.` | None |
 | Fish Audio S2 | `[gruffly] Tide turns at six. [gruffly] [sighs] Miss it, and we wait a whole day.` | None |
 | Gemini 3.8 | `Tide turns at six. <sigh> Miss it, and we wait a whole day.` | `gruff and tired` |
-| Gemini 2.5 or 3.1 | `Tide turns at six. [sigh] Miss it, and we wait a whole day.` | None |
 | Chatterbox-Turbo | `Tide turns at six. [sigh] Miss it, and we wait a whole day.` | None |
 
 - On Fish Audio, `[gruffly]` goes again at the start of the second sentence, so both are said the same way. `[sighs]` is a sound, so it is not repeated.
 - On Gemini 3.8, how the line is said goes in the note, and only the sigh stays in the line.
-- On Gemini 2.5 and 3.1 and on Chatterbox-Turbo, `[sighs]` becomes the engine's own `[sigh]`, and `[gruffly]` is taken out, since they cannot read it. The voice you picked has to carry the gruffness.
+- On Chatterbox-Turbo, `[sighs]` becomes its own `[sigh]`, and `[gruffly]` is taken out, since it cannot read it. The voice you picked has to carry the gruffness.
 
 ## What helps on each engine
 
@@ -76,12 +75,6 @@ Here is what each engine is sent:
 - How a line is said goes in its note, such as `hushed and nervous`. Tags are only for vocal sounds and pauses, such as `<sigh>` and `<short pause>`.
 - **Their usual way of speaking** is the note for every line of theirs that has none, such as "calm and dry". Write it like a note to an actor, in a few plain words.
 - In **How they speak**, describe the delivery in words the Director can put in notes: "flat and quiet, speeds up when angry".
-
-### Gemini 2.5 and 3.1
-
-- These models know eleven tags and take no notes. See [Gemini](engines.md#gemini) for the list.
-- A feeling outside those tags cannot be asked for. Pick a voice that already has it.
-- In **How they speak**, mention only what the tags can do, such as whispering, shouting or laughing.
 
 ### Chatterbox-Turbo
 

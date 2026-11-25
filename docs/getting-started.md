@@ -10,7 +10,7 @@
 ## Steps
 
 1. **Add a TTS connection in Lumiverse**, if you do not have one. Open **Connections**, go to the TTS section, and add one with your key. For Chatterbox on your own computer, see [Chatterbox](engines.md#chatterbox).
-2. **Pick the model.** On the connection, choose one that acts: Eleven v3 or v4, Fish Audio S2.1 Pro or Drama 3, or Gemini 3.8 Flash TTS. Gemini 2.5 and 3.1 TTS act too, with fewer tags. You can also pick a model for each person later, in the Cast tab. Only models that act are offered there.
+2. **Pick the model.** On the connection, choose one that acts: Eleven v3 or v4, Fish Audio S2.1 Pro or Drama 3, or Gemini 3.8 Flash TTS. You can also pick a model for each person later, in the Cast tab. Only models that act are offered there.
 3. **Open the Foley tab** in the drawer. Go to **Settings** and check that **TTS connection** shows yours. The line under it says what its engine can do.
 4. **Press Check my setup** on the Settings tab. It says what is ready and what is missing. It speaks nothing, so it spends no voice credits.
 5. **Perform a message.** Press the Auto Foley button on any message. The first time, the Director reads it, and the Stage tab shows each part as it plays.

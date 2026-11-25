@@ -6,7 +6,7 @@ import { join } from "node:path";
 import vm from "node:vm";
 import { __testing } from "../src/frontend";
 
-const { engineOf, fitTag, tagSound, textFor, styleFor, stripTags, stabilityFor, ENGINES } = __testing;
+const { engineOf, noTagsWhy, fitTag, tagSound, textFor, styleFor, stripTags, stabilityFor, ENGINES } = __testing;
 
 describe("which engine a connection runs", () => {
   test("ElevenLabs: v3 and v4 act, and the older models are not used", () => {
@@ -21,13 +21,16 @@ describe("which engine a connection runs", () => {
     expect(engineOf({ provider: "fish_audio" }, "s1").supported).toBe(false);
   });
 
-  test("Gemini: 3.8 takes tags and line notes, 2.5 and 3.1 take tags only", () => {
+  test("Gemini: 3.8 takes tags and line notes, and 2.5 and 3.1 are not used, since Google shuts them down", () => {
     expect(engineOf({ provider: "google_tts" }, "gemini-3.8-flash-tts").id).toBe("gemini");
     expect(engineOf({ provider: "google_vertex_tts" }, "gemini-3.8-flash-lite-tts").id).toBe("gemini");
     for (const m of ["gemini-2.5-pro-preview-tts", "gemini-3.1-flash-tts-preview", "gemini-2.5-flash-tts", "gemini-2.5-flash-lite-preview-tts"]) {
-      expect(engineOf({ provider: "google_vertex_tts" }, m).id).toBe("gemini_31");
+      for (const provider of ["google_tts", "google_vertex_tts", "openrouter_tts"]) {
+        expect(engineOf({ provider }, m).supported).toBe(false);
+        expect(noTagsWhy({ provider }, m)).toContain("December 18, 2026");
+      }
     }
-    expect(ENGINES.gemini_31.style).toBe(false);
+    expect(Object.keys(ENGINES).sort()).toEqual(["chatterbox_turbo", "eleven_v3", "fish", "gemini"]);
     expect(engineOf({ provider: "google_tts" }, "gemini-2.0-flash").supported).toBe(false);
   });
 
@@ -65,15 +68,7 @@ describe("fitting a line to its engine", () => {
     expect(fitTag("clears her throat", ENGINES.chatterbox_turbo.list)).toBe("clear throat");
     expect(fitTag("clears her throat", ENGINES.gemini.list)).toBe("throat-clearing");
     expect(fitTag("whispering", ENGINES.gemini.list)).toBe("");
-    expect(fitTag("whispers", ENGINES.gemini_31.list)).toBe("whispering");
-    expect(fitTag("laughs", ENGINES.gemini_31.list)).toBe("laughing");
-    expect(fitTag("sarcastically", ENGINES.gemini_31.list)).toBe("sarcasm");
-    expect(fitTag("a medium pause", ENGINES.gemini_31.list)).toBe("medium pause");
     expect(fitTag("whispering", ENGINES.chatterbox_turbo.list)).toBe("");
-  });
-
-  test("Gemini 2.5 and 3.1 never get the tags they read aloud", () => {
-    for (const t of ["scared", "curious", "bored"]) expect(fitTag(t, ENGINES.gemini_31.list)).toBe("");
   });
 
   const line = { text: '[quietly] Stay down. [exhales] [sound of boots on gravel] They are close.' };
@@ -93,11 +88,6 @@ describe("fitting a line to its engine", () => {
   test("Gemini 3.8 gets no pipes, stray angle brackets or slash pairs from the message", () => {
     const odd = { text: "[sighs] Fine |whatever| <3 the /north/ gate, 24/7." };
     expect(textFor(odd, ENGINES.gemini)).toBe("<sigh> Fine whatever 3 the north gate, 24/7.");
-  });
-
-  test("Gemini 2.5 and 3.1 keep their own tags, in square brackets", () => {
-    expect(textFor({ text: "[whispers] Not yet. [laughs] Now." }, ENGINES.gemini_31)).toBe("[whispering] Not yet. [laughing] Now.");
-    expect(textFor(line, ENGINES.gemini_31)).toBe("Stay down. They are close.");
   });
 
   test("Chatterbox keeps only its nine tags", () => {
@@ -126,7 +116,7 @@ describe("the backend fits tags the same way", () => {
   vm.runInContext(readFileSync(join(import.meta.dir, "..", "dist", "backend.js"), "utf8") + "\n;globalThis.__fit = fitTag;", box);
   const tags = ["laughs", "a soft sigh", "clears throat", "whispering", "beat", "long pause", "medium pause", "sniffles", "gasping", "deadpan", "shh", "heavy breathing", "yells", "um", "sarcastic", "rapidly", "scared"];
   test("for every list", () => {
-    for (const list of [ENGINES.gemini.list, ENGINES.gemini_31.list, ENGINES.chatterbox_turbo.list]) for (const t of tags) expect(box.__fit(t, list)).toBe(fitTag(t, list));
+    for (const list of [ENGINES.gemini.list, ENGINES.chatterbox_turbo.list]) for (const t of tags) expect(box.__fit(t, list)).toBe(fitTag(t, list));
   });
 });
 

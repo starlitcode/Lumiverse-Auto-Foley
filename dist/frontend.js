@@ -31,23 +31,12 @@ const GEMINI_TAGS = [
     'moan', 'growl', 'grunt', 'hiss', 'scream', 'shout', 'shriek', 'cheer', 'phew',
     'short pause', 'long pause', 'tsk', 'argh',
 ];
-// The markup tags Google's Gemini-TTS page lists for Gemini 2.5 and 3.1, in
-// square brackets. Some are sounds, some change how the words after them are
-// said, and three are pauses. [scared], [curious] and [bored] are left out:
-// the page says those are read aloud as words.
-const GEMINI_OLD_TAGS = [
-    'sigh', 'laughing', 'uhm', 'sarcasm', 'robotic', 'shouting', 'whispering', 'extremely fast',
-    'short pause', 'medium pause', 'long pause',
-];
 // The nine tags Chatterbox-Turbo knows.
 const CHATTERBOX_TAGS = ['clear throat', 'sigh', 'shush', 'cough', 'groan', 'sniff', 'gasp', 'chuckle', 'laugh'];
 const ENGINE_LIST = [
     { id: 'eleven_v3', label: 'ElevenLabs v3 or v4', tags: 'free', list: [], wrap: '[]', style: false, inVoiceSounds: true, singTag: 'sings', singStyle: false, eleven: true, supported: true },
     { id: 'fish', label: 'Fish Audio S2 or Drama 3', tags: 'free', list: [], wrap: '[]', style: false, inVoiceSounds: false, singTag: 'singing', singStyle: false, eleven: false, supported: true, perSentence: true },
     { id: 'gemini', label: 'Gemini 3.8 TTS', tags: 'list', list: GEMINI_TAGS, wrap: '<>', style: true, inVoiceSounds: false, singTag: '', singStyle: true, eleven: false, supported: true },
-    // Lumiverse sends these models the text alone, with no note on how it is
-    // said, so the tags and the punctuation carry it.
-    { id: 'gemini_31', label: 'Gemini 2.5 or 3.1 TTS', tags: 'list', list: GEMINI_OLD_TAGS, wrap: '[]', style: false, inVoiceSounds: false, singTag: '', singStyle: false, eleven: false, supported: true },
     { id: 'chatterbox_turbo', label: 'Chatterbox-Turbo', tags: 'list', list: CHATTERBOX_TAGS, wrap: '[]', style: false, inVoiceSounds: false, singTag: '', singStyle: false, eleven: false, supported: true },
 ];
 // A model that cannot act.
@@ -75,8 +64,6 @@ function engineOf(conn, model, chosen) {
     if (provider === 'google_tts' || provider === 'google_vertex_tts' || provider === 'openrouter_tts') {
         if (/gemini-3\.8-flash(-lite)?-tts/.test(m))
             return ENGINES.gemini;
-        if (/gemini-(2\.5|3\.1)-[a-z0-9.-]*tts/.test(m))
-            return ENGINES.gemini_31;
         return NO_TAGS;
     }
     // A Chatterbox server Auto Foley talks to itself. Its model is read from
@@ -105,10 +92,14 @@ function noTagsWhy(conn, model) {
         return what + (m || 'This model') + ' does not. Pick Eleven v3 or Eleven v4 on the connection, or for this person in the Cast tab.';
     if (provider === 'fish_audio')
         return what + 'Fish Audio S1 does not. Pick S2.1 Pro, S2 Pro or Drama 3.';
+    // Google shuts down the Gemini 2.5 and 3.1 TTS models on December 18,
+    // 2026, so they are not used, and the reason is said plainly.
+    if (/gemini-(2\.5|3\.1)-[a-z0-9.-]*tts/.test(m.toLowerCase()) && (provider === 'google_tts' || provider === 'google_vertex_tts' || provider === 'openrouter_tts'))
+        return 'Auto Foley does not use ' + m + ', since Google shuts down the Gemini 2.5 and 3.1 TTS models on December 18, 2026. Pick Gemini 3.8 Flash TTS on the connection, or for this person in the Cast tab.';
     if (provider === 'openrouter_tts')
-        return what + 'Through OpenRouter, only the Gemini TTS models do. Pick google/gemini-3.8-flash-tts, or a Gemini 2.5 or 3.1 TTS model, on the connection or for this person in the Cast tab.';
+        return what + 'Through OpenRouter, only the Gemini 3.8 TTS models do. Pick google/gemini-3.8-flash-tts on the connection, or for this person in the Cast tab.';
     if (provider === 'google_tts' || provider === 'google_vertex_tts')
-        return what + (m || 'This Gemini model') + ' does not. Pick Gemini 3.8 Flash TTS, Gemini 3.8 Flash-Lite TTS, or a Gemini 2.5 or 3.1 TTS model.';
+        return what + (m || 'This Gemini model') + ' does not. Pick Gemini 3.8 Flash TTS or Gemini 3.8 Flash-Lite TTS.';
     if (provider === 'chatterbox_direct')
         return what + 'Your Chatterbox server runs the ' + (m || 'unknown') + ' model, which takes no tags. Load Chatterbox-Turbo on it, on its own web page or with model.repo_id set to chatterbox-turbo in its config.yaml.';
     if (provider === 'openai_tts' && /multilingual|\bmtl\b/.test(hay))
@@ -1406,9 +1397,6 @@ export function setup(ctx, overrides) {
         // make one in the voice, so only In the voice is worth a warning.
         if (S.directorOn && S.soundsOn && S.soundStyle === 'voice' && !eng.inVoiceSounds)
             out.push('This engine cannot make sounds inside a line, so In the voice does nothing here. Its sounds are played as separate sound effects instead, which come from Freesound, ElevenLabs or your own uploads, in the Sounds tab.');
-        // Google's deprecations page gives the date these preview models stop.
-        if (eng.id === 'gemini_31')
-            out.push('Google shuts down the Gemini 2.5 and 3.1 TTS models on December 18, 2026. Gemini 3.8 Flash TTS replaces them, and it also takes a note on how each line is said.');
         return out;
     }
     // What a setting cannot do on the engine in use. Not a fault, so these
@@ -7314,8 +7302,6 @@ export function setup(ctx, overrides) {
             return 'On Fish Audio: describe how they sound when calm and when upset, such as low and slow, sharp when angry. The Director turns it into tags like [calm] or [shouting].';
         if (eng.id === 'gemini')
             return 'On Gemini 3.8: describe their voice in plain words, such as hushed, dry and unhurried. The Director writes notes like that for each line. Sounds are limited to Gemini\u2019s own list.';
-        if (eng.id === 'gemini_31')
-            return 'On Gemini 2.5 or 3.1: say when they whisper, shout or sound sarcastic. Those are the only ways of speaking it can mark, so other detail is not used.';
         return 'On Chatterbox: say when they laugh, sigh or gasp. It marks only sounds like those, so how they speak comes from the voice and the punctuation. With a Chatterbox server reached directly, Exaggeration under More settings makes the voice stronger.';
     }
     // A switch for one person's setting, built like every other switch: only
@@ -9464,7 +9450,7 @@ export function setup(ctx, overrides) {
         catch (_) { }
     };
 }
-export const __testing = { wavBlob, noConnectionWhy, perSentence, clipLevel, levelGain, voiceGender, describeWords, markText, movedFor, movedRowMark, MOVED_DEFAULTS, looksLikeDate, voicedFrames, wordWeight, partTimes, engineOf, fitTag, tagSound, textFor, styleFor, stripTags, stabilityFor, ENGINES };
+export const __testing = { wavBlob, noConnectionWhy, perSentence, clipLevel, levelGain, voiceGender, describeWords, markText, movedFor, movedRowMark, MOVED_DEFAULTS, looksLikeDate, voicedFrames, wordWeight, partTimes, engineOf, noTagsWhy, fitTag, tagSound, textFor, styleFor, stripTags, stabilityFor, ENGINES };
 // The built-in cheer: "Cheering and clapping crowd 1" by freesound_community,
 // a free sound from Pixabay (pixabay.com/sound-effects/people-cheering-and-clapping-crowd-1-5995/),
 // made mono at 64 kbps so it stays small. assets/applause.mp3 is the same

@@ -1230,7 +1230,7 @@ interface TagRules {
 // do. The Director is told, so it writes what that engine can read. The panel
 // fits each line again to the engine that speaks it.
 // Only models that act are used. The panel speaks nothing through any other.
-const ENGINE_IDS = ['eleven_v3', 'fish', 'gemini', 'gemini_31', 'chatterbox_turbo'];
+const ENGINE_IDS = ['eleven_v3', 'fish', 'gemini', 'chatterbox_turbo'];
 
 interface EngineInfo {
   id: string;
@@ -1268,8 +1268,6 @@ const ENGINE_NOTES: Record<string, string> = {
     'Fish Audio acts out free tags in square brackets, like [barely holding it together] or [whispering]. Put a tag at the start of the sentence it shapes. A tag keeps going until the next one, so when a whisper ends, mark where the voice comes back up. One feeling per sentence works best. Fish can\'t make the sounds of the world, so sounds go in "before" and "after".',
   gemini:
     'Gemini 3.8 knows only the tags in "tag_list", and they\'re all sounds a voice makes or pauses. Use them as written, in square brackets, right where the sound happens, even mid-sentence. How a line is said goes in its "style": a few plain words like "hushed and nervous" or "fast, out of breath". Most lines need no style at all, since Gemini reads the punctuation and the words around them. Leave age, accent and who they are out of it, since the voice already carries those.',
-  gemini_31:
-    'Gemini 2.5 and 3.1 know only the tags in "tag_list". [sigh], [laughing] and [uhm] are sounds. [whispering], [shouting], [sarcasm], [robotic] and [extremely fast] change the words after them, so put one right before the words it shapes. The pauses are for timing. There\'s no "style" here, so the words and the punctuation carry the rest. Go light: most lines get no tag.',
   chatterbox_turbo:
     'Chatterbox knows only the nine tags in "tag_list", and they\'re all sounds a voice makes. Use them as written, in square brackets, and rarely: one in a line at most, and most lines get none. It can\'t take a delivery tag like [quietly], so the punctuation carries the delivery.',
 };

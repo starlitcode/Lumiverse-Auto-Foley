@@ -118,7 +118,8 @@ Two skills are available. Load them before starting work.
   connection in Lumiverse, with Lumiverse's own `/api/v1/tts/synthesize`
   route. Lumiverse keeps every speech key.
 - These engines act: ElevenLabs v3 and v4, Fish Audio S2 and Drama 3, Gemini
-  2.5, 3.1 and 3.8, and Chatterbox-Turbo. `ENGINE_LIST` in `src/frontend.ts` says
+  3.8, and Chatterbox-Turbo. Gemini 2.5 and 3.1 are not used, since Google
+  shuts them down on December 18, 2026. `ENGINE_LIST` in `src/frontend.ts` says
   what each can do, and `docs/engines.md` has the same table.
 - A model that cannot act is not used: nothing is spoken through it, and
   `noTagsWhy` says which model to pick. Other providers are not listed.
@@ -127,8 +128,8 @@ Two skills are available. Load them before starting work.
   found by name. **What this connection runs** in Settings overrides it.
 - The Director writes every tag in square brackets. `textFor` fits each line
   to the engine of the person who says it, just before it is sent: free tags,
-  a closed list (Gemini 3.8 in angle brackets, Gemini 2.5 and 3.1, and
-  Chatterbox-Turbo, in square brackets), or none. The Gemini lists follow
+  a closed list (Gemini 3.8 in angle brackets, Chatterbox-Turbo in square
+  brackets), or none. The Gemini list follows
   Google's own pages. Tags Google says are read aloud are never sent.
   A tag an engine cannot read is taken out, or the voice reads it aloud.
 - The backend's `fitTag` and `TAG_WORDS` match the frontend's. A test checks

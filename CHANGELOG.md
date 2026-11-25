@@ -13,7 +13,6 @@ _Not yet released_
 ### Added
 
 - **More vocal sounds for Gemini 3.8**: moan, growl, grunt, hiss, scream, shout, shriek, cheer and phew, from Google's own list.
-- **A warning for Gemini 2.5 and 3.1.** Google shuts those TTS models down on December 18, 2026. The panel says so, and names Gemini 3.8 as the model to use.
 - **Saved audio**, on the Stage tab. It lists every message with a saved script, newest first, with whose script it is, the day and its first line. **Play**, **Download** and **Delete** are on each row. Play and Download use only saved audio, so nothing is spent.
 - **A player under each message**, on by default. A message Auto Foley has performed gets a small player under its text, where Lumiverse puts its own. It has Back, Play and Next, and a line you tap to go to any point. It says which part is playing, and plays the saved audio again with nothing spent. It follows your theme: its colors, the message font, and the side and alignment of the message text, centered too.
 - **Voice price, per million characters**, in the Settings tab. Now playing says how many characters were sent to the voice service for new audio, and with a price set, what it cost. Saved audio adds nothing.
@@ -41,6 +40,7 @@ _Not yet released_
 
 ### Changed
 
+- **Gemini 2.5 and 3.1 are no longer used.** Google shuts down these TTS models on December 18, 2026. A person who speaks through one is not spoken, and the panel says to pick Gemini 3.8 Flash TTS instead. Their notes, tags and settings are gone.
 - **ElevenLabs shows only the settings Eleven v3 and v4 take.** ElevenLabs' docs say v3 takes Stability only, and v4 Stability and Similarity. **Style**, **Speed** and **Speaker boost** are gone for them, and Similarity shows on Eleven v4 only. They did nothing on these models.
 - **A message the Director could not direct is saved, read as written.** Before, nothing was saved, so every play asked the Director again and it did not show in Saved audio. Now it plays from saved audio, and **Now playing** and **Saved audio** say "read as written" and why. **Direct again** tries the Director. A script saved with the Director off says so too.
 - **A sound with nothing to play no longer pops up a warning.** Without a Freesound or ElevenLabs key, a sound missing from your library warned on every play. It is now said once in the Log, and the message plays on without it.
@@ -60,7 +60,6 @@ _Not yet released_
 
 ### Fixed
 
-- **A name at the top of a message could be lit instead of the text.** **Light up words in the chat** looked through the whole message, name and all, so a message that started with the speaker's name lit the name. It now looks only at the message text, in both chat modes.
 - **A line Gemini sent back with no audio waited 15 seconds or more.** Gemini's preview models now and then answer with no audio, and the line was waited out as if the service were busy. It is asked for again after a moment, and the Log says so.
 - **A new person's lines could be made again on the next play, in two voices.** Lines are made ahead, several at once. Two lines of someone new each picked a voice, so the lines had different voices, and a line spoken before the person joined the cast used the connection's voice. On the next play, those lines did not match and were made, and paid for, again. Now one voice is picked for each new person, and every line waits for it.
 - **The Director's tokens were counted with the tokenizer of your main connection.** When the provider sends no count, Lumiverse counts them, and it now counts for the Director's own model. Auto Refine does the same.
