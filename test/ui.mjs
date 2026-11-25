@@ -2181,10 +2181,13 @@ if (section("number boxes")) {
     const ranges = [];
     for (const tab of TABS) {
       await showTab(page, tab);
-      const got = await page.evaluate(() => Array.from(document.querySelectorAll('.af input[type="range"]')).filter((r) => !r.classList.contains("af-colorrange")).map((r) => (r.closest(".af-col") || r.parentElement).textContent.trim().slice(0, 40)));
+      const got = await page.evaluate(() => Array.from(document.querySelectorAll('.af input[type="range"]')).filter((r) => !r.classList.contains("af-colorrange") && !r.closest(".af-mixer")).map((r) => (r.closest(".af-col") || r.parentElement).textContent.trim().slice(0, 40)));
       for (const g of got) ranges.push(tab + ": " + g);
     }
-    check(ranges.length === 0, where + ": no slider is left outside the color editor (" + ranges.join(" | ") + ")");
+    check(ranges.length === 0, where + ": no slider is left outside the color editor and the Mixer (" + ranges.join(" | ") + ")");
+    await showTab(page, "stage");
+    const mixer = await page.evaluate(() => Array.from(document.querySelectorAll('.af-mixer input[type="range"]')).length);
+    check(mixer === 2, where + ": the Mixer's Voices and Sounds volume are sliders (" + mixer + ")");
     await showTab(page, "settings");
     const held = await page.evaluate(async () => {
       const row = Array.from(document.querySelectorAll(".af-col")).find((c) => /^How loud they cheer \(%\)/.test((c.querySelector(".af-lab") || {}).textContent || ""));

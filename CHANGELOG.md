@@ -17,6 +17,7 @@ _2026-11-25_
 ### Changed
 
 - **Sort the cast takes the place of the Sort by kind button.** By kind is its first choice. Dragging someone switches it to **My own order**, and the order you dragged them into is kept when you pick another way to sort.
+- **The Mixer's Voices and Sounds volume are sliders again**, so a level can be moved by ear while something plays. The other number settings stay as boxes.
 - **The narrator's card says why it cannot be removed.** It reads everything outside quotes, so it would be added back at once. The card says to change **Narration** in the Settings tab to skip it.
 
 ---

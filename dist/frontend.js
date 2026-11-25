@@ -7077,7 +7077,9 @@ export function setup(ctx, overrides) {
     function strip(name, kind, key) {
         const s = el('<div class="af-strip"><div class="af-between"><span class="af-strip-name"><span class="af-swatch' + (kind === 'sound' ? ' af-swatch-sound' : '') + '"></span>' + esc(name) +
             '</span><button type="button" class="af-btn" aria-pressed="' + (muted[kind] ? 'true' : 'false') + '">' + (muted[kind] ? 'Unmute' : 'Mute') + '</button></div></div>');
-        s.appendChild(numberRow('Volume (%)', Math.round(S[key] * 100), 0, 100, 1, (v) => {
+        s.appendChild(
+        // A slider, so the level can be moved by ear while something plays.
+        slider('Volume', Math.round(S[key] * 100), 0, 100, 1, (v) => v + '%', (v) => {
             set({ [key]: v / 100 });
             if (audio && audio.dataset && audio.dataset.kind === kind)
                 audio.volume = liveVolume(audio);
