@@ -6,6 +6,20 @@ Versions follow [Semantic Versioning](https://semver.org). A new major version m
 
 ---
 
+## 1.2.0
+
+_Not yet released_
+
+### Added
+
+- **ElevenLabs and Fish Audio through OpenRouter.** An OpenRouter TTS connection running ElevenLabs v3 or v4, such as `elevenlabs/eleven-v4`, or Fish Audio S2.1 or Drama 3, such as `fish-audio/s2.1-pro`, can now be used. Their tags are read the same as on a direct connection. Lumiverse sends OpenRouter only the text, the voice and the speed, so Stability, Similarity, Speed, Language and Fish Audio's own settings are not shown for them. See [Through OpenRouter](docs/engines.md#through-openrouter).
+
+### Fixed
+
+- **A new speaker on Gemini through OpenRouter could get a voice Gemini does not have.** Lumiverse lists the same few OpenAI and Gemini voices for every OpenRouter model, so a new speaker could be given an OpenAI voice. Auto Foley now picks from the model's own voices: Gemini's 30 and ElevenLabs' 21. Fish Audio has no list there, so a Fish Audio voice ID is typed in the Cast tab.
+
+---
+
 ## 1.1.0
 
 _2026-11-25_

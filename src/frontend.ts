@@ -13,10 +13,79 @@
 
 type Ctx = any;
 
-const VERSION = '1.1.0';
+const VERSION = '1.2.0';
 // The marks Lumiverse puts on another extension's part of the page. Nothing
 // inside one is read, written or pressed.
 const OTHER_UI = '[data-spindle-extension-root],[data-spindle-ext],[data-spindle-modal]';
+
+// The voices OpenRouter offers for ElevenLabs and Gemini, from its own model
+// pages. Lumiverse's OpenRouter connection lists only a few OpenAI and Gemini
+// voices, whatever the model, so a voice is picked from the model's own list.
+// Fish Audio on OpenRouter takes a Fish voice ID and has no list.
+const OR_ELEVEN_VOICES = [
+  { id: 'george', name: 'George', gender: 'male', description: 'Warm, captivating storyteller' },
+  { id: 'sarah', name: 'Sarah', gender: 'female', description: 'Mature, reassuring, confident' },
+  { id: 'adam', name: 'Adam', gender: 'male', description: 'Dominant, firm' },
+  { id: 'alice', name: 'Alice', gender: 'female', description: 'Clear, engaging educator' },
+  { id: 'bella', name: 'Bella', gender: 'female', description: 'Professional, bright, warm' },
+  { id: 'bill', name: 'Bill', gender: 'male', description: 'Wise, mature, balanced' },
+  { id: 'brian', name: 'Brian', gender: 'male', description: 'Deep, resonant and comforting' },
+  { id: 'callum', name: 'Callum', gender: 'male', description: 'Husky trickster' },
+  { id: 'charlie', name: 'Charlie', gender: 'male', description: 'Deep, confident, energetic' },
+  { id: 'chris', name: 'Chris', gender: 'male', description: 'Charming, down-to-earth' },
+  { id: 'daniel', name: 'Daniel', gender: 'male', description: 'Steady broadcaster' },
+  { id: 'eric', name: 'Eric', gender: 'male', description: 'Smooth, trustworthy' },
+  { id: 'harry', name: 'Harry', gender: 'male', description: 'Fierce warrior' },
+  { id: 'jessica', name: 'Jessica', gender: 'female', description: 'Playful, bright, warm' },
+  { id: 'laura', name: 'Laura', gender: 'female', description: 'Enthusiast, quirky attitude' },
+  { id: 'liam', name: 'Liam', gender: 'male', description: 'Energetic, social media creator' },
+  { id: 'lily', name: 'Lily', gender: 'female', description: 'Velvety actress' },
+  { id: 'matilda', name: 'Matilda', gender: 'female', description: 'Knowledgable, professional' },
+  { id: 'river', name: 'River', gender: 'neutral', description: 'Relaxed, neutral, informative' },
+  { id: 'roger', name: 'Roger', gender: 'male', description: 'Laid-back, casual, resonant' },
+  { id: 'will', name: 'Will', gender: 'male', description: 'Relaxed optimist' },
+];
+const OR_GEMINI_VOICES = [
+  { id: 'Achird', name: 'Achird', gender: 'male', description: 'Friendly, approachable delivery.' },
+  { id: 'Achernar', name: 'Achernar', gender: 'female', description: 'Soft, delicate delivery.' },
+  { id: 'Algenib', name: 'Algenib', gender: 'male', description: 'Gravelly, textured voice.' },
+  { id: 'Algieba', name: 'Algieba', gender: 'male', description: 'Smooth, flowing delivery.' },
+  { id: 'Alnilam', name: 'Alnilam', gender: 'male', description: 'Firm, steady delivery.' },
+  { id: 'Aoede', name: 'Aoede', gender: 'female', description: 'Breezy, relaxed delivery.' },
+  { id: 'Autonoe', name: 'Autonoe', gender: 'female', description: 'Bright, buoyant tone.' },
+  { id: 'Callirrhoe', name: 'Callirrhoe', gender: 'female', description: 'Easygoing, relaxed delivery.' },
+  { id: 'Charon', name: 'Charon', gender: 'male', description: 'Informative, explanatory delivery.' },
+  { id: 'Despina', name: 'Despina', gender: 'female', description: 'Smooth, flowing delivery.' },
+  { id: 'Enceladus', name: 'Enceladus', gender: 'male', description: 'Breathy, airy voice.' },
+  { id: 'Erinome', name: 'Erinome', gender: 'female', description: 'Clear, articulate delivery.' },
+  { id: 'Fenrir', name: 'Fenrir', gender: 'male', description: 'Excitable, animated tone.' },
+  { id: 'Gacrux', name: 'Gacrux', gender: 'female', description: 'Mature, seasoned tone.' },
+  { id: 'Iapetus', name: 'Iapetus', gender: 'male', description: 'Clear, articulate delivery.' },
+  { id: 'Kore', name: 'Kore', gender: 'female', description: 'Firm, assured delivery.' },
+  { id: 'Laomedeia', name: 'Laomedeia', gender: 'female', description: 'Upbeat, cheerful tone.' },
+  { id: 'Leda', name: 'Leda', gender: 'female', description: 'Youthful, light tone.' },
+  { id: 'Orus', name: 'Orus', gender: 'male', description: 'Firm, assured delivery.' },
+  { id: 'Pulcherrima', name: 'Pulcherrima', gender: 'female', description: 'Forward, direct delivery.' },
+  { id: 'Puck', name: 'Puck', gender: 'male', description: 'Upbeat, cheerful tone.' },
+  { id: 'Rasalgethi', name: 'Rasalgethi', gender: 'male', description: 'Informative, explanatory delivery.' },
+  { id: 'Sadachbia', name: 'Sadachbia', gender: 'male', description: 'Lively, spirited tone.' },
+  { id: 'Sadaltager', name: 'Sadaltager', gender: 'male', description: 'Knowledgeable, considered delivery.' },
+  { id: 'Schedar', name: 'Schedar', gender: 'male', description: 'Even, balanced delivery.' },
+  { id: 'Sulafat', name: 'Sulafat', gender: 'female', description: 'Warm, welcoming tone.' },
+  { id: 'Umbriel', name: 'Umbriel', gender: 'male', description: 'Easygoing, relaxed delivery.' },
+  { id: 'Vindemiatrix', name: 'Vindemiatrix', gender: 'female', description: 'Gentle, soft delivery.' },
+  { id: 'Zephyr', name: 'Zephyr', gender: 'female', description: 'Bright, buoyant tone.' },
+  { id: 'Zubenelgenubi', name: 'Zubenelgenubi', gender: 'male', description: 'Casual, conversational delivery.' },
+];
+// The voices for a model on OpenRouter, or null when Lumiverse's own list is
+// used. An empty list means the voice has to be typed.
+function openRouterVoices(model: string): any[] | null {
+  const m = String(model || '').toLowerCase();
+  if (/^elevenlabs\//.test(m)) return OR_ELEVEN_VOICES;
+  if (/^google\/gemini-/.test(m)) return OR_GEMINI_VOICES;
+  if (/^fish-audio\//.test(m)) return [];
+  return null;
+}
 
 // Color codes for the color editor. A code is #rrggbb, typed with or without
 // the #, or the three-letter short form.
@@ -146,8 +215,14 @@ function engineOf(conn: any, model?: string, chosen?: string): Engine {
   const hay = [m, conn && conn.name, conn && conn.api_url].map((x) => String(x || '').toLowerCase()).join(' ');
   if (provider === 'elevenlabs') return /^eleven_v(3|4)/.test(m) ? ENGINES.eleven_v3 : NO_TAGS;
   if (provider === 'fish_audio') return /^s1$/.test(m) ? NO_TAGS : ENGINES.fish;
-  // OpenRouter serves Gemini's TTS models too, named such as
-  // google/gemini-3.8-flash-tts. Its other models take no tags.
+  // OpenRouter serves ElevenLabs, Fish Audio and Gemini models, named such
+  // as elevenlabs/eleven-v4, fish-audio/s2.1-pro and
+  // google/gemini-3.8-flash-tts. Their tags are read the same as on a direct
+  // connection. Its other voice models take no tags.
+  if (provider === 'openrouter_tts') {
+    if (/^elevenlabs\/eleven-v(3|4)/.test(m)) return ENGINES.eleven_v3;
+    if (/^fish-audio\//.test(m) && !/^fish-audio\/s1\b/.test(m)) return ENGINES.fish;
+  }
   if (provider === 'google_tts' || provider === 'google_vertex_tts' || provider === 'openrouter_tts') {
     if (/gemini-3\.8-flash(-lite)?-tts/.test(m)) return ENGINES.gemini;
     return NO_TAGS;
@@ -178,7 +253,7 @@ function noTagsWhy(conn: any, model?: string): string {
   // 2026, so they are not used, and the reason is said plainly.
   if (/gemini-(2\.5|3\.1)-[a-z0-9.-]*tts/.test(m.toLowerCase()) && (provider === 'google_tts' || provider === 'google_vertex_tts' || provider === 'openrouter_tts'))
     return 'Auto Foley does not use ' + m + ', since Google shuts down the Gemini 2.5 and 3.1 TTS models on December 18, 2026. Pick Gemini 3.8 Flash TTS on the connection, or for this person in the Cast tab.';
-  if (provider === 'openrouter_tts') return what + 'Through OpenRouter, only the Gemini 3.8 TTS models do. Pick google/gemini-3.8-flash-tts on the connection, or for this person in the Cast tab.';
+  if (provider === 'openrouter_tts') return what + (m || 'This OpenRouter model') + ' does not. Through OpenRouter, pick elevenlabs/eleven-v4, elevenlabs/eleven-v3, fish-audio/s2.1-pro or google/gemini-3.8-flash-tts, on the connection or for this person in the Cast tab.';
   if (provider === 'google_tts' || provider === 'google_vertex_tts') return what + (m || 'This Gemini model') + ' does not. Pick Gemini 3.8 Flash TTS or Gemini 3.8 Flash-Lite TTS.';
   if (provider === 'chatterbox_direct') return what + 'Your Chatterbox server runs the ' + (m || 'unknown') + ' model, which takes no tags. Load Chatterbox-Turbo on it, on its own web page or with model.repo_id set to chatterbox-turbo in its config.yaml.';
   if (provider === 'openai_tts' && /multilingual|\bmtl\b/.test(hay)) return what + 'Chatterbox-Multilingual does not. Run Chatterbox-Turbo on your server.';
@@ -1548,7 +1623,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     if (p === 'elevenlabs') return 'ElevenLabs';
     if (p === 'fish_audio') return 'Fish Audio';
     if (p === 'google_tts' || p === 'google_vertex_tts') return 'Gemini';
-    if (p === 'openrouter_tts') return 'Gemini through OpenRouter';
+    if (p === 'openrouter_tts') return 'OpenRouter';
     if (p === 'chatterbox_direct') return 'Chatterbox, direct';
     return 'Chatterbox and other servers';
   }
@@ -1580,11 +1655,14 @@ export function setup(ctx: Ctx, overrides?: any) {
   function engineLimits(eng: Engine): string[] {
     const out: string[] = [];
     if (!eng.supported || !S.directorOn) return out;
-    // Off ElevenLabs, a big moment only lets the audience cheer, and only
+    // Off a direct ElevenLabs connection, a big moment only lets the audience
+    // cheer, since Stability cannot be sent through OpenRouter. It does that
     // when the audience is set to cheer on big moments. Otherwise it does
     // nothing, which is the only case worth saying.
-    if (S.bigMoments && !eng.eleven && !(S.applauseOn && S.applauseWhen === 'big'))
-      out.push('Big moments do nothing on this engine. Only ElevenLabs makes the voice stronger on a big moment. You can turn Big moments off.');
+    const conn = activeConnection();
+    const direct = eng.eleven && !!conn && String(conn.provider || '').toLowerCase() === 'elevenlabs';
+    if (S.bigMoments && !direct && !(S.applauseOn && S.applauseWhen === 'big'))
+      out.push('Big moments do nothing here. Only a direct ElevenLabs connection makes the voice stronger on a big moment. You can turn Big moments off.');
     if (!eng.singTag && !eng.singStyle) out.push('This engine cannot sing, so a sung line is spoken.');
     return out;
   }
@@ -1810,9 +1888,26 @@ export function setup(ctx: Ctx, overrides?: any) {
   }
 
   const voiceCache: Record<string, { voices: any[]; why: string }> = {};
-  async function loadVoices(connId: string): Promise<{ voices: any[]; why: string }> {
+  // The voices for a connection, and for the model a person uses on it.
+  // OpenRouter's voices depend on the model, so its list is the model's own.
+  function voiceKey(connId: string, model?: string): string {
+    const conn = connById(connId);
+    if (conn && String(conn.provider || '').toLowerCase() === 'openrouter_tts') return connId + '\u0001' + String(model || conn.model || '').toLowerCase();
+    return connId;
+  }
+  async function loadVoices(connId: string, model?: string): Promise<{ voices: any[]; why: string }> {
     if (!connId) return { voices: [], why: 'Pick your TTS connection in the Settings tab first.' };
-    if (voiceCache[connId]) return voiceCache[connId];
+    const key = voiceKey(connId, model);
+    if (voiceCache[key]) return voiceCache[key];
+    const conn = connById(connId);
+    if (conn && String(conn.provider || '').toLowerCase() === 'openrouter_tts') {
+      const own = openRouterVoices(String(model || conn.model || ''));
+      if (own) {
+        const out = { voices: own, why: own.length ? '' : 'Fish Audio through OpenRouter has no list of voices. Type a Fish Audio voice ID in the box below.' };
+        voiceCache[key] = out;
+        return out;
+      }
+    }
     if (connId === CBX_ID) {
       if (!cbxInfo) await readChatterbox();
       const out = { voices: (cbxInfo && cbxInfo.voices) || [], why: cbxInfo && !cbxInfo.voices.length ? cbxInfo.why || 'The Chatterbox server has no voices.' : '' };
@@ -1825,7 +1920,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       const j = await res.json();
       const voices = Array.isArray(j && j.voices) ? j.voices : [];
       const out = { voices, why: j && j.error ? 'Reading the voices on this connection failed. Lumiverse said: ' + String(j.error).slice(0, 200) : '' };
-      if (voices.length) voiceCache[connId] = out;
+      if (voices.length) voiceCache[key] = out;
       return out;
     } catch (e) {
       return { voices: [], why: netTrouble(e, 'Reading the voices on this connection') };
@@ -2024,7 +2119,7 @@ export function setup(ctx: Ctx, overrides?: any) {
   }
   async function pickVoiceFor(m: Member, conn: any): Promise<void> {
     if (!conn || pickOf(m, conn).voice) return;
-    const got = await loadVoices(conn.id);
+    const got = await loadVoices(conn.id, pickOf(m, conn).model || conn.model);
     if (!got.voices.length) return;
     const used = new Set((S.cast || []).map((c: Member) => pickOf(c, conn).voice).filter(Boolean));
     if (conn.voice) used.add(conn.voice);
@@ -2115,16 +2210,17 @@ export function setup(ctx: Ctx, overrides?: any) {
     const speed = m ? Number(m.speed) || 1 : 1;
     const own: Record<string, any> = (m && m.params) || {};
     const has = (k: string) => own[k] !== undefined && own[k] !== '';
-    if (eng.eleven) {
+    if (eng.eleven && provider === 'elevenlabs') {
       // Eleven v3 takes Stability only, and Eleven v4 Stability and
       // Similarity. Neither takes Speed, Style or Speaker boost, so those
-      // are not sent.
+      // are not sent. Lumiverse's OpenRouter connection sends only the text,
+      // the voice and the speed, so none of these reach it there.
       if (m) {
         params.stability = stabilityFor(model, m.stability, line.big);
         if (/^eleven_v4/.test(model)) params.similarity_boost = m.similarity;
       }
       if (has('lang')) params.language_code = own.lang;
-    } else if (speed !== 1 && provider !== 'google_tts' && provider !== 'google_vertex_tts' && provider !== 'openrouter_tts') {
+    } else if (!eng.eleven && speed !== 1 && provider !== 'google_tts' && provider !== 'google_vertex_tts' && provider !== 'openrouter_tts') {
       params.speed = speed;
     }
     if (provider === 'fish_audio') {
@@ -7446,7 +7542,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       return wrap;
     };
     const words = (k: string, label: string, ph: string, help: string, max?: number) => text(label, String(own[k] || ''), (v) => setP(k, v.trim()), ph, help, max);
-    if (eng.eleven) {
+    if (eng.eleven && prov === 'elevenlabs') {
       out.push(words('lang', 'Language', 'en, de, ja', 'Empty lets ElevenLabs tell from the text. A two-letter code, such as en or fr, makes it read the text in that language.'));
     }
     if (prov === 'fish_audio') {
@@ -7613,9 +7709,10 @@ export function setup(ctx: Ctx, overrides?: any) {
         vh.hidden = !got.why;
       };
       if (cn) {
-        if (voiceCache[cn.id]) fillVoices(voiceCache[cn.id]);
+        const vModel = pickOf(m, cn).model || cn.model;
+        if (voiceCache[voiceKey(cn.id, vModel)]) fillVoices(voiceCache[voiceKey(cn.id, vModel)]);
         else
-          loadVoices(cn.id).then((got) => {
+          loadVoices(cn.id, vModel).then((got) => {
             if (vs.isConnected) fillVoices(got);
           });
       } else {
@@ -7669,7 +7766,10 @@ export function setup(ctx: Ctx, overrides?: any) {
         save();
         drawVoice();
       });
-      if (eng.eleven) {
+      // OpenRouter is sent only the text, the voice and the speed, so the
+      // settings below show only on a connection they can reach.
+      const viaOpenRouter = String(cn.provider || '').toLowerCase() === 'openrouter_tts';
+      if (eng.eleven && !viaOpenRouter) {
         const model = pick.model || cn.model || '';
         if (/^eleven_v3/.test(model)) {
           voiceBox.appendChild(
@@ -7694,7 +7794,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       const g2 = el('<div class="af-grid2"></div>');
       // Only the settings the model takes. Eleven v4 takes Similarity, and
       // Eleven v3 does not.
-      if (eng.eleven && /^eleven_v4/.test(pick.model || cn.model || '')) {
+      if (eng.eleven && !viaOpenRouter && /^eleven_v4/.test(pick.model || cn.model || '')) {
         g2.appendChild(slider('Similarity', m.similarity, 0, 1, 0.05, (v) => v.toFixed(2), (v) => {
           m.similarity = v;
           save();
@@ -7702,7 +7802,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       }
       // Speed, in the range the engine takes. Gemini, Eleven v3 and Eleven
       // v4 have no speed.
-      if (!/^gemini/.test(eng.id) && !eng.eleven) {
+      if (!/^gemini/.test(eng.id) && !eng.eleven && !viaOpenRouter) {
         const lo = 0.5;
         const hi = 2;
         const at = Math.min(hi, Math.max(lo, Number(m.speed) || 1));
@@ -8687,7 +8787,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         const eng = engineFor(conn, conn.model);
         if (eng.supported) add(true, 'Its engine is ' + eng.label + '. ' + engineAbility(eng));
         for (const w of engineWarnings(eng, conn, conn.model)) add(false, w);
-        const v = await loadVoices(conn.id);
+        const v = await loadVoices(conn.id, conn.model);
         add(!!v.voices.length, v.voices.length ? v.voices.length + ' voices are available.' : v.why || 'No voices came back from ' + serviceName(conn) + '.');
       }
       // People who speak through a connection of their own.
@@ -9624,7 +9724,7 @@ export function setup(ctx: Ctx, overrides?: any) {
   };
 }
 
-export const __testing = { wavBlob, noConnectionWhy, perSentence, clipLevel, levelGain, voiceGender, describeWords, markText, movedFor, movedRowMark, MOVED_DEFAULTS, looksLikeDate, voicedFrames, wordWeight, partTimes, engineOf, noTagsWhy, colorCode, hexHsl, hslHex, computedHex, fitTag, tagSound, textFor, styleFor, stripTags, stabilityFor, ENGINES };
+export const __testing = { wavBlob, noConnectionWhy, perSentence, clipLevel, levelGain, voiceGender, describeWords, markText, movedFor, movedRowMark, MOVED_DEFAULTS, looksLikeDate, voicedFrames, wordWeight, partTimes, engineOf, noTagsWhy, openRouterVoices, colorCode, hexHsl, hslHex, computedHex, fitTag, tagSound, textFor, styleFor, stripTags, stabilityFor, ENGINES };
 
 // The built-in cheer: "Cheering and clapping crowd 1" by freesound_community,
 // a free sound from Pixabay (pixabay.com/sound-effects/people-cheering-and-clapping-crowd-1-5995/),

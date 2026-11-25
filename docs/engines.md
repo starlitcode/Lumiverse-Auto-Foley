@@ -17,7 +17,7 @@
 | Gemini 3.8 Flash TTS or Flash-Lite TTS | Only its own sound tags | Yes | No | Yes, with a note |
 | Chatterbox-Turbo | Only its nine sound tags | No | No | No |
 
-These are not used: ElevenLabs models older than v3, Fish Audio S1, Gemini models older than 3.8, OpenRouter models that are not Gemini 3.8, Chatterbox-Multilingual, Qwen3-TTS, and every other TTS provider. A line for someone on one of them is not spoken. The Stage tab, the Cast tab and **Check my setup** say which model to pick instead.
+These are not used: ElevenLabs models older than v3, Fish Audio S1, Gemini models older than 3.8, OpenRouter models other than those under [Through OpenRouter](#through-openrouter), Chatterbox-Multilingual, Qwen3-TTS, and every other TTS provider. A line for someone on one of them is not spoken. The Stage tab, the Cast tab and **Check my setup** say which model to pick instead.
 
 "No" under **Sounds inside a line** means the engine cannot make the sound of a door or rain itself. Its sounds are played as separate sound effects instead. See [Sounds](sounds.md).
 
@@ -104,11 +104,21 @@ Gemini 2.5 and 3.1:
 
 - Google shuts down the Gemini 2.5 and 3.1 TTS models on December 18, 2026, so Auto Foley does not use them. Pick Gemini 3.8 Flash TTS instead.
 
-Gemini through OpenRouter:
+### Through OpenRouter
 
-- An **OpenRouter TTS** connection in Lumiverse can run Gemini's TTS models, such as `google/gemini-3.8-flash-tts`. Auto Foley uses it the same as Gemini.
+An **OpenRouter TTS** connection in Lumiverse can run ElevenLabs, Fish Audio and Gemini models. Auto Foley reads their tags the same as on a direct connection.
+
+| Model on OpenRouter | Engine |
+| --- | --- |
+| `elevenlabs/eleven-v4`, `elevenlabs/eleven-v4-turbo`, `elevenlabs/eleven-v3`, `elevenlabs/eleven-v3-conversational` | ElevenLabs v3 or v4 |
+| `fish-audio/s2.1-pro`, `fish-audio/s2.1-pro-free` and Drama 3 | Fish Audio |
+| `google/gemini-3.8-flash-tts`, `google/gemini-3.8-flash-lite-tts` | Gemini 3.8 |
+
 - OpenRouter's other voice models do not act, so Auto Foley does not use them.
-- Through OpenRouter, a person's **More settings** has only their usual way of speaking, for Gemini 3.8. OpenRouter takes no temperature or language.
+- Lumiverse sends OpenRouter only the text, the voice and the speed. So through OpenRouter, Stability, Similarity, Speed, Language and Fish Audio's own settings are not shown, since they cannot be sent. Big moments only let the audience cheer.
+- A person's **More settings** has only their usual way of speaking, for Gemini 3.8.
+- Each model has its own voices on OpenRouter. ElevenLabs has 21, such as `george`, `sarah` and `river`. Gemini has its 30. Auto Foley picks from the model's own list.
+- Fish Audio on OpenRouter has no list of voices. Type a Fish Audio voice ID under **Or type a voice name or ID**, in the Cast tab. With none, the voice saved on the connection in Lumiverse is used.
 
 ### Chatterbox
 

@@ -6,7 +6,7 @@ import { join } from "node:path";
 import vm from "node:vm";
 import { __testing } from "../src/frontend";
 
-const { engineOf, noTagsWhy, colorCode, hexHsl, hslHex, computedHex, fitTag, tagSound, textFor, styleFor, stripTags, stabilityFor, ENGINES } = __testing;
+const { engineOf, noTagsWhy, openRouterVoices, colorCode, hexHsl, hslHex, computedHex, fitTag, tagSound, textFor, styleFor, stripTags, stabilityFor, ENGINES } = __testing;
 
 describe("which engine a connection runs", () => {
   test("ElevenLabs: v3 and v4 act, and the older models are not used", () => {
@@ -32,6 +32,29 @@ describe("which engine a connection runs", () => {
     }
     expect(Object.keys(ENGINES).sort()).toEqual(["chatterbox_turbo", "eleven_v3", "fish", "gemini"]);
     expect(engineOf({ provider: "google_tts" }, "gemini-2.0-flash").supported).toBe(false);
+  });
+
+  test("OpenRouter: ElevenLabs v3 and v4, Fish Audio S2.1 and Drama 3, and Gemini 3.8 act, and the rest are not used", () => {
+    const or = { provider: "openrouter_tts" };
+    for (const m of ["elevenlabs/eleven-v4", "elevenlabs/eleven-v4-turbo", "elevenlabs/eleven-v3", "elevenlabs/eleven-v3-conversational"]) expect(engineOf(or, m).id).toBe("eleven_v3");
+    for (const m of ["fish-audio/s2.1-pro", "fish-audio/s2.1-pro-free", "fish-audio/drama-3"]) expect(engineOf(or, m).id).toBe("fish");
+    expect(engineOf(or, "google/gemini-3.8-flash-tts").id).toBe("gemini");
+    for (const m of ["fish-audio/s1", "elevenlabs/eleven-multilingual-v2", "elevenlabs/eleven-flash-v2.5", "hexgrad/kokoro-82m", "openai/gpt-4o-mini-tts-2025-12-15"]) {
+      expect(engineOf(or, m).supported).toBe(false);
+      expect(noTagsWhy(or, m)).toContain("elevenlabs/eleven-v4");
+    }
+  });
+
+  test("OpenRouter voices come from the model's own list", () => {
+    const eleven = openRouterVoices("elevenlabs/eleven-v3");
+    expect(eleven.length).toBe(21);
+    expect(eleven.find((v: any) => v.id === "river").gender).toBe("neutral");
+    expect(eleven.every((v: any) => /^[a-z]+$/.test(v.id) && /^(male|female|neutral)$/.test(v.gender))).toBe(true);
+    const gemini = openRouterVoices("google/gemini-3.8-flash-tts");
+    expect(gemini.length).toBe(30);
+    expect(gemini.every((v: any) => /^(male|female)$/.test(v.gender))).toBe(true);
+    expect(openRouterVoices("fish-audio/s2.1-pro")).toEqual([]);
+    expect(openRouterVoices("openai/gpt-4o-mini-tts-2025-12-15")).toBe(null);
   });
 
   test("Chatterbox found by name on an OpenAI-style connection, and other engines not used", () => {

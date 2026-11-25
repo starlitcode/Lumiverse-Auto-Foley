@@ -1290,6 +1290,8 @@ if (section("connection list")) {
     { name: "no connections", list: [], want: /Lumiverse found no TTS connection on your account/, usable: false },
     { name: "only an unusable service", list: [{ id: "k1", name: "Read aloud", provider: "kokoro" }], want: /Lumiverse sent: Read aloud \(kokoro\)/, usable: false },
     { name: "Gemini through OpenRouter", list: [{ id: "o1", name: "Router voices", provider: "openrouter_tts", model: "google/gemini-3.8-flash-tts", has_api_key: true }], want: /Router voices/, usable: true },
+    { name: "ElevenLabs through OpenRouter", list: [{ id: "o2", name: "Router eleven", provider: "openrouter_tts", model: "elevenlabs/eleven-v4", has_api_key: true }], want: /Router eleven/, usable: true },
+    { name: "Fish Audio through OpenRouter", list: [{ id: "o3", name: "Router fish", provider: "openrouter_tts", model: "fish-audio/s2.1-pro", has_api_key: true }], want: /Router fish/, usable: true },
   ];
   for (const size of SIZES) {
     for (const c of cases) {
@@ -1308,6 +1310,24 @@ if (section("connection list")) {
       check(c.want.test(text), size.name + ", " + c.name + ": the Settings tab says so");
       check(/no TTS connection|None of your TTS connections/.test(text) === !c.usable, size.name + ", " + c.name + ": " + (c.usable ? "no warning, since it can be used" : "the warning shows"));
       if (c.name === "Gemini through OpenRouter") check(/Engine: Gemini 3\.8/.test(text), size.name + ": OpenRouter's Gemini 3.8 is read as Gemini 3.8");
+      if (c.name === "ElevenLabs through OpenRouter") check(/Engine: ElevenLabs v3 or v4/.test(text), size.name + ": OpenRouter's Eleven v4 is read as ElevenLabs");
+      if (c.name === "Fish Audio through OpenRouter") check(/Engine: Fish Audio/.test(text), size.name + ": OpenRouter's Fish Audio S2.1 is read as Fish Audio");
+      if (c.name === "ElevenLabs through OpenRouter") {
+        // In the Cast tab: the model's own voices, and no setting that
+        // cannot be sent through OpenRouter.
+        await page.click('.af-tab[data-tab="cast"]');
+        await page.waitForTimeout(300);
+        await page.locator(".af-person-head").nth(1).click();
+        await page.waitForTimeout(900);
+        const cast = await page.evaluate(() => {
+          const p = Array.from(document.querySelectorAll(".af-person")).find((x) => x.querySelector(".af-person-body:not([hidden])"));
+          const labels = Array.from(p.querySelectorAll(".af-lab")).map((x) => x.textContent.trim());
+          const opts = Array.from(p.querySelectorAll("select option")).map((o) => o.textContent);
+          return { labels, opts };
+        });
+        check(cast.opts.some((o) => /^George/.test(o)) && !cast.opts.some((o) => /OpenAI|Alloy/i.test(o)), size.name + ": the voice list is ElevenLabs' own on OpenRouter (" + cast.opts.slice(0, 4).join(", ") + ")");
+        check(["Stability", "Similarity", "Speed"].every((x) => cast.labels.indexOf(x) < 0), size.name + ": no Stability, Similarity or Speed, which OpenRouter cannot be sent (" + cast.labels.join(", ") + ")");
+      }
       const m = await page.evaluate(MEASURE, true);
       check(!m.overflow.length, size.name + ", " + c.name + ": nothing runs off the side. " + m.overflow.slice(0, 2).join("; "));
       check(!errors.length, size.name + ", " + c.name + ": no console errors. " + errors.slice(0, 2).join("; "));

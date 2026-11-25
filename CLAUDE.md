@@ -126,6 +126,12 @@ Two skills are available. Load them before starting work.
 - The engine is found from the connection's provider and model by
   `engineOf`. Chatterbox runs behind an OpenAI-style connection, so it is
   found by name. **What this connection runs** in Settings overrides it.
+- OpenRouter serves ElevenLabs v3 and v4, Fish Audio S2.1 and Drama 3, and
+  Gemini 3.8, which `engineOf` reads as those engines. Lumiverse sends
+  OpenRouter only the text, the voice and the speed, so engine settings are
+  hidden there. Voices come from the model's own list, `openRouterVoices`,
+  taken from OpenRouter's model pages, since Lumiverse lists the same few
+  voices for every OpenRouter model.
 - The Director writes every tag in square brackets. `textFor` fits each line
   to the engine of the person who says it, just before it is sent: free tags,
   a closed list (Gemini 3.8 in angle brackets, Chatterbox-Turbo in square
