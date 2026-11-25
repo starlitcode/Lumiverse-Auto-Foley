@@ -12,7 +12,7 @@ _Not yet released_
 
 ### Added
 
-- **Colors for the player and the lit word**, in the Settings tab. Under **A player under each message**, pick the player's accent, background, and text and icons. Under **Light up words in the chat**, pick the color of the lit word and how strong it is. Each color has its own editor: type a code such as #ff0040, move the hue, saturation and lightness sliders, or take one of your theme's colors. **Use the theme's color** goes back to your theme.
+- **Colors for the player and the lit word**, in the Settings tab. Under **A player under each message**, pick the player's accent, background, and text and icons. Under **Light up words in the chat**, pick the color of the lit word and how strong it is. Each color has its own editor: type a code such as #ff0040, or move the hue, saturation and lightness sliders. **Use the theme's color** goes back to your theme.
 - **More vocal sounds for Gemini 3.8**: moan, growl, grunt, hiss, scream, shout, shriek, cheer and phew, from Google's own list.
 - **Saved audio**, on the Stage tab. It lists every message with a saved script, newest first, with whose script it is, the day and its first line. **Play**, **Download** and **Delete** are on each row. Play and Download use only saved audio, so nothing is spent.
 - **A player under each message**, on by default. A message Auto Foley has performed gets a small player under its text, where Lumiverse puts its own. It has Back, Play and Next, and a line you tap to go to any point. It says which part is playing, and plays the saved audio again with nothing spent. It follows your theme: its colors, the message font, and the side and alignment of the message text, centered too.

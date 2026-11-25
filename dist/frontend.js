@@ -919,7 +919,6 @@ const PANEL_CSS = `
 .af.af input.af-colorrange[type="range"]::-moz-range-progress { background: transparent; }
 .af.af input.af-colorrange[type="range"]::-webkit-slider-thumb { width: 22px; height: 22px; margin-top: -5px; border: 3px solid #fff; border-radius: 50%; background: var(--af-thumb, #fff); box-shadow: 0 0 0 1px rgba(0,0,0,.35), 0 2px 6px rgba(0,0,0,.4); }
 .af.af input.af-colorrange[type="range"]::-moz-range-thumb { width: 16px; height: 16px; border: 3px solid #fff; border-radius: 50%; background: var(--af-thumb, #fff); box-shadow: 0 0 0 1px rgba(0,0,0,.35), 0 2px 6px rgba(0,0,0,.4); }
-.af-colordot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; vertical-align: -1px; border: 1px solid var(--af-line); }
 .af-wordsample { padding: 0 2px; border-radius: 3px; background-color: var(--af-word, var(--lumiverse-primary-020, rgba(147,112,219,.3))); }
 .af-mpsample { pointer-events: none; }
 @media (pointer: coarse) { .af-colorswatch { width: 52px; height: 36px; } .af.af input.af-colorrange[type="range"] { height: 36px; } .af-colorcode { height: 36px; } }
@@ -3980,7 +3979,7 @@ export function setup(ctx, overrides) {
                     ? 'Writing the script'
                     : 'Getting the script'
                 : mine
-                    ? (paused ? 'Paused · ' : '') + 'Part ' + (at + 1) + ' of ' + total + (show.saved.has(at) ? ' · saved' : '')
+                    ? (paused ? 'Paused · ' : '') + 'Part ' + (at + 1) + ' of ' + total
                     : 'Auto Foley';
             setText(box.querySelector('[data-af-mp="text"]'), text);
             paintPlayerBar(box, mine);
@@ -4825,9 +4824,8 @@ export function setup(ctx, overrides) {
     }
     // A color with its own editor rather than the browser's color input, which
     // on a phone often has no way to type a code. The swatch opens the editor
-    // under the row: a box for a code such as #ff0040, sliders for hue,
-    // saturation and lightness, and the theme's own colors to pick from.
-    // Use the theme's color clears it.
+    // under the row: a box for a code such as #ff0040, and sliders for hue,
+    // saturation and lightness. Use the theme's color clears it.
     function colorRow(key, label, help, themeVar, fallback) {
         const wrap = el('<div class="af-col"></div>');
         wrap.setAttribute('data-af-row', key);
@@ -4874,20 +4872,6 @@ export function setup(ctx, overrides) {
             shown[part] = line.lastElementChild;
             inner.appendChild(line);
         }
-        const picks = el('<div class="af-row"></div>');
-        for (const [name, v, b] of [
-            ['Accent', '--lumiverse-primary', '#9370db'],
-            ['Text', '--lumiverse-text', '#eeeeee'],
-            ['Card', '--lumiverse-bg-elevated', '#231e30'],
-        ]) {
-            const one = button(name, () => take(themeHex(v, b), true));
-            one.setAttribute('data-af-colorpick', name.toLowerCase());
-            const dot = el('<span class="af-colordot"></span>');
-            dot.style.background = 'var(' + v + ',' + b + ')';
-            one.insertBefore(dot, one.firstChild);
-            picks.appendChild(one);
-        }
-        inner.appendChild(picks);
         wrap.appendChild(editor);
         // The sliders keep their own hue, saturation and lightness. A code holds
         // less: hue 360 is the same red as hue 0, and with no saturation there is

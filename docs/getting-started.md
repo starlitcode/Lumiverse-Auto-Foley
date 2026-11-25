@@ -195,7 +195,7 @@ The player under a message and the lit word use your theme's colors. You can pic
 To pick a color:
 
 1. Tap the swatch beside the name. The editor opens under it.
-2. Type a color code such as `#ff0040`, move the **Hue**, **Saturation** and **Lightness** sliders, or tap **Accent**, **Text** or **Card** to take your theme's color.
+2. Type a color code such as `#ff0040`, or move the **Hue**, **Saturation** and **Lightness** sliders.
 3. **Use the theme's color** goes back to your theme.
 
 The colors are saved with your settings, under your account.
