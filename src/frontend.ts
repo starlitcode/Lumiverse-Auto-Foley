@@ -1337,7 +1337,19 @@ textarea.af-tall { min-height: 260px; }
 .af-group-empty { margin: 0; color: var(--af-muted); font-size: 12.5px; }
 .af-person-top { display: flex; align-items: center; gap: 2px; }
 .af-person-top > .af-person-head { flex: 1 1 auto; min-width: 0; }
-.af-person-top > .af-pick { flex: none; margin: 0 6px 0 2px; }
+.af-person-top > .af-pick { flex: none; margin: 0 8px 0 6px; }
+/* A tick box, the same as Auto Retry's: two sides of a square, turned, which
+   lands with a small spring. On a touch screen the box answers a tap a
+   little way around it, so the place to tap is 32 pixels. */
+.af-tick { -webkit-appearance: none; appearance: none; position: relative; width: 20px; height: 20px; border-radius: var(--lumiverse-radius-sm, 5px); background: var(--lumiverse-fill, rgba(0,0,0,.15)); border: 1px solid var(--lumiverse-border, rgba(128,128,128,.25)); cursor: pointer; transition: background-color var(--lumiverse-transition-fast, 150ms ease), border-color var(--lumiverse-transition-fast, 150ms ease); }
+.af-tick::after { content: ""; position: absolute; left: 6px; top: 2px; width: 5px; height: 10px; border: solid var(--lumiverse-primary, rgba(147,112,219,.9)); border-width: 0 2px 2px 0; transform-origin: center; transform: rotate(45deg) scale(.3); opacity: 0; transition: transform 300ms cubic-bezier(.34,1.56,.64,1), opacity var(--lumiverse-transition-fast, 150ms ease); }
+.af-tick:checked { background: var(--lumiverse-primary-020, rgba(147,112,219,.2)); border-color: var(--lumiverse-primary-050, rgba(147,112,219,.5)); }
+.af-tick:checked::after { transform: rotate(45deg) scale(1); opacity: 1; }
+.af-tick:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--af-accent-soft); }
+@media (hover: hover) { .af-tick:hover { box-shadow: 0 0 0 3px var(--lumiverse-primary-020, rgba(147,112,219,.2)); } }
+@media (pointer: coarse) { .af-tick::before { content: ""; position: absolute; inset: -6px; } }
+@media (prefers-reduced-motion: reduce) { .af-tick, .af-tick::after { transition: none; } }
+html[data-af-still] .af-tick, html[data-af-still] .af-tick::after { transition: none; }
 .af-pickbar { gap: 8px; padding-top: 4px; }
 .af-grip { flex: none; display: grid; place-items: center; width: 26px; min-height: 40px; border-radius: var(--af-r-sm); color: var(--af-muted); cursor: grab; touch-action: none; user-select: none; -webkit-user-select: none; }
 .af-grip svg { width: 16px; height: 16px; }
@@ -7582,7 +7594,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     } else bar.appendChild(hint('Make a group with New group to put people in it.'));
     paintPicked = () => {
       const n = pickable().filter((m) => castPicked.has(m.id)).length;
-      count.textContent = n === 0 ? 'Nobody is selected. Tap the switch beside a person.' : n + (n === 1 ? ' person is' : ' people are') + ' selected.';
+      count.textContent = n === 0 ? 'Nobody is selected. Tick the box beside a person.' : n + (n === 1 ? ' person is' : ' people are') + ' selected.';
       remove.disabled = n === 0;
       if (move) move.disabled = n === 0;
       const allOn = pickable().length > 0 && pickable().every((m) => castPicked.has(m.id));
@@ -7856,14 +7868,13 @@ export function setup(ctx: Ctx, overrides?: any) {
     const body = c.querySelector('.af-person-body') as HTMLElement;
     const inner = c.querySelector('.af-person-inner') as HTMLElement;
     const grip = c.querySelector('.af-grip') as HTMLElement;
-    // While picking, a switch stands where the dots are. The narrator gets
+    // While picking, a tick box stands where the dots are. The narrator gets
     // none, since it cannot be removed.
     if (castSelecting) {
       if (m.kind !== 'narrator') {
         const pick = document.createElement('input');
         pick.type = 'checkbox';
-        pick.className = 'af-box af-pick';
-        pick.setAttribute('role', 'switch');
+        pick.className = 'af-tick af-pick';
         pick.setAttribute('data-af-pick', m.id);
         pick.setAttribute('aria-label', 'Select ' + shownName(m));
         pick.checked = castPicked.has(m.id);

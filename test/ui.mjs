@@ -2369,7 +2369,7 @@ if (section("select several")) {
     });
     await page.click('.af-tab[data-tab="cast"]');
     await page.waitForTimeout(400);
-    check(!(await page.$("[data-af-pickbar]")) && !(await page.$("[data-af-pick]")), where + ": no switches or bar until Select is pressed");
+    check(!(await page.$("[data-af-pickbar]")) && !(await page.$("[data-af-pick]")), where + ": no tick boxes or bar until Select is pressed");
     await page.click("[data-af-select]");
     // The bar fades in and slides, rather than appearing at once.
     const fading = await page.evaluate(async () => {
@@ -2385,7 +2385,9 @@ if (section("select several")) {
     await page.waitForTimeout(500);
     check((await page.evaluate(() => Number(getComputedStyle(document.querySelector("[data-af-pickbar]")).opacity))) === 1, where + ": and ends fully shown");
     const picks = await page.evaluate(() => Array.from(document.querySelectorAll("[data-af-pick]")).map((b) => b.getAttribute("data-af-pick")));
-    check(picks.sort().join(",") === "a,b,c", where + ": every person but the narrator has a switch (" + picks.join(",") + ")");
+    check(picks.sort().join(",") === "a,b,c", where + ": every person but the narrator has a tick box (" + picks.join(",") + ")");
+    const tick = await page.evaluate(() => { const b = document.querySelector("[data-af-pick]"); return { type: b.type, role: b.getAttribute("role"), w: b.getBoundingClientRect().width, look: getComputedStyle(b).appearance }; });
+    check(tick.type === "checkbox" && tick.role === null && tick.w === 20 && tick.look === "none", where + ": it is a tick box drawn like Auto Retry's, not a switch (" + JSON.stringify(tick) + ")");
     const start = await page.evaluate(() => ({ said: document.querySelector("[data-af-pickcount]").textContent, off: document.querySelector("[data-af-pickremove]").disabled }));
     check(/Nobody is selected/.test(start.said) && start.off, where + ": with nobody picked it says so, and Remove cannot be pressed");
     // Two people go in the group.
@@ -2406,9 +2408,15 @@ if (section("select several")) {
     await page.waitForTimeout(150);
     const look = await page.evaluate((touch) => {
       const small = [];
-      for (const n of document.querySelectorAll("[data-af-pickbar] button, [data-af-pickbar] select, [data-af-pick]")) {
+      for (const n of document.querySelectorAll("[data-af-pickbar] button, [data-af-pickbar] select")) {
         const h = n.getBoundingClientRect().height;
-        if (touch && h < 32) small.push((n.textContent || n.getAttribute("aria-label") || n.tagName).trim().slice(0, 20) + ":" + h);
+        if (touch && h < 32) small.push((n.textContent || n.tagName).trim().slice(0, 20) + ":" + h);
+      }
+      // A tick box answers a tap 6 pixels around it on a touch screen, as in
+      // Auto Retry, so the place to tap is its size plus 12.
+      for (const n of document.querySelectorAll("[data-af-pick]")) {
+        const reach = n.getBoundingClientRect().height - 2 * (parseFloat(getComputedStyle(n, "::before").top) || 0);
+        if (touch && reach < 32) small.push((n.getAttribute("aria-label") || "tick").slice(0, 20) + ":" + reach);
       }
       return { small, side: document.documentElement.scrollWidth > window.innerWidth + 1 };
     }, size.touch);
