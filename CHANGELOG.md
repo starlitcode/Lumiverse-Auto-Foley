@@ -12,6 +12,8 @@ _Not yet released_
 
 ### Added
 
+- **Second Director**, on the Director tab. When the Director refuses or sends back nothing usable, a second connection you pick is asked. If it fails too, the message is read as written.
+- **Saved scripts and saved audio are named on screen.** Now playing says "Saved script" when the Director was not asked again, and how many lines played from saved audio. The floating player adds "saved" to the part number.
 - **Input price and Output price, per million tokens**, in the Director tab, the same as in Auto Refine and Auto Retry. Now playing says how many input and output tokens the script used, and with a price set, what it cost. Paste your provider's whole price line if you like.
 - **A guide to writing for each voice engine**, on GitHub. It says what to write in **How they speak** and the notes for ElevenLabs, Fish Audio, Gemini and Chatterbox, with one example followed through every engine.
 - **A Contributing page**, on GitHub, with what to put in a bug report and how to build the debug report.

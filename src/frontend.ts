@@ -1238,6 +1238,8 @@ interface Script {
   log: string[];
   directed: boolean;
   added: string[];
+  // Played from the script kept for this message, without asking the Director.
+  fromKept?: boolean;
 }
 
 // A short mark of some text, so a change to it can be noticed. Auto Retry and
@@ -1291,6 +1293,8 @@ const DEFAULTS: any = {
   reduceMotion: false,
   directorOn: true,
   directorConnection: '',
+  backupOn: false,
+  backupConnection: '',
   strength: 'natural',
   tagsOn: true,
   breathsOn: true,
@@ -1885,6 +1889,8 @@ export function setup(ctx: Ctx, overrides?: any) {
     voiced: Map<number, boolean[]>;
     // Which voice says each voice clip, by part, once its level is known.
     voiceKeys: Map<number, string>;
+    // The voice parts played from saved audio, so the panel can say so.
+    saved: Set<number>;
     // The voices already said in the Log to be turned down.
     toldLevel: Set<string>;
     // Set by Back, so the loop plays the part it was moved to.
@@ -2045,7 +2051,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     return { body, sig, conn };
   }
 
-  async function makeVoiceClip(line: Line, signal: AbortSignal, onWait?: (ms: number, n: number) => void): Promise<{ blob?: Blob | string; why?: string }> {
+  async function makeVoiceClip(line: Line, signal: AbortSignal, onWait?: (ms: number, n: number) => void): Promise<{ blob?: Blob | string; why?: string; saved?: boolean }> {
     const req = await voiceRequest(line);
     if (!req.body) return { why: req.why };
     const body = req.body;
@@ -2060,7 +2066,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         const r = await rpc({ type: 'clip_get', sig }, 5000);
         if (r && r.found && r.base64) {
           keptUsed++;
-          return { blob: base64ToBlob(r.base64, r.mime || 'audio/mpeg') };
+          return { blob: base64ToBlob(r.base64, r.mime || 'audio/mpeg'), saved: true };
         }
       } catch (_) {}
     }
@@ -2182,6 +2188,9 @@ export function setup(ctx: Ctx, overrides?: any) {
               if (ms) sh.waiting.set(k, { until: Date.now() + ms, n });
               else sh.waiting.delete(k);
               if (show === sh && sh.index === k) paintStage();
+            }).then((r) => {
+              if (r && r.saved) sh.saved.add(k);
+              return r;
             })
           : it.kind === 'applause'
             ? makeApplauseClip()
@@ -2901,6 +2910,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       waiting: new Map(),
       voiced: new Map(),
       voiceKeys: new Map(),
+      saved: new Set(),
       toldLevel: new Set(),
       failed: [],
     };
@@ -5126,7 +5136,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     }
     setText(q('who'), name || (busyMessage ? (directorWriting ? 'Writing the script' : 'Getting the script') : playerWhose === 'mine' ? 'Your latest message' : 'The latest reply'));
     // The On air light says whether it is playing, so this says only where.
-    const partOf = show ? 'Part ' + (Math.min(show.index, total - 1) + 1) + ' of ' + total : '';
+    const partOf = show ? 'Part ' + (Math.min(show.index, total - 1) + 1) + ' of ' + total + (show.saved.has(show.index) ? ' · saved' : '') : '';
     setText(q('cap'), show ? (paused ? 'Paused · ' + partOf.toLowerCase() : partOf) : busyMessage ? 'Getting ready' : 'Ready');
     setText(q('sub'), chatInfo.kind === 'none' ? 'No chat open' : chatInfo.name || 'This chat');
     // The bar under Play, for where in the part playing it is. Painted on a
@@ -5750,8 +5760,17 @@ export function setup(ctx: Ctx, overrides?: any) {
     const used = q('used');
     const sc0 = currentScript();
     const n = sc0 ? Number(sc0.sent) || 0 : 0;
-    used.hidden = !n;
-    if (n) {
+    // A saved script and saved audio are said in words, so it is plain that
+    // nothing new was asked for or spent.
+    // After the message ends, the last show still says it, while it is the
+    // script shown.
+    const sv = show || (lastShow && sc0 && lastShow.script.messageId === sc0.messageId ? lastShow : null);
+    const voiceParts = sv ? sv.items.filter((x) => x.kind === 'voice').length : 0;
+    const savedSaid = sv && sv.saved.size ? ' ' + sv.saved.size + ' of ' + voiceParts + (voiceParts === 1 ? ' line' : ' lines') + (show ? ' so far' : '') + ' played from saved audio, with nothing spent.' : '';
+    used.hidden = !n && !(sc0 && sc0.fromKept) && !savedSaid;
+    if (sc0 && sc0.fromKept) setText(used, 'Saved script. The Director was not asked again.' + savedSaid);
+    else if (!n) setText(used, savedSaid.trim());
+    else {
       // Input and output, the same two words the prices are named after.
       const word = (x: number) => (sc0!.counted === false ? 'about ' : '') + x.toLocaleString();
       const back = Number(sc0!.back) || 0;
@@ -5759,7 +5778,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       // in the Director tab.
       const priced = (n / 1e6) * (Number(S.costIn) || 0) + (back / 1e6) * (Number(S.costOut) || 0);
       const cost = Number(sc0!.cost) > 0 ? Number(sc0!.cost) : priced;
-      setText(used, 'This script used ' + word(n) + ' input tokens and ' + word(back) + ' output tokens.' + (cost > 0 ? ' Cost: about ' + money(cost) + '.' : ''));
+      setText(used, 'This script used ' + word(n) + ' input tokens and ' + word(back) + ' output tokens.' + (cost > 0 ? ' Cost: about ' + money(cost) + '.' : '') + savedSaid);
     }
     stageRefs.retryRow.hidden = !(lastFailed && !show && !busyMessage);
     const title = q('title');
@@ -7014,9 +7033,13 @@ export function setup(ctx: Ctx, overrides?: any) {
       const opts: { id: string; label: string; group?: string }[] = [{ id: '', label: 'Your default connection' + (def ? ' (' + (def.name || def.model) + ')' : '') }].concat(
         list.filter((c) => c !== twin).map((c) => ({ id: c.id, label: c.name + (c.model ? ' (' + c.model + ')' : ''), group: c.provider ? providerName(c.provider) : undefined })),
       );
-      if (S.directorConnection && !(def && S.directorConnection === def.id) && !opts.some((o) => o.id === S.directorConnection)) opts.push({ id: S.directorConnection, label: 'A connection that is gone' });
-      connBox.appendChild(select('Which connection', opts, def && S.directorConnection === def.id ? '' : S.directorConnection, (v) => set({ directorConnection: v }), 'Any connection you set up in Lumiverse. The first choice is your default connection. ' + (llmWhy || '')));
+      const withGone = (picked: string) =>
+        picked && !(def && picked === def.id) && !opts.some((o) => o.id === picked) ? opts.concat([{ id: picked, label: 'A connection that is gone' }]) : opts;
+      connBox.appendChild(select('Which connection', withGone(S.directorConnection), def && S.directorConnection === def.id ? '' : S.directorConnection, (v) => set({ directorConnection: v }), 'Any connection you set up in Lumiverse. The first choice is your default connection. ' + (llmWhy || '')));
+      backBox.innerHTML = '';
+      backBox.appendChild(select('Second Director’s connection', withGone(S.backupConnection), def && S.backupConnection === def.id ? '' : S.backupConnection, (v) => set({ backupConnection: v }), 'Pick a different connection from the first, such as another provider. The same one is not asked twice.'));
     };
+    const backBox = el('<div></div>');
     drawConn();
     if (!llmConnections) {
       rpc({ type: 'list_connections' }, 15000).then(
@@ -7033,6 +7056,9 @@ export function setup(ctx: Ctx, overrides?: any) {
       );
     }
     model.appendChild(connBox);
+    model.appendChild(
+      toggle('Second Director', 'Off by default. When the Director refuses or sends back nothing usable, a second connection is asked. If it fails too, the message is read as written.', 'backupOn', undefined, () => [backBox]),
+    );
     model.appendChild(
       select('Let it think first', [
         { id: 'off', label: 'No, keep it quick' },

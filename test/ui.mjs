@@ -132,8 +132,9 @@ function answer(msg) {
       // A check can hold the answer, and send the note that the Director is
       // being asked, as the backend does when no kept script is found.
       if (window.__directingAt != null) setTimeout(() => backendFns.forEach((fn) => fn({ type: 'directing', messageId: msg.messageId })), window.__directingAt);
-      if (window.__directHold) return setTimeout(() => reply({ type: 'script', script: SCRIPT }), window.__directHold);
-      return reply({ type: 'script', script: SCRIPT });
+      const sc = window.__fromKept ? Object.assign({}, SCRIPT, { fromKept: true }) : SCRIPT;
+      if (window.__directHold) return setTimeout(() => reply({ type: 'script', script: sc }), window.__directHold);
+      return reply({ type: 'script', script: sc });
     }
     case 'sound': return reply({ type: 'sound', base64: 'AAAA', mime: 'audio/mpeg' });
     case 'list_connections': return reply({ type: 'connections', list: window.__llmList || [{ id: 'l1', name: 'Fast helper with a very long connection name for testing', model: 'maker/tiny-fast-model' }] });
@@ -930,6 +931,19 @@ if (section("script status")) {
     check(!errors.length, "no console errors. " + errors.slice(0, 2).join("; "));
     await context.close();
   }
+  {
+    // A script played from what was kept says so.
+    const { context, page, errors } = await open(THEMES[0], SIZES[0]);
+    await page.evaluate(() => { window.__fromKept = true; });
+    await page.click('.af-tab[data-tab="stage"]');
+    await page.waitForTimeout(150);
+    await page.click('#mount [data-af-slot="message"]');
+    await page.waitForTimeout(300);
+    const used = (await page.locator('[data-af="used"]').textContent()) || "";
+    check(used.startsWith("Saved script. The Director was not asked again."), "a saved script says so in Now playing (" + used + ")");
+    check(!errors.length, "no console errors. " + errors.slice(0, 2).join("; "));
+    await context.close();
+  }
   const { context, page, errors } = await open(THEMES[0], SIZES[0]);
   await page.click('.af-tab[data-tab="director"]');
   await page.waitForTimeout(150);
@@ -1080,6 +1094,10 @@ if (section("kept")) {
   await page.click('#mount [data-af-slot="message"]');
   await page.waitForTimeout(1500);
   check((await page.evaluate(() => (window.__synth || []).length)) === made, "playing it again makes nothing new");
+  await page.click('.af-tab[data-tab="stage"]');
+  await page.waitForTimeout(200);
+  const savedSaid = (await page.locator('[data-af="used"]').textContent()) || "";
+  check(/\d+ of \d+ lines?(?: so far)? played from saved audio, with nothing spent\./.test(savedSaid), "Now playing says the lines came from saved audio (" + savedSaid + ")");
   await page.click('.af-tab[data-tab="settings"]');
   await page.waitForTimeout(300);
   check((await page.locator('[data-af="kept"]').textContent()).includes("Kept now: " + made), "Settings says how much is kept");

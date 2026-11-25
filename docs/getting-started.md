@@ -154,6 +154,7 @@ With **Keep made audio** on, in the Settings tab:
 - Going back to a chat later, even after closing Lumiverse, and pressing the button plays the kept lines. Nothing is spent on them, and the Log says how many were kept.
 - A message is directed once. After that, Play uses its kept script until the message's words change, even after you change a setting, update Auto Foley or restart Lumiverse.
 - To direct a message again with your new settings, press **Direct again** on the Stage tab.
+- **Now playing** says when it uses what was saved: "Saved script. The Director was not asked again." and how many lines played from saved audio. The floating player adds "saved" to the part number.
 - A line is made again only when something about it changed, such as the voice, the model or the words.
 - The last 300 scripts are kept. The oldest go first.
 - **Up to 100 MB** is the default. When the total passes it, the oldest lines go first.

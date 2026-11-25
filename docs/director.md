@@ -71,6 +71,16 @@ With **How sounds are made** set to **In the voice**, the Director answers, and 
 
 If the Director had sent line 3 as "Is it always this noisy?", the word check fails. Line 3 is then read as written, "Is it always this loud?", and **Now playing** says why under the line while it plays.
 
+## A second Director
+
+**Second Director**, on the Director tab under **Which connection**, is off by default.
+
+- When the Director refuses, or sends back nothing it can use after every ask, a second connection is asked.
+- It gets the same request, and the same number of asks.
+- Pick a different connection from the first, such as another provider. The same connection is not asked twice.
+- If the second Director also fails, the message is read as written, so it still plays. The Log says what each one did.
+- Stop cancels whichever Director is being asked.
+
 ## The switches
 
 All on the Director tab:

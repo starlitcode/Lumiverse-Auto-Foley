@@ -26,6 +26,8 @@ const DEFAULT_SETTINGS = {
     reduceMotion: false,
     directorOn: true,
     directorConnection: '',
+    backupOn: false,
+    backupConnection: '',
     strength: 'natural',
     tagsOn: true,
     breathsOn: true,
@@ -394,6 +396,8 @@ function cleanSettings(raw) {
         reduceMotion: bool(r.reduceMotion, d.reduceMotion),
         directorOn: bool(r.directorOn, d.directorOn),
         directorConnection: str(r.directorConnection, 80),
+        backupOn: bool(r.backupOn, d.backupOn),
+        backupConnection: str(r.backupConnection, 80),
         strength: pick(r.strength, ['subtle', 'natural', 'dramatic'], d.strength),
         tagsOn: bool(r.tagsOn, d.tagsOn),
         breathsOn: bool(r.breathsOn, d.breathsOn),
@@ -2645,7 +2649,7 @@ async function direct(userId, p) {
             // Found under an older key, it is kept under this one from now on.
             if (kept.key !== key)
                 keepScript(uid, Object.assign({}, kept, { key }));
-            return Object.assign({}, kept, { key, added: [], log: kept.log.concat('Played from the copy directed before.') });
+            return Object.assign({}, kept, { key, added: [], fromKept: true, log: kept.log.concat('Played from the copy directed before.') });
         }
     }
     const script = {
@@ -2764,14 +2768,22 @@ async function direct(userId, p) {
     send(userId, { type: 'directing', messageId });
     const run = { stopped: false, ctl: null };
     (directRuns[uid] = directRuns[uid] || new Set()).add(run);
-    let firstTry;
+    let answer = null;
     try {
-        firstTry = await askDirector(userId, s, payload, s.directorConnection, script, run);
+        answer = (await askDirector(userId, s, payload, s.directorConnection, script, run)).answer;
+        // The second Director, on another connection, gets the same request
+        // with a fresh count of asks. When it also sends back nothing usable,
+        // the message is read as written, so it still plays.
+        if (!answer && !run.stopped && s.backupOn && s.backupConnection !== s.directorConnection) {
+            script.log.push('The second Director was asked.');
+            answer = (await askDirector(userId, s, payload, s.backupConnection, script, run)).answer;
+            if (answer)
+                script.log.push('The second Director directed the message.');
+        }
     }
     finally {
         directRuns[uid].delete(run);
     }
-    const answer = firstTry.answer;
     if (!answer)
         script.log.push('The message is read as written.');
     const done = applyDirection(segs, answer, s.cast, author, fixed, rules);

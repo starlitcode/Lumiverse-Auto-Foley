@@ -81,6 +81,10 @@ interface Settings {
   // The Director.
   directorOn: boolean;
   directorConnection: string;
+  // A second Director, asked when the first sends back no script it can use.
+  // Empty asks the default connection.
+  backupOn: boolean;
+  backupConnection: string;
   strength: Strength;
   tagsOn: boolean;
   breathsOn: boolean;
@@ -222,6 +226,8 @@ const DEFAULT_SETTINGS: Settings = {
   reduceMotion: false,
   directorOn: true,
   directorConnection: '',
+  backupOn: false,
+  backupConnection: '',
   strength: 'natural',
   tagsOn: true,
   breathsOn: true,
@@ -581,6 +587,8 @@ function cleanSettings(raw: any): Settings {
     reduceMotion: bool(r.reduceMotion, d.reduceMotion),
     directorOn: bool(r.directorOn, d.directorOn),
     directorConnection: str(r.directorConnection, 80),
+    backupOn: bool(r.backupOn, d.backupOn),
+    backupConnection: str(r.backupConnection, 80),
     strength: pick(r.strength, ['subtle', 'natural', 'dramatic'] as const, d.strength),
     tagsOn: bool(r.tagsOn, d.tagsOn),
     breathsOn: bool(r.breathsOn, d.breathsOn),
@@ -1522,6 +1530,8 @@ interface Script {
   key: string;
   // The engine it was directed for. Scripts kept by an older version have none.
   engine?: string;
+  // Set on a script played from what was kept, never stored.
+  fromKept?: boolean;
   messageId: string;
   author: string;
   lines: DirectedLine[];
@@ -2888,7 +2898,7 @@ async function direct(userId: string | undefined, p: any): Promise<Script> {
     if (kept) {
       // Found under an older key, it is kept under this one from now on.
       if (kept.key !== key) keepScript(uid, Object.assign({}, kept, { key }));
-      return Object.assign({}, kept, { key, added: [], log: kept.log.concat('Played from the copy directed before.') });
+      return Object.assign({}, kept, { key, added: [], fromKept: true, log: kept.log.concat('Played from the copy directed before.') });
     }
   }
   const script: Script = {
@@ -3003,13 +3013,20 @@ async function direct(userId: string | undefined, p: any): Promise<Script> {
   send(userId, { type: 'directing', messageId });
   const run: DirectRun = { stopped: false, ctl: null };
   (directRuns[uid] = directRuns[uid] || new Set()).add(run);
-  let firstTry: { answer: any };
+  let answer: any = null;
   try {
-    firstTry = await askDirector(userId, s, payload, s.directorConnection, script, run);
+    answer = (await askDirector(userId, s, payload, s.directorConnection, script, run)).answer;
+    // The second Director, on another connection, gets the same request
+    // with a fresh count of asks. When it also sends back nothing usable,
+    // the message is read as written, so it still plays.
+    if (!answer && !run.stopped && s.backupOn && s.backupConnection !== s.directorConnection) {
+      script.log.push('The second Director was asked.');
+      answer = (await askDirector(userId, s, payload, s.backupConnection, script, run)).answer;
+      if (answer) script.log.push('The second Director directed the message.');
+    }
   } finally {
     directRuns[uid].delete(run);
   }
-  const answer = firstTry.answer;
   if (!answer) script.log.push('The message is read as written.');
 
   const done = applyDirection(segs, answer, s.cast, author, fixed, rules);

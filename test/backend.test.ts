@@ -1352,6 +1352,7 @@ describe("a message is directed once", () => {
     const again = await h.ask(msg);
     expect(h.calls.generate.length).toBe(1);
     expect(said(again)).toContain("Played from the copy directed before.");
+    expect(again.find((m) => m.type === "script").script.fromKept).toBe(true);
   });
 
   test("Direct again asks the Director anew", async () => {
@@ -1379,6 +1380,39 @@ describe("a message is directed once", () => {
     const again = await h2.ask(msg);
     expect(h2.calls.generate.length).toBe(0);
     expect(said(again)).toContain("Played from the copy directed before.");
+  });
+});
+
+describe("the second Director", () => {
+  const good = JSON.stringify({ lines: [{ i: 0, speaker: "Oriel", text: "[quietly] Lanterns up." }] });
+  const msg = { type: "direct", chatId: "c", messageId: "m11", swipeId: 0, name: "Oriel", text: '"Lanterns up."' };
+  const said = (out: any[]) => out.find((m) => m.type === "script").script;
+
+  test("is asked on its own connection when the first refuses", async () => {
+    const h = host({ answers: ["I can't help with that.", good] });
+    await h.ask({ type: "save", settings: { retryDirector: 0, backupOn: true, backupConnection: "second" } });
+    const sc = said(await h.ask(msg));
+    expect(h.calls.generate.length).toBe(2);
+    expect(h.calls.generate[0].connection_id).toBeUndefined();
+    expect(h.calls.generate[1].connection_id).toBe("second");
+    expect(sc.directed).toBe(true);
+    expect(sc.log.join(" ")).toContain("The second Director directed the message.");
+  });
+
+  test("when it fails too, the message is read as written", async () => {
+    const h = host({ answers: ["I can't help with that.", "I won't do that."] });
+    await h.ask({ type: "save", settings: { retryDirector: 0, backupOn: true, backupConnection: "second" } });
+    const sc = said(await h.ask(msg));
+    expect(h.calls.generate.length).toBe(2);
+    expect(sc.directed).toBe(false);
+    expect(sc.log.join(" ")).toContain("The message is read as written.");
+  });
+
+  test("is not asked while it is off", async () => {
+    const h = host({ answers: ["I can't help with that.", good] });
+    await h.ask({ type: "save", settings: { retryDirector: 0, backupConnection: "second" } });
+    await h.ask(msg);
+    expect(h.calls.generate.length).toBe(1);
   });
 });
 
