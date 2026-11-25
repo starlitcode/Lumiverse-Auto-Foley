@@ -966,66 +966,156 @@ if (section("script status")) {
 }
 
 if (section("message player")) {
-  console.log("A performed message gets a player under its text, lined up with it");
-  for (const size of SIZES) {
+  console.log("A performed message gets a player under its text, lined up with it, in both chat modes");
+  for (const mode of ["bubble", "minimal"]) for (const size of SIZES) {
+    const where = mode + ", " + size.name;
     const { context, page, errors } = await open(THEMES[0], size);
-    // As Lumiverse lays a message out: the text in a padded box, then the
-    // place it leaves for an extension under it.
-    await page.evaluate(() => {
+    // As Lumiverse lays a message out. Bubble: the text in a padded box,
+    // then the place it leaves for an extension. Minimal: the message text
+    // with no padding of its own, then the same place.
+    await page.evaluate((mode) => {
       const msg = document.querySelector('[data-message-id="m1"]');
       const p = msg.querySelector("p");
       const content = document.createElement("div");
-      content.className = "content";
-      content.style.padding = "0 22px";
+      if (mode === "bubble") {
+        content.className = "content";
+        content.style.padding = "0 22px";
+      } else content.setAttribute("data-component", "MessageContent");
       p.replaceWith(content);
       content.appendChild(p);
       const mount = document.createElement("span");
       mount.setAttribute("data-spindle-mount", "message_body_after");
-      mount.setAttribute("data-spindle-scope", "message:m1:bubble:body-after");
+      mount.setAttribute("data-spindle-scope", "message:m1:" + mode + ":body-after");
       mount.style.display = "contents";
       content.after(mount);
-    });
-    await page.evaluate(() => { window.__clipMs = 4000; });
+      window.__clipMs = 4000;
+    }, mode);
     await page.waitForTimeout(400);
-    check((await page.locator("[data-af-player]").count()) === 0, size.name + ": no player before the message is performed");
-    await page.click('#mount [data-af-slot="message"]');
-    await page.waitForTimeout(700);
-    const got = await page.evaluate(() => {
-      const box = document.querySelector("[data-af-player]");
-      if (!box) return null;
-      const inner = box.firstElementChild;
-      const btn = box.querySelector("[data-af-mp=play]").getBoundingClientRect();
-      const msg = document.querySelector('[data-message-id="m1"]').getBoundingClientRect();
-      const r = box.querySelector(".af-mp-box").getBoundingClientRect();
-      return {
-        open: box.hasAttribute("data-open"),
-        pad: getComputedStyle(inner).paddingLeft,
-        label: box.querySelector("[data-af-mp=play]").getAttribute("aria-label"),
-        text: box.querySelector("[data-af-mp=text]").textContent,
-        btnH: btn.height,
-        inside: r.left >= msg.left - 1 && r.right <= msg.right + 1,
-        sideways: document.documentElement.scrollWidth > document.documentElement.clientWidth,
-      };
+    check((await page.locator("[data-af-player]").count()) === 0, where + ": no player before the message is performed");
+    const look = () =>
+      page.evaluate(() => {
+        const box = document.querySelector("[data-af-player]");
+        if (!box) return null;
+        const inner = box.firstElementChild;
+        const pill = box.querySelector(".af-mp-box").getBoundingClientRect();
+        const text = box.querySelector("[data-af-mp=text]").getBoundingClientRect();
+        const btn = box.querySelector("[data-af-mp=play]").getBoundingClientRect();
+        const msg = document.querySelector('[data-message-id="m1"]').getBoundingClientRect();
+        return {
+          open: box.hasAttribute("data-open"),
+          pad: getComputedStyle(inner).paddingLeft,
+          label: box.querySelector("[data-af-mp=play]").getAttribute("aria-label"),
+          text: box.querySelector("[data-af-mp=text]").textContent,
+          btnH: btn.height,
+          inside: pill.left >= msg.left - 1 && pill.right <= msg.right + 1 && text.right <= pill.right + 1,
+          mid: Math.abs((pill.left + pill.right) / 2 - (msg.left + msg.right) / 2),
+          sideways: document.documentElement.scrollWidth > document.documentElement.clientWidth,
+          cut: box.querySelector("[data-af-mp=text]").scrollWidth > box.querySelector("[data-af-mp=text]").clientWidth,
+        };
+      });
+    // While the Director writes, with the longest words it shows and a
+    // large font, it still fits inside the message.
+    await page.evaluate(() => {
+      window.__directHold = 1500;
+      window.__directingAt = 50;
     });
-    if (shots) await page.locator('[data-message-id="m1"]').screenshot({ path: shots + "/message-player-" + size.name + ".png" });
-    check(!!got && got.open, size.name + ": the player opens under the message");
-    check(!!got && got.pad === "22px", size.name + ": it has the message text's side padding (" + (got && got.pad) + ")");
-    check(!!got && got.label === "Pause" && /^Part \d+ of \d+/.test(got.text), size.name + ": while it plays, it says the part and offers Pause (" + JSON.stringify(got) + ")");
-    check(!!got && got.inside && !got.sideways, size.name + ": it fits inside the message, with no sideways scrolling");
-    if (size.touch) check(!!got && got.btnH >= 32, size.name + ": its button is at least 32 pixels high (" + (got && got.btnH) + ")");
-    // Text centered by the theme centers the player too.
-    await page.addStyleTag({ content: '[data-message-id="m1"] .content p{text-align:center}' });
+    const bigStyle = await page.addStyleTag({ content: '[data-message-id="m1"]{font-size:26px}' });
+    await page.click('#mount [data-af-slot="message"]');
+    await page.waitForTimeout(400);
+    const busy = await look();
+    check(!!busy && busy.text === "Writing the script" && busy.inside && !busy.sideways, where + ": while the script is written, with a large font, it fits inside the message (" + JSON.stringify(busy) + ")");
+    await bigStyle.evaluate((n) => n.remove());
+    await page.waitForTimeout(1800);
+    const got = await look();
+    if (shots) await page.locator('[data-message-id="m1"]').screenshot({ path: shots + "/message-player-" + mode + "-" + size.name + ".png" });
+    check(!!got && got.open, where + ": the player opens under the message");
+    check(!!got && got.pad === (mode === "bubble" ? "22px" : "0px"), where + ": it has the message text's side padding (" + (got && got.pad) + ")");
+    check(!!got && got.label === "Pause" && /^Part \d+ of \d+/.test(got.text), where + ": while it plays, it says the part and offers Pause (" + JSON.stringify(got) + ")");
+    check(!!got && got.inside && !got.sideways, where + ": it fits inside the message, with no sideways scrolling");
+    check(!!got && !got.cut, where + ": with room to spare, its words are not cut off (" + (got && got.text) + ")");
+    if (size.touch) check(!!got && got.btnH >= 32, where + ": its button is at least 32 pixels high (" + (got && got.btnH) + ")");
+    // A theme with centered text and a large font centers the player and
+    // keeps it inside the message.
+    await page.addStyleTag({ content: '[data-message-id="m1"]{font-size:26px} [data-message-id="m1"] p{text-align:center}' });
     await page.evaluate(() => document.body.appendChild(document.createElement("i")));
     await page.waitForTimeout(500);
+    const big = await look();
     const at = await page.evaluate(() => getComputedStyle(document.querySelector("[data-af-player]").firstElementChild).justifyContent);
-    check(at === "center", size.name + ": with the message text centered, the player is centered (" + at + ")");
+    check(at === "center" && !!big && big.mid <= 2, where + ": with the message text centered, the player is centered (" + at + ", " + (big && big.mid) + ")");
+    check(!!big && big.inside && !big.sideways, where + ": with a large font, it still fits inside the message (" + JSON.stringify(big) + ")");
     // Turned off, it goes.
     await page.click('.af-tab[data-tab="settings"]');
     await page.waitForTimeout(200);
     await page.locator('[data-af-row="messagePlayer"] .af-box').first().click();
     await page.waitForTimeout(600);
-    check((await page.locator("[data-af-player]").count()) === 0, size.name + ": switched off, the player goes");
-    check(!errors.length, size.name + ": no console errors. " + errors.slice(0, 2).join("; "));
+    check((await page.locator("[data-af-player]").count()) === 0, where + ": switched off, the player goes");
+    check(!errors.length, where + ": no console errors. " + errors.slice(0, 2).join("; "));
+    await context.close();
+  }
+}
+
+if (section("message player contrast")) {
+  console.log("The player in a message reads clearly on every theme, over a busy picture");
+  // The colors drawn, read from a screenshot: the pill's own background
+  // beside the words, and the word pixel that differs most from it.
+  const lum = (c) => {
+    const f = (v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); };
+    return 0.2126 * f(c[0]) + 0.7152 * f(c[1]) + 0.0722 * f(c[2]);
+  };
+  const ratio = (a, b) => (Math.max(lum(a), lum(b)) + 0.05) / (Math.min(lum(a), lum(b)) + 0.05);
+  for (const theme of THEMES) {
+    const { context, page, errors } = await open(theme, SIZES[0]);
+    await page.evaluate(() => {
+      const msg = document.querySelector('[data-message-id="m1"]');
+      // A picture behind the message, in bright and dark stripes.
+      msg.style.background = "repeating-linear-gradient(90deg,#fff 0 6px,#111 6px 12px,#c9a 12px 18px)";
+      const p = msg.querySelector("p");
+      const content = document.createElement("div");
+      content.setAttribute("data-component", "MessageContent");
+      p.replaceWith(content);
+      content.appendChild(p);
+      const mount = document.createElement("span");
+      mount.setAttribute("data-spindle-mount", "message_body_after");
+      mount.setAttribute("data-spindle-scope", "message:m1:minimal:body-after");
+      mount.style.display = "contents";
+      content.after(mount);
+      window.__clipMs = 4000;
+    });
+    await page.click('#mount [data-af-slot="message"]');
+    await page.waitForTimeout(800);
+    const r = await page.evaluate(() => {
+      const t = document.querySelector("[data-af-player] [data-af-mp=text]").getBoundingClientRect();
+      const b = document.querySelector("[data-af-player] .af-mp-box").getBoundingClientRect();
+      const i = document.querySelector("[data-af-player] [data-af-mp=play] svg").getBoundingClientRect();
+      return { t: { x: t.left, y: t.top, w: t.width, h: t.height }, bg: { x: b.right - 6, y: b.top + b.height / 2 }, icon: { x: i.left, y: i.top, w: i.width, h: i.height }, btn: document.querySelector("[data-af-player] [data-af-mp=play]").getBoundingClientRect().left + 2 };
+    });
+    const shot = (await page.screenshot()).toString("base64");
+    const px = await page.evaluate(async ({ shot, r }) => {
+      const img = new Image();
+      await new Promise((ok) => { img.onload = ok; img.src = "data:image/png;base64," + shot; });
+      const c = document.createElement("canvas");
+      c.width = img.naturalWidth; c.height = img.naturalHeight;
+      const g = c.getContext("2d");
+      g.drawImage(img, 0, 0);
+      const s = img.naturalWidth / innerWidth;
+      const at = (x, y) => Array.from(g.getImageData(Math.round(x * s), Math.round(y * s), 1, 1).data).slice(0, 3);
+      const area = (q) => Array.from(g.getImageData(Math.round(q.x * s), Math.round(q.y * s), Math.max(1, Math.round(q.w * s)), Math.max(1, Math.round(q.h * s))).data);
+      return { bg: at(r.bg.x, r.bg.y), text: area(r.t), icon: area(r.icon), btnBg: at(r.btn, r.icon.y + r.icon.h / 2) };
+    }, { shot, r });
+    const most = (data, from) => {
+      let best = from, d = -1;
+      for (let k = 0; k < data.length; k += 4) {
+        const c = [data[k], data[k + 1], data[k + 2]];
+        const e = Math.abs(c[0] - from[0]) + Math.abs(c[1] - from[1]) + Math.abs(c[2] - from[2]);
+        if (e > d) { d = e; best = c; }
+      }
+      return best;
+    };
+    const words = ratio(most(px.text, px.bg), px.bg);
+    const icon = ratio(most(px.icon, px.btnBg), px.btnBg);
+    check(words >= 4.5, theme.name + ": the words read clearly on the player (" + words.toFixed(1) + ")");
+    check(icon >= 3, theme.name + ": the play button's icon stands out (" + icon.toFixed(1) + ")");
+    check(!errors.length, theme.name + ": no console errors. " + errors.slice(0, 2).join("; "));
     await context.close();
   }
 }

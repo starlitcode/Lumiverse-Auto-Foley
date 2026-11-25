@@ -3586,8 +3586,11 @@ export function setup(ctx, overrides) {
             }
             const total = mine ? show.items.length : 0;
             const at = mine ? Math.min(show.index, total - 1) : 0;
+            // Short words, so the player stays small under the message.
             const text = busy
-                ? busyWords()
+                ? directorWriting
+                    ? 'Writing the script'
+                    : 'Getting the script'
                 : mine
                     ? (paused ? 'Paused · ' : '') + 'Part ' + (at + 1) + ' of ' + total + (show.saved.has(at) ? ' · saved' : '')
                     : 'Auto Foley';
@@ -4741,16 +4744,24 @@ export function setup(ctx, overrides) {
         '.af-mp[data-open]{grid-template-rows:1fr;opacity:1;transform:none}' +
         '.af-mp-in{overflow:hidden;min-height:0;display:flex;min-width:0}' +
         '.af-mp-box{display:inline-flex;align-items:center;gap:8px;max-width:100%;min-width:0;margin:6px 0;padding:3px 12px 3px 3px;border-radius:999px;' +
-        'border:1px solid var(--lumiverse-border,rgba(147,112,219,.2));background:var(--lumiverse-fill,rgba(255,255,255,.04));color:inherit;font:inherit;font-size:.85em;line-height:1.3}' +
-        '.af-mp-play{flex:none;display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;padding:0;border:none;border-radius:50%;cursor:pointer;' +
-        'background:var(--lumiverse-primary,rgb(147,112,219));color:var(--lumiverse-primary-text,#fff)}' +
+        // Solid, the same as Auto Foley's other floating parts, so the words never
+        // sit on a picture or pattern behind the message.
+        'border:1px solid var(--lumiverse-border,rgba(147,112,219,.2));background-color:var(--lumiverse-card-bg-solid,rgb(24,20,34));' +
+        'background-image:linear-gradient(var(--lumiverse-bg-elevated,rgba(35,30,48,.98)),var(--lumiverse-bg-elevated,rgba(35,30,48,.98)));' +
+        'color:var(--lumiverse-text,rgba(255,255,255,.92));font:inherit;font-size:.85em;line-height:1.3;box-shadow:var(--lumiverse-shadow-sm,0 2px 8px rgba(0,0,0,.25))}' +
+        '.af-mp-play{flex:none;display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;padding:0;border-radius:50%;cursor:pointer;' +
+        // The icon is in the text color, which reads on the pill in every theme.
+        // The accent color is only the ring.
+        'border:1.5px solid var(--lumiverse-primary,rgb(147,112,219));background:transparent;color:var(--lumiverse-text,rgba(255,255,255,.92))}' +
         '.af-mp-play svg{width:14px;height:14px}' +
-        '@media (hover:hover){.af-mp-play:hover{filter:brightness(1.12)}}' +
+        '@media (hover:hover){.af-mp-play:hover{background:var(--lumiverse-primary-050,rgba(147,112,219,.5))}}' +
         '@media (pointer:coarse){.af-mp-play{width:32px;height:32px}}' +
-        '.af-mp-bar{position:relative;flex:0 1 120px;min-width:40px;height:4px;border-radius:2px;overflow:hidden;background:var(--lumiverse-border,rgba(147,112,219,.25))}' +
+        // The bar gives up its room before the words do. It has a width of its
+        // own, since an empty element counts as no width when the browser sizes
+        // the pill to fit.
+        '.af-mp-bar{position:relative;flex:0 50 120px;width:120px;min-width:24px;height:4px;border-radius:2px;overflow:hidden;background:var(--lumiverse-border,rgba(147,112,219,.25))}' +
         '.af-mp-bar i{position:absolute;left:0;top:0;bottom:0;width:0;background:var(--lumiverse-primary,rgb(147,112,219))}' +
-        '.af-mp-text{flex:0 0 auto;max-width:60vw;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--lumiverse-text-muted,rgba(255,255,255,.65));font-variant-numeric:tabular-nums}' +
-        '.af-mp[data-af-live] .af-mp-text{color:inherit}' +
+        '.af-mp-text{flex:0 0.01 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:inherit;font-variant-numeric:tabular-nums}' +
         '@media (prefers-reduced-motion: reduce){.af-mp{transition:none}}' +
         'html[data-af-still] .af-mp{transition:none}' +
         '.af-theater-cue:empty{display:none}' +
