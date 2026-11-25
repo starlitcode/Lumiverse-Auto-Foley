@@ -896,11 +896,19 @@ if (section("sync")) {
     for (let k = 0; k < 40; k++) {
       const w = document.querySelector('[data-af="line"] .af-w.af-now');
       if (w) seen.add(Math.round(parseFloat(w.style.getPropertyValue("--af-p")) / 10));
+      if (w) {
+        const cs = getComputedStyle(w);
+        (window.__nowLooks = window.__nowLooks || []).push(cs.color + "|" + cs.webkitTextFillColor);
+      }
       await new Promise((r) => requestAnimationFrame(r));
     }
     return Array.from(seen);
   });
   check(fills.some((x) => x > 0 && x < 10), "a word fills part way as it is said (" + fills.join(",") + ")");
+  // The word being said is never made see-through, so a browser that cannot
+  // draw the fill still shows it.
+  const shown = await page.evaluate(() => window.__nowLooks || []);
+  check(shown.length > 0 && shown.every((x) => !/rgba\(0, 0, 0, 0\)|transparent/.test(x)), "the word being said is never see-through (" + shown.slice(0, 2).join(" ; ") + ")");
   check(!errors.length, "no console errors. " + errors.slice(0, 2).join("; "));
   await context.close();
 }
@@ -2154,6 +2162,51 @@ if (section("start here")) {
     check(!errors.length, where + ": no console errors. " + errors.slice(0, 2).join("; "));
     await context.close();
   }
+}
+
+if (section("drawer bar")) {
+  console.log("The drawer's scroll bar is hidden while it holds this tab");
+  const { context, page, errors } = await open(THEMES[0], SIZES[1]);
+  const got = await page.evaluate(async () => {
+    window.__teardown();
+    // As Lumiverse lays the drawer out: a box that scrolls, a holder, and
+    // the tab's own root inside it.
+    const content = document.createElement("div");
+    content.style.cssText = "height:400px;overflow-y:auto;width:360px";
+    const holder = document.createElement("div");
+    const tabRoot = document.createElement("div");
+    holder.appendChild(tabRoot);
+    content.appendChild(holder);
+    document.body.appendChild(content);
+    const ctx = Object.assign({}, window.__ctx, {
+      ui: Object.assign({}, window.__ctx.ui, {
+        registerDrawerTab() {
+          return { root: tabRoot, setBadge() {}, activate() {}, destroy() {}, onActivate() { return () => {}; } };
+        },
+      }),
+    });
+    window.__teardown = window.__setup(ctx, { fetch: window.__fetch, Audio: window.__Audio });
+    await new Promise((r) => setTimeout(r, 400));
+    // The test browser draws no scroll bars at all, so the style the bar
+    // is given is read instead.
+    const bar = () => (getComputedStyle(content).scrollbarWidth === "none" ? 0 : 1);
+    const tall = content.scrollHeight > content.clientHeight;
+    const ours = bar();
+    // Another tab picked: Lumiverse puts that tab's root in the holder.
+    const other = document.createElement("div");
+    other.style.height = "2000px";
+    holder.replaceChildren(other);
+    await new Promise((r) => requestAnimationFrame(r));
+    const theirs = bar();
+    holder.replaceChildren(tabRoot);
+    content.scrollTop = 300;
+    return { tall, ours, theirs, scrolls: content.scrollTop > 0 };
+  });
+  check(got.tall && got.ours === 0, "with this tab in the drawer, the drawer shows no scroll bar (" + JSON.stringify(got) + ")");
+  check(got.scrolls, "the drawer still scrolls");
+  check(got.theirs > 0, "another tab in the drawer keeps its scroll bar");
+  check(!errors.length, "no console errors. " + errors.slice(0, 2).join("; "));
+  await context.close();
 }
 
 if (section("widget steady")) {

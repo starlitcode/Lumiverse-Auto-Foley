@@ -1140,6 +1140,13 @@ textarea.af-bigta { flex: 1; min-height: 0; resize: none; }
 .af input.af-field[type="number"]::-webkit-outer-spin-button, .af input.af-field[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; appearance: none; margin: 0; }
 .af input.af-field[type="search"]::-webkit-search-cancel-button { -webkit-appearance: none; appearance: none; }
 .af, .af * { scrollbar-width: thin; scrollbar-color: var(--af-line-hover) transparent; }
+/* The drawer's own scroll bar is hidden while it holds this tab. Lumiverse
+   draws scroll bars that do not fade, so it popped up at the side as soon
+   as an open card made the tab longer than the drawer. The drawer still
+   scrolls. Lumiverse takes the tab out of the drawer when another tab is
+   picked, so every other tab keeps its scroll bar. */
+:has(> div > [data-af-drawer]) { scrollbar-width: none; }
+:has(> div > [data-af-drawer])::-webkit-scrollbar { display: none; width: 0; height: 0; }
 .af ::-webkit-scrollbar { width: 8px; height: 8px; }
 .af ::-webkit-scrollbar-track { background: transparent; }
 .af ::-webkit-scrollbar-thumb { min-height: 28px; border-radius: 999px; background: var(--af-line-hover); }
@@ -3508,6 +3515,10 @@ export function setup(ctx: Ctx, overrides?: any) {
       iconSvg: ICON,
     });
     drawer.root.appendChild(root);
+    // Marks the tab, so the drawer's scroll bar is hidden while it shows.
+    try {
+      drawer.root.setAttribute('data-af-drawer', '');
+    } catch (_) {}
     disposers.push(() => {
       try {
         drawer.destroy();
@@ -4368,10 +4379,13 @@ export function setup(ctx: Ctx, overrides?: any) {
     '.af-theater-idle{font-size:13px;color:var(--lumiverse-text-muted,rgba(255,255,255,.65))}' +
     '.af-w{color:var(--lumiverse-text-muted,rgba(255,255,255,.65));transition:color .12s linear}' +
     '.af-w.af-said,.af-w.af-now{color:var(--lumiverse-text,rgba(255,255,255,.92))}' +
-    // The word being said fills from left to right as it is spoken. With
-    // reduce motion on, it is lit whole.
-    '@media (prefers-reduced-motion: no-preference){html:not([data-af-still]) .af-w.af-now{color:transparent;-webkit-text-fill-color:transparent;-webkit-background-clip:text;background-clip:text;' +
-    'background-image:linear-gradient(90deg,var(--lumiverse-text,rgba(255,255,255,.92)) var(--af-p,0%),var(--lumiverse-text-muted,rgba(255,255,255,.65)) var(--af-p,0%));transition:none}}' +
+    // The word being said fills from left to right as it is spoken: the word
+    // stays in the dim color, and a lit copy on top of it is shown as far as
+    // it has been said. The word itself is never made see-through, so a
+    // browser that cannot draw the copy still shows the word. With reduce
+    // motion on, it is lit whole.
+    '@media (prefers-reduced-motion: no-preference){html:not([data-af-still]) .af-w.af-now{position:relative;color:var(--lumiverse-text-muted,rgba(255,255,255,.65));transition:none}' +
+    'html:not([data-af-still]) .af-w.af-now::after{content:attr(data-w);content:attr(data-w) / "";position:absolute;left:0;top:0;width:var(--af-p,0%);overflow:hidden;white-space:nowrap;color:var(--lumiverse-text,rgba(255,255,255,.92));pointer-events:none}}' +
     // The word being said, in the chat.
     '::highlight(auto-foley-word){background-color:var(--lumiverse-primary-020,rgba(147,112,219,.3));color:inherit}' +
     '.af-theater-cue:empty{display:none}' +
@@ -5862,7 +5876,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     who.innerHTML = '<span class="af-avatar af-avatar-' + esc((m && m.kind) || 'character') + '">' + faceHtml(m, name) + '</span><span>' + esc(name) + '</span>';
     const { parts, weights } = lineParts(line);
     lineBox.innerHTML = parts
-      .map((p, k) => (p.kind === 'word' ? '<span class="af-w" data-af-part="' + k + '">' + esc(p.text) + '</span>' : '<span class="af-chip ' + (p.kind === 'sound' ? 'af-chip-insound' : 'af-chip-tag') + '" data-af-part="' + k + '">' + esc(p.text) + '</span>'))
+      .map((p, k) => (p.kind === 'word' ? '<span class="af-w" data-af-part="' + k + '" data-w="' + esc(p.text) + '">' + esc(p.text) + '</span>' : '<span class="af-chip ' + (p.kind === 'sound' ? 'af-chip-insound' : 'af-chip-tag') + '" data-af-part="' + k + '">' + esc(p.text) + '</span>'))
       .join(' ');
     // The box keeps the tallest line of this message, so a short line after a
     // long one does not pull the rest of the tab up.
