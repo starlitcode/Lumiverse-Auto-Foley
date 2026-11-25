@@ -49,6 +49,7 @@ _Not yet released_
 
 ### Fixed
 
+- **Stop did not stop the Director.** Pressed while the script was being written, Stop only stopped the panel waiting. The Director's request went on, and could be asked again. Stop now cancels the request in Lumiverse, and nothing more is asked or kept for that message.
 - **Reduce motion could stop another extension's motion.** It matched any part of the page whose name held af- inside a word, such as leaf-. It now matches only Auto Foley's own parts.
 - **The notice that a built-in text changed could run off the side of a phone.** Its button now sits under the words, inside the notice.
 - **"You have no TTS connection Auto Foley can use" did not say what it found.** It now says whether Lumiverse found no TTS connection on your account, or names the ones it found and their service. It also tells you that a key added under the LLM tab is not a TTS connection. Reported by a Discord user.

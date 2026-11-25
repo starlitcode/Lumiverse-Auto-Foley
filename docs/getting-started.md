@@ -104,6 +104,8 @@ On the **Settings** tab:
 - **Prepare replies ahead** directs each reply in the background, with Autoplay off. Play then starts at once.
 - **Read your own messages** performs your messages too, with Autoplay on.
 
+**Stop**, pressed while the Director is writing the script, cancels the Director's request. Nothing more is asked or spent on that message, and nothing is kept.
+
 A message edited after it was directed is directed again. If it was playing, it starts again with the new text, so what you hear matches what is on screen.
 
 Your browser may block sound until you tap the page. Auto Foley then waits, and the Stage tab says so. Press Play, or the button on the message, to start.

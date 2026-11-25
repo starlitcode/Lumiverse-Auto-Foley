@@ -26,6 +26,7 @@ function host(opts: {
   connections?: any[] | Error;
   // Files already on disk, as after a restart.
   files?: Map<string, any>;
+  hold?: boolean;
 } = {}): Host {
   const files = new Map<string, any>(opts.files || []);
   const keys = new Map<string, string>();
@@ -96,6 +97,11 @@ function host(opts: {
     generate: {
       async quiet(req: any) {
         calls.generate.push(req);
+        // A held answer waits until the call is canceled, as a slow model would.
+        if (opts.hold)
+          return await new Promise((_, no) => {
+            if (req.signal) req.signal.addEventListener("abort", () => no(new Error("aborted")));
+          });
         const a = answers.length ? answers.shift() : "";
         if (a instanceof Error) throw a;
         return { content: a, finish_reason: "stop" };
@@ -127,6 +133,10 @@ function host(opts: {
   }
   // Waits run at once here, so a test of a busy provider does not take a minute.
   const box: any = { spindle, console, Date, Math, JSON, Promise, setTimeout: (fn: any) => setTimeout(fn, 0), clearTimeout };
+  // Lumiverse's runtime has AbortController. Here it is only given to a check
+  // that holds the Director's answer, since every wait runs at once and a
+  // time limit would cancel every other call straight away.
+  if (opts.hold) box.AbortController = AbortController;
   vm.createContext(box);
   vm.runInContext(SRC, box);
   return {
@@ -1369,6 +1379,26 @@ describe("a message is directed once", () => {
     const again = await h2.ask(msg);
     expect(h2.calls.generate.length).toBe(0);
     expect(said(again)).toContain("Played from the copy directed before.");
+  });
+});
+
+describe("Stop while the script is written", () => {
+  test("cancels the Director's call, and keeps nothing", async () => {
+    const h = host({ hold: true });
+    // No time limit, since every wait here runs at once.
+    await h.ask({ type: "save", settings: { timeoutSecs: 0 } });
+    const msg = { type: "direct", chatId: "c", messageId: "m9", swipeId: 0, name: "Oriel", text: '"Lanterns up."' };
+    const going = h.ask(msg);
+    await new Promise((r) => setTimeout(r, 20));
+    expect(h.calls.generate.length).toBe(1);
+    expect(h.calls.generate[0].signal.aborted).toBe(false);
+    await h.ask({ type: "direct_stop" });
+    const out = await going;
+    expect(h.calls.generate[0].signal.aborted).toBe(true);
+    expect(h.calls.generate.length).toBe(1);
+    const log = out.find((m: any) => m.type === "script").script.log.join(" ");
+    expect(log).toContain("Stopped before the Director answered.");
+    expect(h.files.has("u1/scripts.json")).toBe(false);
   });
 });
 

@@ -2932,6 +2932,14 @@ export function setup(ctx: Ctx, overrides?: any) {
 
   const preparing = new Map<string, Promise<any>>();
   let busyMessage = '';
+  // Stop while the script is being written: the panel stops waiting, and the
+  // server cancels the Director's call, so nothing more is spent on it.
+  function stopDirecting() {
+    busyMessage = '';
+    try {
+      ctx.sendToBackend({ type: 'direct_stop' });
+    } catch (_) {}
+  }
   // The text each message had when it was directed, so an edit made after,
   // by the reader or by another extension, can be noticed.
   const directedText = new Map<string, string>();
@@ -3173,7 +3181,7 @@ export function setup(ctx: Ctx, overrides?: any) {
 
   function pressMessage(id: string) {
     if (busyMessage === id) {
-      busyMessage = '';
+      stopDirecting();
       phase = 'Stopped';
       paintButtons();
       if (tab === 'stage') renderTab();
@@ -3199,7 +3207,7 @@ export function setup(ctx: Ctx, overrides?: any) {
 
   async function pressBar() {
     if (show || busyMessage) {
-      if (busyMessage) busyMessage = '';
+      if (busyMessage) stopDirecting();
       stop('Stopped');
       return;
     }
@@ -3439,7 +3447,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         if (!id) return;
         directedText.delete(id);
         if (show && show.messageId === id) stop('The message was deleted, so it stopped.');
-        if (busyMessage === id) busyMessage = '';
+        if (busyMessage === id) stopDirecting();
         if (lastShow && lastShow.messageId === id) lastShow = null;
         if (lastMeta.messageId === id) {
           lastScript = null;
@@ -3468,7 +3476,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     if (now === lastChat) return;
     lastChat = now;
     if (show && show.chatId && show.chatId !== now) stop('Stopped, because the chat changed');
-    if (busyMessage) busyMessage = '';
+    if (busyMessage) stopDirecting();
     lastScript = null;
     lastFailed = null;
     readChat();
@@ -4771,7 +4779,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       } catch (_) {}
     } else if (key === 'pause') togglePause();
     else if (key === 'stop') {
-      if (busyMessage) busyMessage = '';
+      if (busyMessage) stopDirecting();
       stop('Stopped');
     } else if (key === 'latest' || key === 'mine') {
       stop();
@@ -4943,7 +4951,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     q('back').addEventListener('click', () => back());
     q('next').addEventListener('click', () => skip());
     q('stop').addEventListener('click', () => {
-      if (busyMessage) busyMessage = '';
+      if (busyMessage) stopDirecting();
       stop('Stopped');
     });
     const vol = q('vol') as HTMLInputElement;
@@ -5316,7 +5324,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       }
     });
     extra('auto-foley-stop', 'Stop Auto Foley', on && (!!show || !!busyMessage), () => {
-      if (busyMessage) busyMessage = '';
+      if (busyMessage) stopDirecting();
       stop('Stopped');
     });
   }
@@ -5447,7 +5455,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       }),
     );
     q('stop').addEventListener('click', () => {
-      if (busyMessage) busyMessage = '';
+      if (busyMessage) stopDirecting();
       stop('Stopped');
     });
     q('skip').addEventListener('click', () => skip());

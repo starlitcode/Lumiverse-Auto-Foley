@@ -1587,30 +1587,54 @@ function rateWait(attempt, err) {
     const grown = Math.min(RATE_WAIT_MAX, RATE_WAIT_MS * Math.pow(2, Math.max(0, attempt - 1)));
     return Math.round(grown * (0.85 + Math.random() * 0.3));
 }
+const directRuns = {};
+function stopDirecting(uid) {
+    const runs = directRuns[uid];
+    if (!runs)
+        return 0;
+    for (const run of runs) {
+        run.stopped = true;
+        try {
+            if (run.ctl)
+                run.ctl.abort();
+        }
+        catch (_) { }
+    }
+    return runs.size;
+}
 // Asks the Director, and gives up after Give up waiting after. 0 waits for as
 // long as the model takes. The abort reaches Lumiverse, which stops the call.
-async function withTimeout(req, secs) {
+async function withTimeout(req, secs, run) {
     const AC = globalThis.AbortController;
-    if (!secs || typeof AC !== 'function')
+    if ((!secs && !run) || typeof AC !== 'function')
         return await spindle.generate.quiet(req);
     const ctl = new AC();
     req.signal = ctl.signal;
-    const timer = setTimeout(() => {
-        try {
-            ctl.abort();
-        }
-        catch (_) { }
-    }, secs * 1000);
+    if (run)
+        run.ctl = ctl;
+    const timer = secs
+        ? setTimeout(() => {
+            try {
+                ctl.abort();
+            }
+            catch (_) { }
+        }, secs * 1000)
+        : 0;
     try {
         return await spindle.generate.quiet(req);
     }
     catch (e) {
+        if (run && run.stopped)
+            throw new Error('Stopped');
         if (ctl.signal.aborted)
             throw new Error('The Director timed out after ' + secs + ' seconds');
         throw e;
     }
     finally {
-        clearTimeout(timer);
+        if (timer)
+            clearTimeout(timer);
+        if (run)
+            run.ctl = null;
     }
 }
 function sleep(ms) {
@@ -2456,11 +2480,15 @@ async function addUsed(script, usage, sent, back, userId) {
     if (!counted)
         script.counted = false;
 }
-async function askDirector(userId, s, payload, connection, script) {
+async function askDirector(userId, s, payload, connection, script, run) {
     let waits = 0;
     let asks = 0;
     let note = '';
     for (;;) {
+        if (run.stopped) {
+            script.log.push('Stopped before the Director answered.');
+            return { answer: null };
+        }
         let content = '';
         let failed = '';
         try {
@@ -2485,7 +2513,7 @@ async function askDirector(userId, s, payload, connection, script) {
                 req.connection_id = connection;
             if (userId)
                 req.userId = userId;
-            const res = await withTimeout(req, s.timeoutSecs);
+            const res = await withTimeout(req, s.timeoutSecs, run);
             content = res && typeof res.content === 'string' ? res.content : '';
             const cost = Number(res && res.usage && res.usage.cost);
             if (Number.isFinite(cost))
@@ -2497,6 +2525,8 @@ async function askDirector(userId, s, payload, connection, script) {
         }
         let why = '';
         let kind = '';
+        if (run.stopped)
+            continue;
         if (failed) {
             if (REFUSAL_ERROR.test(failed)) {
                 why = 'The Director\'s provider refused this message';
@@ -2725,7 +2755,15 @@ async function direct(userId, p) {
     //   changed most words is asked for again, up to Ask again when the
     //   Director's answer fails, with a note saying what went wrong.
     // Whatever happens, the message is still read, as written if need be.
-    const firstTry = await askDirector(userId, s, payload, s.directorConnection, script);
+    const run = { stopped: false, ctl: null };
+    (directRuns[uid] = directRuns[uid] || new Set()).add(run);
+    let firstTry;
+    try {
+        firstTry = await askDirector(userId, s, payload, s.directorConnection, script, run);
+    }
+    finally {
+        directRuns[uid].delete(run);
+    }
     const answer = firstTry.answer;
     if (!answer)
         script.log.push('The message is read as written.');
@@ -3526,6 +3564,12 @@ async function onPanel(p, userId) {
                 answer({ type: 'saved', ok, settings: clean });
                 if (!ok)
                     notify('warning', 'Your Auto Foley settings could not be saved. They will be lost when the page reloads.', userId);
+                return;
+            }
+            case 'direct_stop': {
+                // Stop, pressed while a script is written. Nothing is answered: the
+                // panel has already moved on.
+                stopDirecting(userId || '');
                 return;
             }
             case 'direct': {
