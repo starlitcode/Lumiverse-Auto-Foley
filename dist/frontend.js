@@ -5643,18 +5643,46 @@ export function setup(ctx, overrides) {
         const card = floatBox ? floatBox.querySelector('.af-pl') : null;
         const done = () => {
             playerMoving = null;
-            playerOpen = false;
             const home = floatHome;
-            floatHome = null;
-            placedAt = null;
-            drawFloat();
-            // The button goes back where it was before the player opened.
+            const swap = () => {
+                holdSize = false;
+                playerOpen = false;
+                floatHome = null;
+                placedAt = null;
+                drawFloat();
+                keepFloat();
+            };
+            // The button goes back where it was before the player opened. Lumiverse
+            // draws the move on its next render, so the closed circle stays until
+            // the widget is drawn at home, and the button is put in its place on
+            // that frame, before it is painted. A button drawn before the move
+            // would show for a frame or two at the card's corner.
+            let at = null;
             try {
-                if (home && widget && typeof widget.moveTo === 'function')
-                    widget.moveTo(home.x, home.y);
+                at = widget && typeof widget.getPosition === 'function' ? widget.getPosition() : null;
             }
             catch (_) { }
-            keepFloat();
+            if (!home || !at || !floatBox || !widget || typeof widget.moveTo !== 'function' || (Math.abs(at.x - home.x) < 0.5 && Math.abs(at.y - home.y) < 0.5))
+                return swap();
+            const box = floatBox;
+            const was = box.getBoundingClientRect();
+            try {
+                widget.moveTo(home.x, home.y);
+            }
+            catch (_) {
+                return swap();
+            }
+            let frames = 0;
+            const look = () => {
+                if (!floatBox || floatBox !== box || !playerOpen)
+                    return;
+                const r = box.getBoundingClientRect();
+                if (Math.abs(r.left - was.left) > 0.5 || Math.abs(r.top - was.top) > 0.5 || ++frames > 20)
+                    swap();
+                else
+                    requestAnimationFrame(look);
+            };
+            requestAnimationFrame(look);
         };
         if (still || !card)
             return done();
@@ -5685,13 +5713,9 @@ export function setup(ctx, overrides) {
                 { clipPath: 'circle(' + far + 'px at ' + cx + 'px ' + cy + 'px)', offset: 0.25 },
                 { clipPath: 'circle(' + d / 2 + 'px at ' + cx + 'px ' + cy + 'px)', offset: 1 },
             ], { duration: 380, easing: 'cubic-bezier(.45,0,.2,1)', fill: 'forwards' });
-            playerMoving.onfinish = () => {
-                holdSize = false;
-                done();
-            };
+            playerMoving.onfinish = () => done();
         }
         catch (_) {
-            holdSize = false;
             done();
         }
     }

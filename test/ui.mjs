@@ -2617,6 +2617,7 @@ if (section("widget low")) {
         await page.waitForTimeout(200);
         const pos = () => page.evaluate(() => ({ x: parseFloat(window.__widget.style.left), y: parseFloat(window.__widget.style.top), w: parseFloat(window.__widget.style.width), h: parseFloat(window.__widget.style.height) }));
         const home = await pos();
+        await page.evaluate((h) => (window.__homeAt = h), home);
         // Moved on the next render, as Lumiverse does, the circle still
         // starts on the button.
         const start = await page.evaluate(async (zoom) => {
@@ -2644,8 +2645,26 @@ if (section("widget low")) {
         const vert = low ? Math.abs(opened.y + opened.h - (home.y + home.h)) < 2 || opened.y <= 9 : Math.abs(opened.y - home.y) < 2;
         const horiz = right ? Math.abs(opened.x + opened.w - (home.x + home.w)) < 2 || opened.x <= 9 : Math.abs(opened.x - home.x) < 2 || opened.x <= 9;
         check(vert && horiz, where + ": the player grows away from the side the button is near (" + JSON.stringify({ home, opened }) + ")");
-        await page.evaluate(() => window.__widget.querySelector('[data-p="close"]').click());
-        await page.waitForTimeout(700);
+        // Moved on the next render, as Lumiverse does, the round button is
+        // drawn only at its home, never for a frame at the card's corner.
+        const off = await page.evaluate(async (zoom) => {
+          window.__lateMove = true;
+          window.__widget.querySelector('[data-p="close"]').click();
+          const want = { x: parseFloat(window.__homeAt.x), y: parseFloat(window.__homeAt.y) };
+          const seen = [];
+          for (let k = 0; k < 50; k++) {
+            await new Promise((r) => requestAnimationFrame(r));
+            const b = window.__widget.querySelector(".af-float");
+            if (b && b.getClientRects().length) {
+              const r = b.getBoundingClientRect();
+              seen.push(Math.round(Math.max(Math.abs(r.left / zoom - want.x), Math.abs(r.top / zoom - want.y))));
+            }
+          }
+          window.__lateMove = false;
+          return seen;
+        }, zoom);
+        check(off.length > 0 && Math.max(...off) <= 2, where + ": closing draws the round button only at its home (" + off.slice(0, 8).join(",") + ")");
+        await page.waitForTimeout(300);
         const back = await pos();
         check(Math.abs(back.x - home.x) < 1 && Math.abs(back.y - home.y) < 1, where + ": closing puts the button back where it was (" + JSON.stringify({ home, back }) + ")");
         check(!errors.length, where + ": no console errors. " + errors.slice(0, 2).join("; "));
