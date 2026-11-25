@@ -2273,6 +2273,33 @@ if (section("colors")) {
   }
 }
 
+if (section("sampler range")) {
+  console.log("A sampler box keeps its number in range, as in Auto Refine");
+  for (const size of SIZES) {
+    const { context, page, errors } = await open(THEMES[0], size);
+    const where = size.name;
+    await page.click('.af-tab[data-tab="director"]');
+    await page.waitForTimeout(300);
+    await page.locator(".af-fold", { hasText: "Samplers" }).first().click();
+    await page.waitForTimeout(400);
+    const box = page.locator('[data-af-sampler="top_p"]');
+    await box.scrollIntoViewIfNeeded();
+    check((await box.getAttribute("placeholder")) === "Leave to the connection", where + ": an empty box says Leave to the connection");
+    await box.fill("5");
+    await box.blur();
+    await page.waitForTimeout(500);
+    const held = await page.evaluate(() => ({ box: document.querySelector('[data-af-sampler="top_p"]').value, saved: (window.__settings.samplers || {}).top_p }));
+    check(held.box === "1" && held.saved === 1, where + ": a number above the range is held to the top of it (" + JSON.stringify(held) + ")");
+    await box.fill("");
+    await box.blur();
+    await page.waitForTimeout(500);
+    const gone = await page.evaluate(() => !("top_p" in (window.__settings.samplers || {})));
+    check(gone, where + ": an emptied box hands it back to the connection");
+    check(!errors.length, where + ": no page errors. " + errors.slice(0, 2).join(" | "));
+    await context.close();
+  }
+}
+
 if (section("more settings")) {
   console.log("Each person gets a voice name or ID box and the settings their engine takes");
   for (const size of SIZES) {

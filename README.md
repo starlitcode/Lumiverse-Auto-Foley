@@ -1,8 +1,10 @@
 # Auto Foley
 
-Voice acting and sound effects for your TTS, in Lumiverse.
+A Lumiverse extension. It gives voice acting and sound effects to your TTS, so a reply is read like a performance, with a voice for everyone in it.
 
-Lumiverse can already read a reply aloud. Auto Foley makes it a performance:
+It works alongside [Auto Retry](https://github.com/starlitcode/Lumiverse-Auto-Retry) and [Auto Refine](https://github.com/starlitcode/Lumiverse-Auto-Refine). Auto Retry catches a reply that went wrong, Auto Refine improves it, and Auto Foley performs it.
+
+## What it does
 
 - A second model, the **Director**, marks how each line is said, with voice tags such as `[whispers]`, `[sighs]` or `[through gritted teeth]`.
 - Sounds go with what happens: a door, footsteps, a glass breaking. They can be made inside the voice or as separate sound effects.
@@ -17,36 +19,52 @@ It works only with models that act: ElevenLabs v3 and v4, Fish Audio S2 and Dram
 1. In Lumiverse, open **Settings**, then **Extensions**, then **Install**.
 2. Enter `https://github.com/starlitcode/Lumiverse-Auto-Foley`.
 3. Turn on Auto Foley and grant its permissions.
+4. To see it, open the drawer and choose the **Foley** tab, with a headphones icon. **Play**, under **Now playing** on the Stage tab, performs the latest reply.
 
 You also need a TTS connection in Lumiverse, under **Connections**, in the TTS section. Auto Foley speaks through it, so its key stays in Lumiverse.
 
-## Where it is
+Once a message has been performed, a small player sits under its text, with Back, Play and Next. A button on every message and a floating player over the chat can be turned on in the Settings tab. See [Getting started](docs/getting-started.md).
 
-- **The drawer:** a tab called **Foley**, with a headphones icon. It has five tabs: Stage, Cast, Director, Sounds and Settings. **Play**, under **Now playing** on the Stage tab, performs the latest reply.
-- **Under each message:** once a message has been performed, a small player sits under its text, with Back, Play and Next. It plays the saved audio again, so nothing is spent.
-- **A button on every message:** off by default. Turn it on in the Settings tab to perform any message with one tap.
-- **The floating player:** a round button over the chat. Turn on **A floating player** in the Settings tab. See [The floating player](docs/getting-started.md#the-floating-player).
+## You are in control
+
+- **Stop** stops at once. A Director still writing is stopped too, so nothing more is spent.
+- Nothing plays by itself unless you turn on **Autoplay new replies**. It is off by default.
+- Saved audio plays again with nothing spent. **Saved audio**, on the Stage tab, lists it, and **Delete** removes it.
+- Every built-in prompt, note and pattern can be read and changed in the panel, with a way back to the built-in one.
+- **Auto Foley is on**, in the Settings tab, switches it off everywhere.
 
 ## Documentation
 
 **Start here**
 
-- [Getting started](docs/getting-started.md): set it up and perform your first message.
+- [Getting started](docs/getting-started.md): set it up and perform your first message
 
 **Going further**
 
-- [Voice engines](docs/engines.md): what each engine can do, and how to set up Chatterbox.
-- [The Director](docs/director.md): what it does, what it is sent, and its prompt.
-- [The cast](docs/cast.md): voices for personas, characters and NPCs.
-- [Writing for each voice engine](docs/writing.md): what to write in How they speak and the notes, for each engine, with an example.
-- [Sounds](docs/sounds.md): sounds in the voice, sound effects and your library.
+- [Voice engines](docs/engines.md): what each engine can do, and how to set up Chatterbox
+- [The Director](docs/director.md): what it does, what it is sent, and its prompt
+- [The cast](docs/cast.md): voices for personas, characters and NPCs
+- [Writing for each voice engine](docs/writing.md): what to write in How they speak and the notes, for each engine, with an example
+- [Sounds](docs/sounds.md): sounds in the voice, sound effects and your library
 
 **About it**
 
-- [Privacy](docs/privacy.md): what is sent where, and what is kept.
-- [Security](SECURITY.md): what it can reach and how to check it.
-- [Contributing](CONTRIBUTING.md): what to put in a bug report.
-- [Changelog](CHANGELOG.md)
+- [Privacy](docs/privacy.md): what the extension sends and where, what it keeps, and how to check any of it
+- [Security policy](SECURITY.md): how to report a security problem
+- [Contributing](CONTRIBUTING.md): what to put in a bug report
+- [Changelog](CHANGELOG.md): what changed in every version
+
+## How it works
+
+- It listens to Lumiverse's own generation events, and reads the message you perform.
+- The Director is asked through one of your connections in Lumiverse. The voice is made through your TTS connection, with Lumiverse's own TTS route, so every key for them stays in Lumiverse.
+- A small backend keeps your settings, cast, sounds and saved audio with your account, not in one browser.
+- Its only calls of its own go through Lumiverse's CORS proxy: to Freesound and ElevenLabs for sound effects, with your own keys, and to a Chatterbox server you add. [Privacy](docs/privacy.md) covers the four permissions it asks for and what still works without each one.
+- The files Lumiverse loads are `dist/frontend.js` and `dist/backend.js`. They are plain, readable JavaScript. Nothing is minified. [Privacy](docs/privacy.md#checking-any-of-this-yourself) goes through the rest of the repo file by file.
+
+## Help and feedback
+
+Questions, bug reports and ideas are welcome as a [GitHub issue](https://github.com/starlitcode/Lumiverse-Auto-Foley/issues). [Contributing](CONTRIBUTING.md) says what to put in a bug report.
 
 ## Made for adults
 

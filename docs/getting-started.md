@@ -37,7 +37,7 @@ Thinking a model writes in the message is never read aloud. The same nine format
 | Form | Example |
 | --- | --- |
 | Angle brackets | `<think>` … `</think>` |
-| Square brackets | `[thinking]` … `[/thinking]`, and `[THINK]` … `[/THINK]` |
+| Square brackets | `[thinking]` … `[/thinking]`, and Mistral's `[THINK]` … `[/THINK]` |
 | Pipes | `<\|think\|>` … `<\|/think\|>`, and `<\|think>` … `<think\|>` |
 | Harmony channels | `<\|channel\|>analysis<\|message\|>` … `<\|end\|>` |
 | Gemma 4 channels | `<\|channel>thought` … `<channel\|>` |
@@ -47,7 +47,7 @@ Thinking a model writes in the message is never read aloud. The same nine format
 | Kimi | `◁think▷` … `◁/think▷` |
 
 - The tag names in the first three forms are `think`, `thinking`, `thought`, `thoughts`, `reasoning`, `reflection`, `scratchpad` and `analysis`.
-- **Extra thinking tag names**, on the Settings tab, adds more.
+- **Extra thinking tag names**, on the Settings tab, is for a model that uses a tag not listed above. Write only the name, with no brackets or pipes, one per line. It applies to the first three forms.
 - A closer with no opener means the opener was in the prompt. Everything before it is thinking.
 - A **Prefix** and **Suffix** saved on a connection, in Lumiverse's **Reasoning** settings, are recognized too.
 

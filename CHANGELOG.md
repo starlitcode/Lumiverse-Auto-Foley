@@ -41,6 +41,9 @@ _Not yet released_
 
 ### Changed
 
+- **The sampler boxes on the Director tab keep a number in range**, the same as in Auto Refine. A number above or below what a sampler takes is changed to the nearest one it takes when you leave the box, and saved then. An empty box says **Leave to the connection**.
+- **Extra thinking tag names** has no example in the box, and its hint reads the same as in Auto Retry and Auto Refine.
+- **The README, security policy and privacy page are laid out the same as in Auto Retry and Auto Refine**, on GitHub. The security policy says how to report a security problem, and the privacy page says what the extension never does and how to check it.
 - **The Debug info box has no ring around it while you type in it**, the same as in Auto Retry.
 - **Gemini 2.5 and 3.1 are no longer used.** Google shuts down these TTS models on December 18, 2026. A person who speaks through one is not spoken, and the panel says to pick Gemini 3.8 Flash TTS instead. Their notes, tags and settings are gone.
 - **ElevenLabs shows only the settings Eleven v3 and v4 take.** ElevenLabs' docs say v3 takes Stability only, and v4 Stability and Similarity. **Style**, **Speed** and **Speaker boost** are gone for them, and Similarity shows on Eleven v4 only. They did nothing on these models.

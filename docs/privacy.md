@@ -55,6 +55,28 @@ With **Save the performance to the message** on, the finished audio is saved to 
 
 Refusing **UI panels** stops only the floating player. Refusing **CORS proxy** stops new sound effects and a Chatterbox server reached directly. Refusing **Decision models** turns the Decision model off. Refusing **Generation** turns the Director off, and messages are read as written.
 
+## What it never does
+
+- It never changes the words of a message. Only the copy sent to the voice gets tags.
+- It never sends your Freesound or ElevenLabs key anywhere but its own host: `freesound.org` and `api.elevenlabs.io`. Neither key is sent back to the panel or put in settings.
+- Apart from Lumiverse's own routes, and a sound you added by link, it never calls any host other than Freesound, ElevenLabs and a Chatterbox server you add. Every speech key for your TTS connections stays in Lumiverse.
+- It never sends earlier messages in the chat anywhere.
+- It never runs text as code. There is no `eval` and no `new Function`, so nothing in a message, a note or a model's answer can run.
+
+## Checking any of this yourself
+
+Lumiverse loads two files, named in `spindle.json`: `dist/frontend.js` and `dist/backend.js`. They are readable code, not minified or bundled. What you read is what runs. If you are checking this extension, or pointing a scanner at it, those two files are all of it.
+
+The rest of the repo is for working on the extension and never reaches your browser:
+
+- `src/` is the TypeScript the two files are built from. A scanner that only reads JavaScript cannot read it. The `dist/` files are plain JavaScript.
+- `test/` only runs when a developer runs `bun run check`.
+- `setup.sh` prepares a developer's machine. Nothing runs it when you install.
+- `docs/` is these pages.
+- `.github/workflows/` runs the checks on pull requests.
+
+The checks rebuild `dist/` on every push and fail if it differs from `src/`, so the files Lumiverse loads always match the source. `package.json` has no install scripts, so nothing runs when Lumiverse installs the extension.
+
 ---
 
 [Back to the README](../README.md)

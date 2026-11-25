@@ -7701,6 +7701,24 @@ export function setup(ctx, overrides) {
         const prov = String((cn && cn.provider) || '').toLowerCase();
         const out = [];
         const num = (k, label, lo, hi, step, dflt, help) => slider(label, typeof own[k] === 'number' ? own[k] : dflt, lo, hi, step, (v) => (step >= 1 ? String(Math.round(v)) : v.toFixed(2)), (v) => setP(k, v), help);
+        // An exact whole number, such as a seed, in a box rather than on a
+        // slider. Held to its range when the box is left, as every number box is.
+        const wholeBox = (k, label, lo, hi, dflt, help) => {
+            const id = rid('whole');
+            const wrap = el('<div class="af-col"></div>');
+            wrap.setAttribute('data-af-row', id);
+            wrap.appendChild(labelRow(label, help, id));
+            const i = el('<input type="number" class="af-field" id="' + id + '" inputmode="numeric" step="1" min="' + lo + '" max="' + hi + '">');
+            i.value = String(typeof own[k] === 'number' ? own[k] : dflt);
+            i.addEventListener('change', () => {
+                const v = Number(String(i.value).trim());
+                const held = Number.isFinite(v) && String(i.value).trim() !== '' ? Math.round(Math.min(hi, Math.max(lo, v))) : dflt;
+                i.value = String(held);
+                setP(k, held);
+            });
+            wrap.appendChild(i);
+            return wrap;
+        };
         const words = (k, label, ph, help, max) => text(label, String(own[k] || ''), (v) => setP(k, v.trim()), ph, help, max);
         if (eng.eleven) {
             out.push(words('lang', 'Language', 'en, de, ja', 'Empty lets ElevenLabs tell from the text. A two-letter code, such as en or fr, makes it read the text in that language.'));
@@ -7721,9 +7739,9 @@ export function setup(ctx, overrides) {
         }
         if (prov === 'chatterbox_direct') {
             out.push(num('exaggeration', 'Exaggeration', 0.25, 2, 0.05, 0.5, 'How strong the feeling is. 0.50 by default. Higher is more dramatic and a little faster.'));
-            out.push(num('cfg_weight', 'CFG weight', 0, 1, 0.05, 0.5, 'How closely it follows the voice\u2019s pace. 0.50 by default. Lower is slower and more deliberate.'));
+            out.push(num('cfg_weight', 'CFG weight', 0, 1, 0.05, 0.5, 'How closely it follows the voice\u2019s pace. 0.50 by default. Lower is slower.'));
             out.push(num('temperature', 'Temperature', 0.05, 2, 0.05, 0.8, 'How much each take varies. 0.80 by default.'));
-            out.push(num('seed', 'Seed', 0, 999999, 1, 0, '0 by default, a new take each time. Any other number gives the same take for the same line.'));
+            out.push(wholeBox('seed', 'Seed', 0, 2147483647, 0, '0 by default, a new take each time. Any other number gives the same take for the same line.'));
         }
         return out;
     }
@@ -8076,16 +8094,27 @@ export function setup(ctx, overrides) {
         const id = rid('smp');
         const wrap = el('<div class="af-col"></div>');
         wrap.setAttribute('data-af-row', id);
-        wrap.appendChild(labelRow(f.label, f.help + ' Blank leaves it to the connection.', id));
-        const i = el('<input type="number" class="af-field" id="' + id + '" inputmode="decimal" min="' + f.min + '" max="' + f.max + '" step="' + f.step + '" placeholder="Blank: the connection decides">');
+        wrap.appendChild(labelRow(f.label, f.help, id));
+        const i = el('<input type="number" class="af-field" id="' + id + '" inputmode="decimal" min="' + f.min + '" max="' + f.max + '" step="' + f.step + '" placeholder="Leave to the connection">');
+        i.setAttribute('data-af-sampler', f.id);
         const cur = (S.samplers || {})[f.id];
         i.value = cur === '' || cur == null ? '' : String(cur);
-        i.addEventListener('input', () => {
+        // Saved when the box is left, held to the sampler's range, the same as in
+        // Auto Refine. Cleared hands it back to the connection, which is not the
+        // same as sending zero, so the key goes rather than being set to 0.
+        i.addEventListener('change', () => {
             const next = Object.assign({}, S.samplers || {});
-            if (i.value.trim() === '')
+            const raw = String(i.value).trim();
+            const v = Number(raw);
+            if (!raw || !Number.isFinite(v)) {
                 delete next[f.id];
-            else
-                next[f.id] = Number(i.value);
+                i.value = '';
+            }
+            else {
+                const held = Math.min(f.max, Math.max(f.min, v));
+                next[f.id] = held;
+                i.value = String(held);
+            }
             set({ samplers: next });
         });
         wrap.appendChild(i);
@@ -8826,8 +8855,7 @@ export function setup(ctx, overrides) {
             return [f, said];
         }));
         r.appendChild(area('Extra thinking tag names', (S.extraThinkTags || []).join('\n'), (v) => set({ extraThinkTags: v.split('\n').map((x) => x.trim()).filter(Boolean).slice(0, 20) }), {
-            placeholder: 'musing',
-            help: 'More tag names that hold thinking, one per line, without the angle brackets. Text inside these tags is not read aloud.',
+            help: 'Optional. One tag name per line, with no brackets. The common thinking tags are already known.',
         }));
         page.appendChild(r);
         const c = card('Check my setup', 'Checks your TTS connection, the Director, the Decision model and the sound keys. It speaks nothing, so it spends no voice credits.');

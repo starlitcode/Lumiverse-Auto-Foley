@@ -1,29 +1,39 @@
-# Security
+# Security policy
 
-## What Auto Foley can reach
+How to report a security problem in Auto Foley. For what the extension sends, keeps and can reach, read [Privacy](docs/privacy.md) instead.
 
-- **Lumiverse's own routes, as you.** The panel runs in your Lumiverse page. It lists your TTS connections and their voices, reads the message you perform, speaks lines through your TTS connections, and, when you turn it on, saves the finished audio to the message. These are the same routes Lumiverse's own TTS uses.
-- **Generation.** It asks the Director, through a connection you pick.
-- **Decision models.** It asks the Decision model, through a connection you pick.
-- **Two outside services**, through Lumiverse's CORS proxy, for sound effects and for testing their keys:
-  - Freesound: searches go to `freesound.org`, with your Freesound key. Previews are downloaded from Freesound's own addresses, with no key.
-  - ElevenLabs: `api.elevenlabs.io`, with your ElevenLabs key.
-- **Your own Chatterbox server**, only when you add its address under **Chatterbox server (direct)** in the Settings tab. It is reached at that address, through the same CORS proxy, with no key.
-- Auto Foley calls no other host.
-- **Sounds you add by link.** Your browser plays them from the address you gave, as with any link you open. Auto Foley only keeps the link.
+## Where to send it
 
-## What it keeps
+**Something sensitive, or anything you can see being abused: open a [security advisory](https://github.com/starlitcode/Lumiverse-Auto-Foley/security/advisories/new), or message me on Discord.** I am `.moonsight.` in the Lumiverse server. Either way, wait for my reply before posting it anywhere public.
 
-- Settings, the cast with any pictures you picked, and the sound library, in `spindle.userStorage`, under your account.
-- With **Keep made audio** on, the lines it spoke and the last 300 scripts, in the same place. **Clear kept audio** deletes them.
-- The Freesound and ElevenLabs keys, in Lumiverse's secure enclave, under your account. Neither is ever sent back to the panel or put in settings. The Freesound key is only sent to `freesound.org`, and the ElevenLabs key only to `api.elevenlabs.io`.
+**Anything else: [open an issue](https://github.com/starlitcode/Lumiverse-Auto-Foley/issues).** Ordinary bugs, odd behavior, and anything you are happy to have read by everyone belong there.
 
-## How to check it
+**A permission being used for more than [Privacy](docs/privacy.md) says: an advisory or Discord.** That page states what each permission is for and what the extension does not do with it. If you find it doing something that page does not describe, that is a security report, not a bug report, whether or not it looks harmful.
 
-- `dist/` is committed as readable JavaScript, and it is the code Lumiverse runs. It is built from `src/` with `bun run build`, which only takes out the types.
-- Every push and pull request runs a check that rebuilds `dist/` and fails if it differs from what is committed.
-- `package.json` has no install scripts. Nothing runs when Lumiverse installs the extension.
+Not sure which? Use an advisory. If it turns out to be nothing sensitive, you can open an issue afterwards and nothing is lost. If you open an issue first and it was sensitive, deleting it does not undo anything: GitHub has already emailed it to everyone watching the repo, and search engines may have it.
 
-## Reporting a problem
+## What to include
 
-Open an issue at https://github.com/starlitcode/Lumiverse-Auto-Foley/issues. For something that should not be public, say so in the issue, with no details, and I will reply.
+- What you saw, and what you expected instead.
+- The steps that produce it, or the message or setting that triggers it.
+- Your Lumiverse build, your browser, and the Auto Foley version, which is the first line of **Debug info**.
+- Whatever **Debug info** gives you. It is on the Settings tab. Tick the parts to include, press **Build preview**, and read it before you send it. Leave out anything you would rather not share.
+
+## What not to do
+
+- **Do not post a working exploit in public** before I have replied.
+- **Do not include your API keys, passwords or session tokens.** I never need them, and nothing in a real report requires one. That includes your Freesound and ElevenLabs keys.
+- **Do not paste chat text you would not want read.** Debug info leaves message text out, but a screenshot or a Log copied by hand can show it. Delete those parts before you send it.
+- **Do not test against other people.** Anything you report should be something you reproduced in your own Lumiverse.
+
+## What to expect
+
+I will read it and reply with whether I think it is a real problem and what I intend to do.
+
+I maintain this alone in my spare time, so I cannot promise a fix by any particular date. If it is real, the fix goes out in a new version and the changelog says what it was.
+
+Only the latest version is supported. I do not release fixes for older versions, so updating is how you get one.
+
+---
+
+[Back to the README](README.md)
