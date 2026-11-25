@@ -96,7 +96,7 @@ A person can speak through a connection of their own. Open them in the **Cast** 
 Gemini 3.8:
 
 - Voice tags and notes work with **Gemini 3.8 Flash TTS** and **Gemini 3.8 Flash-Lite TTS**.
-- Gemini 3.8 knows only vocal sounds and pauses as tags, such as `<sigh>`, `<laugh>` and `<short pause>`. Auto Foley writes them in Gemini's angle brackets.
+- Gemini 3.8 knows only vocal sounds and pauses as tags, such as `<sigh>`, `<laugh>`, `<growl>` and `<short pause>`. Auto Foley writes them in Gemini's angle brackets. A tag in square brackets is not acted on, so it is never sent that way.
 - Gemini 3.8 reads its text word for word. A few words in `|pipes|` are said by a second voice in the background, and a word in `/slashes/` is read as a phonetic spelling. Auto Foley takes pipes, angle brackets and slash pairs out of the message first, so only its own tags are read that way.
 - How a line is said goes in its note, such as `hushed and nervous`.
 - With no note, the line uses the speech style saved on the connection in Lumiverse. With none saved there, Lumiverse uses its own: relaxed conversation.
@@ -110,6 +110,8 @@ Gemini 2.5 and 3.1:
 - Google lists three more, `[scared]`, `[curious]` and `[bored]`, but the voice says those words aloud. Auto Foley never sends them.
 - Lumiverse sends these models the text alone, so a line gets no note on how it is said, and singing is spoken.
 - Google calls these tags a preview, so a tag may not always work.
+- Google shuts these models down on December 18, 2026, and names Gemini 3.8 as the model to use instead. The panel says so while you use one.
+- Now and then these preview models answer with no audio. Auto Foley asks again after a moment.
 
 Gemini through OpenRouter:
 

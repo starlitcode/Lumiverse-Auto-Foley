@@ -12,6 +12,8 @@ _Not yet released_
 
 ### Added
 
+- **More vocal sounds for Gemini 3.8**: moan, growl, grunt, hiss, scream, shout, shriek, cheer and phew, from Google's own list.
+- **A warning for Gemini 2.5 and 3.1.** Google shuts those TTS models down on December 18, 2026. The panel says so, and names Gemini 3.8 as the model to use.
 - **Saved audio**, on the Stage tab. It lists every message with a saved script, newest first, with whose script it is, the day and its first line. **Play**, **Download** and **Delete** are on each row. Play and Download use only saved audio, so nothing is spent.
 - **A player under each message**, on by default. A message Auto Foley has performed gets a small player under its text, where Lumiverse puts its own. It has Back, Play, Next and Download, says which part is playing, and plays the saved audio again with nothing spent. It follows your theme: its colors, the message font, and the side and alignment of the message text, centered too.
 - **Voice price, per million characters**, in the Settings tab. Now playing says how many characters were sent to the voice service for new audio, and with a price set, what it cost. Saved audio adds nothing.
@@ -24,9 +26,9 @@ _Not yet released_
 - **Play from the drawer.** Play in Now playing, on the Stage tab, performs the latest reply or your latest message when nothing is playing. The same choice as in the floating player sits under it.
 - **Light up words in the chat**, on the Settings tab, on by default. The word being spoken is lit in the message itself, as it is said. Nothing in the message is changed.
 - **Type a voice name or ID**, in the Cast tab, for a voice the list does not show, such as one you made or cloned, a Gemini voice name, or a voice file on a Chatterbox server. A name or ID that matches a voice in the list picks that voice.
-- **More settings for each engine**, in the Cast tab, under each person's voice. Only the settings their engine takes are shown: speaker boost and language for ElevenLabs, voice direction, temperature, top P and steady loudness for Fish Audio, temperature, language and a usual way of speaking for Gemini, and exaggeration, CFG weight, temperature and seed for Chatterbox. **Back to defaults** clears them.
+- **More settings for each engine**, in the Cast tab, under each person's voice. Only the settings their engine takes are shown: language for ElevenLabs, voice direction, temperature, top P and steady loudness for Fish Audio, temperature, language and a usual way of speaking for Gemini, and exaggeration, CFG weight, temperature and seed for Chatterbox. **Back to defaults** clears them.
 - **A Chatterbox server, without a Lumiverse connection**, in the Settings tab. Auto Foley talks to a Chatterbox-TTS-Server itself, listed as **Chatterbox server (direct)**, so its own settings reach it. **Save and test** says which model it runs and how many voices it has.
-- **Speed in each engine's own range**: 0.7 to 1.2 for ElevenLabs, 0.5 to 2 for Fish Audio and Chatterbox.
+- **Speed in each engine's own range**: 0.5 to 2 for Fish Audio and Chatterbox.
 - **How they speak says what helps on each engine.** The line under the box changes with the engine the person speaks through.
 - **Neutral**, as a voice type in the Cast tab. A voice the provider marks neutral is picked when there is one. The Director sets it for someone new only when the story says they are nonbinary.
 - **Main characters and minor ones.** The Director says which a new speaker is, and the Cast tab files a main one as a character and a minor one as an NPC.
@@ -39,6 +41,7 @@ _Not yet released_
 
 ### Changed
 
+- **ElevenLabs shows only the settings Eleven v3 and v4 take.** ElevenLabs' docs say v3 takes Stability only, and v4 Stability and Similarity. **Style**, **Speed** and **Speaker boost** are gone for them, and Similarity shows on Eleven v4 only. They did nothing on these models.
 - **A message the Director could not direct is saved, read as written.** Before, nothing was saved, so every play asked the Director again and it did not show in Saved audio. Now it plays from saved audio, and **Now playing** and **Saved audio** say "read as written" and why. **Direct again** tries the Director. A script saved with the Director off says so too.
 - **A sound with nothing to play no longer pops up a warning.** Without a Freesound or ElevenLabs key, a sound missing from your library warned on every play. It is now said once in the Log, and the message plays on without it.
 - **Start here says what to do first, with a button for each step.** **Check my setup** goes to the Settings tab and runs the check, **Open the Cast tab** goes to the cast, and it says to press Play under **Now playing**, since the buttons on messages now start off.

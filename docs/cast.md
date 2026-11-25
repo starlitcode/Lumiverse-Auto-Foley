@@ -33,8 +33,8 @@ Someone the AI added has no voice picked. The first time they speak, Auto Foley 
 - **Or type a voice name or ID.** For a voice the list does not show, such as one you made or cloned, a Gemini voice name, or a voice file on a Chatterbox server. A name or ID that matches a voice in the list picks that voice. Anything else is sent as you typed it. It is saved when you leave the box.
 - **Model.** Empty uses the connection's model. The line under it names the engine and what it can do. See [Voice engines](engines.md).
 - **Stability.** ElevenLabs only. Lower is more expressive. On Eleven v3 it has three settings: Creative, Natural and Robust.
-- **Similarity and Style.** ElevenLabs only. Sent to ElevenLabs as they are.
-- **Speed.** Sent to every engine but Gemini, which has no speed.
+- **Similarity.** Eleven v4 only. Eleven v3 does not take it.
+- **Speed.** Fish Audio and Chatterbox only. ElevenLabs' docs say Eleven v3 and v4 take no speed, and Gemini has none either.
 - **More settings.** A fold under the voice, with only the settings their engine takes. **Back to defaults** clears them.
 - **How they speak.** A note for the Director, such as "soft-spoken and dry, rarely raises their voice". It holds up to 1000 characters. See [How much a box holds](#how-much-a-box-holds), and [Writing for each voice engine](writing.md) for what helps on each engine.
 - **Do not voice.** Their lines are skipped.

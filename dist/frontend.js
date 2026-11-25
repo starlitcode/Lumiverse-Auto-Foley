@@ -28,6 +28,7 @@ const ELEVEN_MODELS = [
 const GEMINI_TAGS = [
     'breath', 'heavy breath', 'exhales', 'pant', 'sigh', 'laugh', 'chuckle', 'giggle', 'snicker', 'cackle',
     'gasp', 'cough', 'sneeze', 'throat-clearing', 'snort', 'sob', 'cry', 'whimper', 'groan', 'yawn',
+    'moan', 'growl', 'grunt', 'hiss', 'scream', 'shout', 'shriek', 'cheer', 'phew',
     'short pause', 'long pause', 'tsk', 'argh',
 ];
 // The markup tags Google's Gemini-TTS page lists for Gemini 2.5 and 3.1, in
@@ -1405,6 +1406,9 @@ export function setup(ctx, overrides) {
         // make one in the voice, so only In the voice is worth a warning.
         if (S.directorOn && S.soundsOn && S.soundStyle === 'voice' && !eng.inVoiceSounds)
             out.push('This engine cannot make sounds inside a line, so In the voice does nothing here. Its sounds are played as separate sound effects instead, which come from Freesound, ElevenLabs or your own uploads, in the Sounds tab.');
+        // Google's deprecations page gives the date these preview models stop.
+        if (eng.id === 'gemini_31')
+            out.push('Google shuts down the Gemini 2.5 and 3.1 TTS models on December 18, 2026. Gemini 3.8 Flash TTS replaces them, and it also takes a note on how each line is said.');
         return out;
     }
     // What a setting cannot do on the engine in use. Not a fault, so these
@@ -1946,13 +1950,13 @@ export function setup(ctx, overrides) {
         const own = (m && m.params) || {};
         const has = (k) => own[k] !== undefined && own[k] !== '';
         if (eng.eleven) {
-            params.use_speaker_boost = own.boost !== false;
+            // Eleven v3 takes Stability only, and Eleven v4 Stability and
+            // Similarity. Neither takes Speed, Style or Speaker boost, so those
+            // are not sent.
             if (m) {
                 params.stability = stabilityFor(model, m.stability, line.big);
-                params.similarity_boost = m.similarity;
-                params.style = m.style;
-                // ElevenLabs takes 0.7 to 1.2.
-                params.speed = Math.min(1.2, Math.max(0.7, speed));
+                if (/^eleven_v4/.test(model))
+                    params.similarity_boost = m.similarity;
             }
             if (has('lang'))
                 params.language_code = own.lang;
@@ -7331,7 +7335,6 @@ export function setup(ctx, overrides) {
         const num = (k, label, lo, hi, step, dflt, help) => slider(label, typeof own[k] === 'number' ? own[k] : dflt, lo, hi, step, (v) => (step >= 1 ? String(Math.round(v)) : v.toFixed(2)), (v) => setP(k, v), help);
         const words = (k, label, ph, help, max) => text(label, String(own[k] || ''), (v) => setP(k, v.trim()), ph, help, max);
         if (eng.eleven) {
-            out.push(personSwitch('Speaker boost', 'On by default. Makes the voice closer to the original. Off can be a little faster.', own.boost !== false, (v) => setP('boost', v ? undefined : false)));
             out.push(words('lang', 'Language', 'en, de, ja', 'Empty lets ElevenLabs tell from the text. A two-letter code, such as en or fr, makes it read the text in that language.'));
         }
         if (prov === 'fish_audio') {
@@ -7571,20 +7574,19 @@ export function setup(ctx, overrides) {
                 }
             }
             const g2 = el('<div class="af-grid2"></div>');
-            if (eng.eleven) {
+            // Only the settings the model takes. Eleven v4 takes Similarity, and
+            // Eleven v3 does not.
+            if (eng.eleven && /^eleven_v4/.test(pick.model || cn.model || '')) {
                 g2.appendChild(slider('Similarity', m.similarity, 0, 1, 0.05, (v) => v.toFixed(2), (v) => {
                     m.similarity = v;
                     save();
                 }, 'How closely ElevenLabs keeps to the original voice. 0.75 by default.'));
-                g2.appendChild(slider('Style', m.style, 0, 1, 0.05, (v) => v.toFixed(2), (v) => {
-                    m.style = v;
-                    save();
-                }, 'Exaggerates the voice’s own style. 0 by default. Higher can sound less stable.'));
             }
-            // Speed, in the range the engine takes. Gemini has no speed.
-            if (!/^gemini/.test(eng.id)) {
-                const lo = eng.eleven ? 0.7 : 0.5;
-                const hi = eng.eleven ? 1.2 : 2;
+            // Speed, in the range the engine takes. Gemini, Eleven v3 and Eleven
+            // v4 have no speed.
+            if (!/^gemini/.test(eng.id) && !eng.eleven) {
+                const lo = 0.5;
+                const hi = 2;
                 const at = Math.min(hi, Math.max(lo, Number(m.speed) || 1));
                 g2.appendChild(slider('Speed', at, lo, hi, 0.05, (v) => v.toFixed(2) + '×', (v) => {
                     m.speed = v;
