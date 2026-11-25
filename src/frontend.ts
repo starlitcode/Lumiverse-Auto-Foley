@@ -1350,6 +1350,7 @@ const DEFAULTS: any = {
   timeoutSecs: 120,
   costIn: 0,
   costOut: 0,
+  voicePrice: 0,
   rateWaits: 2,
   retryDirector: 1,
   askNote: true,
@@ -1891,6 +1892,8 @@ export function setup(ctx: Ctx, overrides?: any) {
     voiceKeys: Map<number, string>;
     // The voice parts played from saved audio, so the panel can say so.
     saved: Set<number>;
+    // Characters sent to the voice service for audio made new in this show.
+    chars: number;
     // The voices already said in the Log to be turned down.
     toldLevel: Set<string>;
     // Set by Back, so the loop plays the part it was moved to.
@@ -2051,9 +2054,16 @@ export function setup(ctx: Ctx, overrides?: any) {
     return { body, sig, conn };
   }
 
-  async function makeVoiceClip(line: Line, signal: AbortSignal, onWait?: (ms: number, n: number) => void): Promise<{ blob?: Blob | string; why?: string; saved?: boolean }> {
+  // A spoken line, with how many characters were sent for it when it was
+  // made new, for the voice cost. A line played from saved audio sends none.
+  async function makeVoiceClip(line: Line, signal: AbortSignal, onWait?: (ms: number, n: number) => void): Promise<{ blob?: Blob | string; why?: string; saved?: boolean; chars?: number }> {
     const req = await voiceRequest(line);
     if (!req.body) return { why: req.why };
+    const got: { blob?: Blob | string; why?: string; saved?: boolean; chars?: number } = await madeVoiceClip(line, signal, onWait, req);
+    if (got && got.blob && !got.saved) got.chars = Array.from(String(req.body.text || '')).length;
+    return got;
+  }
+  async function madeVoiceClip(line: Line, signal: AbortSignal, onWait: ((ms: number, n: number) => void) | undefined, req: any): Promise<{ blob?: Blob | string; why?: string; saved?: boolean }> {
     const body = req.body;
     const conn = req.conn;
     const who = serviceName(conn);
@@ -2190,6 +2200,7 @@ export function setup(ctx: Ctx, overrides?: any) {
               if (show === sh && sh.index === k) paintStage();
             }).then((r) => {
               if (r && r.saved) sh.saved.add(k);
+              if (r && r.chars) sh.chars += r.chars;
               return r;
             })
           : it.kind === 'applause'
@@ -2911,6 +2922,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       voiced: new Map(),
       voiceKeys: new Map(),
       saved: new Set(),
+      chars: 0,
       toldLevel: new Set(),
       failed: [],
     };
@@ -5767,9 +5779,12 @@ export function setup(ctx: Ctx, overrides?: any) {
     const sv = show || (lastShow && sc0 && lastShow.script.messageId === sc0.messageId ? lastShow : null);
     const voiceParts = sv ? sv.items.filter((x) => x.kind === 'voice').length : 0;
     const savedSaid = sv && sv.saved.size ? ' ' + sv.saved.size + ' of ' + voiceParts + (voiceParts === 1 ? ' line' : ' lines') + (show ? ' so far' : '') + ' played from saved audio, with nothing spent.' : '';
-    used.hidden = !n && !(sc0 && sc0.fromKept) && !savedSaid;
-    if (sc0 && sc0.fromKept) setText(used, 'Saved script. The Director was not asked again.' + savedSaid);
-    else if (!n) setText(used, savedSaid.trim());
+    // The characters sent for new audio, and their cost at the voice price.
+    const vp = Number(S.voicePrice) || 0;
+    const voiceSaid = sv && sv.chars ? ' Voice: ' + sv.chars.toLocaleString() + ' characters' + (vp > 0 ? ', about ' + money((sv.chars / 1e6) * vp) : '') + '.' : '';
+    used.hidden = !n && !(sc0 && sc0.fromKept) && !savedSaid && !voiceSaid;
+    if (sc0 && sc0.fromKept) setText(used, 'Saved script. The Director was not asked again.' + voiceSaid + savedSaid);
+    else if (!n) setText(used, (voiceSaid + savedSaid).trim());
     else {
       // Input and output, the same two words the prices are named after.
       const word = (x: number) => (sc0!.counted === false ? 'about ' : '') + x.toLocaleString();
@@ -5778,7 +5793,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       // in the Director tab.
       const priced = (n / 1e6) * (Number(S.costIn) || 0) + (back / 1e6) * (Number(S.costOut) || 0);
       const cost = Number(sc0!.cost) > 0 ? Number(sc0!.cost) : priced;
-      setText(used, 'This script used ' + word(n) + ' input tokens and ' + word(back) + ' output tokens.' + (cost > 0 ? ' Cost: about ' + money(cost) + '.' : '') + savedSaid);
+      setText(used, 'This script used ' + word(n) + ' input tokens and ' + word(back) + ' output tokens.' + (cost > 0 ? ' Cost: about ' + money(cost) + '.' : '') + voiceSaid + savedSaid);
     }
     stageRefs.retryRow.hidden = !(lastFailed && !show && !busyMessage);
     const title = q('title');
@@ -6956,7 +6971,7 @@ export function setup(ctx: Ctx, overrides?: any) {
   // A price box. A pasted line, such as "$0.30 / 1M input tokens", keeps
   // its first number. It saves when the box is left, so a half-typed number
   // is not saved.
-  function priceRow(key: 'costIn' | 'costOut', label: string, help: string): HTMLElement {
+  function priceRow(key: 'costIn' | 'costOut' | 'voicePrice', label: string, help: string): HTMLElement {
     const id = rid('price');
     const wrap = el('<div class="af-col"></div>');
     wrap.setAttribute('data-af-row', key);
@@ -7572,6 +7587,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       if (connBox.isConnected && connSig() !== drawnWith) drawConn();
     });
     a.appendChild(connBox);
+    a.appendChild(priceRow('voicePrice', 'Voice price, per million characters', 'Your voice service\u2019s price per million characters. Now playing then gives the cost of the new audio. Saved audio costs nothing.'));
     // A Chatterbox-TTS-Server Auto Foley talks to itself.
     a.appendChild(
       fold('A Chatterbox server, without a Lumiverse connection', (body) => {

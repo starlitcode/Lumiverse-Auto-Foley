@@ -1086,10 +1086,22 @@ if (section("note limit")) {
 if (section("kept")) {
   console.log("Kept audio plays again without being made again");
   const { context, page, errors } = await open(THEMES[0], SIZES[0]);
+  await page.click('.af-tab[data-tab="settings"]');
+  await page.waitForTimeout(200);
+  await page.fill('[data-af-row="voicePrice"] input', "30");
+  await page.locator('[data-af-row="voicePrice"] input').blur();
+  await page.click('.af-tab[data-tab="stage"]');
+  await page.waitForTimeout(200);
   await page.click('#mount [data-af-slot="message"]');
   await page.waitForFunction(() => document.querySelector('#mount [data-af-slot="message"]').getAttribute("aria-busy") === null && (window.__synth || []).length > 0, null, { timeout: 8000 });
   await page.waitForTimeout(300);
   const made = await page.evaluate(() => (window.__synth || []).length);
+  {
+    const chars = await page.evaluate(() => (window.__synth || []).reduce((n, b) => n + Array.from(String(b.text || "")).length, 0));
+    const firstSaid = (await page.locator('[data-af="used"]').textContent()) || "";
+    const cost = Number(((chars / 1e6) * 30).toPrecision(2));
+    check(firstSaid.includes("Voice: " + chars.toLocaleString("en-US") + " characters, about " + cost + "."), "Now playing gives the characters sent for new audio, and their cost (" + firstSaid + ")");
+  }
   check(made > 0 && (await page.evaluate(() => Object.keys(window.__clips || {}).length)) === made, "each line made is kept (" + made + ")");
   await page.click('#mount [data-af-slot="message"]');
   await page.waitForTimeout(1500);
@@ -1098,6 +1110,7 @@ if (section("kept")) {
   await page.waitForTimeout(200);
   const savedSaid = (await page.locator('[data-af="used"]').textContent()) || "";
   check(/\d+ of \d+ lines?(?: so far)? played from saved audio, with nothing spent\./.test(savedSaid), "Now playing says the lines came from saved audio (" + savedSaid + ")");
+  check(!savedSaid.includes("Voice:"), "audio played from what was saved adds no characters");
   await page.click('.af-tab[data-tab="settings"]');
   await page.waitForTimeout(300);
   check((await page.locator('[data-af="kept"]').textContent()).includes("Kept now: " + made), "Settings says how much is kept");

@@ -122,6 +122,8 @@ interface Settings {
   // cost worked out from them.
   costIn: number;
   costOut: number;
+  // The voice service's price per million characters, from the reader.
+  voicePrice: number;
   // How many times to wait and ask again when a provider is busy.
   rateWaits: number;
   // A note sent with an ask made again, saying what went wrong with the last
@@ -268,6 +270,7 @@ const DEFAULT_SETTINGS: Settings = {
   timeoutSecs: 120,
   costIn: 0,
   costOut: 0,
+  voicePrice: 0,
   rateWaits: 2,
   askNote: true,
   askNotes: {},
@@ -629,6 +632,7 @@ function cleanSettings(raw: any): Settings {
     timeoutSecs: Math.round(num(r.timeoutSecs, 0, 3600, d.timeoutSecs)),
     costIn: num(r.costIn, 0, 10000, d.costIn),
     costOut: num(r.costOut, 0, 10000, d.costOut),
+    voicePrice: num(r.voicePrice, 0, 10000, d.voicePrice),
     rateWaits: Math.round(num(r.rateWaits, 0, 5, d.rateWaits)),
     askNote: bool(r.askNote, d.askNote),
     askNotes: cleanNotes(r.askNotes),

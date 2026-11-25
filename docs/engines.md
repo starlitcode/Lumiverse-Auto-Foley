@@ -130,6 +130,17 @@ Chatterbox runs on your own computer, through a server such as Chatterbox-TTS-Se
 - Chatterbox-Turbo knows nine tags: `[clear throat]`, `[sigh]`, `[shush]`, `[cough]`, `[groan]`, `[sniff]`, `[gasp]`, `[chuckle]` and `[laugh]`. It reads English only.
 - Chatterbox-Multilingual takes no tags, so Auto Foley does not use it. A connection with "multilingual" in its name is taken to run it.
 
+## What the voice costs
+
+Lumiverse sends back only the audio, with no price. Auto Foley counts what it sends instead.
+
+- **Voice price, per million characters** is in the Settings tab, under **TTS connection**. Type your voice service's price.
+- Now playing says how many characters were sent for new audio in the message, such as "Voice: 1,240 characters, about 0.037."
+- Lines played from saved audio send nothing, so they add nothing.
+- The count includes the tags in each line, since a voice service counts them too.
+- At 0, which is the default, the characters are counted with no cost.
+- ElevenLabs and Fish Audio charge by the text, so the cost is close. Gemini charges for the audio it sends back, so for Gemini it is only a rough guide.
+
 ## Proxies
 
 Auto Foley never calls a voice service itself. Lumiverse makes the call, to the address saved on the connection. So a proxy set up in Lumiverse works with Auto Foley.
