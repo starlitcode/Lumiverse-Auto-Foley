@@ -11,7 +11,7 @@
 // One backend process can serve every account on a server, so everything that
 // belongs to a person is kept per user id, in spindle.userStorage, and every
 // reply goes back addressed to that user.
-const VERSION = '1.5.0';
+const VERSION = '1.6.0';
 const DEFAULT_SETTINGS = {
     enabled: true,
     ttsConnection: '',
@@ -102,7 +102,7 @@ const DEFAULT_SETTINGS = {
     resetParts: ['settings', 'prompt', 'cast', 'sounds', 'audio', 'key'],
     cast: [],
     groups: [],
-    castSorted: true,
+    castSort: 'kind',
 };
 const NARRATOR_ID = 'narrator';
 function narrator() {
@@ -488,7 +488,9 @@ function cleanSettings(raw) {
         resetParts: partList(r.resetParts, RESET_PARTS, d.resetParts),
         cast: cast,
         groups: groups,
-        castSorted: bool(r.castSorted, d.castSorted),
+        // castSorted is the name 1.5.0 saved this under: false was a cast moved
+        // by hand. It is read once, to move it to castSort.
+        castSort: pick(r.castSort, ['kind', 'az', 'za', 'voice', 'own'], r.castSorted === false ? 'own' : d.castSort),
     };
 }
 // An id that works over plain http too. crypto.randomUUID is missing outside

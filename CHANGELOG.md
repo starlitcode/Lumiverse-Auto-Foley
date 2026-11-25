@@ -6,13 +6,28 @@ Versions follow [Semantic Versioning](https://semver.org). A new major version m
 
 ---
 
+## 1.6.0
+
+_2026-11-25_
+
+### Added
+
+- **Sort the cast A to Z, Z to A or by voice type.** **Sort the cast**, on the Cast tab under **New group**, lists people by kind, A to Z, Z to A, by voice type, or in your own order. Inside a group, people are sorted the same way. The floating player lists the cast in the same order. See [Sorting and moving people](docs/cast.md#sorting-and-moving-people).
+
+### Changed
+
+- **Sort the cast takes the place of the Sort by kind button.** By kind is its first choice. Dragging someone switches it to **My own order**, and the order you dragged them into is kept when you pick another way to sort.
+- **The narrator's card says why it cannot be removed.** It reads everything outside quotes, so it would be added back at once. The card says to change **Narration** in the Settings tab to skip it.
+
+---
+
 ## 1.5.0
 
 _2026-11-25_
 
 ### Added
 
-- **Move people and groups on the Cast tab.** Hold the dots on the left of a person or a group and drag it up or down. On a keyboard, the up and down arrow keys move it one place. **Sort by kind** puts people back in order of kind. The floating player lists the cast in the same order. See [Moving people and groups](docs/cast.md#moving-people-and-groups).
+- **Move people and groups on the Cast tab.** Hold the dots on the left of a person or a group and drag it up or down. On a keyboard, the up and down arrow keys move it one place. **Sort by kind** puts people back in order of kind. The floating player lists the cast in the same order. See [Sorting and moving people](docs/cast.md#sorting-and-moving-people).
 
 ### Changed
 

@@ -13,7 +13,7 @@
 
 type Ctx = any;
 
-const VERSION = '1.5.0';
+const VERSION = '1.6.0';
 // The marks Lumiverse puts on another extension's part of the page. Nothing
 // inside one is read, written or pressed.
 const OTHER_UI = '[data-spindle-extension-root],[data-spindle-ext],[data-spindle-modal]';
@@ -152,6 +152,27 @@ function keyCombo(e: any): string {
   if (!name) return '';
   if (!e.ctrlKey && !e.altKey && !e.metaKey) return '';
   return (e.ctrlKey ? 'Ctrl+' : '') + (e.altKey ? 'Alt+' : '') + (e.shiftKey ? 'Shift+' : '') + (e.metaKey ? 'Cmd+' : '') + name;
+}
+
+// The ways the Cast tab can list people. Each sort keeps people who tie in
+// the cast's own order.
+const CAST_SORTS = [
+  { id: 'kind', label: 'By kind' },
+  { id: 'az', label: 'A to Z' },
+  { id: 'za', label: 'Z to A' },
+  { id: 'voice', label: 'By voice type' },
+  { id: 'own', label: 'My own order' },
+];
+function sortCast<T extends { name: string; kind: string; gender?: string }>(cast: T[], how: string): T[] {
+  const list = (Array.isArray(cast) ? cast : []).slice();
+  const kinds: Record<string, number> = { narrator: 0, persona: 1, character: 2, npc: 3 };
+  const voices: Record<string, number> = { female: 0, male: 1, nonbinary: 2, unknown: 3 };
+  const byName = (a: T, b: T) => String(a.name || '').localeCompare(String(b.name || ''), undefined, { sensitivity: 'base', numeric: true });
+  if (how === 'az') list.sort(byName);
+  else if (how === 'za') list.sort((a, b) => byName(b, a));
+  else if (how === 'voice') list.sort((a, b) => (voices[String(a.gender || 'unknown')] ?? 3) - (voices[String(b.gender || 'unknown')] ?? 3) || byName(a, b));
+  else if (how !== 'own') list.sort((a, b) => (kinds[a.kind] ?? 9) - (kinds[b.kind] ?? 9));
+  return list;
 }
 
 const STORE_KEY = 'lv-auto-foley:settings:v1';
@@ -1574,7 +1595,7 @@ const DEFAULTS: any = {
   engines: {},
   engineNotes: {},
   groups: [],
-  castSorted: true,
+  castSort: 'kind',
   logShow: {},
   builtInSeen: '',
   movedSeen: '',
@@ -1662,7 +1683,13 @@ export function setup(ctx: Ctx, overrides?: any) {
   let S: any = Object.assign({}, DEFAULTS);
   try {
     const raw = localStorage.getItem(STORE_KEY);
-    if (raw) S = Object.assign({}, DEFAULTS, JSON.parse(raw));
+    if (raw) {
+      const kept = JSON.parse(raw);
+      // castSorted is the name 1.5.0 saved the cast's order under. It is read
+      // once, so a cast moved by hand stays in its own order.
+      if (kept && kept.castSort == null && kept.castSorted === false) kept.castSort = 'own';
+      S = Object.assign({}, DEFAULTS, kept);
+    }
   } catch (_) {}
   // Nothing is written to the account until the account has answered once,
   // so an empty first render can never overwrite real settings.
@@ -7436,19 +7463,18 @@ export function setup(ctx: Ctx, overrides?: any) {
       }, 'af-primary'),
     );
     row.appendChild(button('New group', () => editGroup(null)));
-    // Shown once someone has been moved, to put the cast back in order of
-    // kind: the narrator, your personas, the characters, then the NPCs.
-    const sortKind = button('Sort by kind', () => {
-      S.cast = castInOrder(true);
-      S.castSorted = true;
+    top.appendChild(row);
+    // How the people are listed on this tab and in the floating player. Only
+    // the list on screen is sorted: the cast's own order is kept, and My own
+    // order shows it again.
+    const sortPick = select('Sort the cast', CAST_SORTS, String(S.castSort || 'kind'), (v) => {
+      S.castSort = v;
       save();
       renderTab();
-    });
-    sortKind.setAttribute('data-af-sortkind', '');
-    sortKind.hidden = S.castSorted !== false;
-    row.appendChild(sortKind);
-    top.appendChild(row);
+    }, 'By kind lists the narrator, your personas, the characters, then the NPCs. Dragging someone switches to My own order.');
+    sortPick.setAttribute('data-af-castsort', '');
     top.appendChild(hint('Groups sort the cast, such as one for each story. Drag the dots beside a person or a group to move it.'));
+    top.appendChild(sortPick);
     const conn = activeConnection();
     if (!conn) top.appendChild(notice('warn', ttsWhy || 'Pick your TTS connection in the Settings tab to choose voices.'));
     page.appendChild(top);
@@ -7460,14 +7486,9 @@ export function setup(ctx: Ctx, overrides?: any) {
     for (const m of people) if (!m.group || !known.has(m.group)) page.appendChild(personCard(m));
   }
 
-  // The cast in the order the tab shows it. Sorted by kind until someone is
-  // moved, and in the order it was left in after that. byKind sorts it
-  // either way.
-  function castInOrder(byKind?: boolean): Member[] {
-    const order: Record<string, number> = { narrator: 0, persona: 1, character: 2, npc: 3 };
-    const list = (S.cast as Member[]).slice();
-    if (byKind || S.castSorted !== false) list.sort((a, b) => (order[a.kind] ?? 9) - (order[b.kind] ?? 9));
-    return list;
+  // The cast in the order the tab shows it, as Sort the cast says.
+  function castInOrder(): Member[] {
+    return sortCast(S.cast as Member[], String(S.castSort || 'kind'));
   }
 
   // Picks a row up by its grip and moves it in its own list. The row follows
@@ -7669,10 +7690,10 @@ export function setup(ctx: Ctx, overrides?: any) {
         if (who) cast[slot] = who;
       });
       S.cast = cast;
-      S.castSorted = false;
+      S.castSort = 'own';
       save();
-      const back = page.querySelector('[data-af-sortkind]') as HTMLElement | null;
-      if (back) back.hidden = false;
+      const pick = page.querySelector('[data-af-castsort] select') as HTMLSelectElement | null;
+      if (pick) pick.value = 'own';
     });
     // typed is the name field while it is being changed. Empty, the header
     // says so, rather than showing the name that was there before.
@@ -7954,6 +7975,11 @@ export function setup(ctx: Ctx, overrides?: any) {
 
   function fillPerson(inner: HTMLElement, m: Member, paintName: (typed?: string) => void) {
     inner.appendChild(pictureRow(m, () => paintName()));
+    // The narrator reads everything outside quotes, and the backend adds it
+    // back whenever it is missing, so it has no Remove. It never has a voice
+    // picked for it, so it has no Voice type.
+    if (m.kind === 'narrator')
+      inner.appendChild(hint('The narrator reads everything outside quotes, so it cannot be removed. To skip it, change Narration in the Settings tab.'));
     if (m.kind !== 'narrator') {
       const g1 = el('<div class="af-grid2"></div>');
       const nameRow = text('Name', m.name, (v) => {
@@ -10111,7 +10137,7 @@ export function setup(ctx: Ctx, overrides?: any) {
   };
 }
 
-export const __testing = { keyCombo, PAUSE_KEY_DEFAULT, wavBlob, noConnectionWhy, perSentence, clipLevel, levelGain, voiceGender, describeWords, markText, movedFor, movedRowMark, MOVED_DEFAULTS, looksLikeDate, voicedFrames, wordWeight, partTimes, engineOf, noTagsWhy, openRouterVoices, colorCode, hexHsl, hslHex, computedHex, fitTag, tagSound, textFor, styleFor, stripTags, stabilityFor, ENGINES };
+export const __testing = { sortCast, CAST_SORTS, keyCombo, PAUSE_KEY_DEFAULT, wavBlob, noConnectionWhy, perSentence, clipLevel, levelGain, voiceGender, describeWords, markText, movedFor, movedRowMark, MOVED_DEFAULTS, looksLikeDate, voicedFrames, wordWeight, partTimes, engineOf, noTagsWhy, openRouterVoices, colorCode, hexHsl, hslHex, computedHex, fitTag, tagSound, textFor, styleFor, stripTags, stabilityFor, ENGINES };
 
 // The built-in cheer: "Cheering and clapping crowd 1" by freesound_community,
 // a free sound from Pixabay (pixabay.com/sound-effects/people-cheering-and-clapping-crowd-1-5995/),

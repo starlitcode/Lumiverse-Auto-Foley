@@ -2255,7 +2255,8 @@ if (section("reorder")) {
     check(JSON.stringify(await order(page, ".af-page > .af-person, .af > * .af-person", "data-person")) !== "[]", where + ": the cast is shown");
     const before = await order(page, ".af-person", "data-person");
     check(JSON.stringify(before) === JSON.stringify(["n", "c", "a", "b"]), where + ": sorted by kind at first (" + before.join(",") + ")");
-    check(await page.evaluate(() => document.querySelector("[data-af-sortkind]").hidden), where + ": Sort by kind is hidden while it is sorted");
+    const sortIs = () => page.evaluate(() => document.querySelector("[data-af-castsort] select").value);
+    check((await sortIs()) === "kind", where + ": Sort the cast says By kind");
     const tall = await page.evaluate(() => Array.from(document.querySelectorAll(".af-grip")).every((g) => g.getBoundingClientRect().height >= 32));
     if (size.touch) check(tall, where + ": every grip is at least 32 pixels high");
 
@@ -2267,9 +2268,9 @@ if (section("reorder")) {
     check(!!mid && Math.abs(mid.moved - mid.pointer) <= 2, where + ": the row follows the pointer while it is held (" + JSON.stringify(mid) + ")");
     const after = await order(page, ".af-person", "data-person");
     check(JSON.stringify(after) === JSON.stringify(["b", "n", "c", "a"]), where + ": let go above the narrator, it is first (" + after.join(",") + ")");
-    const saved = await page.evaluate(() => ({ ids: window.__settings.cast.map((m) => m.id), sorted: window.__settings.castSorted }));
-    check(saved.ids[0] === "b" && saved.sorted === false, where + ": the new order is saved (" + JSON.stringify(saved) + ")");
-    check(!(await page.evaluate(() => document.querySelector("[data-af-sortkind]").hidden)), where + ": Sort by kind shows");
+    const saved = await page.evaluate(() => ({ ids: window.__settings.cast.map((m) => m.id), sort: window.__settings.castSort }));
+    check(saved.ids[0] === "b" && saved.sort === "own", where + ": the new order is saved (" + JSON.stringify(saved) + ")");
+    check((await sortIs()) === "own", where + ": Sort the cast now says My own order");
     const still = await page.evaluate(() => Array.from(document.querySelectorAll(".af-person, .af-group")).every((n) => !n.style.transform && !n.classList.contains("af-lifted")));
     check(still, where + ": no row is left lifted or moved");
 
@@ -2322,10 +2323,20 @@ if (section("reorder")) {
     }
 
     // Sort by kind puts it back.
-    await page.click("[data-af-sortkind]");
-    await page.waitForTimeout(500);
-    const back = await order(page, ".af-person", "data-person");
-    check(JSON.stringify(back) === JSON.stringify(["n", "c", "a", "b"]), where + ": Sort by kind puts it back (" + back.join(",") + ")");
+    // The other ways to sort, then back to your own order and to by kind.
+    const sortBy = async (how) => {
+      await page.selectOption("[data-af-castsort] select", how);
+      await page.waitForTimeout(500);
+      return (await order(page, ".af-person", "data-person")).join(",");
+    };
+    const own = (await order(page, ".af-person", "data-person")).join(",");
+    check((await sortBy("az")) === "b,n,c,a", where + ": A to Z");
+    check((await sortBy("za")) === "a,c,n,b", where + ": Z to A");
+    check((await sortBy("voice")) === "a,b,n,c", where + ": by voice type, female, male, then any");
+    check((await page.evaluate(() => window.__settings.castSort)) === "voice", where + ": the way it is sorted is saved");
+    check((await sortBy("own")) === own, where + ": My own order shows the order it was dragged into (" + own + ")");
+    const back = (await sortBy("kind")).split(",");
+    check(JSON.stringify(back) === JSON.stringify(["n", "c", "a", "b"]), where + ": By kind puts it back (" + back.join(",") + ")");
     check(!(await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1)), where + ": nothing runs off the side");
     check(!errors.length, where + ": no page errors. " + errors.slice(0, 2).join(" | "));
     await context.close();

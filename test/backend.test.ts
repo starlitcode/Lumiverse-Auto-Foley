@@ -326,6 +326,20 @@ describe("keys to pause and play are saved", () => {
   });
 });
 
+describe("how the cast is sorted is saved", () => {
+  const h = host();
+  test("by kind by default, and only the known ways are kept", () => {
+    expect(h.box.cleanSettings({}).castSort).toBe("kind");
+    for (const how of ["az", "za", "voice", "own"]) expect(h.box.cleanSettings({ castSort: how }).castSort).toBe(how);
+    expect(h.box.cleanSettings({ castSort: "newest" }).castSort).toBe("kind");
+  });
+  test("a cast moved by hand in 1.5.0 keeps its own order", () => {
+    expect(h.box.cleanSettings({ castSorted: false }).castSort).toBe("own");
+    expect(h.box.cleanSettings({ castSorted: true }).castSort).toBe("kind");
+    expect(h.box.cleanSettings({ castSorted: false, castSort: "az" }).castSort).toBe("az");
+  });
+});
+
 describe("the Director's answer", () => {
   const h = host();
   const segs = () => h.box.splitSegments('Mara turned. "Not again." "Again," Tobin said.');

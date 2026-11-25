@@ -39,7 +39,8 @@ Someone the AI added has no voice picked. The first time they speak, Auto Foley 
 - **How they speak.** A note for the Director, such as "soft-spoken and dry, rarely raises their voice". It holds up to 1000 characters. See [How much a box holds](#how-much-a-box-holds), and [Writing for each voice engine](writing.md) for what helps on each engine.
 - **Do not voice.** Their lines are skipped.
 - **Hear a sample** speaks a test line with these settings. It costs a few credits.
-- **Remove** takes them out of the cast. The narrator cannot be removed.
+- **Remove** takes them out of the cast. The narrator cannot be removed, since it reads everything outside quotes. If it were taken out, it would be added back at once. To skip narration, set **Narration** in the Settings tab to **Skip**.
+- The narrator has no **Voice type**. A voice type is only used to pick a voice for someone new, and the narrator uses the connection's voice until you pick one.
 
 ## How much a box holds
 
@@ -78,9 +79,18 @@ Groups sort the cast on the Cast tab, such as one group for each story. They cha
 - **Delete** asks first. The people in it stay in the cast, outside any group.
 - Groups follow your account, and go with the cast in an export and in **Start again**.
 
-## Moving people and groups
+## Sorting and moving people
 
-The Cast tab lists people by kind at first: the narrator, your personas, the characters, then the NPCs. You can put them in your own order.
+**Sort the cast**, under **New group**, says how people are listed:
+
+- **By kind**, the first choice: the narrator, your personas, the characters, then the NPCs.
+- **A to Z** or **Z to A**, by name.
+- **By voice type**: female, male, neutral, then any. Inside each, A to Z.
+- **My own order**: the order you dragged them into.
+
+Inside a group, people are sorted the same way. Groups stay in their own order.
+
+To put people in your own order:
 
 1. Hold the six dots on the left of a person or a group.
 2. Drag up or down. The others move out of the way.
@@ -91,7 +101,7 @@ What to know:
 - A person moves within their own list: their group, or the people outside any group. To put someone in another group, use **Edit** on the group, or **Group** on the person.
 - On a keyboard, tap the dots, then press the up or down arrow key to move one place.
 - Near the top or the bottom of the drawer, the drawer scrolls while you hold.
-- **Sort by kind**, next to **New group**, puts people back in order of kind. It shows once you have moved someone.
+- Dragging someone switches **Sort the cast** to **My own order**. Your order is kept when you pick another way to sort, and comes back when you pick **My own order** again.
 - The floating player lists the cast in the same order.
 - The order follows your account.
 

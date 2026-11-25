@@ -15,7 +15,7 @@ declare const spindle: any;
 declare function setTimeout(fn: () => void, ms: number): any;
 declare function clearTimeout(handle: any): void;
 
-const VERSION = '1.5.0';
+const VERSION = '1.6.0';
 
 // ---------------------------------------------------------------------------
 // Settings
@@ -217,9 +217,9 @@ interface Settings {
   // Groups that sort the cast on the Cast tab. Only for the panel: they
   // change nothing about how anyone sounds.
   groups: CastGroup[];
-  // True while the Cast tab sorts people by kind. False once someone has
-  // been moved, and the cast's own order is shown.
-  castSorted: boolean;
+  // How the Cast tab lists people: by kind, A to Z, Z to A, by voice type,
+  // or in the cast's own order, which dragging someone switches to.
+  castSort: 'kind' | 'az' | 'za' | 'voice' | 'own';
 }
 
 interface CastGroup {
@@ -318,7 +318,7 @@ const DEFAULT_SETTINGS: Settings = {
   resetParts: ['settings', 'prompt', 'cast', 'sounds', 'audio', 'key'],
   cast: [],
   groups: [],
-  castSorted: true,
+  castSort: 'kind',
 };
 
 const NARRATOR_ID = 'narrator';
@@ -696,7 +696,9 @@ function cleanSettings(raw: any): Settings {
     resetParts: partList(r.resetParts, RESET_PARTS, d.resetParts),
     cast: cast,
     groups: groups,
-    castSorted: bool(r.castSorted, d.castSorted),
+    // castSorted is the name 1.5.0 saved this under: false was a cast moved
+    // by hand. It is read once, to move it to castSort.
+    castSort: pick(r.castSort, ['kind', 'az', 'za', 'voice', 'own'] as const, r.castSorted === false ? 'own' : d.castSort),
   };
 }
 

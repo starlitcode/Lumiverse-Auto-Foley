@@ -424,3 +424,34 @@ describe("keys to pause and play", () => {
     expect(keyCombo({ code: "MetaLeft", metaKey: true })).toBe("");
   });
 });
+
+describe("sorting the cast", () => {
+  const { sortCast } = __testing;
+  const cast = [
+    { name: "ilsa", kind: "npc", gender: "unknown" },
+    { name: "Narrator", kind: "narrator", gender: "unknown" },
+    { name: "Bram", kind: "character", gender: "male" },
+    { name: "Corrie", kind: "persona", gender: "female" },
+    { name: "Tamsin 10", kind: "character", gender: "nonbinary" },
+    { name: "Tamsin 9", kind: "npc", gender: "female" },
+  ];
+  const names = (how: string) => sortCast(cast, how).map((m: any) => m.name);
+
+  test("by kind: the narrator, personas, characters, then NPCs, ties kept in order", () => {
+    expect(names("kind")).toEqual(["Narrator", "Corrie", "Bram", "Tamsin 10", "ilsa", "Tamsin 9"]);
+  });
+  test("A to Z ignores capitals and reads numbers as numbers", () => {
+    expect(names("az")).toEqual(["Bram", "Corrie", "ilsa", "Narrator", "Tamsin 9", "Tamsin 10"]);
+  });
+  test("Z to A is the other way round", () => {
+    expect(names("za")).toEqual(["Tamsin 10", "Tamsin 9", "Narrator", "ilsa", "Corrie", "Bram"]);
+  });
+  test("by voice type: female, male, neutral, then any, A to Z inside each", () => {
+    expect(names("voice")).toEqual(["Corrie", "Tamsin 9", "Bram", "Tamsin 10", "ilsa", "Narrator"]);
+  });
+  test("my own order leaves the cast as it is, and the cast itself is never changed", () => {
+    expect(names("own")).toEqual(cast.map((m) => m.name));
+    sortCast(cast, "az");
+    expect(cast[0].name).toBe("ilsa");
+  });
+});
