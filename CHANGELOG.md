@@ -13,6 +13,11 @@ _2026-11-25_
 ### Added
 
 - **Keys to pause and play**, in the Settings tab under **Playing**. Off by default. On a keyboard, press the keys to pause a message, and press them again to play it. The keys are Alt+P by default, and you can pick others under **Which keys**. They do nothing while you type in a box. See [Keys to pause and play](docs/getting-started.md#keys-to-pause-and-play). Suggested by a Discord user.
+- **Move people and groups on the Cast tab.** Hold the dots on the left of a person or a group and drag it up or down. On a keyboard, the up and down arrow keys move it one place. **Sort by kind** puts people back in order of kind. The floating player lists the cast in the same order. See [Moving people and groups](docs/cast.md#moving-people-and-groups).
+
+### Changed
+
+- **Numbers are typed in boxes**, the same as in Auto Retry and Auto Refine. The Mixer's volumes, the audience's cheer, how solid the boxes are, how strong the lit word is, How sure it must be, and each person's Stability, Similarity, Speed and engine settings were sliders. A number outside the range is changed to the nearest one when you leave the box. The color editor, Zoom when you crop a picture, and the floating player's volume and seek bar keep their sliders.
 
 ---
 

@@ -78,6 +78,23 @@ Groups sort the cast on the Cast tab, such as one group for each story. They cha
 - **Delete** asks first. The people in it stay in the cast, outside any group.
 - Groups follow your account, and go with the cast in an export and in **Start again**.
 
+## Moving people and groups
+
+The Cast tab lists people by kind at first: the narrator, your personas, the characters, then the NPCs. You can put them in your own order.
+
+1. Hold the six dots on the left of a person or a group.
+2. Drag up or down. The others move out of the way.
+3. Let go. The new order is kept.
+
+What to know:
+
+- A person moves within their own list: their group, or the people outside any group. To put someone in another group, use **Edit** on the group, or **Group** on the person.
+- On a keyboard, tap the dots, then press the up or down arrow key to move one place.
+- Near the top or the bottom of the drawer, the drawer scrolls while you hold.
+- **Sort by kind**, next to **New group**, puts people back in order of kind. It shows once you have moved someone.
+- The floating player lists the cast in the same order.
+- The order follows your account.
+
 ## Group chats
 
 Auto Foley names no character in its prompt and assumes nothing about who plays whom. In a group chat, each message's author joins the cast, and the Director picks speakers from everyone in it.

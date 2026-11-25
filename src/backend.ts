@@ -217,6 +217,9 @@ interface Settings {
   // Groups that sort the cast on the Cast tab. Only for the panel: they
   // change nothing about how anyone sounds.
   groups: CastGroup[];
+  // True while the Cast tab sorts people by kind. False once someone has
+  // been moved, and the cast's own order is shown.
+  castSorted: boolean;
 }
 
 interface CastGroup {
@@ -315,6 +318,7 @@ const DEFAULT_SETTINGS: Settings = {
   resetParts: ['settings', 'prompt', 'cast', 'sounds', 'audio', 'key'],
   cast: [],
   groups: [],
+  castSorted: true,
 };
 
 const NARRATOR_ID = 'narrator';
@@ -692,6 +696,7 @@ function cleanSettings(raw: any): Settings {
     resetParts: partList(r.resetParts, RESET_PARTS, d.resetParts),
     cast: cast,
     groups: groups,
+    castSorted: bool(r.castSorted, d.castSorted),
   };
 }
 

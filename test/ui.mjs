@@ -287,7 +287,7 @@ if (shots) mkdirSync(shots, { recursive: true });
 
 const browser = await chromium.launch();
 
-async function open(theme, size, zoom = 1) {
+async function open(theme, size, zoom = 1, pre = null) {
   const context = await browser.newContext({
     viewport: { width: size.width, height: size.height },
     hasTouch: size.touch,
@@ -304,6 +304,7 @@ async function open(theme, size, zoom = 1) {
   await page.setContent(pageHtml(theme));
   if (zoom !== 1) await page.evaluate((z) => (document.documentElement.style.zoom = String(z)), zoom);
   await page.addScriptTag({ content: STUB });
+  if (pre) await page.evaluate(pre);
   await page.addScriptTag({ content: SOURCE });
   await page.evaluate(() => {
     window.__teardown = window.__setup(window.__ctx, { fetch: window.__fetch, Audio: window.__Audio });
@@ -1813,17 +1814,17 @@ if (section("decision line")) {
     const got = await page.evaluate(async () => {
       const row = document.querySelector("[data-af-sure]");
       if (!row) return null;
-      const r = row.querySelector('input[type="range"]');
-      const before = row.textContent;
+      const r = row.querySelector('input[type="number"]');
+      const before = r.value;
       r.value = "70";
       r.dispatchEvent(new Event("input", { bubbles: true }));
       r.dispatchEvent(new Event("change", { bubbles: true }));
       await new Promise((x) => setTimeout(x, 400));
       const box = row.getBoundingClientRect();
-      return { before, after: row.textContent, saved: window.__settings.decisionSure, w: box.width, vw: document.documentElement.clientWidth, right: box.right };
+      return { before, after: r.value, saved: window.__settings.decisionSure, w: box.width, vw: document.documentElement.clientWidth, right: box.right };
     });
-    check(!!got && /50%/.test(got.before) && /70%/.test(got.after) && got.saved === 70, size.name + ": How sure it must be shows 50% and saves a new value (" + JSON.stringify(got) + ")");
-    check(!!got && got.right <= got.vw + 0.5, size.name + ": the slider stays on screen");
+    check(!!got && got.before === "50" && got.after === "70" && got.saved === 70, size.name + ": How sure it must be is a box at 50 and saves a new value (" + JSON.stringify(got) + ")");
+    check(!!got && got.right <= got.vw + 0.5, size.name + ": the box stays on screen");
     await page.click('.af-tab[data-tab="stage"]');
     await page.waitForTimeout(300);
     const kind = await page.evaluate(async () => {
@@ -2167,6 +2168,165 @@ if (section("pause keys")) {
     await page.keyboard.press("Control+Shift+KeyK");
     await page.waitForTimeout(100);
     check(await playing(), where + ": switched off, the keys do nothing");
+    check(!errors.length, where + ": no page errors. " + errors.slice(0, 2).join(" | "));
+    await context.close();
+  }
+}
+
+if (section("number boxes")) {
+  console.log("Numbers are typed in boxes, as in Auto Retry and Auto Refine");
+  for (const size of SIZES) {
+    const where = size.name;
+    const { context, page, errors } = await open(THEMES[0], size);
+    const ranges = [];
+    for (const tab of TABS) {
+      await showTab(page, tab);
+      const got = await page.evaluate(() => Array.from(document.querySelectorAll('.af input[type="range"]')).filter((r) => !r.classList.contains("af-colorrange")).map((r) => (r.closest(".af-col") || r.parentElement).textContent.trim().slice(0, 40)));
+      for (const g of got) ranges.push(tab + ": " + g);
+    }
+    check(ranges.length === 0, where + ": no slider is left outside the color editor (" + ranges.join(" | ") + ")");
+    await showTab(page, "settings");
+    const held = await page.evaluate(async () => {
+      const row = Array.from(document.querySelectorAll(".af-col")).find((c) => /^How loud they cheer \(%\)/.test((c.querySelector(".af-lab") || {}).textContent || ""));
+      if (!row) return null;
+      const box = row.querySelector('input[type="number"]');
+      box.value = "150";
+      box.dispatchEvent(new Event("change", { bubbles: true }));
+      await new Promise((x) => setTimeout(x, 700));
+      return { box: box.value, saved: window.__settings.applauseVolume };
+    });
+    check(!!held && held.box === "100" && held.saved === 1, where + ": a number above the range is held to the top of it (" + JSON.stringify(held) + ")");
+    const look = await page.evaluate((touch) => {
+      const small = [];
+      for (const b of document.querySelectorAll('.af input[type="number"]')) {
+        if (b.closest("[hidden]") || !b.getClientRects().length) continue;
+        if (touch && b.getBoundingClientRect().height < 32) small.push(b.id + ":" + b.getBoundingClientRect().height);
+      }
+      return { small, side: document.documentElement.scrollWidth > window.innerWidth + 1 };
+    }, size.touch);
+    check(!look.small.length, where + ": every number box is at least 32 pixels high on a phone (" + look.small.join(", ") + ")");
+    check(!look.side, where + ": nothing runs off the side");
+    check(!errors.length, where + ": no page errors. " + errors.slice(0, 2).join(" | "));
+    await context.close();
+  }
+}
+
+if (section("reorder")) {
+  console.log("People and groups can be picked up and moved");
+  const order = (page, sel, attr) => page.evaluate(([sel, attr]) => Array.from(document.querySelectorAll(sel)).map((n) => n.getAttribute(attr)), [sel, attr]);
+  // Drags a grip to a point with a mouse, or with a finger on a phone, in
+  // small steps, and reports how far the row moved on screen halfway.
+  const drag = async (page, context, touch, gripSel, toY) => {
+    const g = await page.evaluate((sel) => { const r = document.querySelector(sel).getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; }, gripSel);
+    const rowTop = () => page.evaluate((sel) => document.querySelector(sel).closest(".af-person, .af-group").getBoundingClientRect().top, gripSel);
+    const start = await rowTop();
+    const steps = 12;
+    let mid = null;
+    if (touch) {
+      const cdp = await context.newCDPSession(page);
+      await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ x: g.x, y: g.y }] });
+      for (let k = 1; k <= steps; k++) {
+        await cdp.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [{ x: g.x, y: g.y + ((toY - g.y) * k) / steps }] });
+        await page.waitForTimeout(16);
+        if (k === steps / 2) mid = { moved: (await rowTop()) - start, pointer: ((toY - g.y) * k) / steps };
+      }
+      await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+    } else {
+      await page.mouse.move(g.x, g.y);
+      await page.mouse.down();
+      for (let k = 1; k <= steps; k++) {
+        await page.mouse.move(g.x, g.y + ((toY - g.y) * k) / steps);
+        await page.waitForTimeout(16);
+        if (k === steps / 2) mid = { moved: (await rowTop()) - start, pointer: ((toY - g.y) * k) / steps };
+      }
+      await page.mouse.up();
+    }
+    await page.waitForTimeout(700);
+    return mid;
+  };
+  const runs = [[SIZES[0], 1], [SIZES[1], 1], [SIZES[1], 1.25], [SIZES[1], 0.85]];
+  for (const [size, zoom] of runs) {
+    const where = size.name + (zoom !== 1 ? ", zoom " + zoom : "");
+    const { context, page, errors } = await open(THEMES[0], size, zoom, () => {
+      window.__settings.groups = [{ id: "g1", name: "The harbor", open: true }, { id: "g2", name: "The mill", open: true }];
+    });
+    await page.click('.af-tab[data-tab="cast"]');
+    await page.waitForTimeout(400);
+    check(JSON.stringify(await order(page, ".af-page > .af-person, .af > * .af-person", "data-person")) !== "[]", where + ": the cast is shown");
+    const before = await order(page, ".af-person", "data-person");
+    check(JSON.stringify(before) === JSON.stringify(["n", "c", "a", "b"]), where + ": sorted by kind at first (" + before.join(",") + ")");
+    check(await page.evaluate(() => document.querySelector("[data-af-sortkind]").hidden), where + ": Sort by kind is hidden while it is sorted");
+    const tall = await page.evaluate(() => Array.from(document.querySelectorAll(".af-grip")).every((g) => g.getBoundingClientRect().height >= 32));
+    if (size.touch) check(tall, where + ": every grip is at least 32 pixels high");
+
+    // The NPC, last, is dragged above the narrator, with both on screen.
+    await page.evaluate(() => document.querySelector('.af-person[data-person="n"]').scrollIntoView({ block: "start" }));
+    await page.waitForTimeout(100);
+    const topY = await page.evaluate(() => document.querySelector('.af-person[data-person="n"]').getBoundingClientRect().top + 4);
+    const mid = await drag(page, context, size.touch, '.af-person[data-person="b"] .af-grip', topY);
+    check(!!mid && Math.abs(mid.moved - mid.pointer) <= 2, where + ": the row follows the pointer while it is held (" + JSON.stringify(mid) + ")");
+    const after = await order(page, ".af-person", "data-person");
+    check(JSON.stringify(after) === JSON.stringify(["b", "n", "c", "a"]), where + ": let go above the narrator, it is first (" + after.join(",") + ")");
+    const saved = await page.evaluate(() => ({ ids: window.__settings.cast.map((m) => m.id), sorted: window.__settings.castSorted }));
+    check(saved.ids[0] === "b" && saved.sorted === false, where + ": the new order is saved (" + JSON.stringify(saved) + ")");
+    check(!(await page.evaluate(() => document.querySelector("[data-af-sortkind]").hidden)), where + ": Sort by kind shows");
+    const still = await page.evaluate(() => Array.from(document.querySelectorAll(".af-person, .af-group")).every((n) => !n.style.transform && !n.classList.contains("af-lifted")));
+    check(still, where + ": no row is left lifted or moved");
+
+    // The arrow keys move one place.
+    await page.focus('.af-person[data-person="c"] .af-grip');
+    await page.keyboard.press("ArrowDown");
+    await page.waitForTimeout(100);
+    const keyed = await order(page, ".af-person", "data-person");
+    check(JSON.stringify(keyed) === JSON.stringify(["b", "n", "a", "c"]), where + ": the down arrow moves a person one place (" + keyed.join(",") + ")");
+
+    // Groups move the same way.
+    await page.evaluate(() => document.querySelector('.af-group[data-group="g1"]').scrollIntoView({ block: "start" }));
+    await page.waitForTimeout(100);
+    const g1Top = await page.evaluate(() => document.querySelector('.af-group[data-group="g1"]').getBoundingClientRect().top + 4);
+    await drag(page, context, size.touch, '.af-group[data-group="g2"] .af-grip', g1Top);
+    const gOrder = await order(page, ".af-group", "data-group");
+    check(JSON.stringify(gOrder) === JSON.stringify(["g2", "g1"]), where + ": a group dragged above another is first (" + gOrder.join(",") + ")");
+    await page.waitForTimeout(700);
+    check((await page.evaluate(() => window.__settings.groups.map((g) => g.id).join(","))) === "g2,g1", where + ": and the group order is saved");
+
+    // Held near the edge of a drawer that scrolls, the drawer scrolls, and
+    // stops at its end even though the lifted row makes it taller.
+    if (!size.touch && zoom === 1) {
+      await page.evaluate(() => {
+        const d = document.querySelector("#drawer");
+        d.style.height = "320px";
+        d.style.overflowY = "auto";
+        d.scrollTop = d.scrollHeight;
+      });
+      await page.waitForTimeout(100);
+      const hold = async (toEdge) => {
+        const g = await page.evaluate(() => { const d = document.querySelector("#drawer"); const grips = Array.from(document.querySelectorAll(".af-person .af-grip")); const r = grips[grips.length - 1].getBoundingClientRect(); const b = d.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2, top: b.top, bottom: b.bottom, was: d.scrollTop, most: d.scrollHeight - d.clientHeight }; });
+        await page.mouse.move(g.x, g.y);
+        await page.mouse.down();
+        await page.mouse.move(g.x, g.y + (toEdge === "down" ? 10 : -10));
+        await page.mouse.move(g.x, toEdge === "down" ? g.bottom - 8 : g.top + 8);
+        await page.waitForTimeout(500);
+        const now = await page.evaluate(() => document.querySelector("#drawer").scrollTop);
+        await page.mouse.up();
+        await page.waitForTimeout(300);
+        return { was: g.was, most: g.most, now };
+      };
+      const down = await hold("down");
+      check(down.now <= down.most + 1, where + ": held at the bottom, the drawer does not scroll past its end (" + JSON.stringify(down) + ")");
+      await page.evaluate(() => { const d = document.querySelector("#drawer"); d.scrollTop = d.scrollHeight; });
+      await page.waitForTimeout(100);
+      const up = await hold("up");
+      check(up.now < up.was, where + ": held near the top, the drawer scrolls up (" + JSON.stringify(up) + ")");
+      await page.evaluate(() => { const d = document.querySelector("#drawer"); d.style.height = ""; d.style.overflowY = ""; });
+    }
+
+    // Sort by kind puts it back.
+    await page.click("[data-af-sortkind]");
+    await page.waitForTimeout(500);
+    const back = await order(page, ".af-person", "data-person");
+    check(JSON.stringify(back) === JSON.stringify(["n", "c", "a", "b"]), where + ": Sort by kind puts it back (" + back.join(",") + ")");
+    check(!(await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1)), where + ": nothing runs off the side");
     check(!errors.length, where + ": no page errors. " + errors.slice(0, 2).join(" | "));
     await context.close();
   }

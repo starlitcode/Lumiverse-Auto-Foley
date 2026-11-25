@@ -966,6 +966,7 @@ const ICON_DOWN = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" st
 const ICON_PREP = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 4h10l4 4v12H5Z"/><path d="M9 12h6M9 16h4"/></svg>';
 const ICON_MIC = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21"/></svg>';
 const ICON_MIC_OFF = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 9.5V6a3 3 0 0 0-5.7-1.3M9 9v2a3 3 0 0 0 4.7 2.5"/><path d="M5.5 11a6.5 6.5 0 0 0 10.6 5M18.5 11a6.4 6.4 0 0 1-.6 2.7M12 17.5V21M4 4l16 16"/></svg>';
+const ICON_GRIP = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/><circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/><circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/></svg>';
 const ICON_CHEVRON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>';
 // ---------------------------------------------------------------------------
 // Styles
@@ -1305,6 +1306,17 @@ textarea.af-tall { min-height: 260px; }
 .af-group-count { flex: none; color: var(--af-muted); font-weight: 400; font-size: 12px; }
 .af-group-body > div { display: flex; flex-direction: column; gap: 12px; padding: 2px 0 2px 12px; margin-left: 10px; border-left: 2px solid var(--af-line); }
 .af-group-empty { margin: 0; color: var(--af-muted); font-size: 12.5px; }
+.af-person-top { display: flex; align-items: center; gap: 2px; }
+.af-person-top > .af-person-head { flex: 1 1 auto; min-width: 0; }
+.af-grip { flex: none; display: grid; place-items: center; width: 26px; min-height: 40px; border-radius: var(--af-r-sm); color: var(--af-muted); cursor: grab; touch-action: none; user-select: none; -webkit-user-select: none; }
+.af-grip svg { width: 16px; height: 16px; }
+.af-grip:focus-visible { outline: none; box-shadow: inset 0 0 0 2px var(--af-accent-soft); }
+@media (hover: hover) { .af-grip:hover { color: var(--af-text); background: var(--af-accent-faint); } }
+@media (pointer: coarse) { .af-grip { width: 32px; min-height: 44px; } }
+.af-lifted { position: relative; z-index: 5; cursor: grabbing; box-shadow: 0 8px 24px rgba(0,0,0,.28); }
+.af-lifted .af-grip { cursor: grabbing; }
+.af-making-room { transition: transform 160ms ease; }
+html[data-af-still] .af-making-room { transition: none; }
 .af-person-head { display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; align-items: center; gap: 8px; width: 100%; min-height: 48px; padding: 8px 10px; border: 0; border-radius: var(--af-r-md); background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
 @media (hover: hover) { .af-person-head:hover { background: var(--af-accent-faint); } }
 .af-person-head:focus-visible { outline: none; box-shadow: inset 0 0 0 2px var(--af-accent-soft); }
@@ -1485,6 +1497,7 @@ const DEFAULTS = {
     engines: {},
     engineNotes: {},
     groups: [],
+    castSorted: true,
     logShow: {},
     builtInSeen: '',
     movedSeen: '',
@@ -5086,6 +5099,31 @@ export function setup(ctx, overrides) {
         f.appendChild(r);
         return f;
     }
+    // A number in a box, the same as Auto Retry's and Auto Refine's number
+    // settings. It is held to its range and saved when the box is left or Enter
+    // is pressed. A step of 1 keeps it whole, and a smaller step keeps two
+    // decimal places. An empty box goes back to the number it had.
+    function numberRow(label, value, min, max, step, onChange, help) {
+        const id = rid('nb');
+        const f = el('<div class="af-col"></div>');
+        f.setAttribute('data-af-row', id);
+        f.appendChild(labelRow(label, help || '', id));
+        const whole = step >= 1;
+        const i = el('<input type="number" class="af-field af-numbox" id="' + id + '" inputmode="' + (whole ? 'numeric' : 'decimal') + '" step="' + (whole ? '1' : 'any') + '" min="' + min + '" max="' + max + '" autocomplete="off">');
+        const tidy = (v) => (whole ? Math.round(v) : Math.round(v * 100) / 100);
+        let last = tidy(Math.min(max, Math.max(min, Number.isFinite(Number(value)) ? Number(value) : min)));
+        i.value = String(last);
+        i.addEventListener('change', () => {
+            const raw = String(i.value).trim();
+            const v = Number(raw);
+            if (raw !== '' && Number.isFinite(v))
+                last = tidy(Math.min(max, Math.max(min, v)));
+            i.value = String(last);
+            onChange(last);
+        });
+        f.appendChild(i);
+        return f;
+    }
     // A color with its own editor rather than the browser's color input, which
     // on a phone often has no way to type a code. The swatch opens the editor
     // under the row: a box for a code such as #ff0040, and sliders for hue,
@@ -6429,8 +6467,7 @@ export function setup(ctx, overrides) {
     function fillCast(wrap) {
         const box = wrap.querySelector('.af-pl-cast') || wrap;
         box.innerHTML = '';
-        const order = { narrator: 0, persona: 1, character: 2, npc: 3 };
-        const people = S.cast.slice().sort((a, b) => (order[a.kind] ?? 9) - (order[b.kind] ?? 9));
+        const people = castInOrder();
         for (const m of people) {
             const ch = el('<div class="af-pl-ch" data-person="' + esc(m.id) + '"><span class="af-avatar">' + faceHtml(m, m.name) + '</span><span></span><button type="button" class="af-round"></button></div>');
             ch.children[1].textContent = m.name;
@@ -6671,8 +6708,8 @@ export function setup(ctx, overrides) {
                 { id: 'message', label: 'End of a message' },
                 { id: 'big', label: 'Big moments' },
             ], S.applauseWhen, (v) => set({ applauseWhen: v }), 'End of a message is the default: one cheer when a message finishes. Big moments cheers after a line the Director marks as a peak, which needs Big moments on in the Director tab.'),
-            slider('How long they cheer', Number(S.applauseSeconds) || 5, 1, 15, 1, (v) => v + '\u00a0s', (v) => set({ applauseSeconds: v }), '5 seconds by default. The cheer fades out at the end, so the next part is not held up.'),
-            slider('How loud they cheer', Math.round((Number(S.applauseVolume) || 0) * 100), 0, 100, 5, (v) => v + '%', (v) => set({ applauseVolume: v / 100 }), '60% by default, of the Sounds volume on the Stage tab.'),
+            numberRow('How long they cheer (seconds)', Number(S.applauseSeconds) || 5, 1, 15, 1, (v) => set({ applauseSeconds: v }), '5 seconds by default. The cheer fades out at the end, so the next part is not held up.'),
+            numberRow('How loud they cheer (%)', Math.round((Number(S.applauseVolume) || 0) * 100), 0, 100, 5, (v) => set({ applauseVolume: v / 100 }), '60% by default, of the Sounds volume on the Stage tab.'),
             select('Applause sound', [{ id: '', label: 'The built-in cheering crowd' }].concat(sounds.map((x) => ({ id: String(x.id), label: String(x.name) }))), S.applauseSound, (v) => set({ applauseSound: v }), 'The built-in cheer by default. Any sound in your library can be used instead. Upload one in the Sounds tab.'),
             (() => {
                 const row = el('<div class="af-row"></div>');
@@ -6769,7 +6806,7 @@ export function setup(ctx, overrides) {
         }, 'None by default. A faint pattern in your theme’s color, drawn behind the cards.'));
         // Only with a pattern. Built either way, so it opens and closes smoothly.
         const solid = el('<div class="af-sub"><div class="af-under"></div></div>');
-        solid.firstElementChild.appendChild(slider('How solid the boxes are (%)', Number(S.boxSolid), 0, 100, 5, (v) => v + '%', (v) => {
+        solid.firstElementChild.appendChild(numberRow('How solid the boxes are (%)', Number(S.boxSolid), 0, 100, 5, (v) => {
             set({ boxSolid: v });
             paintLook();
         }, '60 by default. Lower lets more of the pattern show through the cards and the tabs. Higher makes them more solid.'));
@@ -6782,7 +6819,7 @@ export function setup(ctx, overrides) {
             const sample = el('<p class="af-note">A line with <span class="af-wordsample">this</span> word lit.</p>');
             return [
                 colorRow('wordColor', 'Color of the lit word', 'Empty uses your theme\u2019s accent. Tap the swatch to type a color code or pick one.', '--lumiverse-primary', '#9370db'),
-                slider('How strong it is', Math.min(80, Math.max(10, Number(S.wordStrength) || 20)), 10, 80, 5, (v) => v + '%', (v) => {
+                numberRow('How strong it is (%)', Math.min(80, Math.max(10, Number(S.wordStrength) || 20)), 10, 80, 5, (v) => {
                     set({ wordStrength: v });
                     paintColors();
                 }, '20% by default. Higher makes the lit word stand out more.'),
@@ -7010,7 +7047,7 @@ export function setup(ctx, overrides) {
     function strip(name, kind, key) {
         const s = el('<div class="af-strip"><div class="af-between"><span class="af-strip-name"><span class="af-swatch' + (kind === 'sound' ? ' af-swatch-sound' : '') + '"></span>' + esc(name) +
             '</span><button type="button" class="af-btn" aria-pressed="' + (muted[kind] ? 'true' : 'false') + '">' + (muted[kind] ? 'Unmute' : 'Mute') + '</button></div></div>');
-        s.appendChild(slider('Volume', Math.round(S[key] * 100), 0, 100, 1, (v) => v + '%', (v) => {
+        s.appendChild(numberRow('Volume (%)', Math.round(S[key] * 100), 0, 100, 1, (v) => {
             set({ [key]: v / 100 });
             if (audio && audio.dataset && audio.dataset.kind === kind)
                 audio.volume = liveVolume(audio);
@@ -7702,22 +7739,179 @@ export function setup(ctx, overrides) {
             renderTab();
         }, 'af-primary'));
         row.appendChild(button('New group', () => editGroup(null)));
+        // Shown once someone has been moved, to put the cast back in order of
+        // kind: the narrator, your personas, the characters, then the NPCs.
+        const sortKind = button('Sort by kind', () => {
+            S.cast = castInOrder(true);
+            S.castSorted = true;
+            save();
+            renderTab();
+        });
+        sortKind.setAttribute('data-af-sortkind', '');
+        sortKind.hidden = S.castSorted !== false;
+        row.appendChild(sortKind);
         top.appendChild(row);
-        top.appendChild(hint('Groups sort the cast on this tab, such as one for each story. New group and Edit pick who is in each.'));
+        top.appendChild(hint('Groups sort the cast, such as one for each story. Drag the dots beside a person or a group to move it.'));
         const conn = activeConnection();
         if (!conn)
             top.appendChild(notice('warn', ttsWhy || 'Pick your TTS connection in the Settings tab to choose voices.'));
         page.appendChild(top);
         if (groupDraft && groupDraft.id === 'new')
             page.appendChild(groupEditor());
-        const order = { narrator: 0, persona: 1, character: 2, npc: 3 };
-        const people = S.cast.slice().sort((a, b) => (order[a.kind] ?? 9) - (order[b.kind] ?? 9));
+        const people = castInOrder();
         const known = new Set(groups().map((f) => f.id));
         for (const f of groups())
             page.appendChild(groupDraft && groupDraft.id === f.id ? groupEditor() : groupSection(f, people.filter((m) => m.group === f.id)));
         for (const m of people)
             if (!m.group || !known.has(m.group))
                 page.appendChild(personCard(m));
+    }
+    // The cast in the order the tab shows it. Sorted by kind until someone is
+    // moved, and in the order it was left in after that. byKind sorts it
+    // either way.
+    function castInOrder(byKind) {
+        const order = { narrator: 0, persona: 1, character: 2, npc: 3 };
+        const list = S.cast.slice();
+        if (byKind || S.castSorted !== false)
+            list.sort((a, b) => (order[a.kind] ?? 9) - (order[b.kind] ?? 9));
+        return list;
+    }
+    // Picks a row up by its grip and moves it in its own list. The row follows
+    // the finger or the pointer, the rows it passes slide out of its way, and
+    // the new order is kept when it is let go. Near the top or the bottom of
+    // the drawer, the drawer scrolls. The up and down arrow keys move it one
+    // place. Sizes read from the screen are turned into CSS pixels, so a moved
+    // row lines up under Lumiverse's UI Scale.
+    function sortable(grip, item, siblings, commit) {
+        const place = (order) => {
+            const marks = siblings().map((n) => {
+                const mark = document.createComment('');
+                n.parentNode.insertBefore(mark, n);
+                return mark;
+            });
+            order.forEach((n, k) => marks[k].parentNode.replaceChild(n, marks[k]));
+        };
+        grip.addEventListener('keydown', (e) => {
+            if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown')
+                return;
+            e.preventDefault();
+            const list = siblings();
+            const from = list.indexOf(item);
+            const to = e.key === 'ArrowUp' ? from - 1 : from + 1;
+            if (from < 0 || to < 0 || to >= list.length)
+                return;
+            list.splice(from, 1);
+            list.splice(to, 0, item);
+            place(list);
+            commit(list);
+            grip.focus();
+        });
+        grip.addEventListener('pointerdown', (e) => {
+            if (e.button !== 0)
+                return;
+            const list = siblings();
+            const from = list.indexOf(item);
+            if (from < 0 || list.length < 2)
+                return;
+            e.preventDefault();
+            try {
+                grip.setPointerCapture(e.pointerId);
+            }
+            catch (_) { }
+            const box = scrollBoxOf(item);
+            const scale = item.offsetHeight ? item.getBoundingClientRect().height / item.offsetHeight || 1 : 1;
+            const rects = list.map((n) => n.getBoundingClientRect());
+            // How far the rows it passes move: its own height and the gap after it.
+            const room = from + 1 < rects.length ? rects[from + 1].top - rects[from].top : rects[from].bottom - rects[from - 1].bottom;
+            const startY = e.clientY;
+            const startScroll = box ? box.scrollTop : 0;
+            // The lifted row makes the drawer taller as it moves, so the scroll
+            // stops where the drawer ended when the row was picked up.
+            const most = box ? Math.max(0, box.scrollHeight - box.clientHeight) : 0;
+            let lastY = startY;
+            let target = from;
+            let frame = 0;
+            item.classList.add('af-lifted');
+            for (const n of list)
+                if (n !== item)
+                    n.classList.add('af-making-room');
+            const move = () => {
+                const dy = lastY - startY + (box ? (box.scrollTop - startScroll) * scale : 0);
+                item.style.transform = 'translateY(' + dy / scale + 'px)';
+                const mid = rects[from].top + rects[from].height / 2 + dy;
+                target = 0;
+                list.forEach((n, k) => {
+                    if (n !== item && rects[k].top + rects[k].height / 2 < mid)
+                        target++;
+                });
+                list.forEach((n, k) => {
+                    if (n === item)
+                        return;
+                    let shift = 0;
+                    if (from < target && k > from && k <= target)
+                        shift = -room;
+                    if (target < from && k >= target && k < from)
+                        shift = room;
+                    n.style.transform = shift ? 'translateY(' + shift / scale + 'px)' : '';
+                });
+            };
+            // Scrolls the drawer while the row is held near its top or bottom.
+            const edge = () => {
+                frame = 0;
+                if (!box)
+                    return;
+                const r = box.getBoundingClientRect();
+                const near = 48 * scale;
+                let by = 0;
+                if (lastY < r.top + near)
+                    by = -Math.ceil((r.top + near - lastY) / 6);
+                else if (lastY > r.bottom - near)
+                    by = Math.ceil((lastY - (r.bottom - near)) / 6);
+                if (!by)
+                    return;
+                const was = box.scrollTop;
+                box.scrollTop = Math.max(0, Math.min(most, was + by));
+                if (box.scrollTop !== was)
+                    move();
+                frame = requestAnimationFrame(edge);
+            };
+            const onMove = (ev) => {
+                lastY = ev.clientY;
+                move();
+                if (!frame)
+                    frame = requestAnimationFrame(edge);
+            };
+            const done = (keep) => {
+                grip.removeEventListener('pointermove', onMove);
+                grip.removeEventListener('pointerup', onUp);
+                grip.removeEventListener('pointercancel', onCancel);
+                if (frame)
+                    cancelAnimationFrame(frame);
+                frame = 0;
+                // The rows are put in their new places in the same frame as their
+                // slides are taken off, so nothing moves on screen.
+                for (const n of list) {
+                    n.style.transition = 'none';
+                    n.style.transform = '';
+                    n.classList.remove('af-lifted', 'af-making-room');
+                }
+                if (keep && target !== from) {
+                    const order = list.slice();
+                    order.splice(from, 1);
+                    order.splice(target, 0, item);
+                    place(order);
+                    commit(order);
+                }
+                void item.offsetHeight;
+                for (const n of list)
+                    n.style.transition = '';
+            };
+            const onUp = () => done(true);
+            const onCancel = () => done(false);
+            grip.addEventListener('pointermove', onMove);
+            grip.addEventListener('pointerup', onUp);
+            grip.addEventListener('pointercancel', onCancel);
+        });
     }
     function groupSection(f, people) {
         const sec = el('<section class="af-group" data-group="' + esc(f.id) + '" data-open="' + (f.open ? 'true' : 'false') + '"><div class="af-group-head"></div><div class="af-sub af-group-body"' + (f.open ? '' : ' hidden') + '><div></div></div></section>');
@@ -7739,6 +7933,18 @@ export function setup(ctx, overrides) {
                     fillGroup();
                 reveal(body, f.open);
             });
+            const grip = el('<span class="af-grip" role="button" tabindex="0">' + ICON_GRIP + '</span>');
+            grip.setAttribute('aria-label', 'Move the group ' + f.name + '. Drag, or press the up and down arrow keys.');
+            grip.title = 'Hold and drag to move';
+            sortable(grip, sec, () => Array.from(sec.parentElement.children).filter((n) => n.matches('.af-group')), (order) => {
+                const ids = order.map((n) => String(n.getAttribute('data-group') || ''));
+                const all = groups();
+                const byId = new Map(all.map((g) => [g.id, g]));
+                const moved = ids.map((id) => byId.get(id)).filter(Boolean);
+                S.groups = moved.concat(all.filter((g) => ids.indexOf(g.id) < 0));
+                save();
+            });
+            head.appendChild(grip);
             head.appendChild(toggle);
             head.appendChild(button('Edit', () => editGroup(f)));
             head.appendChild(button('Delete', async () => {
@@ -7767,13 +7973,35 @@ export function setup(ctx, overrides) {
     function personCard(m) {
         const open = openPeople.has(m.id);
         const badge = ADDED_LABEL[m.addedBy] ? '<span class="af-badge af-badge-ai">' + esc(ADDED_LABEL[m.addedBy]) + '</span>' : '<span class="af-badge">' + esc(KIND_LABEL[m.kind] || m.kind) + '</span>';
-        const c = el('<section class="af-card af-person" data-kind="' + esc(m.kind) + '" data-open="' + (open ? 'true' : 'false') + '">' +
+        const c = el('<section class="af-card af-person" data-person="' + esc(m.id) + '" data-kind="' + esc(m.kind) + '" data-open="' + (open ? 'true' : 'false') + '">' +
+            '<div class="af-person-top"><span class="af-grip" role="button" tabindex="0">' + ICON_GRIP + '</span>' +
             '<button type="button" class="af-person-head" aria-expanded="' + (open ? 'true' : 'false') + '"><span class="af-avatar">' + faceHtml(m, m.name) + '</span>' +
-            '<span class="af-person-name"><b></b><span></span></span>' + badge + '<span class="af-chev">' + ICON_CHEVRON + '</span></button>' +
+            '<span class="af-person-name"><b></b><span></span></span>' + badge + '<span class="af-chev">' + ICON_CHEVRON + '</span></button></div>' +
             '<div class="af-sub af-person-body"' + (open ? '' : ' hidden') + '><div class="af-person-inner"></div></div></section>');
         const head = c.querySelector('.af-person-head');
         const body = c.querySelector('.af-person-body');
         const inner = c.querySelector('.af-person-inner');
+        const grip = c.querySelector('.af-grip');
+        grip.setAttribute('aria-label', 'Move ' + (m.name || 'this person') + '. Drag, or press the up and down arrow keys.');
+        grip.title = 'Hold and drag to move';
+        sortable(grip, c, () => Array.from(c.parentElement.children).filter((n) => n.matches('.af-person')), (order) => {
+            const ids = order.map((n) => String(n.getAttribute('data-person') || ''));
+            const cast = castInOrder();
+            const moving = new Set(ids);
+            const byId = new Map(cast.map((x) => [x.id, x]));
+            const slots = cast.map((x, k) => (moving.has(x.id) ? k : -1)).filter((k) => k >= 0);
+            slots.forEach((slot, k) => {
+                const who = byId.get(ids[k]);
+                if (who)
+                    cast[slot] = who;
+            });
+            S.cast = cast;
+            S.castSorted = false;
+            save();
+            const back = page.querySelector('[data-af-sortkind]');
+            if (back)
+                back.hidden = false;
+        });
         // typed is the name field while it is being changed. Empty, the header
         // says so, rather than showing the name that was there before.
         const paintName = (typed) => {
@@ -8024,7 +8252,7 @@ export function setup(ctx, overrides) {
         };
         const prov = String((cn && cn.provider) || '').toLowerCase();
         const out = [];
-        const num = (k, label, lo, hi, step, dflt, help) => slider(label, typeof own[k] === 'number' ? own[k] : dflt, lo, hi, step, (v) => (step >= 1 ? String(Math.round(v)) : v.toFixed(2)), (v) => setP(k, v), help);
+        const num = (k, label, lo, hi, step, dflt, help) => numberRow(label, typeof own[k] === 'number' ? own[k] : dflt, lo, hi, step, (v) => setP(k, v), help);
         // An exact whole number, such as a seed, in a box rather than on a
         // slider. Held to its range when the box is left, as every number box is.
         const wholeBox = (k, label, lo, hi, dflt, help) => {
@@ -8281,7 +8509,7 @@ export function setup(ctx, overrides) {
                     }, 'Eleven v3 has three settings. Creative is the most expressive and can drift. Robust is the steadiest and acts the least. Natural is the default.'));
                 }
                 else {
-                    voiceBox.appendChild(slider('Stability', m.stability, 0, 1, 0.05, (v) => v.toFixed(2), (v) => {
+                    voiceBox.appendChild(numberRow('Stability', m.stability, 0, 1, 0.05, (v) => {
                         m.stability = v;
                         save();
                     }, 'Lower is more expressive and varied. Higher is steadier and more even. 0.50 by default.'));
@@ -8291,7 +8519,7 @@ export function setup(ctx, overrides) {
             // Only the settings the model takes. Eleven v4 takes Similarity, and
             // Eleven v3 does not.
             if (eng.eleven && !viaOpenRouter && /^eleven_v4/.test(pick.model || cn.model || '')) {
-                g2.appendChild(slider('Similarity', m.similarity, 0, 1, 0.05, (v) => v.toFixed(2), (v) => {
+                g2.appendChild(numberRow('Similarity', m.similarity, 0, 1, 0.05, (v) => {
                     m.similarity = v;
                     save();
                 }, 'How closely ElevenLabs keeps to the original voice. 0.75 by default.'));
@@ -8302,7 +8530,7 @@ export function setup(ctx, overrides) {
                 const lo = eng.speed ? eng.speed[0] : 0.5;
                 const hi = eng.speed ? eng.speed[1] : 2;
                 const at = Math.min(hi, Math.max(lo, Number(m.speed) || 1));
-                g2.appendChild(slider('Speed', at, lo, hi, 0.05, (v) => v.toFixed(2) + '×', (v) => {
+                g2.appendChild(numberRow('Speed', at, lo, hi, 0.05, (v) => {
                     m.speed = v;
                     save();
                 }, 'How fast they speak, from ' + lo + ' to ' + hi + '. 1.00 by default.'));
@@ -8697,7 +8925,7 @@ export function setup(ctx, overrides) {
                 }));
                 return f;
             });
-            const line = slider('How sure it must be', Number(S.decisionSure) || 50, 10, 95, 5, (v) => Math.round(v) + '%', (v) => set({ decisionSure: Math.round(v) }), '50% by default. A speaker it picks, or a sound it finds likely, is used only at this or higher. The Log shows each answer.');
+            const line = numberRow('How sure it must be (%)', Number(S.decisionSure) || 50, 10, 95, 5, (v) => set({ decisionSure: Math.round(v) }), '50% by default. A speaker it picks, or a sound it finds likely, is used only at this or higher. The Log shows each answer.');
             line.setAttribute('data-af-sure', '');
             return [box, line].concat(fields);
         }));

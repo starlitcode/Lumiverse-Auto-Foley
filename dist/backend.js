@@ -102,6 +102,7 @@ const DEFAULT_SETTINGS = {
     resetParts: ['settings', 'prompt', 'cast', 'sounds', 'audio', 'key'],
     cast: [],
     groups: [],
+    castSorted: true,
 };
 const NARRATOR_ID = 'narrator';
 function narrator() {
@@ -487,6 +488,7 @@ function cleanSettings(raw) {
         resetParts: partList(r.resetParts, RESET_PARTS, d.resetParts),
         cast: cast,
         groups: groups,
+        castSorted: bool(r.castSorted, d.castSorted),
     };
 }
 // An id that works over plain http too. crypto.randomUUID is missing outside
