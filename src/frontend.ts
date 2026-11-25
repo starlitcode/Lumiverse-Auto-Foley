@@ -1932,7 +1932,21 @@ export function setup(ctx: Ctx, overrides?: any) {
   // Someone the AI added has no voice yet. They get one from the
   // connection's voices that matches their gender and nobody in the cast
   // uses, so two new people never sound the same.
-  async function voiceForNew(m: Member, conn: any): Promise<void> {
+  // Lines are made ahead, several at once, so two lines of one new person
+  // can ask together. One pick is made for each person, and every line waits
+  // for it. Two picks would give the lines two voices, and the line made
+  // with the voice not kept would be made again on the next play.
+  const picking = new Map<string, Promise<void>>();
+  function voiceForNew(m: Member, conn: any): Promise<void> {
+    if (!conn || pickOf(m, conn).voice) return Promise.resolve();
+    const key = String(m.id || m.name) + '\u0001' + String(conn.id);
+    const on = picking.get(key);
+    if (on) return on;
+    const p = pickVoiceFor(m, conn).finally(() => picking.delete(key));
+    picking.set(key, p);
+    return p;
+  }
+  async function pickVoiceFor(m: Member, conn: any): Promise<void> {
     if (!conn || pickOf(m, conn).voice) return;
     const got = await loadVoices(conn.id);
     if (!got.voices.length) return;
@@ -2293,11 +2307,14 @@ export function setup(ctx: Ctx, overrides?: any) {
       if (l && l.length) quietest = Math.min(quietest, average(l));
     }
     const gain = levelGain(average(mine), quietest);
-    if (gain < 1 && !sh.toldLevel.has(key)) {
+    // Said only from 1 dB, since a smaller change cannot be heard and reads
+    // as nothing done.
+    const db = gain < 1 ? Math.round(-20 * Math.log10(gain)) : 0;
+    if (db >= 1 && !sh.toldLevel.has(key)) {
       sh.toldLevel.add(key);
       const it = sh.items[k];
       const who = it && it.line ? (it.line.kind === 'narration' ? 'The narrator' : it.line.speaker || 'A voice') : 'A voice';
-      log(who + ' is louder than the quietest voice here, so it is turned down by ' + Math.round(-20 * Math.log10(gain)) + ' dB.');
+      log(who + ' is louder than the quietest voice here, so it is turned down by ' + db + ' dB.');
     }
     return gain;
   }

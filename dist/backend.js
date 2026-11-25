@@ -3619,9 +3619,11 @@ async function onPanel(p, userId) {
             }
             case 'direct': {
                 const script = await direct(userId, p);
-                answer({ type: 'script', script });
+                // The cast first, so a person added for this message has their
+                // voice before the panel speaks their first line.
                 if (script.added.length)
                     answer({ type: 'state_changed', settings: await loadSettings(userId) });
+                answer({ type: 'script', script });
                 return;
             }
             case 'sound': {

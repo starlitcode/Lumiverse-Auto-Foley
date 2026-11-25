@@ -55,6 +55,7 @@ _Not yet released_
 
 ### Fixed
 
+- **A new person's lines could be made again on the next play, in two voices.** Lines are made ahead, several at once. Two lines of someone new each picked a voice, so the lines had different voices, and a line spoken before the person joined the cast used the connection's voice. On the next play, those lines did not match and were made, and paid for, again. Now one voice is picked for each new person, and every line waits for it.
 - **The Director's tokens were counted with the tokenizer of your main connection.** When the provider sends no count, Lumiverse counts them, and it now counts for the Director's own model. Auto Refine does the same.
 - **Stop did not stop the Director.** Pressed while the script was being written, Stop only stopped the panel waiting. The Director's request went on, and could be asked again. Stop now cancels the request in Lumiverse, and nothing more is asked or kept for that message.
 - **Reduce motion could stop another extension's motion.** It matched any part of the page whose name held af- inside a word, such as leaf-. It now matches only Auto Foley's own parts.
