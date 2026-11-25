@@ -2360,6 +2360,70 @@ if (section("display name")) {
   }
 }
 
+if (section("select several")) {
+  console.log("Several people can be picked, then put in a group or removed together");
+  for (const size of SIZES) {
+    const where = size.name;
+    const { context, page, errors } = await open(THEMES[0], size, 1, () => {
+      window.__settings.groups = [{ id: "g1", name: "The harbor", open: true }];
+    });
+    await page.click('.af-tab[data-tab="cast"]');
+    await page.waitForTimeout(400);
+    check(!(await page.$("[data-af-pickbar]")) && !(await page.$("[data-af-pick]")), where + ": no switches or bar until Select is pressed");
+    await page.click("[data-af-select]");
+    // The bar fades in and slides, rather than appearing at once.
+    const fading = await page.evaluate(async () => {
+      const seen = [];
+      for (let k = 0; k < 8; k++) {
+        const b = document.querySelector("[data-af-pickbar]");
+        if (b) seen.push(Number(getComputedStyle(b).opacity));
+        await new Promise((r) => requestAnimationFrame(r));
+      }
+      return seen;
+    });
+    check(fading.length > 0 && fading.some((o) => o > 0 && o < 1), where + ": the bar fades in (" + fading.map((o) => o.toFixed(2)).join(",") + ")");
+    await page.waitForTimeout(500);
+    check((await page.evaluate(() => Number(getComputedStyle(document.querySelector("[data-af-pickbar]")).opacity))) === 1, where + ": and ends fully shown");
+    const picks = await page.evaluate(() => Array.from(document.querySelectorAll("[data-af-pick]")).map((b) => b.getAttribute("data-af-pick")));
+    check(picks.sort().join(",") === "a,b,c", where + ": every person but the narrator has a switch (" + picks.join(",") + ")");
+    const start = await page.evaluate(() => ({ said: document.querySelector("[data-af-pickcount]").textContent, off: document.querySelector("[data-af-pickremove]").disabled }));
+    check(/Nobody is selected/.test(start.said) && start.off, where + ": with nobody picked it says so, and Remove cannot be pressed");
+    // Two people go in the group.
+    await page.click('[data-af-pick="b"]');
+    await page.click('[data-af-pick="c"]');
+    await page.waitForTimeout(150);
+    check(/2 people are selected/.test(await page.evaluate(() => document.querySelector("[data-af-pickcount]").textContent)), where + ": it counts the people picked");
+    await page.selectOption("[data-af-pickbar] select", "g1");
+    await page.click("[data-af-pickmove]");
+    await page.waitForTimeout(700);
+    const grouped = await page.evaluate(() => window.__settings.cast.filter((m) => m.group === "g1").map((m) => m.id).sort().join(","));
+    check(grouped === "b,c", where + ": Put them in it puts both in the group (" + grouped + ")");
+    check(!(await page.$("[data-af-pickbar]")), where + ": and picking ends");
+    // Everyone but the narrator is removed together, after one question.
+    await page.click("[data-af-select]");
+    await page.waitForTimeout(400);
+    await page.click("[data-af-pickall]");
+    await page.waitForTimeout(150);
+    const look = await page.evaluate((touch) => {
+      const small = [];
+      for (const n of document.querySelectorAll("[data-af-pickbar] button, [data-af-pickbar] select, [data-af-pick]")) {
+        const h = n.getBoundingClientRect().height;
+        if (touch && h < 32) small.push((n.textContent || n.getAttribute("aria-label") || n.tagName).trim().slice(0, 20) + ":" + h);
+      }
+      return { small, side: document.documentElement.scrollWidth > window.innerWidth + 1 };
+    }, size.touch);
+    if (size.touch) check(!look.small.length, where + ": everything in the bar is at least 32 pixels high (" + look.small.join(", ") + ")");
+    check(!look.side, where + ": nothing runs off the side");
+    await page.evaluate(() => { window.__asked = 0; });
+    await page.click("[data-af-pickremove]");
+    await page.waitForTimeout(700);
+    const left = await page.evaluate(() => ({ ids: window.__settings.cast.map((m) => m.id), asked: window.__asked }));
+    check(left.asked === 1 && left.ids.join(",") === "n", where + ": Remove asks once, then removes all three and keeps the narrator (" + JSON.stringify(left) + ")");
+    check(!errors.length, where + ": no page errors. " + errors.slice(0, 2).join(" | "));
+    await context.close();
+  }
+}
+
 if (section("reorder")) {
   console.log("People and groups can be picked up and moved");
   const order = (page, sel, attr) => page.evaluate(([sel, attr]) => Array.from(document.querySelectorAll(sel)).map((n) => n.getAttribute(attr)), [sel, attr]);

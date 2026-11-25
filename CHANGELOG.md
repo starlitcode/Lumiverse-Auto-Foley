@@ -13,6 +13,7 @@ _2026-11-25_
 ### Added
 
 - **A display name for everyone in the cast**, on each person's card in the Cast tab. It is the name shown on the Cast tab and in the players, such as a nickname. The Director never sees it, and still finds lines by **Name**. The narrator has one too, while the Director still calls them the Narrator. **A to Z** and **Z to A** sort by the name shown.
+- **Pick several people at once**, with **Select** on the Cast tab. Put them all in a group, or remove them all after one question. The narrator cannot be picked, since it cannot be removed. See [Picking several people](docs/cast.md#picking-several-people).
 
 ### Changed
 

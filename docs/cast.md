@@ -80,6 +80,18 @@ Groups sort the cast on the Cast tab, such as one group for each story. They cha
 - **Delete** asks first. The people in it stay in the cast, outside any group.
 - Groups follow your account, and go with the cast in an export and in **Start again**.
 
+## Picking several people
+
+**Select**, next to **New group**, lets you pick several people at once.
+
+1. Press **Select**. A switch shows beside each person, in place of the dots.
+2. Turn on the switch for each person you want. **Select all** picks everyone, and **Select none** clears it.
+3. Press **Put them in it** to put them all in the group picked above it. **No group** takes them out of their groups.
+4. Or press **Remove** to take them all out of the cast. It asks first.
+5. **Done** ends picking without changing anything.
+
+The narrator has no switch, since it cannot be removed.
+
 ## Sorting and moving people
 
 **Sort the cast**, under **New group**, says how people are listed:

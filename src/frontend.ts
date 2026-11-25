@@ -1337,6 +1337,8 @@ textarea.af-tall { min-height: 260px; }
 .af-group-empty { margin: 0; color: var(--af-muted); font-size: 12.5px; }
 .af-person-top { display: flex; align-items: center; gap: 2px; }
 .af-person-top > .af-person-head { flex: 1 1 auto; min-width: 0; }
+.af-person-top > .af-pick { flex: none; margin: 0 6px 0 2px; }
+.af-pickbar { gap: 8px; padding-top: 4px; }
 .af-grip { flex: none; display: grid; place-items: center; width: 26px; min-height: 40px; border-radius: var(--af-r-sm); color: var(--af-muted); cursor: grab; touch-action: none; user-select: none; -webkit-user-select: none; }
 .af-grip svg { width: 16px; height: 16px; }
 .af-grip:focus-visible { outline: none; box-shadow: inset 0 0 0 2px var(--af-accent-soft); }
@@ -7516,6 +7518,80 @@ export function setup(ctx: Ctx, overrides?: any) {
     renderTab();
   }
 
+  // Picking several people at once, to put them in a group or remove them.
+  // The narrator cannot be picked, since it cannot be removed.
+  let castSelecting = false;
+  // Set for the one redraw after Select is pressed, so the bar opens with
+  // motion rather than appearing at once.
+  let pickOpening = false;
+  const castPicked = new Set<string>();
+  let paintPicked: () => void = () => {};
+
+  function pickBar(): HTMLElement {
+    const bar = el('<div class="af-col af-pickbar" data-af-pickbar></div>');
+    const count = el('<p class="af-note" data-af-pickcount aria-live="polite"></p>');
+    bar.appendChild(count);
+    const row = el('<div class="af-row"></div>');
+    const pickable = () => (S.cast as Member[]).filter((m) => m.kind !== 'narrator');
+    const all = button('Select all', () => {
+      const every = pickable();
+      const allOn = every.every((m) => castPicked.has(m.id));
+      castPicked.clear();
+      if (!allOn) for (const m of every) castPicked.add(m.id);
+      document.querySelectorAll('.af [data-af-pick]').forEach((b) => ((b as HTMLInputElement).checked = castPicked.has(String((b as HTMLElement).getAttribute('data-af-pick')))));
+      paintPicked();
+    });
+    all.setAttribute('data-af-pickall', '');
+    row.appendChild(all);
+    const remove = button('Remove', async () => {
+      const who = pickable().filter((m) => castPicked.has(m.id));
+      if (!who.length) return;
+      const n = who.length;
+      const ok = await askSure('Remove ' + n + (n === 1 ? ' person' : ' people'), 'They are taken out of the cast. If they speak again, they are added back with no voice picked.', 'Remove', true);
+      if (!ok) return;
+      const gone = new Set(who.map((m) => m.id));
+      S.cast = (S.cast as Member[]).filter((m) => !gone.has(m.id));
+      for (const id of gone) openPeople.delete(id);
+      castPicked.clear();
+      castSelecting = false;
+      save();
+      renderTab();
+    }, 'af-danger');
+    remove.setAttribute('data-af-pickremove', '');
+    row.appendChild(remove);
+    bar.appendChild(row);
+    // Put the picked people in a group, or take them out of any group.
+    let moveTo: HTMLSelectElement | null = null;
+    let move: HTMLButtonElement | null = null;
+    if (groups().length) {
+      const pickGroup = select('Put them in a group', [{ id: '', label: 'No group' }].concat(groups().map((g) => ({ id: g.id, label: g.name }))), groups()[0].id, () => {}, 'The group the people you picked go in. No group takes them out of their groups.');
+      moveTo = pickGroup.querySelector('select') as HTMLSelectElement;
+      move = button('Put them in it', () => {
+        const to = moveTo ? moveTo.value : '';
+        for (const m of S.cast as Member[]) if (castPicked.has(m.id)) m.group = to;
+        castPicked.clear();
+        castSelecting = false;
+        save();
+        renderTab();
+      });
+      move.setAttribute('data-af-pickmove', '');
+      bar.appendChild(pickGroup);
+      const moveRow = el('<div class="af-row"></div>');
+      moveRow.appendChild(move);
+      bar.appendChild(moveRow);
+    } else bar.appendChild(hint('Make a group with New group to put people in it.'));
+    paintPicked = () => {
+      const n = pickable().filter((m) => castPicked.has(m.id)).length;
+      count.textContent = n === 0 ? 'Nobody is selected. Tap the switch beside a person.' : n + (n === 1 ? ' person is' : ' people are') + ' selected.';
+      remove.disabled = n === 0;
+      if (move) move.disabled = n === 0;
+      const allOn = pickable().length > 0 && pickable().every((m) => castPicked.has(m.id));
+      (all.querySelector('span') as HTMLElement).textContent = allOn ? 'Select none' : 'Select all';
+    };
+    paintPicked();
+    return bar;
+  }
+
   function renderCast() {
     const top = card(
       'Cast',
@@ -7535,7 +7611,38 @@ export function setup(ctx: Ctx, overrides?: any) {
       }, 'af-primary'),
     );
     row.appendChild(button('New group', () => editGroup(null)));
+    // Turns picking on and off. Leaving it clears what was picked.
+    const selectBtn = button(castSelecting ? 'Done' : 'Select', () => {
+      castPicked.clear();
+      const bar = page.querySelector('[data-af-pickbar]') as HTMLElement | null;
+      if (castSelecting && bar && !calm()) {
+        // The bar closes with motion first, then the tab is drawn again.
+        castSelecting = false;
+        reveal(bar, false);
+        const t = setTimeout(() => {
+          timers.delete(t);
+          renderTab();
+        }, 320);
+        timers.add(t);
+        return;
+      }
+      castSelecting = !castSelecting;
+      pickOpening = castSelecting;
+      renderTab();
+    });
+    selectBtn.setAttribute('data-af-select', '');
+    selectBtn.setAttribute('aria-pressed', castSelecting ? 'true' : 'false');
+    row.appendChild(selectBtn);
     top.appendChild(row);
+    if (castSelecting) {
+      const bar = pickBar();
+      top.appendChild(bar);
+      if (pickOpening && !calm()) {
+        bar.hidden = true;
+        requestAnimationFrame(() => reveal(bar, true));
+      }
+      pickOpening = false;
+    }
     // How the people are listed on this tab and in the floating player. Only
     // the list on screen is sorted: the cast's own order is kept, and My own
     // order shows it again.
@@ -7749,6 +7856,25 @@ export function setup(ctx: Ctx, overrides?: any) {
     const body = c.querySelector('.af-person-body') as HTMLElement;
     const inner = c.querySelector('.af-person-inner') as HTMLElement;
     const grip = c.querySelector('.af-grip') as HTMLElement;
+    // While picking, a switch stands where the dots are. The narrator gets
+    // none, since it cannot be removed.
+    if (castSelecting) {
+      if (m.kind !== 'narrator') {
+        const pick = document.createElement('input');
+        pick.type = 'checkbox';
+        pick.className = 'af-box af-pick';
+        pick.setAttribute('role', 'switch');
+        pick.setAttribute('data-af-pick', m.id);
+        pick.setAttribute('aria-label', 'Select ' + shownName(m));
+        pick.checked = castPicked.has(m.id);
+        pick.addEventListener('change', () => {
+          if (pick.checked) castPicked.add(m.id);
+          else castPicked.delete(m.id);
+          paintPicked();
+        });
+        grip.replaceWith(pick);
+      } else grip.style.visibility = 'hidden';
+    }
     grip.setAttribute('aria-label', 'Move ' + (m.name || 'this person') + '. Drag, or press the up and down arrow keys.');
     grip.title = 'Hold and drag to move';
     sortable(grip, c, () => Array.from((c.parentElement as HTMLElement).children).filter((n) => (n as HTMLElement).matches('.af-person')) as HTMLElement[], (order) => {
