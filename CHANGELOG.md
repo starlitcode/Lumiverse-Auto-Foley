@@ -88,6 +88,7 @@ _2026-11-25_
 - **Groups have an editor.** **New group** and **Edit** open it, with the group's name and a switch for each person in the cast, so you can pick everyone in a group in one place. **Save** keeps it and **Cancel** changes nothing. **Edit** takes the place of **Rename**.
 - **Scripts.** The panel calls what the Director makes from a message its script, such as **Kept audio and scripts** in **Start again**. While a message gets ready, the status says "Getting the script", and "The Director is writing the script" only once the Director is asked. A message played from its kept script never says the Director is writing. **Now playing** and the floating player name what plays as a script, such as "Tamsin’s script".
 - **The Director's built-in prompt** says what each kind of person in the cast is, and to mark a big moment only while **Big moments** is on. If you use a prompt of your own, a notice says the built-in one has changed.
+- **Clearer explanations on GitHub.** The engines page says how Auto Foley works with proxies, and the cast page says how much each box holds and why.
 - **Fish Audio tags are repeated for each sentence.** Fish Audio reads a tag for how the words are said best at the start of the sentence it is for. On a line of several sentences, that tag now goes again at the start of each sentence that has none of its own, so the last sentence is said the same way as the first. Sounds and pauses are not repeated.
 
 ### Fixed
