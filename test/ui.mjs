@@ -170,7 +170,8 @@ window.__fetch = async (url, init) => {
   if (u.includes('/characters/c')) return json({ id: 'c', name: 'Ysolde Marrow-Kestrel of the Lower Quays' });
   if (u.includes('/settings/voiceSettings')) return json({ key: 'voiceSettings', value: { ttsEnabled: true, ttsAutoPlay: true, ttsConnectionId: 't1' } });
   if (u.includes('/messages')) return json({ data: [{ id: 'm1', name: 'Ysolde Marrow-Kestrel of the Lower Quays', is_user: false, content: 'text', swipe_id: 0 }].concat(window.__moreMessages || []), total: 1 + (window.__moreMessages || []).length });
-  if (u.includes('/tts/synthesize')) { window.__synth = (window.__synth || []).concat(JSON.parse(init.body)); const body = JSON.parse(init.body); return new Response(window.__wav ? window.__makeWav(window.__wav[0], window.__wav[1], (window.__amps || {})[body.voice || '']) : new Blob([new Uint8Array(64)], { type: 'audio/mpeg' }), { status: 200 }); }
+  if (u.includes('/tts/synthesize') && window.__emptyOnce) { window.__emptyOnce--; window.__emptyAt = (window.__emptyAt || []).concat(Date.now()); return new Response(JSON.stringify({ error: 'Google AI Studio tts synthesize failed: No audio payload in Gemini TTS response' }), { status: 502, headers: { 'Content-Type': 'application/json' } }); }
+  if (u.includes('/tts/synthesize')) { window.__synthAt = (window.__synthAt || []).concat(Date.now()); window.__synth = (window.__synth || []).concat(JSON.parse(init.body)); const body = JSON.parse(init.body); return new Response(window.__wav ? window.__makeWav(window.__wav[0], window.__wav[1], (window.__amps || {})[body.voice || '']) : new Blob([new Uint8Array(64)], { type: 'audio/mpeg' }), { status: 200 }); }
   return new Response('{}', { status: 404 });
 };
 // A real WAV: some seconds of quiet, then some seconds of a tone, so the
@@ -1932,6 +1933,57 @@ if (section("reused row")) {
   const after = await page.evaluate(() => document.querySelector('[data-af="sub"]').textContent);
   check(/deleted, so it stopped/.test(after) || /Press the Auto Foley button/.test(after), "a message deleted while it plays stops, and its script is not kept for Play (" + after + ", playing before: " + playing + ")");
   check(!errors.length, "no page errors. " + errors.slice(0, 2).join(" | "));
+  await context.close();
+}
+
+if (section("no audio")) {
+  console.log("An answer with no audio is asked for again at once");
+  const { context, page, errors } = await open(THEMES[0], SIZES[1]);
+  await page.evaluate(() => { window.__emptyOnce = 1; window.__clipMs = 300; });
+  await page.click('.af-tab[data-tab="stage"]');
+  await page.waitForTimeout(150);
+  await page.click('#mount [data-af-slot="message"]');
+  await page.waitForTimeout(3500);
+  const got = await page.evaluate(() => ({ empty: window.__emptyAt || [], made: window.__synthAt || [], log: (document.querySelector('.af-log') || {}).innerText || '' }));
+  const gap = got.empty.length && got.made.length ? Math.min(...got.made.filter((t) => t > got.empty[0])) - got.empty[0] : -1;
+  check(got.empty.length === 1 && gap > 0 && gap < 3000, "the line is asked for again within 3 seconds (" + gap + " ms)");
+  check(/sent back no audio for line \d+\. Trying again in 2 s/.test(got.log), "the Log says no audio came back and it is asked again");
+  check(!errors.length, "no console errors. " + errors.slice(0, 2).join("; "));
+  await context.close();
+}
+
+if (section("chat words name")) {
+  console.log("Only the message text is lit, not the name above it");
+  const { context, page, errors } = await open(THEMES[0], SIZES[1]);
+  // As Lumiverse lays a message out: the name, then the text in its own box.
+  // The text starts with the same word as the name.
+  await page.evaluate(() => {
+    window.__wav = [0.05, 2.4];
+    window.__clipMs = 2500;
+    const msg = document.querySelector('[data-message-id="m1"]');
+    const p = msg.querySelector("p");
+    const head = document.createElement("div");
+    head.className = "name";
+    head.textContent = "She";
+    const content = document.createElement("div");
+    content.setAttribute("data-component", "MessageContent");
+    p.replaceWith(content);
+    content.appendChild(p);
+    msg.insertBefore(head, content);
+    p.textContent = 'She set the cup down on the long table by the window.';
+  });
+  await page.click('#mount [data-af-slot="message"]');
+  const where = await page.evaluate(async () => {
+    const out = [];
+    for (let k = 0; k < 120; k++) {
+      const h = CSS.highlights.get("auto-foley-word");
+      if (h) for (const r of h) out.push(r.startContainer.parentElement && r.startContainer.parentElement.closest('[data-component="MessageContent"]') ? "text" : "outside");
+      await new Promise((r) => setTimeout(r, 20));
+    }
+    return out;
+  });
+  check(where.length > 0 && where.every((x) => x === "text"), "every lit word is in the message text (" + where.filter((x) => x === "outside").length + " outside of " + where.length + ")");
+  check(!errors.length, "no console errors. " + errors.slice(0, 2).join("; "));
   await context.close();
 }
 

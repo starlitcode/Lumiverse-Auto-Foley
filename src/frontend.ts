@@ -2153,9 +2153,15 @@ export function setup(ctx: Ctx, overrides?: any) {
       // since some services word it as a quota. It is said at once.
       const kind = /quota|credits?|exceeds your/i.test(raw) ? 'hard' : raw === 'empty' ? 'wait' : errorKind(raw);
       if (kind !== 'wait' || wait >= (Number(S.rateWaits) || 0)) return { why };
-      const ms = Math.min(30000, rateWait(wait + 1, raw));
+      // An answer with no audio in it, which Gemini's preview models send now
+      // and then, is asked for again at once rather than waited out as a busy
+      // service.
+      const noAudio = raw === 'empty' || /no audio/i.test(raw);
+      const ms = noAudio ? 1500 : Math.min(30000, rateWait(wait + 1, raw));
       if (onWait) onWait(ms, wait + 1);
-      log(who.charAt(0).toUpperCase() + who.slice(1) + ' is busy for line ' + (line.i + 1) + '. Trying again in ' + Math.round(ms / 1000) + ' s (wait ' + (wait + 1) + ' of ' + S.rateWaits + ').');
+      log(
+        who.charAt(0).toUpperCase() + who.slice(1) + (noAudio ? ' sent back no audio' : ' is busy') + ' for line ' + (line.i + 1) + '. Trying again in ' + Math.max(1, Math.round(ms / 1000)) + ' s (wait ' + (wait + 1) + ' of ' + S.rateWaits + ').',
+      );
       const went = await pause(ms, signal);
       if (onWait) onWait(0, 0);
       if (!went) return { why: what + ' was stopped.' };
@@ -6449,7 +6455,7 @@ export function setup(ctx: Ctx, overrides?: any) {
   // The visible text of a message, as one string, and the text node each part
   // of it comes from. Buttons, edit boxes, folded blocks such as thinking, and
   // other extensions' parts are left out.
-  const NOT_READ = 'button, textarea, input, select, script, style, details, summary, [contenteditable="true"], [data-af-slot], .af-slot-row';
+  const NOT_READ = 'button, textarea, input, select, script, style, details, summary, [contenteditable="true"], [data-af-slot], .af-slot-row, [data-af-player]';
   function messageText(msg: Element): { text: string; at: { node: Text; start: number }[] } {
     const at: { node: Text; start: number }[] = [];
     let text = '';
@@ -6502,7 +6508,11 @@ export function setup(ctx: Ctx, overrides?: any) {
       if (msg && msg.closest(OTHER_UI)) msg = null;
       if (chatAt.show !== show.startedAt || v.item < chatAt.item) chatAt = { show: show.startedAt, item: v.item, at: 0 };
       chatAt.item = v.item;
-      const flat = msg ? messageText(msg) : null;
+      // Only the message text, which Lumiverse marks in both chat modes. The
+      // rest of the row holds the name and the time, and a name that starts
+      // the text too would be lit in the wrong place.
+      const body = msg ? msg.querySelector('[data-component="MessageContent"]') || msg : null;
+      const flat = body ? messageText(body) : null;
       const low = flat ? flat.text.toLowerCase() : '';
       const from = chatAt.at;
       let cursor = chatAt.at;
