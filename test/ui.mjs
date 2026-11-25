@@ -1925,6 +1925,21 @@ if (section("tab flicker")) {
       }, id);
       check(changes.length === 1, size.name + ", " + id + ": the tab is drawn once, with no change after (" + changes.join(", ") + ")");
     }
+    // The highlight moves at once: on every frame after a switch, one tab
+    // carries it, never two.
+    const lit = await page.evaluate(async () => {
+      const counts = [];
+      document.querySelector('.af-tab[data-tab="cast"]').click();
+      for (let k = 0; k < 15; k++) {
+        await new Promise((r) => requestAnimationFrame(r));
+        counts.push(Array.from(document.querySelectorAll(".af-tab")).filter((b) => {
+          const m = getComputedStyle(b).backgroundColor.match(/[\d.]+/g) || [];
+          return m.length === 4 ? parseFloat(m[3]) > 0.02 : m.length === 3;
+        }).length);
+      }
+      return counts;
+    });
+    check(lit.every((n) => n === 1), size.name + ": one tab is highlighted on every frame after a switch (" + lit.join(",") + ")");
     await context.close();
   }
 }

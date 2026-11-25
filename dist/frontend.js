@@ -807,11 +807,13 @@ const PANEL_CSS = `
   flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: center;
   cursor: pointer; background: transparent; border: 0; padding: 8px 4px; border-radius: calc(var(--af-r-md) - 3px);
   font: 12.5px var(--lumiverse-font-family, system-ui); color: var(--af-muted);
-  transition: color var(--af-fast), background var(--af-fast);
 }
+/* The tab picked is marked at once. A fade from one tab to the next showed
+   two tabs marked at the same time for a moment, which reads as a flicker.
+   Only the hover color fades, on a computer. */
 .af-tab[aria-selected="true"] { color: var(--af-text); background: var(--af-accent-soft); }
 .af-tab:focus-visible { outline: none; box-shadow: inset 0 0 0 2px var(--af-accent); }
-@media (hover: hover) { .af-tab:not([aria-selected="true"]):hover { color: var(--af-text); background: var(--af-accent-faint); } }
+@media (hover: hover) { .af-tab:not([aria-selected="true"]):hover { color: var(--af-text); background: var(--af-accent-faint); transition: color var(--af-fast), background var(--af-fast); } }
 @media (max-width: 340px) { .af-tabs { gap: 1px; } .af-tab { padding-left: 1px; padding-right: 1px; } }
 
 .af-page { display: flex; flex-direction: column; gap: 12px; }
