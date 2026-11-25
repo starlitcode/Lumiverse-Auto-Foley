@@ -360,9 +360,6 @@ function tidy(text) {
 // happens once, where it is written. Every other tag is how the words are
 // said, such as [whispering].
 const EVENT_TAG = /\b(laugh|chuckl|giggl|snicker|sigh|gasp|cough|sniff|sneez|groan|grunt|throat|inhal|exhal|breath|pause|sob|crie|cry|crying|yawn|hum|gulp|swallow|kiss|moan|pant|hiccup|snort|whimper|clap|knock|scream|shriek|wail|whistl|tsk|silence)/i;
-// Words in these scripts are drawn the same with each letter in a span of its
-// own. Inherited covers combining marks and joiners, which are left out.
-const LETTERS_SPLIT = /^[\p{Script=Latin}\p{Script=Greek}\p{Script=Cyrillic}\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}\p{Script=Common}]+$/u;
 // The words before a sentence's period that are not the end of a sentence.
 const NOT_AN_END = /(?:^|\s)(?:mr|mrs|ms|dr|st|jr|sr|prof|vs|etc|e\.g|i\.e|no)\.$/i;
 // Fish Audio reads a delivery tag best at the start of the sentence it is
@@ -471,15 +468,6 @@ function esc(text) {
         .replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#39;');
-}
-// A word split into one span for each letter, so the word being said can
-// light letter by letter. A word in a script whose letters join or that
-// reads right to left is kept whole, since splitting it would change how it
-// is drawn. That word lights all at once.
-function letterSpans(word) {
-    if (!LETTERS_SPLIT.test(word))
-        return esc(word);
-    return Array.from(word).map((c) => '<span class="af-l">' + esc(c) + '</span>').join('');
 }
 // A short, stable fingerprint of a text, the same as the backend's. It tells
 // two clips apart. It is not for security.
@@ -1162,10 +1150,12 @@ textarea.af-bigta { flex: 1; min-height: 0; resize: none; }
 .af-slot-row { display: flex; justify-content: center; align-items: center; padding: 2px 0; }
 @media (pointer: coarse) { .af-slot-row .af-slot { padding: 9px; } }
 
-/* Reduce motion, from the panel or the device: nothing moves or fades. */
-html[data-af-still] [class*="af-"], html[data-af-still] [class*="af-"]::before, html[data-af-still] [class*="af-"]::after { animation: none !important; transition: none !important; }
+/* Reduce motion, from the panel or the device: nothing moves or fades. Only
+   class names that start with af- match, so another extension's class that
+   holds af- inside a word, such as leaf-, keeps its motion. */
+html[data-af-still] [class^="af-"], html[data-af-still] [class*=" af-"], html[data-af-still] [class^="af-"]::before, html[data-af-still] [class*=" af-"]::before, html[data-af-still] [class^="af-"]::after, html[data-af-still] [class*=" af-"]::after { animation: none !important; transition: none !important; }
 @media (prefers-reduced-motion: reduce) {
-  [class*="af-"], [class*="af-"]::before, [class*="af-"]::after { animation: none !important; transition: none !important; }
+  [class^="af-"], [class*=" af-"], [class^="af-"]::before, [class*=" af-"]::before, [class^="af-"]::after, [class*=" af-"]::after { animation: none !important; transition: none !important; }
 }
 `;
 // A short mark of some text, so a change to it can be noticed. Auto Retry and
@@ -4505,15 +4495,10 @@ export function setup(ctx, overrides) {
         '.af-theater-who .af-avatar{width:28px;height:28px;font-size:11px}' +
         '.af-theater-line{font-size:17px;line-height:1.6;overflow-wrap:anywhere}' +
         '.af-theater-idle{font-size:13px;color:var(--lumiverse-text-muted,rgba(255,255,255,.65))}' +
-        '.af-w{color:var(--lumiverse-text-muted,rgba(255,255,255,.65));transition:color .12s linear}' +
-        '.af-w.af-said,.af-w.af-now{color:var(--lumiverse-text,rgba(255,255,255,.92))}' +
-        // The word being said lights from left to right as it is spoken, one
-        // letter at a time. Each letter is the word's own text in its own span,
-        // so it is drawn in the same place and font as the rest of the line,
-        // whatever the theme sets. With reduce motion on, it is lit whole.
-        '@media (prefers-reduced-motion: no-preference){html:not([data-af-still]) .af-w.af-now{color:var(--lumiverse-text-muted,rgba(255,255,255,.65));transition:none}' +
-        'html:not([data-af-still]) .af-w.af-now .af-l{transition:color .1s linear}' +
-        'html:not([data-af-still]) .af-w.af-now .af-l.af-lit{color:var(--lumiverse-text,rgba(255,255,255,.92))}}' +
+        // A word lights with a short fade as the voice reaches it. Only its
+        // color changes, so it stays where it is, in the theme's own font.
+        '.af-w{color:var(--lumiverse-text-muted,rgba(255,255,255,.65));transition:color .25s ease}' +
+        '.af-w.af-said{color:var(--lumiverse-text,rgba(255,255,255,.92))}' +
         // The word being said, in the chat.
         '::highlight(auto-foley-word){background-color:var(--lumiverse-primary-020,rgba(147,112,219,.3));color:inherit}' +
         '.af-theater-cue:empty{display:none}' +
@@ -6084,7 +6069,7 @@ export function setup(ctx, overrides) {
         who.innerHTML = '<span class="af-avatar af-avatar-' + esc((m && m.kind) || 'character') + '">' + faceHtml(m, name) + '</span><span>' + esc(name) + '</span>';
         const { parts, weights } = lineParts(line);
         lineBox.innerHTML = parts
-            .map((p, k) => (p.kind === 'word' ? '<span class="af-w" data-af-part="' + k + '">' + letterSpans(p.text) + '</span>' : '<span class="af-chip ' + (p.kind === 'sound' ? 'af-chip-insound' : 'af-chip-tag') + '" data-af-part="' + k + '">' + esc(p.text) + '</span>'))
+            .map((p, k) => (p.kind === 'word' ? '<span class="af-w" data-af-part="' + k + '">' + esc(p.text) + '</span>' : '<span class="af-chip ' + (p.kind === 'sound' ? 'af-chip-insound' : 'af-chip-tag') + '" data-af-part="' + k + '">' + esc(p.text) + '</span>'))
             .join(' ');
         // The box keeps the tallest line of this message, so a short line after a
         // long one does not pull the rest of the tab up.
@@ -6096,8 +6081,8 @@ export function setup(ctx, overrides) {
         }
         void weights;
     }
-    // Where the voice is in the line playing: the part being spoken, how far
-    // through it it is, and the line's parts. Null while no voice plays. The
+    // Where the voice is in the line playing: the part being spoken and the
+    // line's parts. Null while no voice plays. The
     // start of each part is worked out once the clip's sound has been read, and
     // again if it is read after the line began.
     let syncCache = null;
@@ -6125,13 +6110,11 @@ export function setup(ctx, overrides) {
         for (let j = 0; j < st.length; j++)
             if (st[j] != null && st[j] <= now)
                 k = j;
-        const next = k + 1 < st.length ? st[k + 1] : dur;
-        const frac = k < 0 ? 0 : Math.max(0, Math.min(1, (now - st[k]) / Math.max(0.05, next - st[k])));
-        return { k, frac, parts: syncCache.parts, item: show.index };
+        return { k, parts: syncCache.parts, item: show.index };
     }
     // Moves the spoken words along with the audio, on every frame while a
-    // message plays. Words already said are lit. The word being said fills from
-    // left to right as it is spoken. Only words that changed are written.
+    // message plays. A word is lit once the voice reaches it, and stays lit.
+    // Only words that changed are written.
     function theaterTick() {
         theaterRaf = 0;
         if (!alive)
@@ -6143,25 +6126,9 @@ export function setup(ctx, overrides) {
             if (box)
                 box.querySelectorAll('.af-w').forEach((w) => {
                     const n = Number(w.dataset.afPart);
-                    // A word whose fill has reached its end counts as said, so the last
-                    // word of a line is lit whole when the voice stops.
-                    const said = !!v && (n < v.k || (n === v.k && v.frac >= 1));
-                    const cur = !!v && n === v.k && v.frac < 1;
+                    const said = !!v && n <= v.k;
                     if (w.classList.contains('af-said') !== said)
                         w.classList.toggle('af-said', said);
-                    if (w.classList.contains('af-now') !== cur)
-                        w.classList.toggle('af-now', cur);
-                    const ls = w.children;
-                    const lit = cur ? Math.round(v.frac * ls.length) : 0;
-                    const el = w;
-                    if (ls.length && el.dataset.lit !== String(lit)) {
-                        el.dataset.lit = String(lit);
-                        for (let j = 0; j < ls.length; j++) {
-                            const on = j < lit;
-                            if (ls[j].classList.contains('af-lit') !== on)
-                                ls[j].classList.toggle('af-lit', on);
-                        }
-                    }
                 });
         }
         paintChatWords(v);
@@ -8842,7 +8809,7 @@ export function setup(ctx, overrides) {
         catch (_) { }
     };
 }
-export const __testing = { letterSpans, wavBlob, noConnectionWhy, perSentence, clipLevel, levelGain, voiceGender, describeWords, markText, movedFor, movedRowMark, MOVED_DEFAULTS, looksLikeDate, voicedFrames, wordWeight, partTimes, engineOf, fitTag, tagSound, textFor, styleFor, stripTags, stabilityFor, ENGINES };
+export const __testing = { wavBlob, noConnectionWhy, perSentence, clipLevel, levelGain, voiceGender, describeWords, markText, movedFor, movedRowMark, MOVED_DEFAULTS, looksLikeDate, voicedFrames, wordWeight, partTimes, engineOf, fitTag, tagSound, textFor, styleFor, stripTags, stabilityFor, ENGINES };
 // The built-in cheer: "Cheering and clapping crowd 1" by freesound_community,
 // a free sound from Pixabay (pixabay.com/sound-effects/people-cheering-and-clapping-crowd-1-5995/),
 // made mono at 64 kbps so it stays small. assets/applause.mp3 is the same

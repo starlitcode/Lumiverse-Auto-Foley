@@ -879,69 +879,28 @@ if (section("sync")) {
   await page.click('#mount [data-af-slot="message"]');
   await page.waitForFunction(() => document.querySelector('[data-af="theater"]') && document.querySelector('[data-af="theater"]').dataset.state === "voice", null, { timeout: 8000 });
   const t0 = Date.now();
-  // A word filling as it is said counts as lit.
-  const lit = () => page.evaluate(() => [document.querySelectorAll('[data-af="line"] .af-w.af-said, [data-af="line"] .af-w.af-now').length, document.querySelectorAll('[data-af="line"] .af-w').length]);
+  const lit = () => page.evaluate(() => [document.querySelectorAll('[data-af="line"] .af-w.af-said').length, document.querySelectorAll('[data-af="line"] .af-w').length]);
   await page.waitForTimeout(Math.max(0, 450 - (Date.now() - t0)));
   const early = await lit();
   check(early[1] > 0 && early[0] === 0, "no word is lit while the clip is still quiet (" + early.join(" of ") + ")");
   await page.waitForTimeout(Math.max(0, 2250 - (Date.now() - t0)));
   const late = await lit();
   check(late[1] > 0 && late[0] === late[1], "every word is lit by the end of the voice (" + late.join(" of ") + ")");
-  // Part of the way through, one word is part filled: it fills smoothly as it
-  // is said, rather than turning on all at once.
-  await page.evaluate(() => { window.__clipMs = 2400; });
-  const fills = await page.evaluate(async () => {
-    const seen = new Set();
-    for (let k = 0; k < 40; k++) {
-      const w = document.querySelector('[data-af="line"] .af-w.af-now');
-      if (w && w.children.length) seen.add(Math.round((w.querySelectorAll(".af-l.af-lit").length / w.children.length) * 10));
-      if (w) {
-        const cs = getComputedStyle(w);
-        (window.__nowLooks = window.__nowLooks || []).push(cs.color + "|" + cs.webkitTextFillColor);
+  // The word being said is lit whole, with only its color changing, so it
+  // stays in place in the theme's own font. Nothing is drawn on top of it.
+  const looks = await page.evaluate(async () => {
+    window.__clipMs = 2400;
+    const out = [];
+    for (let k = 0; k < 30; k++) {
+      for (const w of document.querySelectorAll('[data-af="line"] .af-w.af-said')) {
+        out.push([w.children.length, getComputedStyle(w, "::after").content, getComputedStyle(w).color]);
       }
       await new Promise((r) => requestAnimationFrame(r));
     }
-    return Array.from(seen);
+    return out;
   });
-  check(fills.some((x) => x > 0 && x < 10), "a word fills part way as it is said (" + fills.join(",") + ")");
-  // The word being said is never made see-through, so a browser that cannot
-  // draw the fill still shows it.
-  const shown = await page.evaluate(() => window.__nowLooks || []);
-  check(shown.length > 0 && shown.every((x) => !/rgba\(0, 0, 0, 0\)|transparent/.test(x)), "the word being said is never see-through (" + shown.slice(0, 2).join(" ; ") + ")");
-  check(!errors.length, "no console errors. " + errors.slice(0, 2).join("; "));
-  await context.close();
-}
-
-if (section("words in place")) {
-  console.log("The word being said is drawn in its own place and font, whatever the theme sets");
-  const { context, page, errors } = await open(THEMES[0], SIZES[0]);
-  // A theme that styles every layer drawn on top of an element, and indents
-  // and centers text, would move a lit copy of the word away from the word.
-  await page.addStyleTag({ content: "*::after{font-family:serif!important;font-size:24px!important;line-height:3!important;top:12px!important}[data-af=line]{text-indent:2em;text-align:center}" });
-  await page.evaluate(() => {
-    window.__wav = [0.1, 3];
-    window.__clipMs = 3200;
-  });
-  await page.click('.af-tab[data-tab="stage"]');
-  await page.waitForTimeout(200);
-  await page.click('#mount [data-af-slot="message"]');
-  await page.waitForFunction(() => document.querySelector('[data-af="line"] .af-w.af-now'), null, { timeout: 8000 });
-  await page.waitForTimeout(150);
-  const looks = await page.evaluate(() => {
-    const w = document.querySelector('[data-af="line"] .af-w.af-now');
-    const wc = getComputedStyle(w);
-    const after = getComputedStyle(w, "::after").content;
-    const r = w.getBoundingClientRect();
-    const off = Array.from(w.querySelectorAll(".af-l")).filter((l) => {
-      const c = getComputedStyle(l);
-      const b = l.getBoundingClientRect();
-      return c.fontFamily !== wc.fontFamily || c.fontSize !== wc.fontSize || b.top < r.top - 1 || b.bottom > r.bottom + 1 || b.left < r.left - 1 || b.right > r.right + 1;
-    }).length;
-    return { after, off, text: w.textContent, letters: w.children.length };
-  });
-  if (shots) await page.locator('[data-af="theater"]').screenshot({ path: shots + "/word-in-place.png" });
-  check(looks.after === "none" || looks.after === "normal", "nothing is drawn on top of the word (" + looks.after + ")");
-  check(looks.letters === looks.text.length && looks.off === 0, "every letter sits inside the word, in the word's font (" + looks.off + " of " + looks.letters + " out of place)");
+  check(looks.length > 0 && looks.every((x) => x[0] === 0 && (x[1] === "none" || x[1] === "normal")), "a lit word is the word itself, with nothing drawn over it");
+  check(looks.every((x) => !/rgba\(0, 0, 0, 0\)|transparent/.test(x[2])), "a lit word is never see-through");
   check(!errors.length, "no console errors. " + errors.slice(0, 2).join("; "));
   await context.close();
 }

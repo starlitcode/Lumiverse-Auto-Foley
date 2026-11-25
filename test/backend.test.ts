@@ -24,8 +24,10 @@ function host(opts: {
   noDecisions?: boolean;
   cors?: (url: string, init: any) => any;
   connections?: any[] | Error;
+  // Files already on disk, as after a restart.
+  files?: Map<string, any>;
 } = {}): Host {
-  const files = new Map<string, any>();
+  const files = new Map<string, any>(opts.files || []);
   const keys = new Map<string, string>();
   const sent: { msg: any; userId?: string }[] = [];
   const toasts: { kind: string; text: string; userId?: string }[] = [];
@@ -1323,6 +1325,50 @@ describe("a script is kept after people join the cast", () => {
     await h.ask(msg);
     const again = await h.ask(msg);
     expect(again.find((m) => m.type === "script").script.log.join(" ")).toContain("Played from the copy directed before.");
+  });
+});
+
+describe("a message is directed once", () => {
+  // A script is found by the message itself, so a changed setting, an
+  // update or a restart plays what was kept. Direct again asks anew.
+  const answer = JSON.stringify({ lines: [{ i: 0, speaker: "Pell Arden", text: "[gruffly] Tide turns at six." }] });
+  const msg = { type: "direct", chatId: "c", messageId: "m7", swipeId: 0, name: "Pell Arden", text: '"Tide turns at six."' };
+  const said = (out: any[]) => out.find((m) => m.type === "script").script.log.join(" ");
+
+  test("a changed setting still plays the kept script", async () => {
+    const h = host({ answers: [answer, answer] });
+    await h.ask(msg);
+    await h.ask({ type: "save", settings: { strength: "dramatic", breathsOn: false } });
+    const again = await h.ask(msg);
+    expect(h.calls.generate.length).toBe(1);
+    expect(said(again)).toContain("Played from the copy directed before.");
+  });
+
+  test("Direct again asks the Director anew", async () => {
+    const h = host({ answers: [answer, answer] });
+    await h.ask(msg);
+    await h.ask(Object.assign({}, msg, { fresh: true }));
+    expect(h.calls.generate.length).toBe(2);
+  });
+
+  test("changed words direct it again", async () => {
+    const seven = JSON.stringify({ lines: [{ i: 0, speaker: "Pell Arden", text: "[gruffly] Tide turns at seven." }] });
+    const h = host({ answers: [answer, seven] });
+    await h.ask(msg);
+    await h.ask(Object.assign({}, msg, { text: '"Tide turns at seven."' }));
+    expect(h.calls.generate.length).toBe(2);
+  });
+
+  test("a script kept under an older key is found after a restart", async () => {
+    const h = host({ answers: [answer, answer] });
+    await h.ask(msg);
+    // As an earlier version kept it: the same message and lines, another key.
+    const file = JSON.parse(h.files.get("u1/scripts.json"));
+    for (const x of file) x.key = x.script.key = "older";
+    const h2 = host({ answers: [answer], files: new Map([...h.files, ["u1/scripts.json", JSON.stringify(file)]]) });
+    const again = await h2.ask(msg);
+    expect(h2.calls.generate.length).toBe(0);
+    expect(said(again)).toContain("Played from the copy directed before.");
   });
 });
 

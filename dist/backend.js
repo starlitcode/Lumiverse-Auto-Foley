@@ -2212,13 +2212,26 @@ async function dropClips(userId, gone) {
         catch (_) { }
     }
 }
-function keptScript(userId, key) {
+// A kept script is found by its key. A script kept under an older key, from
+// before an update, is found by the message it belongs to and the words of
+// its lines, the newest first, so what was made before is played again.
+function keptScript(userId, key, messageId, plain, engineId) {
     const list = scripts[userId] || [];
     const hit = list.find((x) => x.key === key);
-    return hit ? hit.script : null;
+    if (hit)
+        return hit.script;
+    for (let k = list.length - 1; k >= 0; k--) {
+        const sc = list[k].script;
+        // A script that names its engine is only used for that engine.
+        if (sc.engine && sc.engine !== engineId)
+            continue;
+        if (sc.messageId === messageId && sc.lines.map((l) => l.plain).join('\n') === plain)
+            return sc;
+    }
+    return null;
 }
 // A short, stable fingerprint of a text. Not for security: it only tells two
-// versions of a message, or two sets of settings, apart.
+// versions of a message apart.
 function hash(text) {
     let h1 = 0x811c9dc5;
     let h2 = 0x01000193;
@@ -2228,15 +2241,6 @@ function hash(text) {
         h2 = Math.imul(h2 + c, 2246822519) >>> 0;
     }
     return h1.toString(36) + h2.toString(36);
-}
-function settingsSig(s) {
-    return hash(JSON.stringify([
-        s.directorOn, s.directorConnection, s.strength, s.tagsOn, s.breathsOn, s.soundsOn, s.soundStyle, s.narration,
-        s.intimateOn, s.findSpeakers, s.bigMoments, s.prompt, s.decisionsOn, s.decisionConnection, s.extraThinkTags,
-        s.thinkingMode, s.thinkingEffort, s.samplers, s.engineNotes, s.skipOn, s.skipPatterns, s.speechMarks, s.asterisks,
-        s.promptRole, s.engineNoteRole, s.askNoteRole, s.decisionQuestions, s.soundCheck, s.decisionSure,
-        s.cast.map((c) => [c.name, c.aliases, c.note, c.muted]),
-    ]));
 }
 // Settings change while a message is being directed. A new NPC is added to
 // the copy on disk, not to the copy read before the Director was asked.
@@ -2578,9 +2582,12 @@ async function direct(userId, p) {
     const messageId = str(p.messageId, 80);
     const uid = userId || '';
     const engine = cleanEngine(p.engine);
-    // The key holds the settings that change a direction, the cast among
-    // them, so a changed note or a new person directs the message again.
-    const keyFor = (set) => hash([messageId, str(p.swipeId, 8), text, JSON.stringify(engine), settingsSig(set)].join('\u0001'));
+    // The key is the message as it is: which one, which swipe, its words and
+    // the engine that speaks it. A message is directed once, and played from
+    // what was kept after that, until its words change or Direct again is
+    // pressed. Settings and the extension's own version are left out, so a
+    // changed setting or an update does not direct every message again.
+    const key = hash([messageId, str(p.swipeId, 8), text, engine.id].join('\u0001'));
     // The author of a message is in the cast from the first time they speak, so
     // a voice can be picked for them. This comes before the key, so the key
     // holds the cast as it is directed.
@@ -2595,27 +2602,20 @@ async function direct(userId, p) {
         s.cast.push(m);
         await saveSettings(userId, s);
     }
-    const key = keyFor(s);
     await readKeptScripts(uid, s);
-    // Kept under the key it was asked for, and under the key as the settings
-    // are once it is done. People found in the text, or added by the
-    // Director, join the cast while it is directed, which changes the key, and
-    // the same message played again is looked up by the new one.
-    const keepNow = async (sc) => {
-        keepScript(uid, sc);
-        const now = keyFor(await loadSettings(userId));
-        if (now !== sc.key)
-            keepScript(uid, Object.assign({}, sc, { key: now }));
-    };
-    if (!p.fresh) {
-        const kept = keptScript(uid, key);
-        if (kept)
-            return Object.assign({}, kept, { added: [], log: kept.log.concat('Played from the copy directed before.') });
-    }
     const skip = s.skipOn ? skipsFor(s.skipPatterns) : { list: [], bad: [] };
     const segs = splitSegments(text, { extra: s.extraThinkTags, bound: await boundPairs(userId), skips: skip.list, marks: s.speechMarks, asterisks: s.asterisks });
+    if (!p.fresh) {
+        const kept = keptScript(uid, key, messageId, segs.map((g) => g.text).join('\n'), engine.id);
+        if (kept) {
+            // Found under an older key, it is kept under this one from now on.
+            if (kept.key !== key)
+                keepScript(uid, Object.assign({}, kept, { key }));
+            return Object.assign({}, kept, { key, added: [], log: kept.log.concat('Played from the copy directed before.') });
+        }
+    }
     const script = {
-        key, messageId, author, lines: [], log: [], directed: false, added: authorAdded ? [author] : [], inScene: [], isUser, model: '', cost: 0, sent: 0, back: 0, counted: true,
+        key, engine: engine.id, messageId, author, lines: [], log: [], directed: false, added: authorAdded ? [author] : [], inScene: [], isUser, model: '', cost: 0, sent: 0, back: 0, counted: true,
     };
     if (!segs.length) {
         script.log.push('This message has nothing to read aloud.');
@@ -2676,7 +2676,7 @@ async function direct(userId, p) {
         const plain = applyDirection(segs, null, s.cast, author, fixed, rules);
         script.lines = plain.lines;
         script.log.push('The Director is off, so the message is read as written.');
-        await keepNow(script);
+        keepScript(uid, script);
         return script;
     }
     const castForPrompt = s.cast
@@ -2751,7 +2751,7 @@ async function direct(userId, p) {
     // A script is kept only when it was directed. One that fell back because
     // the Director failed is asked again next time.
     if (answer)
-        await keepNow(script);
+        keepScript(uid, script);
     return script;
 }
 // ---------------------------------------------------------------------------

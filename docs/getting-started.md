@@ -148,8 +148,9 @@ With **Keep made audio** on, in the Settings tab:
 
 - Each spoken line is kept in your account, with the message's script: the lines, who says each one, and the tags and sounds the Director added.
 - Going back to a chat later, even after closing Lumiverse, and pressing the button plays the kept lines. Nothing is spent on them, and the Log says how many were kept.
+- A message is directed once. After that, Play uses its kept script until the message's words change, even after you change a setting, update Auto Foley or restart Lumiverse.
+- To direct a message again with your new settings, press **Direct again** on the Stage tab.
 - A line is made again only when something about it changed, such as the voice, the model or the words.
-- A script is kept even when the Director adds someone new to the cast while it works, so playing the message again uses it.
 - The last 300 scripts are kept. The oldest go first.
 - **Up to 100 MB** is the default. When the total passes it, the oldest lines go first.
 - **Clear kept audio**, under it, deletes them all. It asks first.

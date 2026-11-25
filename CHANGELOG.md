@@ -49,13 +49,13 @@ _Not yet released_
 
 ### Fixed
 
+- **Reduce motion could stop another extension's motion.** It matched any part of the page whose name held af- inside a word, such as leaf-. It now matches only Auto Foley's own parts.
 - **The notice that a built-in text changed could run off the side of a phone.** Its button now sits under the words, inside the notice.
 - **"You have no TTS connection Auto Foley can use" did not say what it found.** It now says whether Lumiverse found no TTS connection on your account, or names the ones it found and their service. It also tells you that a key added under the LLM tab is not a TTS connection. Reported by a Discord user.
 - **Other accounts saw no connections to pick, with no reason given.** Lumiverse refuses an extension installed as Personal for every account but the one that installed it. The panel now says so, and that it has to be installed as Operator, under Extensions, for every account to use it.
 - **Sounds made with Both warned on every engine but ElevenLabs.** Both plays every sound as an effect on those engines, so only In the voice warns now.
 - **A new speaker on Gemini got a voice of any gender.** Gemini lists its voices as masculine and feminine, which did not match. Every way a provider writes gender is understood now.
 - **Only minor characters got a voice picked for them.** Anyone new but the narrator gets one now. The pick also matches words in how they sound, such as gravelly or young, to each voice's own description.
-- **The words in Now playing were choppy.** The word being said now lights from left to right, one letter at a time, as it is spoken. Each letter is lit in place, in your theme's font. The timing is worked out on every frame.
 - **Now playing lost its place after you came back to the Lumiverse tab.** It now picks up from where the audio really is.
 - **A message button could perform the wrong message.** After a delete, Lumiverse can show another message in the same row, and the button there still performed the message that was deleted, with its kept audio. A button now performs the message its row shows when it is pressed.
 - **Play could bring back a deleted message.** A message deleted while it plays stops, and its script is not played again.
@@ -66,7 +66,7 @@ _Not yet released_
 - **Copying Debug info could raise a phone's keyboard.** When the browser did not allow the usual way to copy, the box on screen was selected to copy it. A hidden box that cannot be typed in is used instead.
 - **Opening the floating player from low on the screen moved it to the top.** The player now opens upward from the button when the button is low, and to the left when it is on the right. Closing it puts the button back where it was. If you drag the open player, the button stays where you dragged it.
 - **The settings under Let it think first and Pattern behind the panel appeared in one step.** **How much thinking** and **How solid the boxes are** now open and close smoothly, the same as the settings under a switch.
-- **Playing a message again could direct it again and make its audio again.** When someone found in the text joined the cast while a message was directed, its script was kept under the cast as it was before, and was not found next time. It is now kept under the cast as it is after, so the message plays from what was kept, and nothing is spent. The last 300 scripts are kept, up from 40.
+- **Playing a message again could direct it again and make its audio again.** A script was kept under the settings and the cast as they were, so a new person in the cast, a changed setting or an update meant the script was not found. A script is now found by the message itself: which one, which swipe, its words and the engine. A message is directed once, and Play uses its kept script until its words change. **Direct again** directs it with your settings as they are now. Scripts kept before this are found too. The last 300 scripts are kept, up from 40.
 - **{{user}} and {{char}} were read aloud as written.** A message that holds Lumiverse's name macros is now filled in the same way the chat shows it, before the Director reads it, so the voice says the names.
 - **A part taller than the screen seemed to snap open or shut.** Most of its movement happened below the edge, where it could not be seen. Now only the part you can see moves, and the rest is added or taken away out of sight. Auto Retry and Auto Refine have the same fix.
 - **Switching tabs flickered.** The highlight faded from one tab to the next, so for a moment two tabs looked picked. The tab you press is now marked at once.
