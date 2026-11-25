@@ -2756,11 +2756,15 @@ export function setup(ctx, overrides) {
                 clipFor(sh, a);
             phase = paused ? 'Paused' : sh.items[at].kind === 'voice' ? 'Speaking' : sh.items[at].kind === 'applause' ? 'The audience cheers' : 'Playing a sound';
             paintStage();
+            // The player under the message says which part is playing, and whether
+            // it came from saved audio, which is known once the clip is ready.
+            paintPlayers();
             const got = await clipFor(sh, at);
             if (show !== sh)
                 return;
             if (sh.index !== at)
                 continue;
+            paintPlayers();
             if (!got.blob) {
                 sh.failed.push(at);
                 // A sound with nothing to play is said once, not on every play of
@@ -3730,8 +3734,10 @@ export function setup(ctx, overrides) {
                 '<button type="button" class="af-mp-ic" data-af-mp="back" aria-label="Back one part" title="Back one part">' + ICON_BACK + '</button>' +
                 '<button type="button" class="af-mp-play" data-af-mp="play">' + ICON_PLAY + '</button>' +
                 '<button type="button" class="af-mp-ic" data-af-mp="next" aria-label="Next part" title="Next part">' + ICON_SKIP + '</button>' +
+                '<span class="af-mp-run">' +
                 '<button type="button" class="af-mp-seek" data-af-mp="seek" aria-label="Go to a point in the message" title="Go to a point in the message"><span class="af-mp-bar" aria-hidden="true"><i></i></span></button>' +
                 '<span class="af-mp-text" data-af-mp="text"></span>' +
+                '</span>' +
                 '</div></div>';
         const mineNow = () => !!show && show.messageId === (box.getAttribute('data-af-message') || id);
         box.querySelector('[data-af-mp="back"]').addEventListener('click', (e) => {
@@ -5020,13 +5026,20 @@ export function setup(ctx, overrides) {
         // A grid, so every button keeps its column and the pill is never
         // narrower than what is in it, whatever a theme does to buttons. Only the
         // words shrink, and only when there is no room left.
-        '.af-mp-box{display:inline-grid;grid-template-columns:auto auto auto minmax(24px,120px) minmax(0,max-content);align-items:center;column-gap:6px;box-sizing:border-box;max-width:100%;min-width:0;margin:6px 0;padding:3px 12px 3px 3px;border-radius:999px;' +
-        '.af-mp .af-mp-box > *{margin:0;min-width:0;box-sizing:border-box}' +
+        '.af-mp-box{display:inline-grid;grid-template-columns:auto auto auto minmax(0,max-content);align-items:center;column-gap:6px;box-sizing:border-box;max-width:100%;min-width:0;margin:6px 0;padding:3px 12px 3px 3px;border-radius:999px;' +
         // Solid, the same as Auto Foley's other floating parts, so the words never
         // sit on a picture or pattern behind the message.
         'border:1px solid var(--lumiverse-border,rgba(147,112,219,.2));background-color:var(--lumiverse-card-bg-solid,rgb(24,20,34));' +
         'background-image:linear-gradient(var(--lumiverse-bg-elevated,rgba(35,30,48,.98)),var(--lumiverse-bg-elevated,rgba(35,30,48,.98)));' +
         'color:var(--lumiverse-text,rgba(255,255,255,.92));font:inherit;font-size:.85em;line-height:1.3;box-shadow:var(--lumiverse-shadow-sm,0 2px 8px rgba(0,0,0,.25))}' +
+        '.af-mp .af-mp-box > *, .af-mp .af-mp-run > *{margin:0;min-width:0;box-sizing:border-box}' +
+        // The line gives up its room before the words do, so the words are cut
+        // short only when the line is already at its smallest. Flex shares a
+        // shortfall by size, so the words take almost none of it while the line
+        // can shrink: even a hundredth of a pixel ends them in dots.
+        '.af-mp .af-mp-run{display:flex;align-items:center;gap:6px;min-width:0}' +
+        '.af-mp .af-mp-run > .af-mp-seek{flex:0 1 auto;width:120px;min-width:24px}' +
+        '.af-mp .af-mp-run > .af-mp-text{flex:0 0.00001 auto}' +
         '.af-mp-play{flex:none;display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;padding:0;border-radius:50%;cursor:pointer;' +
         // The icon is in the text color, which reads on the pill in every theme.
         // The accent color is only the ring.

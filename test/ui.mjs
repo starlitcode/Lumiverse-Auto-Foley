@@ -1049,7 +1049,7 @@ if (section("message player")) {
     check(!!got && got.inside && !got.sideways, where + ": it fits inside the message, with no sideways scrolling");
     check(!!got && !got.cut, where + ": with room to spare, its words are not cut off (" + (got && got.text) + ")");
     if (size.touch) check(!!got && got.btnH >= 32, where + ": its button is at least 32 pixels high (" + (got && got.btnH) + ")");
-    // Next and Back move through the message, and Download saves it.
+    // Next and Back move through the message.
     const partNow = () => page.evaluate(() => (document.querySelector("[data-af-player] [data-af-mp=text]").textContent.match(/Part (\d+)/) || [])[1] || "");
     const p0 = await partNow();
     await page.evaluate(() => document.querySelector("[data-af-player] [data-af-mp=next]").click());
@@ -1072,8 +1072,29 @@ if (section("message player")) {
       check(small === 0, where + ": every button in the player is at least 32 pixels high");
     }
     // The player's words are not cut short at its usual font size.
-    const cut = await page.evaluate(() => { const t = document.querySelector("[data-af-player] [data-af-mp=text]"); return { cut: t.scrollWidth > t.clientWidth + 1, text: t.textContent }; });
+    // Read from the drawn width of the words, since the box can be short of
+    // them by a fraction of a pixel, which scrollWidth rounds away.
+    const cut = await page.evaluate(() => { const t = document.querySelector("[data-af-player] [data-af-mp=text]"); const r = document.createRange(); r.selectNodeContents(t); return { cut: r.getBoundingClientRect().width > t.getBoundingClientRect().width + 0.005, text: t.textContent }; });
     check(!cut.cut, where + ": the player's words are shown whole (" + cut.text + ")");
+    // In a narrow message the line gives up its room first, so the words
+    // stay whole while the line is longer than its smallest.
+    const narrow = await page.evaluate(async () => {
+      const m = document.querySelector('[data-message-id="m1"]');
+      const was = m.style.width;
+      const t = document.querySelector("[data-af-player] [data-af-mp=text]");
+      const seek = document.querySelector("[data-af-player] [data-af-mp=seek]");
+      const r = document.createRange();
+      r.selectNodeContents(t);
+      const out = [];
+      for (const w of [300, 280, 260]) {
+        m.style.width = w + "px";
+        await new Promise((res) => requestAnimationFrame(() => requestAnimationFrame(res)));
+        out.push({ w, seek: Math.round(seek.getBoundingClientRect().width), cut: r.getBoundingClientRect().width > t.getBoundingClientRect().width + 0.005 });
+      }
+      m.style.width = was;
+      return out;
+    });
+    check(narrow.every((x) => !x.cut || x.seek <= 25), where + ": in a narrow message the line shrinks before the words are cut (" + JSON.stringify(narrow) + ")");
     // A theme with centered text, a large wide font and its own look for
     // every button centers the player and keeps all of it inside the message.
     await page.addStyleTag({ content: '[data-message-id="m1"]{font-size:26px;font-family:"Comic Sans MS",cursive} [data-message-id="m1"] p{text-align:center} button{padding:6px 14px;min-width:44px;margin:2px 4px;border:2px solid currentColor}' });
@@ -1085,7 +1106,7 @@ if (section("message player")) {
     check(!!big && big.inside && !big.sideways, where + ": with a large font, it still fits inside the message (" + JSON.stringify(big) + ")");
     const allIn = await page.evaluate(() => {
       const pill = document.querySelector("[data-af-player] .af-mp-box").getBoundingClientRect();
-      return Array.from(document.querySelectorAll("[data-af-player] .af-mp-box > *")).every((n) => { const r = n.getBoundingClientRect(); return r.left >= pill.left - 1 && r.right <= pill.right + 1; });
+      return Array.from(document.querySelectorAll("[data-af-player] .af-mp-box > *, [data-af-player] .af-mp-run > *")).every((n) => { const r = n.getBoundingClientRect(); return r.left >= pill.left - 1 && r.right <= pill.right + 1; });
     });
     check(allIn, where + ": with a theme that styles every button, every part stays inside the pill");
     // Turned off, it goes.
@@ -1348,7 +1369,36 @@ if (section("kept")) {
     check(firstSaid.includes("Voice: " + chars.toLocaleString("en-US") + " characters, about " + cost + "."), "Now playing gives the characters sent for new audio, and their cost (" + firstSaid + ")");
   }
   check(made > 0 && (await page.evaluate(() => Object.keys(window.__clips || {}).length)) === made, "each line made is kept (" + made + ")");
+  await page.evaluate(() => {
+    window.__clipMs = 700;
+    // The place Lumiverse leaves under a message, where the player goes.
+    const mount = document.createElement("span");
+    mount.setAttribute("data-spindle-mount", "message_body_after");
+    mount.setAttribute("data-spindle-scope", "message:m1:minimal:body-after");
+    mount.style.display = "contents";
+    document.querySelector('[data-message-id="m1"] p').after(mount);
+    // The drawer closed, as on a phone: Lumiverse takes it off the page, so
+    // Now playing is not drawn and nothing else changes as the parts go by.
+    window.__drawerBox = document.getElementById("drawer");
+    window.__drawerNext = window.__drawerBox.nextSibling;
+    window.__drawerBox.remove();
+  });
+  await page.waitForTimeout(400);
   await page.click('#mount [data-af-slot="message"]');
+  // The player under the message moves through the parts while saved audio
+  // plays, with nothing new being made to repaint it.
+  const parts = await page.evaluate(async () => {
+    const seen = [];
+    for (let k = 0; k < 60; k++) {
+      const t = document.querySelector("[data-af-player] [data-af-mp=text]");
+      const m = t && t.textContent.match(/^Part (\d+)/);
+      if (m && seen.indexOf(m[1]) < 0) seen.push(m[1]);
+      await new Promise((r) => setTimeout(r, 50));
+    }
+    return seen;
+  });
+  check(parts.length >= 2, "while saved audio plays, the player under the message says each part in turn (" + parts.join(", ") + ")");
+  await page.evaluate(() => document.body.insertBefore(window.__drawerBox, window.__drawerNext));
   await page.waitForTimeout(1500);
   check((await page.evaluate(() => (window.__synth || []).length)) === made, "playing it again makes nothing new");
   await page.click('.af-tab[data-tab="stage"]');
