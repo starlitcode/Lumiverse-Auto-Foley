@@ -860,7 +860,7 @@ describe("more settings and Chatterbox, direct", () => {
     expect(h.box.cleanSettings({}).wordStrength).toBe(20);
   });
 
-  test("How they speak keeps up to 1000 characters, and a direction up to 300", () => {
+  test("Acting notes keeps up to 1000 characters, and a direction up to 300", () => {
     const h = host();
     const long = "Low and unhurried, with a dry edge. ".repeat(20);
     const s = h.box.cleanSettings({ cast: [{ name: "Pell", note: long.slice(0, 700), params: { direction: "slow ".repeat(50).trim() } }, { name: "Wren", note: long + long }] });

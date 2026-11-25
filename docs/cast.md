@@ -5,7 +5,7 @@
 - Everyone who speaks has a card on the Cast tab: the narrator, your personas, the characters and the NPCs.
 - Each has their own voice, model and settings, and can speak through a connection of their own.
 - People join the cast three ways: when they write a message, when the Director finds them, or when you add them.
-- The **How they speak** note tells the Director how to tag their lines.
+- **Acting notes** tell the Director how to tag their lines. Only the Director reads them.
 
 ## How people join
 
@@ -36,7 +36,7 @@ Someone the AI added has no voice picked. The first time they speak, Auto Foley 
 - **Similarity.** Eleven v4 only. Eleven v3 does not take it.
 - **Speed.** Fish Audio and Chatterbox only. ElevenLabs' docs say Eleven v3 and v4 take no speed, and Gemini has none either.
 - **More settings.** A fold under the voice, with only the settings their engine takes. **Back to defaults** clears them.
-- **How they speak.** A note for the Director, such as "soft-spoken and dry, rarely raises their voice". It holds up to 1000 characters. See [How much a box holds](#how-much-a-box-holds), and [Writing for each voice engine](writing.md) for what helps on each engine.
+- **Acting notes.** A note for the Director, such as "soft-spoken and dry, rarely raises their voice". It holds up to 1000 characters. See [How much a box holds](#how-much-a-box-holds), and [Writing for each voice engine](writing.md) for what helps on each engine.
 - **Do not voice.** Their lines are skipped.
 - **Hear a sample** speaks a test line with these settings. It costs a few credits.
 - **Remove** takes them out of the cast. The narrator cannot be removed, since it reads everything outside quotes. If it were taken out, it would be added back at once. To skip narration, set **Narration** in the Settings tab to **Skip**.
@@ -46,9 +46,9 @@ Someone the AI added has no voice picked. The first time they speak, Auto Foley 
 
 Three boxes on a card have a limit:
 
-- **How they speak**: 1000 characters.
-- **Voice direction**, for Fish Audio, in **More settings**: 300 characters.
-- **Their usual way of speaking**, for Gemini 3.8, in **More settings**: 300 characters.
+- **Acting notes**: 1000 characters.
+- **Fish Audio direction**, in **More settings**: 300 characters.
+- **Gemini style**, in **More settings**: 300 characters.
 
 How it works:
 
@@ -59,9 +59,9 @@ How it works:
 
 Why the limits are there:
 
-- **How they speak** is read only by the Director. It is never sent to the voice engine, so the limit is the same for every model.
+- **Acting notes** is read only by the Director. It is never sent to the voice engine, so the limit is the same for every model.
 - Each time the Director writes a script, it gets the note for every person in the cast. Long notes for a big cast make each script slower to write and cost more.
-- **Voice direction** and **Their usual way of speaking** are sent to the voice service with every line that person says, so Auto Foley keeps them short.
+- **Fish Audio direction** and **Gemini style** are sent to the voice service with every line that person says, so Auto Foley keeps them short.
 
 ## Groups
 

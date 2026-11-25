@@ -1364,7 +1364,7 @@ if (section("connection list")) {
 }
 
 if (section("note limit")) {
-  console.log("How they speak keeps what is typed, and counts it");
+  console.log("Acting notes keeps what is typed, and counts it");
   for (const size of SIZES) {
     const { context, page, errors } = await open(THEMES[0], size);
     const where = size.name;
@@ -2290,6 +2290,29 @@ if (section("still working")) {
   }
 }
 
+if (section("gemini style")) {
+  console.log("Gemini gets the person's Gemini style and the line's own note together");
+  const { context, page, errors } = await open(THEMES[0], SIZES[1], 1, () => {
+    window.__ttsList = [{ id: "t1", name: "Gemini here", provider: "google_tts", model: "gemini-3.8-flash-tts", is_default: true, has_api_key: true }];
+    window.__settings.ttsConnection = "t1";
+    window.__settings.cast = window.__settings.cast.map((m) => (m.id === "a" ? Object.assign({}, m, { params: { style_base: "Warm and unhurried, with a light Southern accent." } }) : m));
+    window.__script = JSON.parse(JSON.stringify(SCRIPT));
+    window.__script.lines[1].style = "quiet and hurt";
+  });
+  await page.evaluate(() => { window.__clipMs = 200; window.__synth = []; });
+  await page.click('.af-tab[data-tab="stage"]');
+  await page.waitForTimeout(150);
+  await page.click('#mount [data-af-slot="message"]');
+  await page.waitForTimeout(2500);
+  const sent = await page.evaluate(() => (window.__synth || []).map((b) => ({ text: b.text, style: (b.parameters || {}).speech_style })));
+  const hers = sent.find((b) => /You are late/.test(b.text || ""));
+  check(!!hers && hers.style === "Warm and unhurried, with a light Southern accent. This line: quiet and hurt", "her line is sent with her Gemini style first, then its own note (" + JSON.stringify(hers) + ")");
+  const narr = sent.find((b) => /set the cup down/.test(b.text || ""));
+  check(!!narr && !narr.style, "the narrator, with neither, sends no style of its own (" + JSON.stringify(narr) + ")");
+  check(!errors.length, "no page errors. " + errors.slice(0, 2).join(" | "));
+  await context.close();
+}
+
 if (section("reorder")) {
   console.log("People and groups can be picked up and moved");
   const order = (page, sel, attr) => page.evaluate(([sel, attr]) => Array.from(document.querySelectorAll(sel)).map((n) => n.getAttribute(attr)), [sel, attr]);
@@ -2743,7 +2766,7 @@ if (section("more settings")) {
     });
     check(got.picked, where + ": a typed voice ID is saved as the person's voice");
     check(got.named, where + ": a typed voice name that is in the list picks that voice");
-    check(got.engine === "eleven_v3" && got.labels.indexOf("Language") >= 0 && ["Speaker boost", "Style", "Speed", "Similarity"].every((x) => got.labels.indexOf(x) < 0) && got.labels.indexOf("Voice direction") < 0 && got.labels.indexOf("Exaggeration") < 0, where + ": an ElevenLabs voice shows only ElevenLabs settings (" + got.labels.join(", ") + ")");
+    check(got.engine === "eleven_v3" && got.labels.indexOf("Language") >= 0 && ["Speaker boost", "Style", "Speed", "Similarity"].every((x) => got.labels.indexOf(x) < 0) && got.labels.indexOf("Fish Audio direction") < 0 && got.labels.indexOf("Exaggeration") < 0, where + ": an ElevenLabs voice shows only ElevenLabs settings (" + got.labels.join(", ") + ")");
     check(got.wide === 0, where + ": nothing runs off the side (" + got.wide + ")");
     check(!errors.length, where + ": no page errors. " + errors.slice(0, 2).join(" | "));
     await context.close();

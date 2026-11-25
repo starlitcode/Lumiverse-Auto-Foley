@@ -26,7 +26,7 @@ Two messages, to the connection picked under **Which connection**:
 
 - **The prompt**, as the system message.
 - **The message as JSON**, as the user message. It holds:
-  - `cast`: each person's name, other names, and the **How they speak** note
+  - `cast`: each person's name, other names, and the **Acting notes**
   - `author`: who wrote the message
   - `lines`: the numbered lines, with a speaker filled in where the Decision model was sure
   - `rules`: your switches, such as the tag limit, the sound style, and whether intimate sounds are allowed. It also names the engine, with its note, and its tag list when it has one. See [Voice engines](engines.md).

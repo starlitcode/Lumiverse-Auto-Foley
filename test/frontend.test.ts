@@ -455,3 +455,15 @@ describe("sorting the cast", () => {
     expect(cast[0].name).toBe("ilsa");
   });
 });
+
+describe("what Gemini is told about how a line is said", () => {
+  const { geminiStyle } = __testing;
+  test("the person's Gemini style comes first, then the line's own note", () => {
+    expect(geminiStyle("Warm and unhurried, with a light Southern accent.", "quiet and hurt")).toBe("Warm and unhurried, with a light Southern accent. This line: quiet and hurt");
+  });
+  test("either one alone is sent as it is", () => {
+    expect(geminiStyle("calm and dry", "")).toBe("calm and dry");
+    expect(geminiStyle("", "quiet and hurt")).toBe("quiet and hurt");
+    expect(geminiStyle("  ", "  ")).toBe("");
+  });
+});

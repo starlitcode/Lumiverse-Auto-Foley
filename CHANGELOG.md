@@ -6,6 +6,18 @@ Versions follow [Semantic Versioning](https://semver.org). A new major version m
 
 ---
 
+## 1.6.3
+
+_2026-11-25_
+
+### Changed
+
+- **Gemini gets each person's style and the line's own note together.** A line the Director gave a note of its own used to replace the person's usual style, so something like an accent was left out of that line. Now the person's style comes first, then the note for the line.
+- **Clearer names for the boxes on a person's card.** **How they speak** is now **Acting notes**, **Their usual way of speaking** is now **Gemini style**, and **Voice direction** is now **Fish Audio direction**. The hint under each says who reads it. What you wrote is kept.
+- **A clearer writing guide on GitHub.** It says which box is read by what, how to split up a voice description, and gives an example to copy for each engine.
+
+---
+
 ## 1.6.2
 
 _2026-11-25_

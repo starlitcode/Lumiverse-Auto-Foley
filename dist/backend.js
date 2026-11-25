@@ -11,7 +11,7 @@
 // One backend process can serve every account on a server, so everything that
 // belongs to a person is kept per user id, in spindle.userStorage, and every
 // reply goes back addressed to that user.
-const VERSION = '1.6.2';
+const VERSION = '1.6.3';
 const DEFAULT_SETTINGS = {
     enabled: true,
     ttsConnection: '',
@@ -173,7 +173,7 @@ function cleanVoices(v) {
 // The more settings a person can have, by key: its type, and its range or
 // length. The panel has the same list and shows each one only for the engines
 // that take it.
-// The most How they speak can hold. The panel's box has the same limit and
+// The most Acting notes can hold. The panel's box has the same limit and
 // counts it, so nothing is cut after it is typed.
 const NOTE_MAX = 1000;
 const PARAM_SPEC = {

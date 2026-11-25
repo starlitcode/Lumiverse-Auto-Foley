@@ -46,7 +46,7 @@ Once a message has been performed, a small player sits under its text, with Back
 - [Voice engines](docs/engines.md): what each engine can do, and how to set up Chatterbox, OpenVox and Cartesia
 - [The Director](docs/director.md): what it does, what it is sent, and its prompt
 - [The cast](docs/cast.md): voices for personas, characters and NPCs
-- [Writing for each voice engine](docs/writing.md): what to write in How they speak and the notes, for each engine, with an example
+- [Writing for each voice engine](docs/writing.md): which box is read by what, and examples to copy for each engine
 - [Sounds](docs/sounds.md): sounds in the voice, sound effects and your library
 
 **About it**

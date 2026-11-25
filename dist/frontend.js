@@ -10,7 +10,7 @@
 // The key for speech stays in Lumiverse. Lines are spoken through
 // Lumiverse's own TTS route, as the signed-in reader, so this file never sees
 // that key.
-const VERSION = '1.6.2';
+const VERSION = '1.6.3';
 // The marks Lumiverse puts on another extension's part of the page. Nothing
 // inside one is read, written or pressed.
 const OTHER_UI = '[data-spindle-extension-root],[data-spindle-ext],[data-spindle-modal]';
@@ -683,6 +683,16 @@ function styleFor(line, eng) {
     if (line.sung && eng.singStyle)
         return said ? 'singing, ' + said : 'singing the words to a simple tune';
     return said;
+}
+// What Gemini is told about how a line is said: the person's Gemini style,
+// then the note for this line. Each line keeps the person's style, such as
+// an accent, and the note adds what this line needs.
+function geminiStyle(base, line) {
+    const b = String(base || '').trim().replace(/[\s.]+$/, '');
+    const l = String(line || '').trim();
+    if (b && l)
+        return b + '. This line: ' + l;
+    return b || l;
 }
 // Eleven v3 has three stability settings, not a range: Creative, Natural and
 // Robust, at 0, 0.5 and 1. Any other value is moved to the nearest one.
@@ -1479,7 +1489,7 @@ function movedFor(cfg, seen, list) {
     const told = String(seen || '').split(' ');
     return list.filter((m) => told.indexOf(movedRowMark(m)) < 0 && JSON.stringify(cfg[m.key]) === JSON.stringify(m.was));
 }
-// The most How they speak can hold, the same as the backend's.
+// The most Acting notes can hold, the same as the backend's.
 const NOTE_MAX = 1000;
 const DEFAULTS = {
     enabled: true,
@@ -2341,11 +2351,13 @@ export function setup(ctx, overrides) {
             for (const k of ['exaggeration', 'cfg_weight', 'temperature', 'seed'])
                 if (has(k))
                     params[k] = own[k];
-        // Gemini 3.8 takes it as its speech style. A line with no note uses the
-        // person's own style, and then the one saved on the connection.
+        // Gemini 3.8 takes it as its speech style: the person's Gemini style and
+        // the line's note together. With neither, the style saved on the
+        // connection is used.
         const baseStyle = eng.style && has('style_base') ? String(own.style_base) : '';
-        if (style || baseStyle)
-            params.speech_style = style || baseStyle;
+        const told = geminiStyle(baseStyle, style);
+        if (told)
+            params.speech_style = told;
         const body = { connectionId: conn.id, text, parameters: params };
         if (pick.voice)
             body.voice = pick.voice;
@@ -8270,16 +8282,16 @@ export function setup(ctx, overrides) {
         paint();
         return row;
     }
-    // What to write in How they speak, for the engine a person speaks through.
+    // What to write in Acting notes, for the engine a person speaks through.
     function speakHint(eng) {
         if (!eng.supported)
             return 'Pick a model that acts first. The note is used once their engine can take directions.';
         if (eng.id === 'eleven_v3')
             return 'On ElevenLabs: describe their manner in a few words, such as dry, clipped, laughs at their own jokes. The Director turns it into tags like [deadpan] or [chuckles].';
         if (eng.id === 'fish')
-            return 'On Fish Audio: describe how they sound when calm and when upset, such as low and slow, sharp when angry. The Director turns it into tags like [calm] or [shouting].';
+            return 'On Fish Audio: describe how they act, such as calm, sharp when angry. The Director turns it into tags like [shouting]. How they always sound goes in Fish Audio direction, under More settings.';
         if (eng.id === 'gemini')
-            return 'On Gemini 3.8: describe their voice in plain words, such as hushed, dry and unhurried. The Director writes notes like that for each line. Sounds are limited to Gemini\u2019s own list.';
+            return 'On Gemini 3.8: describe how they act, such as hushed when scared. The Director writes a note for each line. How they always sound goes in Gemini style, under More settings.';
         if (eng.id === 'omnivoice')
             return 'On OmniVoice: say when they laugh, sigh or make a questioning sound. It marks only sounds like those, so how they speak comes from the voice and the punctuation.';
         if (eng.id === 'cartesia')
@@ -8343,16 +8355,16 @@ export function setup(ctx, overrides) {
             out.push(words('lang', 'Language', 'en, de, ja', 'Empty lets ElevenLabs tell from the text. A two-letter code, such as en or fr, makes it read the text in that language.'));
         }
         if (prov === 'fish_audio') {
-            out.push(words('direction', 'Voice direction', 'warm and tired', 'Plain words on how every line of theirs is said, such as warm and tired. Empty sends none. A line\u2019s own tags still apply.', 300));
+            out.push(words('direction', 'Fish Audio direction', 'warm and tired', 'Sent to Fish Audio with every line of theirs, such as warm and tired. A line\u2019s own tags still apply. Empty sends none.', 300));
             out.push(num('temperature', 'Temperature', 0, 1, 0.05, 0.7, 'How much each take varies. 0.70 by default. Lower is steadier.'));
             out.push(num('top_p', 'Top P', 0, 1, 0.05, 0.7, 'How wide the choice of sounds is. 0.70 by default.'));
             out.push(personSwitch('Steady loudness', 'On by default. Keeps lines at the same loudness.', own.normalize !== false, (v) => setP('normalize', v ? undefined : false)));
         }
         if (prov === 'openrouter_tts' && eng.style)
-            out.push(words('style_base', 'Their usual way of speaking', 'calm and dry', 'Sent with every line of theirs that has no note of its own, such as calm and dry. Empty uses the style saved on the connection.', 300));
+            out.push(words('style_base', 'Gemini style', 'calm and dry', 'Sent to Gemini with every line of theirs, before that line\u2019s own note, such as calm and dry.', 300));
         if (prov === 'google_tts' || prov === 'google_vertex_tts') {
             if (eng.style)
-                out.push(words('style_base', 'Their usual way of speaking', 'calm and dry', 'Sent with every line of theirs that has no note of its own, such as calm and dry. Empty uses the style saved on the connection.', 300));
+                out.push(words('style_base', 'Gemini style', 'calm and dry', 'Sent to Gemini with every line of theirs, before that line\u2019s own note, such as calm and dry.', 300));
             out.push(num('temperature', 'Temperature', 0, 2, 0.05, 1, 'How much each take varies. 1.00 by default.'));
             out.push(words('lang', 'Language', 'en-US', 'Empty lets Gemini tell from the text. A code such as en-US or fr-FR sets the language and accent.'));
         }
@@ -8630,10 +8642,10 @@ export function setup(ctx, overrides) {
             }
         };
         drawVoice();
-        const speakBox = area('How they speak', m.note, (v) => {
+        const speakBox = area('Acting notes', m.note, (v) => {
             m.note = v.slice(0, NOTE_MAX);
             save();
-        }, { max: NOTE_MAX, placeholder: 'Soft-spoken and dry. Rarely raises their voice.', help: 'A short note the Director reads when it marks this person’s lines. The line under the box says what helps most on their engine.' });
+        }, { max: NOTE_MAX, placeholder: 'Soft-spoken and dry. Rarely raises their voice.', help: 'Read only by the Director, when it decides how each of their lines is said. It is never sent to the voice. The line under the box says what helps most on their engine.' });
         speakBox.setAttribute('data-af-speak', '');
         // What to write depends on the engine the person speaks through, since
         // each takes different directions.
@@ -10497,7 +10509,7 @@ export function setup(ctx, overrides) {
         catch (_) { }
     };
 }
-export const __testing = { sortCast, CAST_SORTS, keyCombo, PAUSE_KEY_DEFAULT, wavBlob, noConnectionWhy, perSentence, clipLevel, levelGain, voiceGender, describeWords, markText, movedFor, movedRowMark, MOVED_DEFAULTS, looksLikeDate, voicedFrames, wordWeight, partTimes, engineOf, noTagsWhy, openRouterVoices, colorCode, hexHsl, hslHex, computedHex, fitTag, tagSound, textFor, styleFor, stripTags, stabilityFor, ENGINES };
+export const __testing = { geminiStyle, sortCast, CAST_SORTS, keyCombo, PAUSE_KEY_DEFAULT, wavBlob, noConnectionWhy, perSentence, clipLevel, levelGain, voiceGender, describeWords, markText, movedFor, movedRowMark, MOVED_DEFAULTS, looksLikeDate, voicedFrames, wordWeight, partTimes, engineOf, noTagsWhy, openRouterVoices, colorCode, hexHsl, hslHex, computedHex, fitTag, tagSound, textFor, styleFor, stripTags, stabilityFor, ENGINES };
 // The built-in cheer: "Cheering and clapping crowd 1" by freesound_community,
 // a free sound from Pixabay (pixabay.com/sound-effects/people-cheering-and-clapping-crowd-1-5995/),
 // made mono at 64 kbps so it stays small. assets/applause.mp3 is the same
