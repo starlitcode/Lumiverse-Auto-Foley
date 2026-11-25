@@ -10,7 +10,7 @@
 // The key for speech stays in Lumiverse. Lines are spoken through
 // Lumiverse's own TTS route, as the signed-in reader, so this file never sees
 // that key.
-const VERSION = '1.6.1';
+const VERSION = '1.6.2';
 // The marks Lumiverse puts on another extension's part of the page. Nothing
 // inside one is read, written or pressed.
 const OTHER_UI = '[data-spindle-extension-root],[data-spindle-ext],[data-spindle-modal]';
@@ -1748,6 +1748,13 @@ export function setup(ctx, overrides) {
                     onPush(msg);
                     return;
                 }
+                // The backend is still working on this request, such as a Director
+                // asked again after a slow first answer. The wait starts again.
+                if (msg.type === 'working') {
+                    if (p.arm)
+                        p.arm();
+                    return;
+                }
                 pending.delete(id);
                 clearTimeout(p.timer);
                 p.resolve(msg);
@@ -1757,16 +1764,26 @@ export function setup(ctx, overrides) {
         }));
     }
     catch (_) { }
+    // A request to the backend. It gives up after timeoutMs with no answer.
+    // A backend that says it is still working starts that wait again, so a
+    // long job, such as a slow Director asked twice, is not given up on while
+    // it runs.
     function rpc(msg, timeoutMs) {
         return new Promise((resolve, reject) => {
             if (!alive)
                 return reject(new Error('Auto Foley was turned off.'));
             const requestId = rid('r');
-            const timer = setTimeout(() => {
+            const giveUp = () => {
                 pending.delete(requestId);
-                reject(new Error('The backend did not answer in time.'));
-            }, timeoutMs);
-            pending.set(requestId, { resolve, reject, timer });
+                reject(new Error('Auto Foley\u2019s backend stopped answering. Reload the page, and if it happens again, copy Debug info from the Settings tab.'));
+            };
+            const entry = { resolve, reject, timer: setTimeout(giveUp, timeoutMs) };
+            entry.arm = () => {
+                clearTimeout(entry.timer);
+                entry.timer = setTimeout(giveUp, timeoutMs);
+            };
+            const timer = entry.timer;
+            pending.set(requestId, entry);
             try {
                 ctx.sendToBackend(Object.assign({ requestId }, msg));
             }
@@ -3445,7 +3462,10 @@ export function setup(ctx, overrides) {
         const key = messageId + ':' + swipeId + ':' + eng.id + (fresh ? ':fresh' : '');
         let p = preparing.get(key);
         if (!p) {
-            p = rpc({ type: 'direct', chatId, messageId, swipeId, text: String(m.content || ''), name: String(m.name || ''), isUser: !!m.is_user, fresh, engine }, 150000);
+            p = rpc({ type: 'direct', chatId, messageId, swipeId, text: String(m.content || ''), name: String(m.name || ''), isUser: !!m.is_user, fresh, engine }, 
+            // The backend says it is still working every 10 seconds, however
+            // long the Director takes, so a minute with no word means it stopped.
+            Number(opts.directWaitMs) > 0 ? Number(opts.directWaitMs) : 60000);
             preparing.set(key, p);
             p.then(() => preparing.delete(key), () => preparing.delete(key));
         }

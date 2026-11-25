@@ -20,6 +20,7 @@ type Host = {
 
 function host(opts: {
   answers?: (string | Error)[];
+  slowMs?: number;
   decide?: (input: any) => any;
   noDecisions?: boolean;
   cors?: (url: string, init: any) => any;
@@ -103,6 +104,8 @@ function host(opts: {
           return await new Promise((_, no) => {
             if (req.signal) req.signal.addEventListener("abort", () => no(new Error("aborted")));
           });
+        // A slow model, which answers after this many milliseconds.
+        if (opts.slowMs) await new Promise((r) => setTimeout(r, opts.slowMs));
         const a = answers.length ? answers.shift() : "";
         if (a instanceof Error) throw a;
         return { content: a, finish_reason: "stop" };
@@ -412,6 +415,21 @@ describe("directing a message, end to end", () => {
     ],
     new_speakers: [],
   });
+
+  // The panel waits through a slow Director only while the backend says it
+  // is still working, so the backend says so every 10 seconds.
+  test("a slow Director is reported as still working, and the script still comes", async () => {
+    const h = host({ answers: [good], slowMs: 10600 });
+    const out = await h.ask(msg);
+    const types = out.map((m) => m.type);
+    expect(types.indexOf("working")).toBeGreaterThanOrEqual(0);
+    expect(types.indexOf("working")).toBeLessThan(types.indexOf("script"));
+    expect(out.filter((m) => m.type === "working").every((m) => m.requestId === out.find((x) => x.type === "script").requestId)).toBe(true);
+    // Nothing more is said once the answer is sent.
+    const after = h.sent.length;
+    await new Promise((r) => setTimeout(r, 10500));
+    expect(h.sent.length).toBe(after);
+  }, 30000);
 
   test("the script comes back tagged, to the user who asked", async () => {
     const h = host({ answers: [good] });

@@ -6,6 +6,16 @@ Versions follow [Semantic Versioning](https://semver.org). A new major version m
 
 ---
 
+## 1.6.2
+
+_2026-11-25_
+
+### Fixed
+
+- **Playing a message could stop with "The backend did not answer in time."** The panel gave up after 150 seconds, while a slow Director could still be working, such as when its first answer failed and it was asked again. The backend now says it is still working every 10 seconds, and the panel waits for as long as it does. If the backend stops answering, the panel says so after a minute. Reported by a Discord user.
+
+---
+
 ## 1.6.1
 
 _2026-11-25_

@@ -135,7 +135,15 @@ function answer(msg) {
       const base = window.__script || SCRIPT;
       let sc = window.__fromKept ? Object.assign({}, base, { fromKept: true }) : base;
       if (window.__fallback) sc = Object.assign({}, sc, { directed: false, fallback: true });
-      if (window.__directHold) return setTimeout(() => reply({ type: 'script', script: sc }), window.__directHold);
+      if (window.__directHold) {
+        // A slow Director: the backend says it is still working while it
+        // holds the answer, as the real one does every 10 seconds.
+        if (window.__workingEvery) {
+          const beat = setInterval(() => reply({ type: 'working' }), window.__workingEvery);
+          setTimeout(() => clearInterval(beat), window.__directHold);
+        }
+        return setTimeout(() => reply({ type: 'script', script: sc }), window.__directHold);
+      }
       return reply({ type: 'script', script: sc });
     }
     case 'sound': return reply({ type: 'sound', base64: 'AAAA', mime: 'audio/mpeg' });
@@ -307,7 +315,7 @@ async function open(theme, size, zoom = 1, pre = null) {
   if (pre) await page.evaluate(pre);
   await page.addScriptTag({ content: SOURCE });
   await page.evaluate(() => {
-    window.__teardown = window.__setup(window.__ctx, { fetch: window.__fetch, Audio: window.__Audio });
+    window.__teardown = window.__setup(window.__ctx, { fetch: window.__fetch, Audio: window.__Audio, directWaitMs: window.__directWait });
   });
   await page.waitForTimeout(120);
   return { context, page, errors };
@@ -2246,6 +2254,30 @@ if (section("dropdown press")) {
     check(got.before === got.after, size.name + ": the edge does not change when it is pressed (" + JSON.stringify(got) + ")");
     check(!errors.length, size.name + ": no page errors. " + errors.slice(0, 2).join(" | "));
     await context.close();
+  }
+}
+
+if (section("still working")) {
+  console.log("A slow Director is waited for while the backend says it is still working");
+  for (const size of SIZES) {
+    const where = size.name;
+    // The backend holds the script for 2.5 seconds, and the panel gives up
+    // after 0.8 seconds with no word from it.
+    for (const [label, every] of [["still working", 300], ["silent", 0]]) {
+      const { context, page, errors } = await open(THEMES[0], size, 1, () => {
+        window.__directWait = 800;
+      });
+      await page.evaluate((every) => { window.__directHold = 2500; window.__workingEvery = every; window.__played = 0; }, every);
+      await page.click('.af-tab[data-tab="stage"]');
+      await page.waitForTimeout(150);
+      await page.click('#mount [data-af-slot="message"]');
+      await page.waitForTimeout(3600);
+      const got = await page.evaluate(() => ({ played: window.__played || 0, said: (document.querySelector(".af") || {}).innerText || "" }));
+      if (every) check(got.played > 0 && !/stopped answering/.test(got.said), where + ": a backend that says it is still working is waited for, and the message plays (" + got.played + " played)");
+      else check(got.played === 0 && /backend stopped answering/.test(got.said), where + ": a backend that goes silent is given up on, with a plain reason");
+      check(!errors.length, where + ", " + label + ": no page errors. " + errors.slice(0, 2).join(" | "));
+      await context.close();
+    }
   }
 }
 

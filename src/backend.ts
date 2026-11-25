@@ -15,7 +15,7 @@ declare const spindle: any;
 declare function setTimeout(fn: () => void, ms: number): any;
 declare function clearTimeout(handle: any): void;
 
-const VERSION = '1.6.1';
+const VERSION = '1.6.2';
 
 // ---------------------------------------------------------------------------
 // Settings
@@ -3921,6 +3921,19 @@ async function onPanel(p: any, userId: string | undefined) {
   const type = String(p.type || '');
   const requestId = str(p.requestId, 80);
   const answer = (msg: any) => send(userId, Object.assign({ requestId }, msg));
+  // Said every 10 seconds while a request runs, so the panel keeps waiting
+  // through a slow Director, its retries and its waits, and only gives up
+  // on a backend that has stopped.
+  // A timer set again each time, rather than an interval, so it needs only
+  // setTimeout.
+  let beat: any = null;
+  const tick = () => {
+    beat = setTimeout(() => {
+      answer({ type: 'working' });
+      tick();
+    }, 10000);
+  };
+  if (requestId) tick();
   try {
     switch (type) {
       case 'load': {
@@ -4381,6 +4394,9 @@ async function onPanel(p: any, userId: string | undefined) {
   } catch (e: any) {
     logWarn('panel request ' + type + ' failed: ' + String((e && e.message) || e));
     answer({ type: 'failed', of: type, error: 'Something went wrong in Auto Foley\'s backend: ' + String((e && e.message) || e).slice(0, 200) });
+  } finally {
+    if (beat) clearTimeout(beat);
+    beat = null;
   }
 }
 

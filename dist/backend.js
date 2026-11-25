@@ -11,7 +11,7 @@
 // One backend process can serve every account on a server, so everything that
 // belongs to a person is kept per user id, in spindle.userStorage, and every
 // reply goes back addressed to that user.
-const VERSION = '1.6.1';
+const VERSION = '1.6.2';
 const DEFAULT_SETTINGS = {
     enabled: true,
     ttsConnection: '',
@@ -3668,6 +3668,20 @@ async function onPanel(p, userId) {
     const type = String(p.type || '');
     const requestId = str(p.requestId, 80);
     const answer = (msg) => send(userId, Object.assign({ requestId }, msg));
+    // Said every 10 seconds while a request runs, so the panel keeps waiting
+    // through a slow Director, its retries and its waits, and only gives up
+    // on a backend that has stopped.
+    // A timer set again each time, rather than an interval, so it needs only
+    // setTimeout.
+    let beat = null;
+    const tick = () => {
+        beat = setTimeout(() => {
+            answer({ type: 'working' });
+            tick();
+        }, 10000);
+    };
+    if (requestId)
+        tick();
     try {
         switch (type) {
             case 'load': {
@@ -4184,6 +4198,11 @@ async function onPanel(p, userId) {
     catch (e) {
         logWarn('panel request ' + type + ' failed: ' + String((e && e.message) || e));
         answer({ type: 'failed', of: type, error: 'Something went wrong in Auto Foley\'s backend: ' + String((e && e.message) || e).slice(0, 200) });
+    }
+    finally {
+        if (beat)
+            clearTimeout(beat);
+        beat = null;
     }
 }
 try {
