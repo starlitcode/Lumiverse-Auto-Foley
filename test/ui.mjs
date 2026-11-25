@@ -963,6 +963,7 @@ if (section("script status")) {
   const { context, page, errors } = await open(THEMES[0], SIZES[0]);
   await page.click('.af-tab[data-tab="director"]');
   await page.waitForTimeout(150);
+  check(await page.evaluate(() => { const b = document.querySelector('[data-af-row="costOut"] input'); return b.value === "0" && !b.placeholder; }), "a price box shows its number, 0 by default, with no grey placeholder, as in Auto Refine");
   // Pasted, as a price is copied off a provider's page.
   await page.evaluate(() => {
     const box = document.querySelector('[data-af-row="costIn"] input');

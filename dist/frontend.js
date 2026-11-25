@@ -8150,9 +8150,9 @@ export function setup(ctx, overrides) {
         const wrap = el('<div class="af-col"></div>');
         wrap.setAttribute('data-af-row', key);
         wrap.appendChild(labelRow(label, help, id));
-        const i = el('<input type="number" class="af-field" id="' + id + '" inputmode="decimal" step="any" min="0" max="10000" autocomplete="off" placeholder="0">');
+        const i = el('<input type="number" class="af-field" id="' + id + '" inputmode="decimal" step="any" min="0" max="10000" autocomplete="off">');
         i.setAttribute('data-af-price', key);
-        i.value = Number(S[key]) > 0 ? String(S[key]) : '';
+        i.value = String(Number(S[key]) > 0 ? Number(S[key]) : 0);
         // A price is copied off a provider's own page, where it reads $5.00/M. A
         // number box takes none of that, so the number is lifted out of the paste.
         i.addEventListener('paste', (e) => {
@@ -8169,7 +8169,7 @@ export function setup(ctx, overrides) {
         i.addEventListener('change', () => {
             const m = i.value.replace(/,/g, '').match(/\d+(?:\.\d+)?|\.\d+/);
             const v = m ? Math.min(10000, Math.max(0, Number(m[0]))) : 0;
-            i.value = v > 0 ? String(v) : '';
+            i.value = String(v);
             set({ [key]: v });
         });
         wrap.appendChild(i);
