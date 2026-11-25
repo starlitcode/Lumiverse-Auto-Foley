@@ -221,7 +221,9 @@ function cleanMember(m) {
     if (!m || typeof m !== 'object')
         return null;
     const name = str(m.name, 80).trim();
-    if (!name)
+    // A name can be erased and left empty until a new one is typed. The
+    // person is kept by their id.
+    if (!name && !str(m.id, 64))
         return null;
     const base = narrator();
     return {
@@ -2830,7 +2832,7 @@ async function direct(userId, p) {
         return script;
     }
     const castForPrompt = s.cast
-        .filter((c) => !c.muted)
+        .filter((c) => !c.muted && (c.name || c.aliases.length))
         .map((c) => ({ name: c.name, kind: c.kind, also_called: c.aliases, note: c.note }));
     const payload = {
         cast: castForPrompt,

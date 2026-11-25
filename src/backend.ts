@@ -445,7 +445,9 @@ function cleanServer(v: any): string {
 function cleanMember(m: any): CastMember | null {
   if (!m || typeof m !== 'object') return null;
   const name = str(m.name, 80).trim();
-  if (!name) return null;
+  // A name can be erased and left empty until a new one is typed. The
+  // person is kept by their id.
+  if (!name && !str(m.id, 64)) return null;
   const base = narrator();
   return {
     id: str(m.id, 64) || newId(),
@@ -3102,7 +3104,7 @@ async function direct(userId: string | undefined, p: any): Promise<Script> {
   }
 
   const castForPrompt = s.cast
-    .filter((c) => !c.muted)
+    .filter((c) => !c.muted && (c.name || c.aliases.length))
     .map((c) => ({ name: c.name, kind: c.kind, also_called: c.aliases, note: c.note }));
   const payload: any = {
     cast: castForPrompt,

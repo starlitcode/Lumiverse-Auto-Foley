@@ -1729,7 +1729,7 @@ if (section("erase name")) {
       const c = document.querySelector('.af-person[data-person="b"]');
       const col = Array.from(c.querySelectorAll(".af-col")).find((x) => ((x.querySelector(".af-lab") || {}).textContent || "").trim() === "Name");
       const i = col.querySelector("input");
-      i.id = i.id || "name-b";
+      i.id = "name-b";
       return "#" + i.id;
     });
     const look = () => page.evaluate((sel) => {
@@ -1742,11 +1742,26 @@ if (section("erase name")) {
     await page.waitForTimeout(700);
     const empty = await look();
     check(empty.name === "No name yet" && empty.face === "?" && empty.box === "", size.name + ": erased, the box is empty, and the card shows No name yet and ? (" + JSON.stringify(empty) + ")");
-    check(empty.saved === "Ferryman", size.name + ": while it is erased, the whole name is still the saved one, not its first letter (" + empty.saved + ")");
+    check(empty.saved === "Ferryman", size.name + ": while it is being erased, no shorter name is saved, such as its first letter (" + empty.saved + ")");
     await page.keyboard.press("Tab");
     await page.waitForTimeout(700);
-    const back = await look();
-    check(back.box === "Ferryman" && back.name === "Ferryman" && back.saved === "Ferryman", size.name + ": left empty, the whole name comes back (" + JSON.stringify(back) + ")");
+    const left = await look();
+    check(left.box === "" && left.saved === "" && left.name === "No name yet" && left.face === "?", size.name + ": left empty, it stays empty, with no letter put back (" + JSON.stringify(left) + ")");
+    // Drawn again, such as after a tab switch, it is still empty.
+    await page.click('.af-tab[data-tab="stage"]');
+    await page.waitForTimeout(300);
+    await page.click('.af-tab[data-tab="cast"]');
+    await page.waitForTimeout(400);
+    await page.evaluate(() => { const h = document.querySelector('.af-person[data-person="b"] .af-person-head'); if (h.getAttribute("aria-expanded") !== "true") h.click(); });
+    await page.waitForTimeout(450);
+    const again = await page.evaluate(() => {
+      const c = document.querySelector('.af-person[data-person="b"]');
+      const col = Array.from(c.querySelectorAll(".af-col")).find((x) => ((x.querySelector(".af-lab") || {}).textContent || "").trim() === "Name");
+      const i = col.querySelector("input");
+      i.id = "name-b";
+      return { box: i.value, name: c.querySelector(".af-person-name b").textContent, face: c.querySelector(".af-person-head .af-avatar").textContent };
+    });
+    check(again.box === "" && again.name === "No name yet" && again.face === "?", size.name + ": and is still empty after the tab is drawn again (" + JSON.stringify(again) + ")");
     await page.focus(sel);
     await page.keyboard.press("Control+A");
     await page.keyboard.type("Wren");

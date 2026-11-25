@@ -2289,7 +2289,7 @@ export function setup(ctx: Ctx, overrides?: any) {
   // name.
   function shownName(m: Member | null | undefined): string {
     if (!m) return '';
-    return String(m.display || '').trim() || m.name;
+    return String(m.display || '').trim() || m.name || 'No name yet';
   }
   function narratorName(): string {
     return shownName(narratorMember()) || 'Narrator';
@@ -6313,7 +6313,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     box.innerHTML = '';
     const people = castInOrder();
     for (const m of people) {
-      const ch = el('<div class="af-pl-ch" data-person="' + esc(m.id) + '"><span class="af-avatar">' + faceHtml(m, shownName(m)) + '</span><span></span><button type="button" class="af-round"></button></div>');
+      const ch = el('<div class="af-pl-ch" data-person="' + esc(m.id) + '"><span class="af-avatar">' + faceHtml(m, String(m.display || '').trim() || m.name) + '</span><span></span><button type="button" class="af-round"></button></div>');
       (ch.children[1] as HTMLElement).textContent = shownName(m);
       const b = ch.querySelector('button') as HTMLButtonElement;
       const paintB = () => {
@@ -8204,22 +8204,18 @@ export function setup(ctx: Ctx, overrides?: any) {
     inner.appendChild(shownRow);
     if (m.kind !== 'narrator') {
       const g1 = el('<div class="af-grid2"></div>');
-      // The name is saved when the box is left, not with each letter.
-      // Saved on every letter, erasing it saved each shorter name in turn,
-      // down to its first letter, which then stayed when the box was left
-      // empty. The header follows the box as it is typed.
+      // The name is saved when the box is left, not with each letter, and
+      // an erased name stays erased until a new one is typed. The header
+      // follows the box as it is typed.
       const nameRow = text('Name', m.name, (v) => paintName(v), '', 'The name the story uses for them. Lines are matched to a person by this name and the names below.');
       const nameIn = nameRow.querySelector('input') as HTMLInputElement | null;
       if (nameIn)
         nameIn.addEventListener('change', () => {
-          // An empty name is not saved, since lines are matched by it. The
-          // name there was before comes back.
           const v = nameIn.value.trim();
-          if (v && v !== m.name) {
+          if (v !== m.name) {
             m.name = v;
             save();
           }
-          nameIn.value = m.name;
           paintName();
         });
       g1.appendChild(nameRow);

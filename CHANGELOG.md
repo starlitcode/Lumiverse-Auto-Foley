@@ -22,7 +22,7 @@ _2026-11-25_
 
 ### Fixed
 
-- **Erasing a person's name could leave its first letter behind.** The name was saved with every letter typed or erased, so erasing it saved its first letter one step before the box was empty, and that letter stayed. The name is now saved when you leave the box. Left empty, the whole name comes back.
+- **Erasing a person's name could leave its first letter behind.** The name was saved with every letter typed or erased, so erasing it saved its first letter one step before the box was empty, and that letter came back. Now an erased name stays empty until you type a new one. The card says "No name yet", and the picture circle shows a ? when there is no picture. The Director is not sent a person with no name.
 
 ---
 
