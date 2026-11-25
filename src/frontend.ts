@@ -3488,34 +3488,6 @@ export function setup(ctx: Ctx, overrides?: any) {
   // Reads the list again, for the card on screen. Called when a message has
   // been played, so a script saved just now shows.
   let savedRefresh: (() => void) | null = null;
-  // The saved audio of one message, as one WAV file, from the player under
-  // it. Nothing on screen says when it fails, so a failure warns.
-  async function downloadSavedOf(messageId: string) {
-    let key = '';
-    let who = '';
-    let at = 0;
-    try {
-      const r = await rpc({ type: 'kept_list' }, 15000);
-      const e = (r && Array.isArray(r.list) ? r.list : []).find((x: any) => x && x.messageId === messageId);
-      if (e) {
-        key = e.key;
-        who = e.author;
-        at = e.keptAt;
-      }
-    } catch (_) {}
-    if (!key) {
-      notify('warning', 'This message has no saved audio to download yet. Play it once first.');
-      return;
-    }
-    const j = await joinedSaved(key);
-    if (!j.wav) {
-      notify('warning', j.why || 'The saved audio could not be joined.');
-      return;
-    }
-    const ok = saveFile(j.wav, 'auto-foley ' + fileName(who || 'script') + (at ? ' ' + new Date(at).toISOString().slice(0, 10) : '') + '.wav');
-    if (!ok) notify('warning', 'The audio could not be saved. Some private windows block downloads.');
-  }
-
   function savedCard(): HTMLElement {
     const c = card('Saved audio', 'Every message with a saved script, newest first. Play and Download use only saved audio, so nothing is spent.');
     c.setAttribute('data-af-saved', '');
@@ -3690,7 +3662,6 @@ export function setup(ctx: Ctx, overrides?: any) {
       '<button type="button" class="af-mp-ic" data-af-mp="next" aria-label="Next part" title="Next part">' + ICON_SKIP + '</button>' +
       '<button type="button" class="af-mp-seek" data-af-mp="seek" aria-label="Go to a point in the message" title="Go to a point in the message"><span class="af-mp-bar" aria-hidden="true"><i></i></span></button>' +
       '<span class="af-mp-text" data-af-mp="text"></span>' +
-      '<button type="button" class="af-mp-ic" data-af-mp="save" aria-label="Download the saved audio" title="Download the saved audio">' + ICON_DOWNLOAD + '</button>' +
       '</div></div>';
     const mineNow = () => !!show && show.messageId === (box.getAttribute('data-af-message') || id);
     (box.querySelector('[data-af-mp="back"]') as HTMLElement).addEventListener('click', (e) => {
@@ -3719,17 +3690,6 @@ export function setup(ctx: Ctx, overrides?: any) {
         } catch (_) {}
         paintPlayerBar(box, true);
       } else jumpTo(k);
-    });
-    const save = box.querySelector('[data-af-mp="save"]') as HTMLButtonElement;
-    save.addEventListener('click', async (e) => {
-      e.stopPropagation();
-      if (save.getAttribute('aria-busy') === 'true') return;
-      save.setAttribute('aria-busy', 'true');
-      try {
-        await downloadSavedOf(box.getAttribute('data-af-message') || id);
-      } finally {
-        save.removeAttribute('aria-busy');
-      }
     });
     const btn = box.querySelector('[data-af-mp="play"]') as HTMLButtonElement;
     btn.addEventListener('click', (e) => {
@@ -4905,7 +4865,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     // A grid, so every button keeps its column and the pill is never
     // narrower than what is in it, whatever a theme does to buttons. Only the
     // words shrink, and only when there is no room left.
-    '.af-mp-box{display:inline-grid;grid-template-columns:auto auto auto minmax(24px,120px) minmax(0,max-content) auto;align-items:center;column-gap:6px;box-sizing:border-box;max-width:100%;min-width:0;margin:6px 0;padding:3px 6px 3px 3px;border-radius:999px;' +
+    '.af-mp-box{display:inline-grid;grid-template-columns:auto auto auto minmax(24px,120px) minmax(0,max-content);align-items:center;column-gap:6px;box-sizing:border-box;max-width:100%;min-width:0;margin:6px 0;padding:3px 12px 3px 3px;border-radius:999px;' +
     '.af-mp .af-mp-box > *{margin:0;min-width:0;box-sizing:border-box}' +
     // Solid, the same as Auto Foley's other floating parts, so the words never
     // sit on a picture or pattern behind the message.
@@ -4920,7 +4880,6 @@ export function setup(ctx: Ctx, overrides?: any) {
     '.af-mp-ic{flex:none;display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;padding:0;border:none;border-radius:50%;cursor:pointer;background:transparent;color:var(--lumiverse-text,rgba(255,255,255,.92))}' +
     '.af-mp-ic svg{width:14px;height:14px}' +
     '.af-mp-ic:disabled{opacity:.35;cursor:default}' +
-    '.af-mp-ic[aria-busy="true"]{opacity:.5}' +
     '@media (hover:hover){.af-mp-ic:not(:disabled):hover{background:var(--lumiverse-primary-020,rgba(147,112,219,.2))}}' +
     '@media (hover:hover){.af-mp-play:hover{background:var(--lumiverse-primary-050,rgba(147,112,219,.5))}}' +
     '@media (pointer:coarse){.af-mp-play,.af-mp-ic{width:32px;height:32px}}' +

@@ -1071,13 +1071,9 @@ if (section("message player")) {
       const small = await page.evaluate(() => Array.from(document.querySelectorAll("[data-af-player] button")).filter((b) => b.getBoundingClientRect().height < 32).length);
       check(small === 0, where + ": every button in the player is at least 32 pixels high");
     }
-    await page.evaluate(() => {
-      window.__keptList = [{ key: "k1", messageId: "m1", chatId: "chat1", author: "Ysolde", keptAt: Date.UTC(2026, 10, 20, 15), lines: 3, first: "The quay was empty." }];
-    });
-    const dl = page.waitForEvent("download", { timeout: 8000 }).catch(() => null);
-    await page.evaluate(() => document.querySelector("[data-af-player] [data-af-mp=save]").click());
-    const file = await dl;
-    check(!!file && /\.wav$/.test(file.suggestedFilename()), where + ": Download saves the message's saved audio as one WAV (" + (file && file.suggestedFilename()) + ")");
+    // The player's words are not cut short at its usual font size.
+    const cut = await page.evaluate(() => { const t = document.querySelector("[data-af-player] [data-af-mp=text]"); return { cut: t.scrollWidth > t.clientWidth + 1, text: t.textContent }; });
+    check(!cut.cut, where + ": the player's words are shown whole (" + cut.text + ")");
     // A theme with centered text, a large wide font and its own look for
     // every button centers the player and keeps all of it inside the message.
     await page.addStyleTag({ content: '[data-message-id="m1"]{font-size:26px;font-family:"Comic Sans MS",cursive} [data-message-id="m1"] p{text-align:center} button{padding:6px 14px;min-width:44px;margin:2px 4px;border:2px solid currentColor}' });
