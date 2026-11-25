@@ -2126,6 +2126,20 @@ if (section("downloads")) {
     await page.waitForTimeout(400);
     const making = await page.evaluate(() => ({ said: document.querySelector('[data-af="keepsaid"]').textContent, label: document.querySelector('[data-af="video"]').textContent }));
     check(/Making the video/.test(making.said) && /Stop the video/.test(making.label), where + ": while it is made, the count shows and the button stops it (" + making.said + ")");
+    // Away from the tab, it pauses, and it goes on when the tab is back.
+    const paused = await page.evaluate(async () => {
+      let state = "hidden";
+      Object.defineProperty(document, "visibilityState", { configurable: true, get: () => state });
+      document.dispatchEvent(new Event("visibilitychange"));
+      const a = document.querySelector('[data-af="keepsaid"]').textContent;
+      // The count is in whole seconds, so it is read well over a second apart.
+      await new Promise((r) => setTimeout(r, 1600));
+      const b = document.querySelector('[data-af="keepsaid"]').textContent;
+      state = "visible";
+      document.dispatchEvent(new Event("visibilitychange"));
+      return a === b;
+    });
+    check(paused, where + ": away from the tab, the video pauses");
     const p3 = await vid;
     let size3 = 0;
     if (p3) { const fs = await import("node:fs"); size3 = fs.statSync(await p3.path()).size; if (process.env.UI_VIDEO) await p3.saveAs(process.env.UI_VIDEO + "-" + size.name + ".webm"); }

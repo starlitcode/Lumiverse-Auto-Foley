@@ -166,7 +166,7 @@ About the video:
 
 1. Press **Make a video** after a message has played.
 2. The video is made from the audio you heard, as it plays, so it takes as long as the performance. You do not hear it while it is made.
-3. The line under the buttons counts the time. Keep this tab open until it is done, since a phone pauses a tab in the background.
+3. The line under the buttons counts the time. If you go to another tab or app, the video pauses, and it goes on when you come back.
 4. The video is saved when it ends. **Stop the video** stops it and saves nothing.
 
 - The video is 1280 by 720, in your theme's colors. Most browsers save it as WebM, and Safari saves it as MP4.

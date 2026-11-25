@@ -2622,10 +2622,28 @@ export function setup(ctx: Ctx, overrides?: any) {
     let ended = false;
     let raf = 0;
     const t0 = actx.currentTime + 0.1;
+    // A phone stops drawing a tab in the background while the sound would go
+    // on, so the video and its sound would come apart. The video pauses while
+    // the tab is away and goes on when it comes back.
+    const away = () => {
+      if (ended) return;
+      try {
+        if (document.visibilityState === 'hidden') {
+          if (rec.state === 'recording') rec.pause();
+          actx.suspend();
+        } else {
+          actx.resume();
+          if (rec.state === 'paused') rec.resume();
+          if (!raf) raf = requestAnimationFrame(tick);
+        }
+      } catch (_) {}
+    };
+    document.addEventListener('visibilitychange', away);
     const finish = (keep: boolean) => {
       if (ended) return;
       ended = true;
       videoRun = null;
+      document.removeEventListener('visibilitychange', away);
       if (raf) cancelAnimationFrame(raf);
       try { src.stop(); } catch (_) {}
       rec.onstop = () => {
@@ -2647,8 +2665,8 @@ export function setup(ctx: Ctx, overrides?: any) {
       if (ended) return;
       const t = Math.max(0, actx.currentTime - t0);
       draw(Math.min(t, total));
-      keepSaid('Making the video: ' + mmss(Math.min(t, total)) + ' of ' + mmss(total) + '. Keep this tab open.');
-      raf = requestAnimationFrame(tick);
+      keepSaid('Making the video: ' + mmss(Math.min(t, total)) + ' of ' + mmss(total) + '. It pauses while you are on another tab or app.');
+      raf = document.visibilityState === 'hidden' ? 0 : requestAnimationFrame(tick);
     };
     draw(0);
     try {
