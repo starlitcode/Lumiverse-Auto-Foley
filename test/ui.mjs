@@ -2199,6 +2199,19 @@ if (section("number boxes")) {
       return { box: box.value, saved: window.__settings.applauseVolume };
     });
     check(!!held && held.box === "100" && held.saved === 1, where + ": a number above the range is held to the top of it (" + JSON.stringify(held) + ")");
+    // A preview follows a number as it is typed, before the box is left.
+    const live = await page.evaluate(async () => {
+      const bg = () => getComputedStyle(document.querySelector(".af-wordsample")).backgroundColor;
+      const row = Array.from(document.querySelectorAll(".af-col")).find((c) => /^How strong it is/.test((c.querySelector(".af-lab") || {}).textContent || ""));
+      const box = row.querySelector('input[type="number"]');
+      const before = bg();
+      box.focus();
+      box.value = "70";
+      box.dispatchEvent(new Event("input", { bubbles: true }));
+      await new Promise((x) => setTimeout(x, 150));
+      return { before, typed: bg(), box: box.value };
+    });
+    check(/0\.2\)$/.test(live.before) && /0\.7\)$/.test(live.typed) && live.box === "70", where + ": the lit word preview follows How strong it is as it is typed (" + JSON.stringify(live) + ")");
     const look = await page.evaluate((touch) => {
       const small = [];
       for (const b of document.querySelectorAll('.af input[type="number"]')) {

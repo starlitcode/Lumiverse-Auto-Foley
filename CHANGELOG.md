@@ -6,6 +6,16 @@ Versions follow [Semantic Versioning](https://semver.org). A new major version m
 
 ---
 
+## 1.6.1
+
+_2026-11-25_
+
+### Fixed
+
+- **A preview did not follow a number until you left its box.** **How strong it is**, for the lit word, **How solid the boxes are**, **How big it is** for the floating player, and every other number box now take effect as you type. The preview changes at once. The number is still held to its range when you leave the box.
+
+---
+
 ## 1.6.0
 
 _2026-11-25_

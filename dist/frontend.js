@@ -10,7 +10,7 @@
 // The key for speech stays in Lumiverse. Lines are spoken through
 // Lumiverse's own TTS route, as the signed-in reader, so this file never sees
 // that key.
-const VERSION = '1.6.0';
+const VERSION = '1.6.1';
 // The marks Lumiverse puts on another extension's part of the page. Nothing
 // inside one is read, written or pressed.
 const OTHER_UI = '[data-spindle-extension-root],[data-spindle-ext],[data-spindle-modal]';
@@ -5132,9 +5132,10 @@ export function setup(ctx, overrides) {
         return f;
     }
     // A number in a box, the same as Auto Retry's and Auto Refine's number
-    // settings. It is held to its range and saved when the box is left or Enter
-    // is pressed. A step of 1 keeps it whole, and a smaller step keeps two
-    // decimal places. An empty box goes back to the number it had.
+    // settings. It takes effect as it is typed, so a preview follows it, and is
+    // tidied to its range when the box is left or Enter is pressed. A step of 1
+    // keeps it whole, and a smaller step keeps two decimal places. An empty box
+    // goes back to the number it had.
     function numberRow(label, value, min, max, step, onChange, help) {
         const id = rid('nb');
         const f = el('<div class="af-col"></div>');
@@ -5145,6 +5146,16 @@ export function setup(ctx, overrides) {
         const tidy = (v) => (whole ? Math.round(v) : Math.round(v * 100) / 100);
         let last = tidy(Math.min(max, Math.max(min, Number.isFinite(Number(value)) ? Number(value) : min)));
         i.value = String(last);
+        // While typing, the box is left as typed: rewriting it would move the
+        // cursor and turn a half-typed number into another one.
+        i.addEventListener('input', () => {
+            const raw = String(i.value).trim();
+            const v = Number(raw);
+            if (raw === '' || !Number.isFinite(v))
+                return;
+            last = tidy(Math.min(max, Math.max(min, v)));
+            onChange(last);
+        });
         i.addEventListener('change', () => {
             const raw = String(i.value).trim();
             const v = Number(raw);
@@ -5285,7 +5296,8 @@ export function setup(ctx, overrides) {
         return wrap;
     }
     // A whole number in a box, the same as Auto Retry's and Auto Refine's
-    // number settings. It is held to its range and saved when the box is left.
+    // number settings. It takes effect as it is typed, and is held to its range
+    // when the box is left.
     function wholeRow(key, label, min, max, dflt, onChange, help) {
         const id = rid('num');
         const wrap = el('<div class="af-col"></div>');
@@ -5294,6 +5306,12 @@ export function setup(ctx, overrides) {
         const i = el('<input type="number" class="af-field af-numbox" id="' + id + '" inputmode="numeric" step="1" min="' + min + '" max="' + max + '">');
         const cur = Number(S[key]);
         i.value = String(Number.isFinite(cur) && cur > 0 ? cur : dflt);
+        i.addEventListener('input', () => {
+            const raw = String(i.value).trim();
+            const v = Number(raw);
+            if (raw !== '' && Number.isFinite(v))
+                onChange(Math.round(Math.min(max, Math.max(min, v))));
+        });
         i.addEventListener('change', () => {
             const raw = String(i.value).trim();
             const v = Number(raw);
