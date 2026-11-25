@@ -174,7 +174,7 @@ With **Keep made audio** on, in the Settings tab:
 
 ## Saved audio
 
-**Saved audio**, on the Stage tab, lists every message with a saved script, newest first. Press **See saved audio** to open it.
+**Saved audio**, on the Stage tab, lists every message with a saved script, newest first. The list shows as soon as you open the Stage tab.
 
 - Each row says whose script it is, the day it was saved, how many lines it has, and its first line.
 - **Play** plays the saved audio of its lines, joined. Press it again to stop.

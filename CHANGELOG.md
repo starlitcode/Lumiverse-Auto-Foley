@@ -39,6 +39,7 @@ _Not yet released_
 
 ### Changed
 
+- **A sound with nothing to play no longer pops up a warning.** Without a Freesound or ElevenLabs key, a sound missing from your library warned on every play. It is now said once in the Log, and the message plays on without it.
 - **Start here says what to do first, with a button for each step.** **Check my setup** goes to the Settings tab and runs the check, **Open the Cast tab** goes to the cast, and it says to press Play under **Now playing**, since the buttons on messages now start off.
 - **No scroll bar at the side of the drawer.** Lumiverse's scroll bar popped up at the side when an open card made the tab longer than the drawer. It is hidden while the Auto Foley tab is open, and the drawer still scrolls. Other tabs keep theirs.
 - **Buttons are off by default.** **A button on every message**, **A button in the chat's row of controls** and **In the Extras menu** start off. If you were on the old setting, a notice on every tab says so, with **Take it** and **Keep mine**.

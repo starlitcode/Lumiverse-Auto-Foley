@@ -1127,8 +1127,10 @@ if (section("saved audio")) {
   console.log("Saved audio lists every saved script, and plays, downloads and deletes them");
   for (const size of SIZES) {
     const { context, page, errors } = await open(THEMES[0], size);
-    // A message is played once, so its lines are saved.
+    // A message is played once, so its lines are saved. The backend then
+    // lists its script.
     await page.evaluate(() => {
+      window.__keptList = [{ key: "k1", messageId: "m1", chatId: "chat1", author: "Ysolde", keptAt: Date.UTC(2026, 10, 20, 15), lines: 3, first: "The quay was empty but for the ferry." }];
       window.__clipMs = 300;
       window.__wav = [0.05, 0.25];
     });
@@ -1136,12 +1138,9 @@ if (section("saved audio")) {
     await page.waitForFunction(() => document.querySelector('#mount [data-af-slot="message"]').getAttribute("aria-busy") === null && (window.__synth || []).length > 0, null, { timeout: 10000 });
     await page.waitForTimeout(400);
     const made = await page.evaluate(() => (window.__synth || []).length);
-    await page.evaluate(() => {
-      window.__keptList = [{ key: "k1", messageId: "m1", chatId: "chat1", author: "Ysolde", keptAt: Date.UTC(2026, 10, 20, 15), lines: 3, first: "The quay was empty but for the ferry." }];
-    });
     await page.click('.af-tab[data-tab="stage"]');
     await page.waitForTimeout(200);
-    await page.locator('[data-af-saved] .af-fold').click();
+    // The list shows with no fold to open.
     await page.waitForTimeout(400);
     const row = page.locator("[data-af-saved-row]");
     check((await row.count()) === 1, size.name + ": the saved script is listed");

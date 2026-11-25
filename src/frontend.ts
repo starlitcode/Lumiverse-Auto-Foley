@@ -2763,7 +2763,9 @@ export function setup(ctx: Ctx, overrides?: any) {
           if (sh.items[at].kind === 'sound') soundMissSaid.add(why);
           log(why, 'bad');
         }
-        if (!drawerOpen() && !warnedHidden) {
+        // A sound with nothing to play is in the Log only. A voice that could
+        // not be made warns, since the message then plays with a gap.
+        if (!drawerOpen() && !warnedHidden && sh.items[at].kind !== 'sound') {
           warnedHidden = true;
           notify('warning', 'Auto Foley could not play part of a message: ' + String(got.why || '').slice(0, 300));
         }
@@ -3085,6 +3087,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     for (const line of got.script.log || []) log(line, '', 'director');
     for (const line of got.script.decided || []) log(line, '', 'decision');
     playerIds.add(messageId);
+    if (savedRefresh) savedRefresh();
     startShow(got.script, got.meta, 0);
   }
 
@@ -3468,35 +3471,54 @@ export function setup(ctx: Ctx, overrides?: any) {
     return { wav: wavBlob(j.channels, j.rate), missing: got.lines - got.blobs.length + j.skipped, sigs: got.sigs };
   }
 
+  // The last list read, so the Stage tab draws it at once when it is drawn
+  // again, and only draws it again when it changed.
+  let savedList: any[] | null = null;
+  // Reads the list again, for the card on screen. Called when a message has
+  // been played, so a script saved just now shows.
+  let savedRefresh: (() => void) | null = null;
   function savedCard(): HTMLElement {
     const c = card('Saved audio', 'Every message with a saved script, newest first. Play and Download use only saved audio, so nothing is spent.');
     c.setAttribute('data-af-saved', '');
-    c.appendChild(
-      fold('See saved audio', (body) => {
-        const list = el('<div class="af-col" data-af="savedlist"></div>');
-        const said = el('<div class="af-hint" data-af="savedsaid" aria-live="polite">Reading your saved audio</div>');
-        body.appendChild(said);
-        body.appendChild(list);
-        let all: any[] = [];
-        let shown = 0;
-        const more = button('Show more', () => drawMore());
-        more.hidden = true;
-        body.appendChild(more);
-        const drawMore = () => {
-          for (const e of all.slice(shown, shown + 20)) list.appendChild(savedRow(e, said));
-          shown = Math.min(all.length, shown + 20);
-          more.hidden = shown >= all.length;
-        };
-        rpc({ type: 'kept_list' }, 15000).then(
-          (r: any) => {
-            all = (r && Array.isArray(r.list) ? r.list : []).filter((e: any) => e && e.lines > 0);
-            setText(said, all.length ? all.length + (all.length === 1 ? ' saved script.' : ' saved scripts.') : 'Nothing is saved yet. A message is saved after it plays, with Keep made audio on.');
-            drawMore();
-          },
-          () => setText(said, 'Your saved audio could not be read: the backend did not answer.'),
-        );
-      }),
-    );
+    // Shown at once, with no fold to open, so the list is in plain sight.
+    const list = el('<div class="af-col" data-af="savedlist"></div>');
+    const said = el('<div class="af-hint" data-af="savedsaid" aria-live="polite">Reading your saved audio</div>');
+    const more = button('Show more', () => drawMore());
+    more.hidden = true;
+    c.appendChild(said);
+    c.appendChild(list);
+    c.appendChild(more);
+    let all: any[] = [];
+    let shown = 0;
+    const drawMore = () => {
+      for (const e of all.slice(shown, shown + 20)) list.appendChild(savedRow(e, said));
+      shown = Math.min(all.length, shown + 20);
+      more.hidden = shown >= all.length;
+    };
+    const draw = (got: any[]) => {
+      all = got;
+      shown = 0;
+      list.replaceChildren();
+      setText(said, all.length ? all.length + (all.length === 1 ? ' saved script.' : ' saved scripts.') : 'Nothing is saved yet. A message is saved after it plays, with Keep made audio on.');
+      drawMore();
+    };
+    if (savedList) draw(savedList);
+    const read = () =>
+      rpc({ type: 'kept_list' }, 15000).then(
+        (r: any) => {
+          const got = (r && Array.isArray(r.list) ? r.list : []).filter((e: any) => e && e.lines > 0);
+          const same = !!savedList && JSON.stringify(savedList) === JSON.stringify(got);
+          savedList = got;
+          if (!same && c.isConnected) draw(got);
+        },
+        () => {
+          if (!savedList) setText(said, 'Your saved audio could not be read: the backend did not answer.');
+        },
+      );
+    savedRefresh = () => {
+      if (c.isConnected) read();
+    };
+    read();
     return c;
   }
 
@@ -3582,6 +3604,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         const r = await rpc({ type: 'kept_drop', key: e.key, sigs }, 30000);
         if (!r || !r.ok) throw new Error('no');
         if (e.messageId) playerIds.delete(String(e.messageId));
+        if (savedList) savedList = savedList.filter((x) => x.key !== e.key);
         fillPlayers();
         row.remove();
         log('A saved script and its saved audio were deleted.', '', 'setting');
