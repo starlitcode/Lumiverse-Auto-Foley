@@ -1038,7 +1038,6 @@ textarea.af-tall { min-height: 260px; }
 .af-chip { display: inline-flex; align-items: center; gap: 4px; margin: 0 2px; padding: 0 7px; border-radius: 999px; font-size: 11px; font-weight: 600; line-height: 19px; vertical-align: 1px; white-space: nowrap; }
 .af-chip-tag { background: rgba(96,165,250,.16); color: var(--af-text); box-shadow: inset 0 0 0 1px var(--af-k-tag); }
 .af-chip-insound { background: var(--af-sound-soft); color: var(--af-text); box-shadow: inset 0 0 0 1px var(--af-sound); white-space: normal; }
-button.af-chip-sound svg { width: 12px; height: 12px; flex: none; color: var(--af-sound); }
 .af-empty { padding: 14px 10px; color: var(--af-muted); text-align: center; font-size: 12.5px; }
 .af-log { display: flex; flex-direction: column; gap: 4px; max-height: 220px; overflow: auto; }
 .af-log-line { color: var(--af-muted); font-size: 11.5px; overflow-wrap: anywhere; }
@@ -1064,7 +1063,7 @@ button.af-chip-sound svg { width: 12px; height: 12px; flex: none; color: var(--a
 .af-person-head { display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; align-items: center; gap: 8px; width: 100%; min-height: 48px; padding: 8px 10px; border: 0; border-radius: var(--af-r-md); background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
 @media (hover: hover) { .af-person-head:hover { background: var(--af-accent-faint); } }
 .af-person-head:focus-visible { outline: none; box-shadow: inset 0 0 0 2px var(--af-accent-soft); }
-.af-avatar img, .af-pl-face img, .af-pl-ch em img { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; display: block; }
+.af-avatar img { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; display: block; }
 .af-pic { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .af-pic .af-avatar { width: 48px; height: 48px; font-size: 18px; }
 .af-avatar { overflow: hidden; display: grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; background: var(--af-accent-soft); color: var(--af-text); font-size: 12px; font-weight: 700; box-shadow: inset 0 0 0 1.5px var(--af-accent); }
