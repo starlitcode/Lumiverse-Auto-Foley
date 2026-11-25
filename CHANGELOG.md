@@ -57,7 +57,7 @@ _Not yet released_
 
 ### Fixed
 
-- **A name at the top of a message could be lit instead of the text.** **Light up words in the chat** looked through the whole message, name and all, so a message that started with the speaker's name lit the name. It now looks only at the message text, in both chat modes. Reported by a Discord user.
+- **A name at the top of a message could be lit instead of the text.** **Light up words in the chat** looked through the whole message, name and all, so a message that started with the speaker's name lit the name. It now looks only at the message text, in both chat modes.
 - **A line Gemini sent back with no audio waited 15 seconds or more.** Gemini's preview models now and then answer with no audio, and the line was waited out as if the service were busy. It is asked for again after a moment, and the Log says so.
 - **A new person's lines could be made again on the next play, in two voices.** Lines are made ahead, several at once. Two lines of someone new each picked a voice, so the lines had different voices, and a line spoken before the person joined the cast used the connection's voice. On the next play, those lines did not match and were made, and paid for, again. Now one voice is picked for each new person, and every line waits for it.
 - **The Director's tokens were counted with the tokenizer of your main connection.** When the provider sends no count, Lumiverse counts them, and it now counts for the Director's own model. Auto Refine does the same.
