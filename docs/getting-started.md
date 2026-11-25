@@ -2,18 +2,18 @@
 
 ## In short
 
-- Auto Foley speaks through a TTS connection in Lumiverse: ElevenLabs, Fish Audio, Gemini or Chatterbox.
+- Auto Foley speaks through a TTS connection in Lumiverse: ElevenLabs, Fish Audio, Gemini, Chatterbox, OmniVoice or Cartesia.
 - It works only with a model that acts. [Voice engines](engines.md) lists them.
 - Give each person in the Cast tab a voice.
-- Press the Auto Foley button on a message: a pair of headphones.
+- Press **Play** on the Stage tab to perform the latest reply.
 
 ## Steps
 
 1. **Add a TTS connection in Lumiverse**, if you do not have one. Open **Connections**, go to the TTS section, and add one with your key. For Chatterbox on your own computer, see [Chatterbox](engines.md#chatterbox).
-2. **Pick the model.** On the connection, choose one that acts: Eleven v3 or v4, Fish Audio S2.1 Pro or Drama 3, or Gemini 3.8 Flash TTS. You can also pick a model for each person later, in the Cast tab. Only models that act are offered there.
+2. **Pick the model.** On the connection, choose one that acts: Eleven v3 or v4, Fish Audio S2.1 Pro or Drama 3, Gemini 3.8 Flash TTS, Chatterbox-Turbo, OmniVoice, or Cartesia Sonic 3. You can also pick a model for each person later, in the Cast tab. Only models that act are offered there.
 3. **Open the Foley tab** in the drawer. Go to **Settings** and check that **TTS connection** shows yours. The line under it says what its engine can do.
 4. **Press Check my setup** on the Settings tab. It says what is ready and what is missing. It speaks nothing, so it spends no voice credits.
-5. **Perform a message.** Press the Auto Foley button on any message. The first time, the Director reads it, and the Stage tab shows each part as it plays.
+5. **Perform a message.** Press **Play** under **Now playing** on the Stage tab. It performs the latest reply. For any other message, turn on **A button on every message** in the Settings tab. The first time, the Director reads it, and the Stage tab shows each part as it plays.
 6. **Give voices.** Open the **Cast** tab. Everyone who spoke is there now. Pick a voice for each, and press **Hear a sample**.
 
 ## What happens when you press the button

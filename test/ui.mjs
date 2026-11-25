@@ -2071,7 +2071,7 @@ if (section("reused row")) {
   await page.click('.af-tab[data-tab="stage"]');
   await page.waitForTimeout(300);
   const after = await page.evaluate(() => document.querySelector('[data-af="sub"]').textContent);
-  check(/deleted, so it stopped/.test(after) || /Press the Auto Foley button/.test(after), "a message deleted while it plays stops, and its script is not kept for Play (" + after + ", playing before: " + playing + ")");
+  check(/deleted, so it stopped/.test(after) || /Press Play to start/.test(after), "a message deleted while it plays stops, and its script is not kept for Play (" + after + ", playing before: " + playing + ")");
   check(!errors.length, "no page errors. " + errors.slice(0, 2).join(" | "));
   await context.close();
 }
@@ -2270,11 +2270,20 @@ if (section("still working")) {
       await page.evaluate((every) => { window.__directHold = 2500; window.__workingEvery = every; window.__played = 0; }, every);
       await page.click('.af-tab[data-tab="stage"]');
       await page.waitForTimeout(150);
+      // The line under Nothing playing shows in two lines at most, so what
+      // it says has to fit in them, whole.
+      const whole = () => page.evaluate(() => Array.from(document.querySelectorAll(".af-now-sub")).filter((n) => n.getClientRects().length).map((n) => ({ text: n.textContent, cut: n.scrollHeight > n.clientHeight + 1 })));
+      const idle = await whole();
+      check(idle.length > 0 && idle.every((x) => !x.cut), where + ", " + label + ": the line under Nothing playing is shown whole (" + JSON.stringify(idle) + ")");
       await page.click('#mount [data-af-slot="message"]');
       await page.waitForTimeout(3600);
       const got = await page.evaluate(() => ({ played: window.__played || 0, said: (document.querySelector(".af") || {}).innerText || "" }));
-      if (every) check(got.played > 0 && !/stopped answering/.test(got.said), where + ": a backend that says it is still working is waited for, and the message plays (" + got.played + " played)");
-      else check(got.played === 0 && /backend stopped answering/.test(got.said), where + ": a backend that goes silent is given up on, with a plain reason");
+      if (every) check(got.played > 0 && !/backend stopped/.test(got.said), where + ": a backend that says it is still working is waited for, and the message plays (" + got.played + " played)");
+      else {
+        check(got.played === 0 && /The backend stopped\. Reload the page\./.test(got.said), where + ": a backend that goes silent is given up on, with a plain reason");
+        const said = await whole();
+        check(said.every((x) => !x.cut), where + ": and the reason is shown whole (" + JSON.stringify(said) + ")");
+      }
       check(!errors.length, where + ", " + label + ": no page errors. " + errors.slice(0, 2).join(" | "));
       await context.close();
     }

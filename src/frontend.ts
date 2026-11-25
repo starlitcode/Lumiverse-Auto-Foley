@@ -1848,7 +1848,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       const requestId = rid('r');
       const giveUp = () => {
         pending.delete(requestId);
-        reject(new Error('Auto Foley\u2019s backend stopped answering. Reload the page, and if it happens again, copy Debug info from the Settings tab.'));
+        reject(new Error('The backend stopped. Reload the page.'));
       };
       const entry: { resolve: (v: any) => void; reject: (e: any) => void; timer: any; arm?: () => void } = { resolve, reject, timer: setTimeout(giveUp, timeoutMs) };
       entry.arm = () => {
@@ -3137,7 +3137,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       if (keptUsed) log(keptUsed + (keptUsed === 1 ? ' line was' : ' lines were') + ' played from audio kept from before, so nothing was spent on ' + (keptUsed === 1 ? 'it.' : 'them.'));
       keptUsed = 0;
       lastFailed = sh.failed.length ? { script: sh.script, meta: { chatId: sh.chatId, messageId: sh.messageId, swipeId: sh.swipeId }, items: sh.failed.map((k) => sh.items[k]) } : null;
-      stop(sh.failed.length ? 'Finished. ' + sh.failed.length + (sh.failed.length === 1 ? ' part' : ' parts') + ' could not be played. The Log says why.' : 'Finished');
+      stop(sh.failed.length ? 'Finished. ' + sh.failed.length + (sh.failed.length === 1 ? ' part' : ' parts') + ' did not play. See the Log.' : 'Finished');
       if (S.saveAudio && sh.complete) saveToMessage(sh);
     }
   }
@@ -3222,8 +3222,8 @@ export function setup(ctx: Ctx, overrides?: any) {
       // The browser blocks sound until the page has been tapped. Playback
       // waits as if paused, and Play starts it.
       paused = true;
-      phase = 'Press Play to start. Your browser blocks sound until you tap the page.';
-      log(phase);
+      phase = 'Press Play. The browser needs a tap first.';
+      log('Press Play to start. Your browser blocks sound until you tap the page.');
       if (!drawerOpen()) notify('info', 'Auto Foley is ready. Tap the Auto Foley button on the message, or Play in the drawer, to start the sound.');
       paintStage();
       paintButtons();
@@ -3312,8 +3312,10 @@ export function setup(ctx: Ctx, overrides?: any) {
     lastFailed = null;
     const items = only && only.length ? only : buildItems(script);
     if (!items.length) {
-      phase = script.lines.length ? 'Nothing to play with these settings. Narration may be skipped, or the speakers muted.' : 'This message has nothing to read aloud.';
-      log(phase);
+      // The line under Now playing holds two short lines, so the reason
+      // in full goes to the Log.
+      phase = script.lines.length ? 'Nothing to play with these settings.' : 'This message has nothing to read aloud.';
+      log(script.lines.length ? 'Nothing to play with these settings. Narration may be skipped, or the speakers muted.' : phase);
       if (tab === 'stage') renderTab();
       return;
     }
@@ -7032,7 +7034,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       setText(sub, said + ' · part ' + Math.min(show.index + 1, show.items.length) + ' of ' + show.items.length + ' · ' + secs + '\u00a0s');
     } else {
       setText(title, script ? (script.author ? script.author + '’s script' : 'This script') : 'Nothing playing');
-      setText(sub, phase || (script ? 'Ready. Press Play.' : chatInfo.kind === 'none' ? 'Open a chat, then press the Auto Foley button on a message.' : 'Press the Auto Foley button on a message.'));
+      setText(sub, phase || (script ? 'Ready. Press Play.' : chatInfo.kind === 'none' ? 'Open a chat, then press Play.' : 'Press Play to start.'));
     }
   }
 
