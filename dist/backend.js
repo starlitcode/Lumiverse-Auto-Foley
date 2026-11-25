@@ -11,7 +11,7 @@
 // One backend process can serve every account on a server, so everything that
 // belongs to a person is kept per user id, in spindle.userStorage, and every
 // reply goes back addressed to that user.
-const VERSION = '1.6.4';
+const VERSION = '1.7.0';
 const DEFAULT_SETTINGS = {
     enabled: true,
     ttsConnection: '',
@@ -109,6 +109,7 @@ function narrator() {
     return {
         id: NARRATOR_ID,
         name: 'Narrator',
+        display: '',
         kind: 'narrator',
         addedBy: 'you',
         aliases: [],
@@ -226,6 +227,7 @@ function cleanMember(m) {
     return {
         id: str(m.id, 64) || newId(),
         name: name,
+        display: str(m.display, 60).trim(),
         kind: pick(m.kind, ['narrator', 'character', 'persona', 'npc'], 'character'),
         addedBy: pick(m.addedBy, ['you', 'chat', 'ai', 'found'], 'you'),
         aliases: Array.isArray(m.aliases)

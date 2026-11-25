@@ -2313,6 +2313,53 @@ if (section("gemini style")) {
   await context.close();
 }
 
+if (section("display name")) {
+  console.log("A display name shows in the panel and the players, and the name stays for the Director");
+  for (const size of SIZES) {
+    const where = size.name;
+    const { context, page, errors } = await open(THEMES[0], size, 1, () => {
+      window.__settings.cast = window.__settings.cast.map((m) => (m.id === "a" ? Object.assign({}, m, { display: "The Harbormistress" }) : m.id === "n" ? Object.assign({}, m, { display: "Old Wren" }) : m));
+      window.__settings.widgetOn = true;
+    });
+    await page.click('.af-tab[data-tab="cast"]');
+    await page.waitForTimeout(400);
+    const heads = await page.evaluate(() => Array.from(document.querySelectorAll(".af-person-name b")).map((b) => b.textContent));
+    check(heads.indexOf("The Harbormistress") >= 0 && heads.indexOf("Old Wren") >= 0, where + ": the cards show the display names (" + heads.join(", ") + ")");
+    // A to Z goes by the name shown.
+    await page.selectOption("[data-af-castsort] select", "az");
+    await page.waitForTimeout(400);
+    const az = await page.evaluate(() => Array.from(document.querySelectorAll(".af-person-name b")).map((b) => b.textContent));
+    check(az.join("|") === ["Ferryman", "Old Wren", "The Harbormistress", "Wyn"].join("|"), where + ": A to Z sorts by the name shown (" + az.join(", ") + ")");
+    // Typed on a card, it is saved, and the name is kept.
+    await page.evaluate(() => document.querySelector('.af-person[data-person="b"] .af-person-head').click());
+    await page.waitForTimeout(450);
+    await page.fill('.af-person[data-person="b"] [data-af-display] input', "Captain Oarlock");
+    await page.waitForTimeout(700);
+    const savedB = await page.evaluate(() => window.__settings.cast.find((m) => m.id === "b"));
+    check(savedB.display === "Captain Oarlock" && savedB.name === "Ferryman", where + ": a typed display name is saved, and the name is kept (" + JSON.stringify({ display: savedB.display, name: savedB.name }) + ")");
+    const tall = await page.evaluate(() => document.querySelector('.af-person[data-person="b"] [data-af-display] input').getBoundingClientRect().height);
+    if (size.touch) check(tall >= 32, where + ": the box is at least 32 pixels high (" + tall + ")");
+    // While a line plays, the stage shows who says it by the name shown.
+    await page.evaluate(() => { window.__clipMs = 1500; });
+    await page.click('.af-tab[data-tab="stage"]');
+    await page.waitForTimeout(200);
+    await page.click('#mount [data-af-slot="message"]');
+    const seen = await page.evaluate(async () => {
+      const out = new Set();
+      for (let k = 0; k < 80; k++) {
+        const w = document.querySelector('[data-af="who"]');
+        if (w && w.textContent.trim()) out.add(w.textContent.trim());
+        await new Promise((r) => setTimeout(r, 60));
+      }
+      return Array.from(out);
+    });
+    check(seen.some((t) => /Old Wren/.test(t)) && seen.some((t) => /The Harbormistress/.test(t)) && !seen.some((t) => /^.?Narrator$/.test(t)), where + ": the stage shows the display names while they speak (" + seen.join(" | ") + ")");
+    check(!(await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1)), where + ": nothing runs off the side");
+    check(!errors.length, where + ": no page errors. " + errors.slice(0, 2).join(" | "));
+    await context.close();
+  }
+}
+
 if (section("reorder")) {
   console.log("People and groups can be picked up and moved");
   const order = (page, sel, attr) => page.evaluate(([sel, attr]) => Array.from(document.querySelectorAll(sel)).map((n) => n.getAttribute(attr)), [sel, attr]);

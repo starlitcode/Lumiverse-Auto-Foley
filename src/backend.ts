@@ -15,7 +15,7 @@ declare const spindle: any;
 declare function setTimeout(fn: () => void, ms: number): any;
 declare function clearTimeout(handle: any): void;
 
-const VERSION = '1.6.4';
+const VERSION = '1.7.0';
 
 // ---------------------------------------------------------------------------
 // Settings
@@ -31,6 +31,9 @@ type AddedBy = 'you' | 'chat' | 'ai' | 'found';
 interface CastMember {
   id: string;
   name: string;
+  // The name the panel and the players show. The Director keeps using the
+  // name, which is how lines are matched to people.
+  display?: string;
   kind: CastKind;
   addedBy: AddedBy;
   // Other names this person is called by in the story, one per entry.
@@ -327,6 +330,7 @@ function narrator(): CastMember {
   return {
     id: NARRATOR_ID,
     name: 'Narrator',
+    display: '',
     kind: 'narrator',
     addedBy: 'you',
     aliases: [],
@@ -446,6 +450,7 @@ function cleanMember(m: any): CastMember | null {
   return {
     id: str(m.id, 64) || newId(),
     name: name,
+    display: str(m.display, 60).trim(),
     kind: pick(m.kind, ['narrator', 'character', 'persona', 'npc'] as const, 'character'),
     addedBy: pick(m.addedBy, ['you', 'chat', 'ai', 'found'] as const, 'you'),
     aliases: Array.isArray(m.aliases)

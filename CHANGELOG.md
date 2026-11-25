@@ -6,9 +6,13 @@ Versions follow [Semantic Versioning](https://semver.org). A new major version m
 
 ---
 
-## 1.6.4
+## 1.7.0
 
 _2026-11-25_
+
+### Added
+
+- **A display name for everyone in the cast**, on each person's card in the Cast tab. It is the name shown on the Cast tab and in the players, such as a nickname. The Director never sees it, and still finds lines by **Name**. The narrator has one too, while the Director still calls them the Narrator. **A to Z** and **Z to A** sort by the name shown.
 
 ### Changed
 

@@ -13,7 +13,7 @@
 
 type Ctx = any;
 
-const VERSION = '1.6.4';
+const VERSION = '1.7.0';
 // The marks Lumiverse puts on another extension's part of the page. Nothing
 // inside one is read, written or pressed.
 const OTHER_UI = '[data-spindle-extension-root],[data-spindle-ext],[data-spindle-modal]';
@@ -163,11 +163,13 @@ const CAST_SORTS = [
   { id: 'voice', label: 'By voice type' },
   { id: 'own', label: 'My own order' },
 ];
-function sortCast<T extends { name: string; kind: string; gender?: string }>(cast: T[], how: string): T[] {
+function sortCast<T extends { name: string; kind: string; gender?: string; display?: string }>(cast: T[], how: string): T[] {
   const list = (Array.isArray(cast) ? cast : []).slice();
   const kinds: Record<string, number> = { narrator: 0, persona: 1, character: 2, npc: 3 };
   const voices: Record<string, number> = { female: 0, male: 1, nonbinary: 2, unknown: 3 };
-  const byName = (a: T, b: T) => String(a.name || '').localeCompare(String(b.name || ''), undefined, { sensitivity: 'base', numeric: true });
+  // By the name the panel shows: the display name, when there is one.
+  const shown = (m: T) => String(m.display || '').trim() || String(m.name || '');
+  const byName = (a: T, b: T) => shown(a).localeCompare(shown(b), undefined, { sensitivity: 'base', numeric: true });
   if (how === 'az') list.sort(byName);
   else if (how === 'za') list.sort((a, b) => byName(b, a));
   else if (how === 'voice') list.sort((a, b) => (voices[String(a.gender || 'unknown')] ?? 3) - (voices[String(b.gender || 'unknown')] ?? 3) || byName(a, b));
@@ -1460,6 +1462,9 @@ html[data-af-still] [class^="af-"], html[data-af-still] [class*=" af-"], html[da
 // ---------------------------------------------------------------------------
 
 interface Member {
+  // The name the panel and the players show. The Director keeps using the
+  // name, which is how lines are matched to people.
+  display?: string;
   // More settings for the person's engine. PARAMS says which keys there are
   // and which engines take each one.
   params?: Record<string, number | string | boolean>;
@@ -2265,6 +2270,22 @@ export function setup(ctx: Ctx, overrides?: any) {
   function narratorMember(): Member | null {
     return (S.cast || []).find((c: Member) => c.kind === 'narrator') || null;
   }
+  // The name the panel and the players show for a person: their display
+  // name, or their name when they have none. The Director only ever sees the
+  // name.
+  function shownName(m: Member | null | undefined): string {
+    if (!m) return '';
+    return String(m.display || '').trim() || m.name;
+  }
+  function narratorName(): string {
+    return shownName(narratorMember()) || 'Narrator';
+  }
+  // The name shown for whoever says a line.
+  function speakerName(line: { kind?: string; speaker?: string } | null | undefined): string {
+    if (!line) return '';
+    if (line.kind === 'narration') return narratorName();
+    return shownName(memberFor(String(line.speaker || ''))) || String(line.speaker || '');
+  }
 
   // Someone the AI added has no voice yet. They get one from the
   // connection's voices that matches their gender and nobody in the cast
@@ -2673,7 +2694,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     if (db >= 1 && !sh.toldLevel.has(key)) {
       sh.toldLevel.add(key);
       const it = sh.items[k];
-      const who = it && it.line ? (it.line.kind === 'narration' ? 'The narrator' : it.line.speaker || 'A voice') : 'A voice';
+      const who = it && it.line ? (it.line.kind === 'narration' && narratorName() === 'Narrator' ? 'The narrator' : speakerName(it.line) || 'A voice') : 'A voice';
       log(who + ' is louder than the quietest voice here, so it is turned down by ' + db + ' dB.');
     }
     return gain;
@@ -2897,7 +2918,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         parts: lp ? lp.parts : [],
         times: lp ? partTimes(lp.weights, sh.voiced.get(p.k) || [], joined.lens[i]) : [],
         who: line ? partWho(line) : 'sound',
-        name: line ? (line.kind === 'narration' ? 'Narrator' : line.speaker) : it && it.kind === 'applause' ? 'The audience' : 'A sound',
+        name: line ? speakerName(line) : it && it.kind === 'applause' ? 'The audience' : 'A sound',
       };
     });
     const wrap = (words: string[], max: number): string[][] => {
@@ -6278,8 +6299,8 @@ export function setup(ctx: Ctx, overrides?: any) {
     box.innerHTML = '';
     const people = castInOrder();
     for (const m of people) {
-      const ch = el('<div class="af-pl-ch" data-person="' + esc(m.id) + '"><span class="af-avatar">' + faceHtml(m, m.name) + '</span><span></span><button type="button" class="af-round"></button></div>');
-      (ch.children[1] as HTMLElement).textContent = m.name;
+      const ch = el('<div class="af-pl-ch" data-person="' + esc(m.id) + '"><span class="af-avatar">' + faceHtml(m, shownName(m)) + '</span><span></span><button type="button" class="af-round"></button></div>');
+      (ch.children[1] as HTMLElement).textContent = shownName(m);
       const b = ch.querySelector('button') as HTMLButtonElement;
       const paintB = () => {
         ch.dataset.off = m.muted ? 'true' : 'false';
@@ -6336,7 +6357,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     const it = show ? show.items[Math.min(show.index, show.items.length - 1)] : null;
     const line = it ? it.line : null;
     const who = !it ? null : it.kind === 'voice' && line ? (line.kind === 'narration' ? narratorMember() : memberFor(line.speaker)) : null;
-    const name = !it ? '' : it.kind === 'voice' ? (line && line.kind === 'narration' ? 'Narrator' : (line && line.speaker) || '') : it.kind === 'applause' ? 'The audience' : 'A sound';
+    const name = !it ? '' : it.kind === 'voice' ? speakerName(line) : it.kind === 'applause' ? 'The audience' : 'A sound';
     const face = q('face');
     const faceKey = it ? (it.kind === 'voice' ? 'v:' + name : it.kind) : 'idle';
     if (face.dataset.k !== faceKey) {
@@ -7077,7 +7098,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         .map(
           (x, k) =>
             '<button type="button" data-at="' + k + '" data-k="' + x.kind + '"' + (x.kind === 'voice' ? ' data-who="' + esc(partWho(x.line)) + '"' : '') + ' aria-label="Part ' + (k + 1) +
-            (x.kind === 'voice' ? ', ' + esc(x.line.kind === 'narration' ? 'Narrator' : x.line.speaker) : x.kind === 'applause' ? ', the audience' : ', a sound') +
+            (x.kind === 'voice' ? ', ' + esc(speakerName(x.line)) : x.kind === 'applause' ? ', the audience' : ', a sound') +
             '" title="' + esc(x.kind === 'voice' ? stripTags(x.line.text).slice(0, 80) : x.kind === 'applause' ? 'The audience cheers' : x.sound || '') + '"><i></i></button>',
         )
         .join('');
@@ -7157,7 +7178,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     const line = it.line;
     // A line read as written says why, under it, while it plays.
     cue.innerHTML = line.note ? '<span class="af-note">' + esc(line.note) + '</span>' : '';
-    const name = line.kind === 'narration' ? 'Narrator' : line.speaker;
+    const name = speakerName(line);
     const m = line.kind === 'narration' ? narratorMember() : memberFor(line.speaker);
     who.innerHTML = '<span class="af-avatar af-avatar-' + esc((m && m.kind) || 'character') + '">' + faceHtml(m, name) + '</span><span>' + esc(name) + '</span>';
     const { parts, weights } = lineParts(line);
@@ -7454,7 +7475,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         else d.members.delete(m.id);
       });
       const other = m.group && m.group !== d.id ? groups().find((g) => g.id === m.group) : null;
-      list.appendChild(labelRow(m.name, other ? 'Now in ' + other.name + '. On moves them here.' : '', undefined, sw));
+      list.appendChild(labelRow(shownName(m), other ? 'Now in ' + other.name + '. On moves them here.' : '', undefined, sw));
     }
     if (!(S.cast as Member[]).length) list.appendChild(hint('Nobody is in the cast yet.'));
     c.appendChild(list);
@@ -7749,7 +7770,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     // typed is the name field while it is being changed. Empty, the header
     // says so, rather than showing the name that was there before.
     const paintName = (typed?: string) => {
-      const name = typed === undefined ? m.name : typed.trim();
+      const name = String(m.display || '').trim() || (typed === undefined ? m.name : typed.trim());
       (c.querySelector('.af-person-name b') as HTMLElement).textContent = name || 'No name yet';
       (c.querySelector('.af-person-head .af-avatar') as HTMLElement).innerHTML = faceHtml(m, name);
       const pick = pickOf(m, connOf(m));
@@ -8031,6 +8052,19 @@ export function setup(ctx: Ctx, overrides?: any) {
     // picked for it, so it has no Voice type.
     if (m.kind === 'narrator')
       inner.appendChild(hint('The narrator reads everything outside quotes, so it cannot be removed. To skip it, change Narration in the Settings tab.'));
+    // Only what the panel and the players show. The Director never sees it,
+    // so it can be anything without changing whose lines are whose.
+    const shownRow = text('Display name', String(m.display || ''), (v) => {
+      m.display = v.trim().slice(0, 60);
+      save();
+      paintName();
+    }, m.name, m.kind === 'narrator'
+      ? 'Optional. Shown on this tab and in the players. The Director still calls them the Narrator.'
+      : 'Optional. Shown on this tab and in the players. The Director still finds their lines by Name.');
+    shownRow.setAttribute('data-af-display', '');
+    const shownIn = shownRow.querySelector('input') as HTMLInputElement | null;
+    if (shownIn) shownIn.maxLength = 60;
+    inner.appendChild(shownRow);
     if (m.kind !== 'narrator') {
       const g1 = el('<div class="af-grid2"></div>');
       const nameRow = text('Name', m.name, (v) => {

@@ -434,6 +434,19 @@ describe("directing a message, end to end", () => {
     expect(h.sent.length).toBe(after);
   }, 30000);
 
+  // A display name is only for the panel. The Director finds lines by name.
+  test("a display name is kept, and never sent to the Director", async () => {
+    const h = host({ answers: [good] });
+    await h.ask({ type: "save", settings: { cast: [{ id: "n", name: "Narrator", kind: "narrator", display: "Old Wren" }, { id: "a", name: "Mara Vell", kind: "character", display: "The Captain" }] } });
+    const saved = JSON.parse(h.files.get("u1/settings.json"));
+    expect(saved.cast.map((m: any) => m.display)).toEqual(["Old Wren", "The Captain"]);
+    await h.ask(msg);
+    const sent = JSON.stringify(h.calls.generate[0]);
+    expect(sent.indexOf("Mara Vell")).toBeGreaterThan(-1);
+    expect(sent.indexOf("The Captain")).toBe(-1);
+    expect(sent.indexOf("Old Wren")).toBe(-1);
+  });
+
   test("the script comes back tagged, to the user who asked", async () => {
     const h = host({ answers: [good] });
     const out = await h.ask(msg, "u7");
