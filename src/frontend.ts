@@ -3688,7 +3688,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       '<button type="button" class="af-mp-ic" data-af-mp="back" aria-label="Back one part" title="Back one part">' + ICON_BACK + '</button>' +
       '<button type="button" class="af-mp-play" data-af-mp="play">' + ICON_PLAY + '</button>' +
       '<button type="button" class="af-mp-ic" data-af-mp="next" aria-label="Next part" title="Next part">' + ICON_SKIP + '</button>' +
-      '<span class="af-mp-bar" aria-hidden="true"><i></i></span>' +
+      '<button type="button" class="af-mp-seek" data-af-mp="seek" aria-label="Go to a point in the message" title="Go to a point in the message"><span class="af-mp-bar" aria-hidden="true"><i></i></span></button>' +
       '<span class="af-mp-text" data-af-mp="text"></span>' +
       '<button type="button" class="af-mp-ic" data-af-mp="save" aria-label="Download the saved audio" title="Download the saved audio">' + ICON_DOWNLOAD + '</button>' +
       '</div></div>';
@@ -3700,6 +3700,25 @@ export function setup(ctx: Ctx, overrides?: any) {
     (box.querySelector('[data-af-mp="next"]') as HTMLElement).addEventListener('click', (e) => {
       e.stopPropagation();
       if (mineNow()) skip();
+    });
+    // A tap on the line goes to that point of the message: the part there,
+    // and the point in it when it is the part playing.
+    const seek = box.querySelector('[data-af-mp="seek"]') as HTMLButtonElement;
+    seek.addEventListener('click', (e: MouseEvent) => {
+      e.stopPropagation();
+      if (!mineNow() || !show) return;
+      const r = (seek.querySelector('.af-mp-bar') as HTMLElement).getBoundingClientRect();
+      if (!(r.width > 0)) return;
+      const frac = Math.min(0.999, Math.max(0, (e.clientX - r.left) / r.width));
+      const total = show.items.length;
+      const k = Math.floor(frac * total);
+      const within = frac * total - k;
+      if (k === show.index && audio && Number(audio.duration) > 0) {
+        try {
+          audio.currentTime = within * Number(audio.duration);
+        } catch (_) {}
+        paintPlayerBar(box, true);
+      } else jumpTo(k);
     });
     const save = box.querySelector('[data-af-mp="save"]') as HTMLButtonElement;
     save.addEventListener('click', async (e) => {
@@ -3810,8 +3829,9 @@ export function setup(ctx: Ctx, overrides?: any) {
       const busy = busyMessage === id;
       const playing = mine && !paused;
       const btn = box.querySelector('[data-af-mp="play"]') as HTMLButtonElement;
-      // Back and Next move through the message while it is the one playing.
-      for (const k of ['back', 'next']) {
+      // Back, Next and the line move through the message while it is the one
+      // playing.
+      for (const k of ['back', 'next', 'seek']) {
         const b = box.querySelector('[data-af-mp="' + k + '"]') as HTMLButtonElement | null;
         if (b && b.disabled !== !mine) b.disabled = !mine;
       }
@@ -4900,6 +4920,12 @@ export function setup(ctx: Ctx, overrides?: any) {
     '@media (hover:hover){.af-mp-ic:not(:disabled):hover{background:var(--lumiverse-primary-020,rgba(147,112,219,.2))}}' +
     '@media (hover:hover){.af-mp-play:hover{background:var(--lumiverse-primary-050,rgba(147,112,219,.5))}}' +
     '@media (pointer:coarse){.af-mp-play,.af-mp-ic{width:32px;height:32px}}' +
+    // The line is thin, in a button 28 pixels tall, 32 on a touch screen, so
+    // it is easy to tap.
+    '.af-mp-seek{flex:0 50 120px;width:120px;min-width:24px;height:28px;display:flex;align-items:center;padding:0;border:none;background:transparent;cursor:pointer}' +
+    '.af-mp-seek:disabled{cursor:default}' +
+    '.af-mp-seek .af-mp-bar{flex:1 1 auto;width:100%}' +
+    '@media (pointer:coarse){.af-mp-seek{height:32px}}' +
     // The bar gives up its room before the words do. It has a width of its
     // own, since an empty element counts as no width when the browser sizes
     // the pill to fit.

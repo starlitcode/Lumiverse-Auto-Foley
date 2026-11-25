@@ -1058,6 +1058,14 @@ if (section("message player")) {
     await page.waitForTimeout(300);
     const p2 = await partNow();
     check(Number(p1) === Number(p0) + 1 && Number(p2) === Number(p0), where + ": Next moves on one part and Back returns (" + [p0, p1, p2].join(" ") + ")");
+    // A tap near the end of the line goes to the last part.
+    const total = await page.evaluate(() => Number((document.querySelector("[data-af-player] [data-af-mp=text]").textContent.match(/of (\d+)/) || [])[1] || 0));
+    const seekBox = await page.locator("[data-af-player] [data-af-mp=seek]").boundingBox();
+    await page.mouse.click(seekBox.x + seekBox.width - 3, seekBox.y + seekBox.height / 2);
+    await page.waitForTimeout(300);
+    const p3 = await partNow();
+    check(total > 1 && Number(p3) === total, where + ": a tap near the end of the line goes to the last part (" + p3 + " of " + total + ")");
+    if (size.touch) check(seekBox.height >= 32, where + ": the line is at least 32 pixels tall to tap (" + seekBox.height + ")");
     if (size.touch) {
       const small = await page.evaluate(() => Array.from(document.querySelectorAll("[data-af-player] button")).filter((b) => b.getBoundingClientRect().height < 32).length);
       check(small === 0, where + ": every button in the player is at least 32 pixels high");
