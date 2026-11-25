@@ -1552,6 +1552,10 @@ interface Script {
   engine?: string;
   // Set on a script played from what was kept, never stored.
   fromKept?: boolean;
+  // When it was saved, and the chat it is from, for Saved audio. Scripts
+  // kept by an older version have neither.
+  keptAt?: number;
+  chatId?: string;
   messageId: string;
   author: string;
   lines: DirectedLine[];
@@ -2465,6 +2469,7 @@ const SCRIPTS_KEPT = 300;
 const scripts: Record<string, { key: string; script: Script }[]> = {};
 
 function keepScript(userId: string, script: Script) {
+  if (!script.keptAt) script = Object.assign({}, script, { keptAt: Date.now() });
   const list = scripts[userId] || (scripts[userId] = []);
   const at = list.findIndex((x) => x.key === script.key);
   if (at >= 0) list.splice(at, 1);
@@ -2924,7 +2929,7 @@ async function direct(userId: string | undefined, p: any): Promise<Script> {
     }
   }
   const script: Script = {
-    key, engine: engine.id, messageId, author, lines: [], log: [], directed: false, added: authorAdded ? [author] : [], inScene: [], isUser, model: '', cost: 0, sent: 0, back: 0, counted: true,
+    key, engine: engine.id, messageId, chatId: str(p.chatId, 80), author, lines: [], log: [], directed: false, added: authorAdded ? [author] : [], inScene: [], isUser, model: '', cost: 0, sent: 0, back: 0, counted: true,
   };
 
   if (!segs.length) {
@@ -3952,6 +3957,47 @@ async function onPanel(p: any, userId: string | undefined) {
         await dropClips(userId, gone);
         const ok = await saveClips(userId, list.filter((x) => x.sig !== sig));
         return answer({ type: 'clip_dropped', ok });
+      }
+      case 'kept_list': {
+        // Saved audio: every saved script, newest first, without its lines.
+        const s = await loadSettings(userId);
+        await readKeptScripts(userId || '', s);
+        const list = (scripts[userId || ''] || []).slice().reverse().map((x) => {
+          const sc = x.script;
+          const voice = sc.lines.filter((l) => l.kind === 'speech' || l.kind === 'narration');
+          return { key: x.key, messageId: sc.messageId, chatId: sc.chatId || '', author: sc.author, keptAt: sc.keptAt || 0, lines: voice.length, first: str(voice.length ? voice[0].plain : '', 160) };
+        });
+        return answer({ type: 'kept_list', list });
+      }
+      case 'kept_script': {
+        const key = str(p.key, 80);
+        const hit = (scripts[userId || ''] || []).find((x) => x.key === key);
+        return answer({ type: 'kept_script', script: hit ? hit.script : null });
+      }
+      case 'clips_have': {
+        // Which of these lines have saved audio. Nothing is sent back but the
+        // fingerprints, so a check of many lines stays small.
+        const want = Array.isArray(p.sigs) ? p.sigs.map((x: any) => str(x, 40)).filter((x: string) => /^[a-z0-9]{6,40}$/.test(x)).slice(0, 400) : [];
+        const list = await loadClips(userId);
+        const have = new Set(list.map((x) => x.sig));
+        return answer({ type: 'clips_have', have: want.filter((x: string) => have.has(x)) });
+      }
+      case 'kept_drop': {
+        // One saved script is deleted, with the saved audio of its lines.
+        const key = str(p.key, 80);
+        const uid = userId || '';
+        const s = await loadSettings(userId);
+        await readKeptScripts(uid, s);
+        scripts[uid] = (scripts[uid] || []).filter((x) => x.key !== key);
+        await saveKeptScripts(uid);
+        const sigs = new Set(Array.isArray(p.sigs) ? p.sigs.map((x: any) => str(x, 40)) : []);
+        const list = await loadClips(userId);
+        const gone = list.filter((x) => sigs.has(x.sig));
+        if (gone.length) {
+          await dropClips(userId, gone);
+          await saveClips(userId, list.filter((x) => !sigs.has(x.sig)));
+        }
+        return answer({ type: 'kept_dropped', ok: true, clips: gone.length });
       }
       case 'clips_state': {
         const list = await loadClips(userId);

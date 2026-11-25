@@ -1414,6 +1414,39 @@ describe("counting the Director's tokens", () => {
   });
 });
 
+describe("saved audio", () => {
+  const good = JSON.stringify({ lines: [{ i: 0, speaker: "Oriel", text: "[quietly] Lanterns up." }] });
+  const msg = { type: "direct", chatId: "c4", messageId: "m20", swipeId: 0, name: "Oriel", text: '"Lanterns up."' };
+
+  test("lists a saved script with who, when, its chat and its first line", async () => {
+    const h = host({ answers: [good] });
+    await h.ask(msg);
+    const out = await h.ask({ type: "kept_list" });
+    const list = out.find((m: any) => m.type === "kept_list").list;
+    expect(list.length).toBe(1);
+    expect(list[0].messageId).toBe("m20");
+    expect(list[0].chatId).toBe("c4");
+    expect(list[0].author).toBe("Oriel");
+    expect(list[0].first).toBe("Lanterns up.");
+    expect(list[0].keptAt).toBeGreaterThan(0);
+  });
+
+  test("Delete takes the script and its saved audio away", async () => {
+    const h = host({ answers: [good, good] });
+    await h.ask(msg);
+    await h.ask({ type: "clip_put", sig: "abc123def", mime: "audio/mpeg", base64: h.box.toBase64(new Uint8Array(50).fill(3)) });
+    const key = (await h.ask({ type: "kept_list" })).find((m: any) => m.type === "kept_list").list[0].key;
+    const gone = (await h.ask({ type: "kept_drop", key, sigs: ["abc123def"] })).find((m: any) => m.type === "kept_dropped");
+    expect(gone.ok).toBe(true);
+    expect(gone.clips).toBe(1);
+    expect((await h.ask({ type: "kept_list" })).find((m: any) => m.type === "kept_list").list.length).toBe(0);
+    expect((await h.ask({ type: "clip_get", sig: "abc123def" })).find((m: any) => m.type === "clip").found).toBe(false);
+    // Played again, it is directed again, since nothing is saved for it.
+    await h.ask(msg);
+    expect(h.calls.generate.length).toBe(2);
+  });
+});
+
 describe("the second Director", () => {
   const good = JSON.stringify({ lines: [{ i: 0, speaker: "Oriel", text: "[quietly] Lanterns up." }] });
   const msg = { type: "direct", chatId: "c", messageId: "m11", swipeId: 0, name: "Oriel", text: '"Lanterns up."' };

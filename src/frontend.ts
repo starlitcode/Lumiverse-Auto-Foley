@@ -972,6 +972,11 @@ textarea.af-tall { min-height: 260px; }
 .af-fold[aria-expanded="true"] .af-caret { transform: rotate(90deg); }
 .af-foldbody { display: flex; flex-direction: column; gap: 11px; padding: 2px 2px 4px 10px; border-left: 1px solid var(--af-line); margin-left: 5px; }
 
+.af-saved { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; border: 1px solid var(--af-line); border-radius: var(--af-r-sm); min-width: 0; animation: af-in .2s ease-out both; }
+.af-saved-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px 10px; min-width: 0; }
+.af-saved-head b { font-weight: 600; overflow-wrap: anywhere; }
+.af-saved-meta { color: var(--af-muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+.af-saved-first { color: var(--af-muted); font-size: 12.5px; line-height: 1.45; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .af-warn, .af-bad, .af-good { display: flex; gap: 8px; align-items: flex-start; font-size: 12px; line-height: 1.45; padding: 8px 10px; border-radius: var(--af-r-sm); border: 1px solid; color: var(--af-text); }
 .af-warn { border-color: var(--af-sound); background: var(--af-sound-soft); }
 .af-bad { border-color: var(--af-bad); background: rgba(239,68,68,.12); }
@@ -3383,6 +3388,190 @@ export function setup(ctx: Ctx, overrides?: any) {
     return false;
   }
 
+  // ---- Saved audio ----
+  // Every saved script, newest first, with Play, Download and Delete. Play
+  // and Download use only the audio already saved, so they spend nothing. A
+  // line with no saved audio, such as one made with a voice changed since,
+  // is left out, and the row says so.
+  let savedAudio: any = null;
+  let savedPlaying = '';
+  function stopSavedPlay() {
+    if (savedAudio) {
+      try {
+        savedAudio.pause();
+        URL.revokeObjectURL(savedAudio.src);
+      } catch (_) {}
+    }
+    savedAudio = null;
+    savedPlaying = '';
+  }
+  disposers.push(stopSavedPlay);
+
+  // The saved audio of a script's spoken lines, in order, and the
+  // fingerprint of every line, saved or not.
+  async function savedClipsOf(sc: Script): Promise<{ blobs: Blob[]; sigs: string[]; lines: number }> {
+    const lines = (sc.lines || []).filter((l) => l.kind === 'speech' || l.kind === 'narration');
+    const sigs: string[] = [];
+    for (const l of lines) {
+      try {
+        const r = await voiceRequest(l);
+        if (r && r.sig) sigs.push(r.sig);
+      } catch (_) {}
+    }
+    const blobs: Blob[] = [];
+    for (const sig of sigs) {
+      try {
+        const r = await rpc({ type: 'clip_get', sig }, 15000);
+        if (r && r.found && r.base64) blobs.push(base64ToBlob(r.base64, r.mime || 'audio/mpeg'));
+      } catch (_) {}
+    }
+    return { blobs, sigs, lines: lines.length };
+  }
+
+  async function joinedSaved(key: string): Promise<{ wav?: Blob; why?: string; missing: number; sigs: string[] }> {
+    let sc: Script | null = null;
+    try {
+      const r = await rpc({ type: 'kept_script', key }, 15000);
+      sc = r && r.script ? r.script : null;
+    } catch (_) {}
+    if (!sc) return { why: 'This script is no longer saved.', missing: 0, sigs: [] };
+    const got = await savedClipsOf(sc);
+    if (!got.blobs.length) return { why: 'None of its lines have saved audio. A voice changed since makes a line new.', missing: got.lines, sigs: got.sigs };
+    const j = await joinedAudio({ played: got.blobs.map((blob, k) => ({ blob, k })) } as any);
+    if (!j) return { why: 'This browser cannot join the audio into one file.', missing: 0, sigs: got.sigs };
+    return { wav: wavBlob(j.channels, j.rate), missing: got.lines - got.blobs.length + j.skipped, sigs: got.sigs };
+  }
+
+  function savedCard(): HTMLElement {
+    const c = card('Saved audio', 'Every message with a saved script, newest first. Play and Download use only saved audio, so nothing is spent.');
+    c.setAttribute('data-af-saved', '');
+    c.appendChild(
+      fold('See saved audio', (body) => {
+        const list = el('<div class="af-col" data-af="savedlist"></div>');
+        const said = el('<div class="af-hint" data-af="savedsaid" aria-live="polite">Reading your saved audio</div>');
+        body.appendChild(said);
+        body.appendChild(list);
+        let all: any[] = [];
+        let shown = 0;
+        const more = button('Show more', () => drawMore());
+        more.hidden = true;
+        body.appendChild(more);
+        const drawMore = () => {
+          for (const e of all.slice(shown, shown + 20)) list.appendChild(savedRow(e, said));
+          shown = Math.min(all.length, shown + 20);
+          more.hidden = shown >= all.length;
+        };
+        rpc({ type: 'kept_list' }, 15000).then(
+          (r: any) => {
+            all = (r && Array.isArray(r.list) ? r.list : []).filter((e: any) => e && e.lines > 0);
+            setText(said, all.length ? all.length + (all.length === 1 ? ' saved script.' : ' saved scripts.') : 'Nothing is saved yet. A message is saved after it plays, with Keep made audio on.');
+            drawMore();
+          },
+          () => setText(said, 'Your saved audio could not be read: the backend did not answer.'),
+        );
+      }),
+    );
+    return c;
+  }
+
+  function savedRow(e: any, said: HTMLElement): HTMLElement {
+    const row = el('<div class="af-saved" data-af-saved-row></div>');
+    row.setAttribute('data-af-key', String(e.key || ''));
+    const when = e.keptAt ? new Date(e.keptAt).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) : '';
+    const head = el('<div class="af-saved-head"></div>');
+    head.appendChild(el('<b></b>'));
+    setText(head.firstElementChild as HTMLElement, (e.author || 'Someone') + '’s script');
+    const meta = el('<span class="af-saved-meta"></span>');
+    setText(meta, [when, e.lines + (e.lines === 1 ? ' line' : ' lines')].filter(Boolean).join(' · '));
+    head.appendChild(meta);
+    row.appendChild(head);
+    const first = el('<div class="af-saved-first"></div>');
+    setText(first, String(e.first || ''));
+    row.appendChild(first);
+    const note = el('<div class="af-hint" aria-live="polite"></div>');
+    note.hidden = true;
+    const say = (t: string) => {
+      setText(note, t);
+      note.hidden = !t;
+    };
+    const btns = el('<div class="af-row"></div>');
+    const play = button('Play', async () => {
+      if (savedPlaying === e.key) {
+        stopSavedPlay();
+        play.textContent = 'Play';
+        return;
+      }
+      stopSavedPlay();
+      document.querySelectorAll('[data-af-saved-row] [data-af-saved-play]').forEach((b) => (b.textContent = 'Play'));
+      say('Joining the saved audio');
+      const j = await joinedSaved(e.key);
+      if (!j.wav) return say(j.why || '');
+      say(j.missing ? j.missing + (j.missing === 1 ? ' line has' : ' lines have') + ' no saved audio, so ' + (j.missing === 1 ? 'it is' : 'they are') + ' left out.' : '');
+      try {
+        const a = new AudioCtor();
+        a.src = URL.createObjectURL(j.wav);
+        a.volume = Math.max(0, Math.min(1, Number(S.voiceVolume) || 0));
+        savedAudio = a;
+        savedPlaying = e.key;
+        play.textContent = 'Stop';
+        a.onended = () => {
+          if (savedAudio === a) stopSavedPlay();
+          play.textContent = 'Play';
+        };
+        await a.play();
+      } catch (_) {
+        stopSavedPlay();
+        play.textContent = 'Play';
+        say('The browser would not play it. Tap Play again.');
+      }
+    });
+    play.setAttribute('data-af-saved-play', '');
+    const down = button('Download', async () => {
+      say('Joining the saved audio');
+      const j = await joinedSaved(e.key);
+      if (!j.wav) return say(j.why || '');
+      const ok = saveFile(j.wav, 'auto-foley ' + fileName(e.author || 'script') + (e.keptAt ? ' ' + new Date(e.keptAt).toISOString().slice(0, 10) : '') + '.wav');
+      say(!ok ? 'The browser would not save the file. Some private windows block downloads.' : j.missing ? j.missing + (j.missing === 1 ? ' line has' : ' lines have') + ' no saved audio, so the file does not have ' + (j.missing === 1 ? 'it.' : 'them.') : '');
+    });
+    // Delete asks once more on the same button before it deletes.
+    let armed = 0 as any;
+    const del = button('Delete', async () => {
+      if (!armed) {
+        del.textContent = 'Tap again to delete';
+        armed = setTimeout(() => {
+          armed = 0;
+          del.textContent = 'Delete';
+        }, 4000);
+        return;
+      }
+      clearTimeout(armed);
+      armed = 0;
+      if (savedPlaying === e.key) stopSavedPlay();
+      let sigs: string[] = [];
+      try {
+        const r = await rpc({ type: 'kept_script', key: e.key }, 15000);
+        if (r && r.script) sigs = (await savedClipsOf(r.script)).sigs;
+      } catch (_) {}
+      try {
+        const r = await rpc({ type: 'kept_drop', key: e.key, sigs }, 30000);
+        if (!r || !r.ok) throw new Error('no');
+        if (e.messageId) playerIds.delete(String(e.messageId));
+        fillPlayers();
+        row.remove();
+        log('A saved script and its saved audio were deleted.', '', 'setting');
+      } catch (_) {
+        del.textContent = 'Delete';
+        say('It could not be deleted: the backend did not answer.');
+      }
+    }, 'af-danger');
+    btns.appendChild(play);
+    btns.appendChild(down);
+    btns.appendChild(del);
+    row.appendChild(btns);
+    row.appendChild(note);
+    return row;
+  }
+
   // ---- The player in a message ----
   // Each message Auto Foley has performed gets a small player under its text,
   // where Lumiverse puts its own audio player. It plays the saved script and
@@ -5732,6 +5921,8 @@ export function setup(ctx: Ctx, overrides?: any) {
     );
     mix.appendChild(mixRow);
     page.appendChild(mix);
+
+    page.appendChild(savedCard());
 
     const lg = card('Log', 'What happened, newest last. Anything that went wrong says why here.', '<button type="button" class="af-btn" data-af="copy">Copy</button><button type="button" class="af-btn af-danger" data-af="clear">Clear the log</button>');
     (lg.querySelector('[data-af="clear"]') as HTMLElement).addEventListener('click', () => {

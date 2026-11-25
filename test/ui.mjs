@@ -152,6 +152,9 @@ function answer(msg) {
     case 'clip_put': window.__clips = Object.assign(window.__clips || {}, { [msg.sig]: { base64: msg.base64, mime: msg.mime } }); return reply({ type: 'clip_kept', ok: true });
     case 'clips_state': { const c = window.__clips || {}; return reply({ type: 'clips_state', count: Object.keys(c).length, bytes: Object.values(c).reduce((n, x) => n + x.base64.length * 0.75, 0) }); }
     case 'clips_clear': window.__clips = {}; return reply({ type: 'clips_state', ok: true, count: 0, bytes: 0 });
+    case 'kept_list': return reply({ type: 'kept_list', list: window.__keptList || [] });
+    case 'kept_script': return reply({ type: 'kept_script', script: (window.__keptList || []).some((e) => e.key === msg.key) ? SCRIPT : null });
+    case 'kept_drop': (window.__dropped = window.__dropped || []).push(msg); window.__keptList = (window.__keptList || []).filter((e) => e.key !== msg.key); return reply({ type: 'kept_dropped', ok: true, clips: (msg.sigs || []).length });
     default: return;
   }
 }
@@ -1116,6 +1119,52 @@ if (section("message player contrast")) {
     check(words >= 4.5, theme.name + ": the words read clearly on the player (" + words.toFixed(1) + ")");
     check(icon >= 3, theme.name + ": the play button's icon stands out (" + icon.toFixed(1) + ")");
     check(!errors.length, theme.name + ": no console errors. " + errors.slice(0, 2).join("; "));
+    await context.close();
+  }
+}
+
+if (section("saved audio")) {
+  console.log("Saved audio lists every saved script, and plays, downloads and deletes them");
+  for (const size of SIZES) {
+    const { context, page, errors } = await open(THEMES[0], size);
+    // A message is played once, so its lines are saved.
+    await page.evaluate(() => {
+      window.__clipMs = 300;
+      window.__wav = [0.05, 0.25];
+    });
+    await page.click('#mount [data-af-slot="message"]');
+    await page.waitForFunction(() => document.querySelector('#mount [data-af-slot="message"]').getAttribute("aria-busy") === null && (window.__synth || []).length > 0, null, { timeout: 10000 });
+    await page.waitForTimeout(400);
+    const made = await page.evaluate(() => (window.__synth || []).length);
+    await page.evaluate(() => {
+      window.__keptList = [{ key: "k1", messageId: "m1", chatId: "chat1", author: "Ysolde", keptAt: Date.UTC(2026, 10, 20, 15), lines: 3, first: "The quay was empty but for the ferry." }];
+    });
+    await page.click('.af-tab[data-tab="stage"]');
+    await page.waitForTimeout(200);
+    await page.locator('[data-af-saved] .af-fold').click();
+    await page.waitForTimeout(400);
+    const row = page.locator("[data-af-saved-row]");
+    check((await row.count()) === 1, size.name + ": the saved script is listed");
+    check(((await row.textContent()) || "").includes("Ysolde’s script") && ((await row.textContent()) || "").includes("The quay was empty"), size.name + ": the row names whose script it is and its first line");
+    const dl = page.waitForEvent("download", { timeout: 8000 }).catch(() => null);
+    await row.locator(".af-btn", { hasText: "Download" }).click();
+    const file = await dl;
+    check(!!file && /\.wav$/.test(file.suggestedFilename()), size.name + ": Download saves one WAV file (" + (file && file.suggestedFilename()) + ")");
+    await page.evaluate(() => { window.__clipMs = 4000; });
+    await row.locator("[data-af-saved-play]").click();
+    await page.waitForTimeout(500);
+    check(((await row.locator("[data-af-saved-play]").textContent()) || "") === "Stop", size.name + ": Play plays it, and the button turns to Stop");
+    check((await page.evaluate(() => (window.__synth || []).length)) === made, size.name + ": playing and downloading make nothing new");
+    const m = await page.evaluate(MEASURE, size.touch);
+    check(!m.overflow.length && !m.small.length, size.name + ": the list fits. " + m.overflow.concat(m.small).slice(0, 2).join("; "));
+    await row.locator(".af-btn", { hasText: "Delete" }).click();
+    await page.waitForTimeout(150);
+    check((await row.count()) === 1 && ((await row.textContent()) || "").includes("Tap again to delete"), size.name + ": Delete asks once more first");
+    await row.locator(".af-btn", { hasText: "Tap again to delete" }).click();
+    await page.waitForTimeout(600);
+    const dropped = await page.evaluate(() => window.__dropped || []);
+    check((await page.locator("[data-af-saved-row]").count()) === 0 && dropped.length === 1 && dropped[0].sigs.length > 0, size.name + ": the second tap deletes it, with its saved audio");
+    check(!errors.length, size.name + ": no console errors. " + errors.slice(0, 2).join("; "));
     await context.close();
   }
 }

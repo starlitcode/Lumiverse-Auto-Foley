@@ -172,6 +172,18 @@ With **Keep made audio** on, in the Settings tab:
 - It shows only on messages that have saved audio, so a new chat has none.
 - Lumiverse's own player is only used with **Save the performance to the message** on. It is off by default, and Auto Foley's player does the same job.
 
+## Saved audio
+
+**Saved audio**, on the Stage tab, lists every message with a saved script, newest first. Press **See saved audio** to open it.
+
+- Each row says whose script it is, the day it was saved, how many lines it has, and its first line.
+- **Play** plays the saved audio of its lines, joined. Press it again to stop.
+- **Download** saves the same audio as one WAV file.
+- **Delete** deletes the saved script and the saved audio of its lines. Press it, then press **Tap again to delete**. The next time the message plays, it is directed and spoken again.
+- Play and Download use only audio that is saved, so they spend nothing. A line with no saved audio, such as one spoken with a voice you changed since, is left out, and the row says so.
+- Sounds and the cheer are not in it. Download audio, under **Now playing**, has the whole performance with its sounds.
+- To delete everything at once, use **Clear kept audio** in the Settings tab.
+
 ## Downloads and videos
 
 Three buttons under **Now playing**, on the Stage tab, keep what you heard. None of them spends anything.
