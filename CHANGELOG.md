@@ -13,6 +13,7 @@ _2026-11-25_
 ### Fixed
 
 - **Playing a message could stop with "The backend did not answer in time."** The panel gave up after 150 seconds, while a slow Director could still be working, such as when its first answer failed and it was asked again. The backend now says it is still working every 10 seconds, and the panel waits for as long as it does. If the backend stops answering, the panel says so after a minute. Reported by a Discord user.
+- **A script could wait for as long as Lumiverse took to fill in names or list your connections.** Neither had a time limit. Each now has 15 seconds. After that, the names are read as written, and the script goes on. Reported by a Discord user.
 
 ---
 

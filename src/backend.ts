@@ -785,7 +785,7 @@ async function boundPairs(userId: string | undefined): Promise<ThinkPair[]> {
   // default connection.
   const models: Record<string, string> = {};
   try {
-    const list = await spindle.connections.list(userId);
+    const list: any = await inTime(Promise.resolve(spindle.connections.list(userId)), 15000, 'Lumiverse, listing the connections,');
     for (const c of Array.isArray(list) ? list : []) {
       if (!c || !c.id) continue;
       models[String(c.id)] = String(c.model || '');
@@ -2967,11 +2967,22 @@ async function askDirector(userId: string | undefined, s: Settings, payload: any
 // same way before anything is directed or read aloud. Nothing is changed by
 // it: commit is off, so a macro that sets a variable does not set it. When
 // they cannot be filled in, the text is used as it is.
+// A host call that has to answer within ms, or it is given up on with an
+// error that says so. A call with no answer of its own would otherwise hold
+// a script up for as long as it hangs.
+function inTime<T>(p: Promise<T>, ms: number, what: string): Promise<T> {
+  let timer: any = null;
+  const late = new Promise<T>((_, no) => {
+    timer = setTimeout(() => no(new Error(what + ' did not answer within ' + Math.round(ms / 1000) + ' seconds')), ms);
+  });
+  return Promise.race([p, late]).finally(() => clearTimeout(timer));
+}
+
 async function fillMacros(text: string, chatId: string, userId?: string): Promise<string> {
   if (text.indexOf('{{') < 0) return text;
   try {
     if (!spindle.macros || typeof spindle.macros.resolve !== 'function') return text;
-    const out = await spindle.macros.resolve(text, { chatId: chatId || undefined, userId, commit: false });
+    const out = await inTime(Promise.resolve(spindle.macros.resolve(text, { chatId: chatId || undefined, userId, commit: false })), 15000, 'Lumiverse, filling in the names,');
     const filled = typeof out === 'string' ? out : out && typeof out.text === 'string' ? out.text : '';
     return filled || text;
   } catch (e: any) {

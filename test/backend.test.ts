@@ -21,6 +21,7 @@ type Host = {
 function host(opts: {
   answers?: (string | Error)[];
   slowMs?: number;
+  hangMacros?: boolean;
   decide?: (input: any) => any;
   noDecisions?: boolean;
   cors?: (url: string, init: any) => any;
@@ -51,6 +52,8 @@ function host(opts: {
     macros: {
       async resolve(text: string, o: any) {
         (calls as any).macros = ((calls as any).macros || []).concat([{ text, o }]);
+        // A Lumiverse that never answers.
+        if (opts.hangMacros) return await new Promise(() => {});
         return { text: text.replace(/\{\{user\}\}/g, "Tamsin").replace(/\{\{char\}\}/g, "Orrin"), diagnostics: [] };
       },
     },
@@ -536,6 +539,15 @@ describe("directing a message, end to end", () => {
     expect(call.o.chatId).toBe("c7");
     expect(call.o.commit).toBe(false);
   });
+
+  test("names that cannot be filled in within 15 seconds are read as written, and the script still comes", async () => {
+    const h = host({ hangMacros: true });
+    await h.ask({ type: "save", settings: { directorOn: false } });
+    const out = await h.ask({ type: "direct", chatId: "c7", messageId: "m9", swipeId: 0, name: "Orrin", text: "{{char}} waved." });
+    const script = out.find((m) => m.type === "script");
+    expect(!!script).toBe(true);
+    expect(script.script.lines.map((l: any) => l.text).join(" ")).toBe("{{char}} waved.");
+  }, 30000);
 
   test("a message with no macros is not sent to be filled in", async () => {
     const h = host();
