@@ -965,6 +965,71 @@ if (section("script status")) {
   await context.close();
 }
 
+if (section("message player")) {
+  console.log("A performed message gets a player under its text, lined up with it");
+  for (const size of SIZES) {
+    const { context, page, errors } = await open(THEMES[0], size);
+    // As Lumiverse lays a message out: the text in a padded box, then the
+    // place it leaves for an extension under it.
+    await page.evaluate(() => {
+      const msg = document.querySelector('[data-message-id="m1"]');
+      const p = msg.querySelector("p");
+      const content = document.createElement("div");
+      content.className = "content";
+      content.style.padding = "0 22px";
+      p.replaceWith(content);
+      content.appendChild(p);
+      const mount = document.createElement("span");
+      mount.setAttribute("data-spindle-mount", "message_body_after");
+      mount.setAttribute("data-spindle-scope", "message:m1:bubble:body-after");
+      mount.style.display = "contents";
+      content.after(mount);
+    });
+    await page.evaluate(() => { window.__clipMs = 4000; });
+    await page.waitForTimeout(400);
+    check((await page.locator("[data-af-player]").count()) === 0, size.name + ": no player before the message is performed");
+    await page.click('#mount [data-af-slot="message"]');
+    await page.waitForTimeout(700);
+    const got = await page.evaluate(() => {
+      const box = document.querySelector("[data-af-player]");
+      if (!box) return null;
+      const inner = box.firstElementChild;
+      const btn = box.querySelector("[data-af-mp=play]").getBoundingClientRect();
+      const msg = document.querySelector('[data-message-id="m1"]').getBoundingClientRect();
+      const r = box.querySelector(".af-mp-box").getBoundingClientRect();
+      return {
+        open: box.hasAttribute("data-open"),
+        pad: getComputedStyle(inner).paddingLeft,
+        label: box.querySelector("[data-af-mp=play]").getAttribute("aria-label"),
+        text: box.querySelector("[data-af-mp=text]").textContent,
+        btnH: btn.height,
+        inside: r.left >= msg.left - 1 && r.right <= msg.right + 1,
+        sideways: document.documentElement.scrollWidth > document.documentElement.clientWidth,
+      };
+    });
+    if (shots) await page.locator('[data-message-id="m1"]').screenshot({ path: shots + "/message-player-" + size.name + ".png" });
+    check(!!got && got.open, size.name + ": the player opens under the message");
+    check(!!got && got.pad === "22px", size.name + ": it has the message text's side padding (" + (got && got.pad) + ")");
+    check(!!got && got.label === "Pause" && /^Part \d+ of \d+/.test(got.text), size.name + ": while it plays, it says the part and offers Pause (" + JSON.stringify(got) + ")");
+    check(!!got && got.inside && !got.sideways, size.name + ": it fits inside the message, with no sideways scrolling");
+    if (size.touch) check(!!got && got.btnH >= 32, size.name + ": its button is at least 32 pixels high (" + (got && got.btnH) + ")");
+    // Text centered by the theme centers the player too.
+    await page.addStyleTag({ content: '[data-message-id="m1"] .content p{text-align:center}' });
+    await page.evaluate(() => document.body.appendChild(document.createElement("i")));
+    await page.waitForTimeout(500);
+    const at = await page.evaluate(() => getComputedStyle(document.querySelector("[data-af-player]").firstElementChild).justifyContent);
+    check(at === "center", size.name + ": with the message text centered, the player is centered (" + at + ")");
+    // Turned off, it goes.
+    await page.click('.af-tab[data-tab="settings"]');
+    await page.waitForTimeout(200);
+    await page.locator('[data-af-row="messagePlayer"] .af-box').first().click();
+    await page.waitForTimeout(600);
+    check((await page.locator("[data-af-player]").count()) === 0, size.name + ": switched off, the player goes");
+    check(!errors.length, size.name + ": no console errors. " + errors.slice(0, 2).join("; "));
+    await context.close();
+  }
+}
+
 if (section("voice levels")) {
   console.log("A louder voice is turned down to match the others");
   for (const even of [true, false]) {

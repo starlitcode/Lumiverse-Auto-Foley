@@ -3832,7 +3832,10 @@ async function onPanel(p: any, userId: string | undefined) {
         const sounds = await loadSounds(userId);
         const hasKey = await hasKeyFor(userId, KEY_NAME);
         const hasFsKey = await hasKeyFor(userId, FS_KEY_NAME);
-        answer({ type: 'state', settings, sounds, hasKey, hasFsKey, fresh, builtInPrompt: BUILT_IN_PROMPT, builtInNotes: ASK_NOTES, builtInEngineNotes: ENGINE_NOTES, builtInSkips: BUILT_IN_SKIPS, builtInQuestions: DECISION_QUESTIONS, version: VERSION, decisions: hasDecisions() });
+        // The messages with a saved script, so each gets its player.
+        await readKeptScripts(userId || '', settings);
+        const keptIds = Array.from(new Set((scripts[userId || ''] || []).map((x) => x.script.messageId).filter(Boolean)));
+        answer({ type: 'state', settings, sounds, hasKey, hasFsKey, fresh, keptIds, builtInPrompt: BUILT_IN_PROMPT, builtInNotes: ASK_NOTES, builtInEngineNotes: ENGINE_NOTES, builtInSkips: BUILT_IN_SKIPS, builtInQuestions: DECISION_QUESTIONS, version: VERSION, decisions: hasDecisions() });
         return;
       }
       case 'save': {

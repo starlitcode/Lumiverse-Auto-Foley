@@ -160,6 +160,18 @@ With **Keep made audio** on, in the Settings tab:
 - **Up to 100 MB** is the default. When the total passes it, the oldest lines go first.
 - **Clear kept audio**, under it, deletes them all. It asks first.
 
+## The player under a message
+
+**A player under each message**, in the Settings tab, is on by default.
+
+- A message Auto Foley has performed gets a small player under its text.
+- It plays the saved script and saved audio, so playing it again spends nothing.
+- While it plays, it says which part is playing and how far through the message it is. **Pause** pauses it.
+- It sits where Lumiverse puts its own audio player. It takes the side padding of the message text, and it is centered or to the right when your theme puts the text there.
+- It uses your theme's colors and the message's font.
+- It shows only on messages that have saved audio, so a new chat has none.
+- Lumiverse's own player is only used with **Save the performance to the message** on. It is off by default, and Auto Foley's player does the same job.
+
 ## Downloads and videos
 
 Three buttons under **Now playing**, on the Stage tab, keep what you heard. None of them spends anything.

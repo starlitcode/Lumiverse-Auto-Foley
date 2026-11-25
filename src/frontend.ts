@@ -1287,6 +1287,7 @@ const DEFAULTS: any = {
   readOwnMessages: false,
   narration: 'read',
   saveAudio: false,
+  messagePlayer: true,
   evenVoices: true,
   voiceVolume: 1,
   soundVolume: 0.8,
@@ -3052,6 +3053,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     }
     for (const line of got.script.log || []) log(line, '', 'director');
     for (const line of got.script.decided || []) log(line, '', 'decision');
+    playerIds.add(messageId);
     startShow(got.script, got.meta, 0);
   }
 
@@ -3176,6 +3178,7 @@ export function setup(ctx: Ctx, overrides?: any) {
   function paintButtons() {
     paintFloat();
     syncExtras();
+    paintPlayers();
     let found: any = null;
     try {
       found = document.querySelectorAll('[data-af-slot]');
@@ -3352,6 +3355,7 @@ export function setup(ctx: Ctx, overrides?: any) {
           }
         }
       }
+      fillPlayers();
       openEditors = editors;
       paintButtons();
     } catch (_) {
@@ -3379,10 +3383,173 @@ export function setup(ctx: Ctx, overrides?: any) {
     return false;
   }
 
+  // ---- The player in a message ----
+  // Each message Auto Foley has performed gets a small player under its text,
+  // where Lumiverse puts its own audio player. It plays the saved script and
+  // saved audio, so playing it again spends nothing. It is drawn in the
+  // theme's colors and the message's own font, and it lines up with the
+  // message text: the same side padding, and centered or to the right when
+  // the text is.
+  const MSG_BODY_AFTER = '[data-spindle-mount="message_body_after"]';
+  // The messages with a saved script, from the account, and the ones
+  // performed since the panel loaded.
+  const playerIds = new Set<string>();
+  function playerWanted(id: string): boolean {
+    if (!S.enabled || !S.messagePlayer || !id) return false;
+    return playerIds.has(id) || (!!show && show.messageId === id) || busyMessage === id;
+  }
+
+  function buildPlayer(id: string): HTMLElement {
+    const box = document.createElement('div');
+    box.className = 'af-mp';
+    box.setAttribute('data-af-player', '');
+    box.setAttribute('data-af-message', id);
+    box.innerHTML =
+      '<div class="af-mp-in"><div class="af-mp-box">' +
+      '<button type="button" class="af-mp-play" data-af-mp="play">' + ICON_PLAY + '</button>' +
+      '<span class="af-mp-bar" aria-hidden="true"><i></i></span>' +
+      '<span class="af-mp-text" data-af-mp="text"></span>' +
+      '</div></div>';
+    const btn = box.querySelector('[data-af-mp="play"]') as HTMLButtonElement;
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const now = box.getAttribute('data-af-message') || id;
+      if (show && show.messageId === now) togglePause();
+      else if (busyMessage === now) {
+        stopDirecting();
+        stop('Stopped');
+      } else perform(now);
+    });
+    return box;
+  }
+
+  // The side padding and the alignment of the message text it sits under.
+  function fitPlayer(box: HTMLElement, mount: Element) {
+    try {
+      let content = mount.previousElementSibling as HTMLElement | null;
+      while (content && content.hasAttribute('data-spindle-mount')) content = content.previousElementSibling as HTMLElement | null;
+      if (!content) return;
+      const cs = getComputedStyle(content);
+      const inner = box.firstElementChild as HTMLElement;
+      const left = cs.paddingLeft;
+      const right = cs.paddingRight;
+      if (inner.style.paddingLeft !== left) inner.style.paddingLeft = left;
+      if (inner.style.paddingRight !== right) inner.style.paddingRight = right;
+      const text = content.querySelector('p') || content;
+      const align = getComputedStyle(text).textAlign;
+      const at = align === 'center' ? 'center' : align === 'right' || align === 'end' ? 'flex-end' : 'flex-start';
+      if (inner.style.justifyContent !== at) inner.style.justifyContent = at;
+    } catch (_) {}
+  }
+
+  function fillPlayers() {
+    let mounts: any = [];
+    try {
+      mounts = document.querySelectorAll(MSG_BODY_AFTER);
+    } catch (_) {
+      return;
+    }
+    for (let i = 0; i < mounts.length; i++) {
+      const m = mounts[i] as Element;
+      if (m.closest(OTHER_UI)) continue;
+      const id = slotId(m);
+      const msg = m.closest('[data-message-id]') || m.parentElement;
+      let box = m.querySelector(':scope > [data-af-player]') as HTMLElement | null;
+      // A row Lumiverse reused for another message gets a player of its own.
+      if (box && box.getAttribute('data-af-message') !== id) {
+        box.remove();
+        box = null;
+      }
+      const want = playerWanted(id) && !(msg && beingEdited(msg));
+      if (!want) {
+        if (box && !box.hasAttribute('data-af-closing')) closePlayer(box);
+        continue;
+      }
+      if (box && box.hasAttribute('data-af-closing')) {
+        box.removeAttribute('data-af-closing');
+        box.setAttribute('data-open', '');
+      }
+      if (!box) {
+        box = buildPlayer(id);
+        m.appendChild(box);
+        fitPlayer(box, m);
+        const b = box;
+        if (calm()) b.setAttribute('data-open', '');
+        else requestAnimationFrame(() => requestAnimationFrame(() => b.setAttribute('data-open', '')));
+      } else fitPlayer(box, m);
+    }
+  }
+
+  function closePlayer(box: HTMLElement) {
+    box.setAttribute('data-af-closing', '');
+    box.removeAttribute('data-open');
+    if (calm()) {
+      box.remove();
+      return;
+    }
+    setTimeout(() => {
+      if (box.hasAttribute('data-af-closing')) box.remove();
+    }, 320);
+  }
+
+  // What each player says: ready, getting the script, or the part playing
+  // and how far through the message it is.
+  function paintPlayers() {
+    let found: any = [];
+    try {
+      found = document.querySelectorAll('[data-af-player]');
+    } catch (_) {
+      return;
+    }
+    for (let i = 0; i < found.length; i++) {
+      const box = found[i] as HTMLElement;
+      const id = box.getAttribute('data-af-message') || '';
+      const mine = !!show && show.messageId === id;
+      const busy = busyMessage === id;
+      const playing = mine && !paused;
+      const btn = box.querySelector('[data-af-mp="play"]') as HTMLButtonElement;
+      const icon = playing ? 'pause' : busy ? 'stop' : 'play';
+      if (btn.getAttribute('data-af-icon') !== icon) {
+        btn.setAttribute('data-af-icon', icon);
+        btn.innerHTML = icon === 'pause' ? ICON_PAUSE : icon === 'stop' ? ICON_STOP : ICON_PLAY;
+        const said = icon === 'pause' ? 'Pause' : icon === 'stop' ? 'Stop' : mine ? 'Go on' : 'Play with Auto Foley';
+        btn.title = said;
+        btn.setAttribute('aria-label', said);
+      }
+      const total = mine ? show!.items.length : 0;
+      const at = mine ? Math.min(show!.index, total - 1) : 0;
+      const text = busy
+        ? busyWords()
+        : mine
+          ? (paused ? 'Paused · ' : '') + 'Part ' + (at + 1) + ' of ' + total + (show!.saved.has(at) ? ' · saved' : '')
+          : 'Auto Foley';
+      setText(box.querySelector('[data-af-mp="text"]') as HTMLElement, text);
+      paintPlayerBar(box, mine);
+      if (mine || busy) box.setAttribute('data-af-live', '');
+      else box.removeAttribute('data-af-live');
+    }
+  }
+
+  // How far through the whole message it is, on every frame while it plays.
+  function paintPlayerBar(box: HTMLElement, mine: boolean) {
+    const fill = box.querySelector('.af-mp-bar i') as HTMLElement | null;
+    if (!fill) return;
+    let frac = 0;
+    if (mine && show) {
+      const total = show.items.length || 1;
+      const el2 = audio;
+      const dur = el2 ? Number(el2.duration) : 0;
+      const within = el2 && dur > 0 && Number.isFinite(dur) ? Math.min(1, Number(el2.currentTime) / dur) : 0;
+      frac = Math.min(1, (Math.min(show.index, total) + within) / total);
+    }
+    const w = (frac * 100).toFixed(1) + '%';
+    if (fill.style.width !== w) fill.style.width = w;
+  }
+
   // Keeps the buttons in step with the page. The host redraws messages as the
   // chat scrolls and as replies arrive, and a button has to follow.
   function syncSlots() {
-    const want = !!S.enabled && (!!S.barButton || !!S.messageButton);
+    const want = !!S.enabled && (!!S.barButton || !!S.messageButton || !!S.messagePlayer);
     if (want && !slotEye) {
       try {
         slotEye = new MutationObserver(() => {
@@ -3420,6 +3587,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     try {
       document.querySelectorAll('[data-af-slot]').forEach((n) => n.remove());
       document.querySelectorAll('.af-slot-row').forEach((n) => n.remove());
+      document.querySelectorAll('[data-af-player]').forEach((n) => n.remove());
     } catch (_) {}
   });
 
@@ -3488,6 +3656,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         directedText.delete(id);
         if (show && show.messageId === id) stop('The message was deleted, so it stopped.');
         if (busyMessage === id) stopDirecting();
+        playerIds.delete(id);
         if (lastShow && lastShow.messageId === id) lastShow = null;
         if (lastMeta.messageId === id) {
           lastScript = null;
@@ -4431,6 +4600,25 @@ export function setup(ctx: Ctx, overrides?: any) {
     '.af-w.af-said{color:var(--lumiverse-text,rgba(255,255,255,.92))}' +
     // The word being said, in the chat.
     '::highlight(auto-foley-word){background-color:var(--lumiverse-primary-020,rgba(147,112,219,.3));color:inherit}' +
+    // The player in a message. Its space opens over several frames, and it
+    // fades and slides 4 pixels. It takes the message's font and color, and
+    // the theme's own fill, border and rounding.
+    '.af-mp{display:grid;grid-template-rows:0fr;opacity:0;transform:translateY(4px);transition:grid-template-rows .28s ease-out,opacity .22s ease-out,transform .22s ease-out}' +
+    '.af-mp[data-open]{grid-template-rows:1fr;opacity:1;transform:none}' +
+    '.af-mp-in{overflow:hidden;min-height:0;display:flex;min-width:0}' +
+    '.af-mp-box{display:inline-flex;align-items:center;gap:8px;max-width:100%;min-width:0;margin:6px 0;padding:3px 12px 3px 3px;border-radius:999px;' +
+    'border:1px solid var(--lumiverse-border,rgba(147,112,219,.2));background:var(--lumiverse-fill,rgba(255,255,255,.04));color:inherit;font:inherit;font-size:.85em;line-height:1.3}' +
+    '.af-mp-play{flex:none;display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;padding:0;border:none;border-radius:50%;cursor:pointer;' +
+    'background:var(--lumiverse-primary,rgb(147,112,219));color:var(--lumiverse-primary-text,#fff)}' +
+    '.af-mp-play svg{width:14px;height:14px}' +
+    '@media (hover:hover){.af-mp-play:hover{filter:brightness(1.12)}}' +
+    '@media (pointer:coarse){.af-mp-play{width:32px;height:32px}}' +
+    '.af-mp-bar{position:relative;flex:0 1 120px;min-width:40px;height:4px;border-radius:2px;overflow:hidden;background:var(--lumiverse-border,rgba(147,112,219,.25))}' +
+    '.af-mp-bar i{position:absolute;left:0;top:0;bottom:0;width:0;background:var(--lumiverse-primary,rgb(147,112,219))}' +
+    '.af-mp-text{flex:0 0 auto;max-width:60vw;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--lumiverse-text-muted,rgba(255,255,255,.65));font-variant-numeric:tabular-nums}' +
+    '.af-mp[data-af-live] .af-mp-text{color:inherit}' +
+    '@media (prefers-reduced-motion: reduce){.af-mp{transition:none}}' +
+    'html[data-af-still] .af-mp{transition:none}' +
     '.af-theater-cue:empty{display:none}' +
     '.af-cue{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:999px;font-size:12.5px;color:var(--lumiverse-text,rgba(255,255,255,.9));' +
     'background:var(--lumiverse-warning-015,rgba(245,158,11,.15));box-shadow:inset 0 0 0 1px var(--lumiverse-warning,#f59e0b);animation:af-in .3s ease-out both}' +
@@ -5995,6 +6183,10 @@ export function setup(ctx: Ctx, overrides?: any) {
         });
     }
     paintChatWords(v);
+    if (show) {
+      const players = document.querySelectorAll('[data-af-player]');
+      for (let i = 0; i < players.length; i++) if (players[i].getAttribute('data-af-message') === show.messageId) paintPlayerBar(players[i] as HTMLElement, true);
+    }
     if (show) theaterRaf = requestAnimationFrame(theaterTick);
   }
 
@@ -7666,6 +7858,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     page.appendChild(a);
 
     const btns = card('Buttons', 'Where the Auto Foley button appears.');
+    btns.appendChild(toggle('A player under each message', 'On by default. A message Auto Foley has performed gets a small player under its text, in your theme. It plays the saved audio again, and spends nothing.', 'messagePlayer', () => syncSlots()));
     btns.appendChild(toggle('A button on every message', 'Off by default. One tap performs that message, an older one or the greeting too. It sits in each message\u2019s own row of buttons, in the space Lumiverse leaves for extensions.', 'messageButton', () => syncSlots()));
     btns.appendChild(toggle('A button in the chat\u2019s row of controls', 'Off by default. One tap performs the newest reply. It goes in Lumiverse\u2019s own row of chat buttons, in the place the app leaves there for extensions.', 'barButton', () => syncSlots()));
     btns.appendChild(toggle('In the Extras menu', 'Off by default. Adds Perform the latest reply to the Extras menu of the message box, and Stop Auto Foley while something plays.', 'extrasMenu', () => syncExtras()));
@@ -7685,7 +7878,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       ].concat(bothAutoplayWarning())),
     );
     p.appendChild(toggle('Prepare replies ahead', 'Off by default. With Autoplay off, each new reply is directed in the background, so pressing Play starts at once. It costs a Director call for every reply, played or not.', 'prepareAhead'));
-    p.appendChild(toggle('Save the performance to the message', 'Off by default. After a message plays through, its audio is saved to the message, and Lumiverse’s own player plays it again for free. It uses storage on the server.', 'saveAudio'));
+    p.appendChild(toggle('Save the performance to the message', 'Off by default. Auto Foley’s own player under each message already plays it again for free. On, the audio is also saved for Lumiverse’s player, which uses storage on the server.', 'saveAudio'));
     p.appendChild(keptAudioBox());
     p.appendChild(toggle('Reduce motion', 'Off by default. On, nothing in Auto Foley moves or fades. Your device’s own reduce motion setting does the same.', 'reduceMotion'));
     page.appendChild(p);
@@ -8083,6 +8276,9 @@ export function setup(ctx: Ctx, overrides?: any) {
       try {
         const r = await rpc({ type: 'clips_clear' }, 60000);
         if (r && r.error) log(r.error, 'bad');
+        // With nothing saved, no message has a player to play it.
+        playerIds.clear();
+        fillPlayers();
         keptState = r;
         showKept(r);
       } catch (_) {
@@ -8396,6 +8592,8 @@ export function setup(ctx: Ctx, overrides?: any) {
       if (r && Array.isArray(r.sounds)) sounds = r.sounds;
       if (r && typeof r.hasKey === 'boolean') hasKey = r.hasKey;
       if (r && typeof r.hasFsKey === 'boolean') hasFsKey = r.hasFsKey;
+      // Kept audio and scripts gone means no message has a player.
+      if (r && r.ok && chosen.indexOf('audio') >= 0) playerIds.clear();
       resetSaid = r && r.ok ? 'Put back: ' + names + '.' + sameNote : (r && r.error) || 'The reset did not finish.';
       log(resetSaid, r && r.ok ? '' : 'bad', 'setting');
     } catch (e: any) {
@@ -8641,6 +8839,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       accountAnswered = true;
       S = Object.assign({}, DEFAULTS, r.settings || {});
       sounds = Array.isArray(r.sounds) ? r.sounds : [];
+      if (Array.isArray(r.keptIds)) for (const k of r.keptIds) playerIds.add(String(k));
       hasKey = !!r.hasKey;
       hasFsKey = !!r.hasFsKey;
       builtInPrompt = String(r.builtInPrompt || '');
