@@ -2984,7 +2984,7 @@ export function setup(ctx, overrides) {
         const chatId = activeChatId();
         stop();
         busyMessage = messageId;
-        phase = S.directorOn ? 'The Director is reading the message' : 'Reading the message';
+        phase = S.directorOn ? 'The Director is writing the script' : 'Making the script';
         const started = Date.now();
         paintButtons();
         if (tab === 'stage')
@@ -2992,7 +2992,7 @@ export function setup(ctx, overrides) {
         const waitTick = setInterval(() => {
             if (busyMessage !== messageId)
                 return;
-            phase = (S.directorOn ? 'The Director is reading the message' : 'Reading the message') + ' (' + Math.round((Date.now() - started) / 1000) + ' s)';
+            phase = (S.directorOn ? 'The Director is writing the script' : 'Making the script') + ' (' + Math.round((Date.now() - started) / 1000) + ' s)';
             paintStage();
         }, 1000);
         if (!activeConnection())
@@ -5258,7 +5258,7 @@ export function setup(ctx, overrides) {
         }
         const said = q('said');
         const words = it && it.kind === 'voice' && line ? stripTags(line.text) : it && it.sound ? it.sound : '';
-        const text = words || (busyMessage ? 'The Director is reading it.' : phase && !/^(Stopped|Finished)$/.test(phase) ? phase : playerWhose === 'mine' ? 'Press Play to perform your latest message.' : 'Press Play to perform the latest reply.');
+        const text = words || (busyMessage ? (S.directorOn ? 'The Director is writing the script.' : 'Making the script.') : phase && !/^(Stopped|Finished)$/.test(phase) ? phase : playerWhose === 'mine' ? 'Press Play to perform your latest message.' : 'Press Play to perform the latest reply.');
         setText(said, text);
         if (words)
             said.removeAttribute('data-quiet');
