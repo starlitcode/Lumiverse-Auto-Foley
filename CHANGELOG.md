@@ -20,6 +20,10 @@ _2026-11-25_
 - **Gemini style and Fish Audio direction say they are optional.** The hint under each says so, and that a custom voice may not need it, since the voice already carries its sound.
 - **The writing guide on GitHub has a part on custom voices.** It says what to leave out of **Gemini style** and **Fish Audio direction** when the voice already does it, and how to check.
 
+### Fixed
+
+- **Erasing a person's name could leave its first letter behind.** The name was saved with every letter typed or erased, so erasing it saved its first letter one step before the box was empty, and that letter stayed. The name is now saved when you leave the box. Left empty, the whole name comes back.
+
 ---
 
 ## 1.6.3

@@ -1722,39 +1722,41 @@ if (section("erase name")) {
     const { context, page, errors } = await open(THEMES[0], size);
     await page.click('.af-tab[data-tab="cast"]');
     await page.waitForTimeout(300);
-    const got = await page.evaluate(async () => {
-      const people = Array.from(document.querySelectorAll(".af-person"));
-      for (const c of people) {
-        const head = c.querySelector(".af-person-head");
-        if (head.getAttribute("aria-expanded") !== "true") head.click();
-        await new Promise((r) => setTimeout(r, 400));
-        const label = Array.from(c.querySelectorAll("label")).find((x) => x.textContent.trim() === "Name");
-        if (!label) continue;
-        const input = label.htmlFor ? document.getElementById(label.htmlFor) : label.closest(".af-col").querySelector("input");
-        const was = c.querySelector(".af-person-name b").textContent;
-        input.focus();
-        for (let k = input.value.length; k >= 0; k--) {
-          input.value = input.value.slice(0, k);
-          input.dispatchEvent(new Event("input", { bubbles: true }));
-        }
-        await new Promise((r) => setTimeout(r, 50));
-        const empty = { name: c.querySelector(".af-person-name b").textContent, face: c.querySelector(".af-person-head .af-avatar").textContent };
-        input.value = "Wren";
-        input.dispatchEvent(new Event("input", { bubbles: true }));
-        await new Promise((r) => setTimeout(r, 50));
-        const typed = { name: c.querySelector(".af-person-name b").textContent, face: c.querySelector(".af-person-head .af-avatar").textContent };
-        input.value = "";
-        input.dispatchEvent(new Event("input", { bubbles: true }));
-        input.blur();
-        await new Promise((r) => setTimeout(r, 50));
-        const back = { name: c.querySelector(".af-person-name b").textContent, field: input.value };
-        return { was, empty, typed, back };
-      }
-      return null;
+    // The Ferryman, typed into with the keyboard as a person does.
+    await page.evaluate(() => document.querySelector('.af-person[data-person="b"] .af-person-head').click());
+    await page.waitForTimeout(450);
+    const sel = await page.evaluate(() => {
+      const c = document.querySelector('.af-person[data-person="b"]');
+      const col = Array.from(c.querySelectorAll(".af-col")).find((x) => ((x.querySelector(".af-lab") || {}).textContent || "").trim() === "Name");
+      const i = col.querySelector("input");
+      i.id = i.id || "name-b";
+      return "#" + i.id;
     });
-    check(!!got && got.empty.name === "No name yet" && got.empty.face === "?", size.name + ": an empty name shows No name yet and ? (" + JSON.stringify(got && got.empty) + ")");
-    check(!!got && got.typed.name === "Wren" && got.typed.face === "W", size.name + ": a new name shows at once, with its own first letter");
-    check(!!got && got.back.name === "Wren" && got.back.field === "Wren", size.name + ": leaving the field empty puts the saved name back (" + JSON.stringify(got && got.back) + ")");
+    const look = () => page.evaluate((sel) => {
+      const c = document.querySelector('.af-person[data-person="b"]');
+      return { name: c.querySelector(".af-person-name b").textContent, face: c.querySelector(".af-person-head .af-avatar").textContent, box: document.querySelector(sel).value, saved: window.__settings.cast.find((m) => m.id === "b").name };
+    }, sel);
+    await page.focus(sel);
+    await page.keyboard.press("End");
+    for (let k = 0; k < 8; k++) { await page.keyboard.press("Backspace"); await page.waitForTimeout(120); }
+    await page.waitForTimeout(700);
+    const empty = await look();
+    check(empty.name === "No name yet" && empty.face === "?" && empty.box === "", size.name + ": erased, the box is empty, and the card shows No name yet and ? (" + JSON.stringify(empty) + ")");
+    check(empty.saved === "Ferryman", size.name + ": while it is erased, the whole name is still the saved one, not its first letter (" + empty.saved + ")");
+    await page.keyboard.press("Tab");
+    await page.waitForTimeout(700);
+    const back = await look();
+    check(back.box === "Ferryman" && back.name === "Ferryman" && back.saved === "Ferryman", size.name + ": left empty, the whole name comes back (" + JSON.stringify(back) + ")");
+    await page.focus(sel);
+    await page.keyboard.press("Control+A");
+    await page.keyboard.type("Wren");
+    await page.waitForTimeout(150);
+    const typed = await look();
+    check(typed.name === "Wren" && typed.face === "W", size.name + ": a new name shows at once, with its own first letter (" + JSON.stringify(typed) + ")");
+    await page.keyboard.press("Tab");
+    await page.waitForTimeout(700);
+    const kept = await look();
+    check(kept.saved === "Wren" && kept.box === "Wren", size.name + ": and is saved when the box is left (" + JSON.stringify(kept) + ")");
     check(!errors.length, size.name + ": no page errors. " + errors.slice(0, 2).join(" | "));
     await context.close();
   }

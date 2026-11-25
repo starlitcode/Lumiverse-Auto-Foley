@@ -8204,20 +8204,21 @@ export function setup(ctx: Ctx, overrides?: any) {
     inner.appendChild(shownRow);
     if (m.kind !== 'narrator') {
       const g1 = el('<div class="af-grid2"></div>');
-      const nameRow = text('Name', m.name, (v) => {
-        // An empty name is not saved, since lines are matched by it. The
-        // header shows the field as it is, and leaving it empty puts the
-        // saved name back.
-        if (v.trim()) {
-          m.name = v.trim();
-          save();
-        }
-        paintName(v);
-      }, '', 'The name the story uses for them. Lines are matched to a person by this name and the names below.');
+      // The name is saved when the box is left, not with each letter.
+      // Saved on every letter, erasing it saved each shorter name in turn,
+      // down to its first letter, which then stayed when the box was left
+      // empty. The header follows the box as it is typed.
+      const nameRow = text('Name', m.name, (v) => paintName(v), '', 'The name the story uses for them. Lines are matched to a person by this name and the names below.');
       const nameIn = nameRow.querySelector('input') as HTMLInputElement | null;
       if (nameIn)
-        nameIn.addEventListener('blur', () => {
-          if (nameIn.value.trim()) return;
+        nameIn.addEventListener('change', () => {
+          // An empty name is not saved, since lines are matched by it. The
+          // name there was before comes back.
+          const v = nameIn.value.trim();
+          if (v && v !== m.name) {
+            m.name = v;
+            save();
+          }
           nameIn.value = m.name;
           paintName();
         });
