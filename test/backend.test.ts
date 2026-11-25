@@ -1480,6 +1480,46 @@ describe("the second Director", () => {
   });
 });
 
+describe("a message the Director could not direct", () => {
+  const msg = { type: "direct", chatId: "c", messageId: "m30", swipeId: 0, name: "Oriel", text: '"Lanterns up."' };
+  const good = JSON.stringify({ lines: [{ i: 0, speaker: "Oriel", text: "[quietly] Lanterns up." }] });
+  const script = (out: any[]) => out.find((m: any) => m.type === "script").script;
+
+  test("is kept, read as written and marked, so the next play asks nothing", async () => {
+    const h = host({ answers: ["I can't help with that.", good] });
+    await h.ask({ type: "save", settings: { retryDirector: 0 } });
+    const first = script(await h.ask(msg));
+    expect(first.directed).toBe(false);
+    expect(first.fallback).toBe(true);
+    const again = script(await h.ask(msg));
+    expect(h.calls.generate.length).toBe(1);
+    expect(again.fromKept).toBe(true);
+    expect(again.fallback).toBe(true);
+    const list = (await h.ask({ type: "kept_list" })).find((m: any) => m.type === "kept_list").list;
+    expect(list[0].how).toBe("fallback");
+  });
+
+  test("Direct again asks the Director, and keeps its script", async () => {
+    const h = host({ answers: ["I can't help with that.", good] });
+    await h.ask({ type: "save", settings: { retryDirector: 0 } });
+    await h.ask(msg);
+    const fresh = script(await h.ask(Object.assign({}, msg, { fresh: true })));
+    expect(h.calls.generate.length).toBe(2);
+    expect(fresh.directed).toBe(true);
+    expect(fresh.fallback).toBeFalsy();
+    const list = (await h.ask({ type: "kept_list" })).find((m: any) => m.type === "kept_list").list;
+    expect(list[0].how).toBe("directed");
+  });
+
+  test("with the Director off, it is marked as off", async () => {
+    const h = host();
+    await h.ask({ type: "save", settings: { directorOn: false } });
+    await h.ask(msg);
+    const list = (await h.ask({ type: "kept_list" })).find((m: any) => m.type === "kept_list").list;
+    expect(list[0].how).toBe("off");
+  });
+});
+
 describe("Stop while the script is written", () => {
   test("cancels the Director's call, and keeps nothing", async () => {
     const h = host({ hold: true });

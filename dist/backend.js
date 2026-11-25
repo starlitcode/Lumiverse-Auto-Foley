@@ -2828,9 +2828,13 @@ async function direct(userId, p) {
         script.added.push(...added);
         script.log.push('Added to the cast: ' + added.join(', ') + '.');
     }
-    // A script is kept only when it was directed. One that fell back because
-    // the Director failed is asked again next time.
-    if (answer)
+    // A script is kept when it was directed, and when the Director could not
+    // direct it, marked as read as written. Kept, it plays from saved audio
+    // next time, and Direct again asks the Director anew. A message stopped
+    // with Stop is not kept.
+    if (!answer)
+        script.fallback = true;
+    if (answer || !run.stopped)
         keepScript(uid, script);
     return script;
 }
@@ -3742,7 +3746,7 @@ async function onPanel(p, userId) {
                 const list = (scripts[userId || ''] || []).slice().reverse().map((x) => {
                     const sc = x.script;
                     const voice = sc.lines.filter((l) => l.kind === 'speech' || l.kind === 'narration');
-                    return { key: x.key, messageId: sc.messageId, chatId: sc.chatId || '', author: sc.author, keptAt: sc.keptAt || 0, lines: voice.length, first: str(voice.length ? voice[0].plain : '', 160) };
+                    return { key: x.key, messageId: sc.messageId, chatId: sc.chatId || '', author: sc.author, keptAt: sc.keptAt || 0, lines: voice.length, first: str(voice.length ? voice[0].plain : '', 160), how: sc.directed ? 'directed' : sc.fallback ? 'fallback' : 'off' };
                 });
                 return answer({ type: 'kept_list', list });
             }

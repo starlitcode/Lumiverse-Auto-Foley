@@ -132,7 +132,8 @@ function answer(msg) {
       // A check can hold the answer, and send the note that the Director is
       // being asked, as the backend does when no kept script is found.
       if (window.__directingAt != null) setTimeout(() => backendFns.forEach((fn) => fn({ type: 'directing', messageId: msg.messageId })), window.__directingAt);
-      const sc = window.__fromKept ? Object.assign({}, SCRIPT, { fromKept: true }) : SCRIPT;
+      let sc = window.__fromKept ? Object.assign({}, SCRIPT, { fromKept: true }) : SCRIPT;
+      if (window.__fallback) sc = Object.assign({}, sc, { directed: false, fallback: true });
       if (window.__directHold) return setTimeout(() => reply({ type: 'script', script: sc }), window.__directHold);
       return reply({ type: 'script', script: sc });
     }
@@ -944,6 +945,14 @@ if (section("script status")) {
     await page.waitForTimeout(300);
     const used = (await page.locator('[data-af="used"]').textContent()) || "";
     check(used.startsWith("Saved script. The Director was not asked again."), "a saved script says so in Now playing (" + used + ")");
+    // A script the Director could not direct says so, and what to press.
+    await page.evaluate(() => { window.__fallback = true; });
+    await page.evaluate(() => document.querySelector('[data-af="stop"]').click());
+    await page.waitForTimeout(200);
+    await page.click('#mount [data-af-slot="message"]');
+    await page.waitForTimeout(400);
+    const fell = (await page.locator('[data-af="used"]').textContent()) || "";
+    check(fell.startsWith("Saved script, read as written: the Director could not direct this message.") && fell.includes("Direct again tries the Director."), "a script read as written says why, and what Direct again does (" + fell + ")");
     check(!errors.length, "no console errors. " + errors.slice(0, 2).join("; "));
     await context.close();
   }

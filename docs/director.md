@@ -78,7 +78,7 @@ If the Director had sent line 3 as "Is it always this noisy?", the word check fa
 - When the Director refuses, or sends back nothing it can use after every ask, a second connection is asked.
 - It gets the same request, and the same number of asks.
 - Pick a different connection from the first, such as another provider. The same connection is not asked twice.
-- If the second Director also fails, the message is read as written, so it still plays. The Log says what each one did.
+- If the second Director also fails, the message is read as written, so it still plays. The Log says what each one did. It is saved, marked "read as written", and **Direct again** tries the Directors again.
 - Stop cancels whichever Director is being asked.
 
 ## The switches

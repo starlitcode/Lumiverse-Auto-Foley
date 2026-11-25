@@ -1245,6 +1245,8 @@ interface Script {
   added: string[];
   // Played from the script kept for this message, without asking the Director.
   fromKept?: boolean;
+  // Read as written because the Director could not direct it.
+  fallback?: boolean;
 }
 
 // A short mark of some text, so a change to it can be noticed. Auto Retry and
@@ -3530,7 +3532,9 @@ export function setup(ctx: Ctx, overrides?: any) {
     head.appendChild(el('<b></b>'));
     setText(head.firstElementChild as HTMLElement, (e.author || 'Someone') + '’s script');
     const meta = el('<span class="af-saved-meta"></span>');
-    setText(meta, [when, e.lines + (e.lines === 1 ? ' line' : ' lines')].filter(Boolean).join(' · '));
+    // How it was made: directed, or read as written.
+    const how = e.how === 'fallback' ? 'read as written, the Director could not direct it' : e.how === 'off' ? 'read as written, Director off' : '';
+    setText(meta, [when, e.lines + (e.lines === 1 ? ' line' : ' lines'), how].filter(Boolean).join(' · '));
     head.appendChild(meta);
     row.appendChild(head);
     const first = el('<div class="af-saved-first"></div>');
@@ -6187,19 +6191,33 @@ export function setup(ctx: Ctx, overrides?: any) {
     // The characters sent for new audio, and their cost at the voice price.
     const vp = Number(S.voicePrice) || 0;
     const voiceSaid = sv && sv.chars ? ' Voice: ' + sv.chars.toLocaleString() + ' characters' + (vp > 0 ? ', about ' + money((sv.chars / 1e6) * vp) : '') + '.' : '';
-    used.hidden = !n && !(sc0 && sc0.fromKept) && !savedSaid && !voiceSaid;
-    if (sc0 && sc0.fromKept) setText(used, 'Saved script. The Director was not asked again.' + voiceSaid + savedSaid);
-    else if (!n) setText(used, (voiceSaid + savedSaid).trim());
-    else {
+    // How the script was made, in words, so a message read as written is
+    // never taken for one the Director wrote.
+    const howSaid = !sc0
+      ? ''
+      : sc0.fallback
+        ? (sc0.fromKept ? 'Saved script, read as written' : 'Read as written') + ': the Director could not direct this message. It plays from saved audio. Direct again tries the Director.'
+        : !sc0.directed
+          ? sc0.fromKept
+            ? 'Saved script, read as written with the Director off.' + (S.directorOn ? ' Direct again directs it.' : '')
+            : ''
+          : sc0.fromKept
+            ? 'Saved script. The Director was not asked again.'
+            : '';
+    let tokensSaid = '';
+    if (n && sc0 && !sc0.fromKept) {
       // Input and output, the same two words the prices are named after.
-      const word = (x: number) => (sc0!.counted === false ? 'about ' : '') + x.toLocaleString();
-      const back = Number(sc0!.back) || 0;
+      const word = (x: number) => (sc0.counted === false ? 'about ' : '') + x.toLocaleString();
+      const back = Number(sc0.back) || 0;
       // The provider's own figure where it sent one, or else the prices typed
       // in the Director tab.
       const priced = (n / 1e6) * (Number(S.costIn) || 0) + (back / 1e6) * (Number(S.costOut) || 0);
-      const cost = Number(sc0!.cost) > 0 ? Number(sc0!.cost) : priced;
-      setText(used, 'This script used ' + word(n) + ' input tokens and ' + word(back) + ' output tokens.' + (cost > 0 ? ' Cost: about ' + money(cost) + '.' : '') + voiceSaid + savedSaid);
+      const cost = Number(sc0.cost) > 0 ? Number(sc0.cost) : priced;
+      tokensSaid = ' This script used ' + word(n) + ' input tokens and ' + word(back) + ' output tokens.' + (cost > 0 ? ' Cost: about ' + money(cost) + '.' : '');
     }
+    const usedText = (howSaid + tokensSaid + voiceSaid + savedSaid).trim();
+    used.hidden = !usedText;
+    setText(used, usedText);
     stageRefs.retryRow.hidden = !(lastFailed && !show && !busyMessage);
     const title = q('title');
     const sub = q('sub');
