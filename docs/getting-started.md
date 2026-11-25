@@ -173,9 +173,32 @@ With **Keep made audio** on, in the Settings tab:
 - Tap the line to go to that point of the message. In the part playing, it goes to that point in the audio.
 - To download a message's saved audio, use **Download** in **Saved audio**.
 - It sits where Lumiverse puts its own audio player. It takes the side padding of the message text, and it is centered or to the right when your theme puts the text there.
-- It uses your theme's colors and the message's font.
+- It uses your theme's colors and the message's font, unless you pick colors of your own. See [Colors](#colors).
 - It shows only on messages that have saved audio, so a new chat has none.
 - Lumiverse's own player is only used with **Save the performance to the message** on. It is off by default, and Auto Foley's player does the same job.
+
+## Lit words in the chat
+
+**Light up words in the chat**, in the Settings tab, is on by default.
+
+- The word being spoken is lit in the message itself, as it is said.
+- Nothing in the message is changed.
+- Some older browsers cannot light words. The audio still plays.
+
+## Colors
+
+The player under a message and the lit word use your theme's colors. You can pick your own in the Settings tab:
+
+- Under **A player under each message**: **Player accent** (the ring around Play and the line that fills), **Player background**, and **Player text and icons**. A small player under them shows the colors as you pick.
+- Under **Light up words in the chat**: **Color of the lit word**, and **How strong it is**, from 10% to 80%. It is 20% by default.
+
+To pick a color:
+
+1. Tap the swatch beside the name. The editor opens under it.
+2. Type a color code such as `#ff0040`, move the **Hue**, **Saturation** and **Lightness** sliders, or tap **Accent**, **Text** or **Card** to take your theme's color.
+3. **Use the theme's color** goes back to your theme.
+
+The colors are saved with your settings, under your account.
 
 ## Saved audio
 

@@ -225,7 +225,8 @@ window.__ctx = {
         destroy() { surface.remove(); window.__widgetGone = true; },
         setSize(w, h) { surface.style.width = w + 'px'; surface.style.height = h + 'px'; },
         getPosition() { return at; },
-        moveTo(x, y) { at = { x, y }; surface.style.left = x + 'px'; surface.style.top = y + 'px'; },
+        // Lumiverse draws a move on its next render. A check can ask for that.
+        moveTo(x, y) { at = { x, y }; const put = () => { surface.style.left = x + 'px'; surface.style.top = y + 'px'; }; if (window.__lateMove) requestAnimationFrame(() => requestAnimationFrame(put)); else put(); },
       });
     },
   },
@@ -297,6 +298,7 @@ async function open(theme, size, zoom = 1) {
   const errors = [];
   page.on("console", (m) => {
     if (m.type() === "error") errors.push(m.text());
+    else if (process.env.UI_DEBUG && m.type() === "log") console.log("  page: " + m.text());
   });
   page.on("pageerror", (e) => errors.push(String(e.message)));
   await page.setContent(pageHtml(theme));
@@ -873,7 +875,7 @@ if (section("engines")) {
       const folds = Array.from(card.querySelectorAll(".af-fold")).map((f) => f.textContent.replace("▶", "").trim());
       return { now: now ? now.textContent : "", first: card.querySelector("[data-af-engine-now], .af-fold") === now, folds };
     });
-    check(/In use now: Chatterbox-Turbo/.test(notes.now) && notes.first && notes.folds.length === 4 && notes.folds.indexOf("Chatterbox-Turbo") < 0, size.name + ": the engine in use is first and open, and every other engine has its own fold (" + notes.folds.join(" | ") + ")");
+    check(/In use now: Chatterbox-Turbo/.test(notes.now) && notes.first && notes.folds.length === 3 && notes.folds.indexOf("Chatterbox-Turbo") < 0, size.name + ": the engine in use is first and open, and every other engine has its own fold (" + notes.folds.join(" | ") + ")");
     check((await page.locator('[data-af-engine-note="chatterbox_turbo"] textarea').count()) === 1, size.name + ": the note for the engine in use can be read and changed");
     check(!errors.length, size.name + ": no console errors. " + errors.slice(0, 2).join("; "));
     await context.close();
@@ -2174,6 +2176,103 @@ if (section("chat words jump")) {
   await context.close();
 }
 
+if (section("big moments warning")) {
+  console.log("The Big moments warning shows only when Big moments do nothing");
+  const { context, page, errors } = await open(THEMES[0], SIZES[0]);
+  await page.evaluate(() => {
+    window.__teardown();
+    document.getElementById("drawer").innerHTML = "";
+    window.__ttsList = [{ id: "t1", name: "Fish here", provider: "fish_audio", model: "s2.1-pro", is_default: true, has_api_key: true }];
+    window.__teardown = window.__setup(window.__ctx, { fetch: window.__fetch, Audio: window.__Audio });
+  });
+  await page.waitForTimeout(300);
+  const shown = async () => {
+    await page.click('.af-tab[data-tab="stage"]');
+    await page.waitForTimeout(200);
+    await page.click('.af-tab[data-tab="director"]');
+    await page.waitForTimeout(400);
+    return (await page.locator(".af-warn", { hasText: "Big moments do nothing" }).count()) > 0;
+  };
+  check(await shown(), "on Fish Audio, with the audience not cheering on big moments, it says Big moments do nothing");
+  // Turned off, the warning goes at once.
+  await page.locator('[data-af-row="bigMoments"] .af-box').first().click();
+  await page.waitForTimeout(300);
+  check((await page.locator(".af-warn", { hasText: "Big moments do nothing" }).count()) === 0, "turning Big moments off takes the warning away at once");
+  // With the audience cheering on big moments, they do something, so no warning.
+  await page.evaluate(() => {
+    window.__teardown();
+    document.getElementById("drawer").innerHTML = "";
+    window.__settings = Object.assign({}, window.__settings, { bigMoments: true, applauseOn: true, applauseWhen: "big" });
+    window.__teardown = window.__setup(window.__ctx, { fetch: window.__fetch, Audio: window.__Audio });
+  });
+  await page.waitForTimeout(300);
+  check(!(await shown()), "with the audience cheering on big moments, there is no warning");
+  check(!errors.length, "no page errors. " + errors.slice(0, 2).join(" | "));
+  await context.close();
+}
+
+if (section("colors")) {
+  console.log("Colors for the player and the lit word, picked in their own editor");
+  // The color drawn at the middle of an element, read from a screenshot.
+  const drawn = async (page, sel) => {
+    const buf = await page.locator(sel).first().screenshot();
+    return page.evaluate(async (b64) => {
+      const img = await createImageBitmap(await (await fetch("data:image/png;base64," + b64)).blob());
+      const c = document.createElement("canvas");
+      c.width = img.width; c.height = img.height;
+      const g = c.getContext("2d");
+      g.drawImage(img, 0, 0);
+      return Array.from(g.getImageData(Math.floor(img.width / 2), Math.floor(img.height / 2), 1, 1).data).slice(0, 3);
+    }, buf.toString("base64"));
+  };
+  for (const size of SIZES) {
+    const { context, page, errors } = await open(THEMES[0], size);
+    const where = size.name;
+    await page.click('.af-tab[data-tab="settings"]');
+    await page.waitForTimeout(300);
+    const row = '[data-af-row="playerAccent"]';
+    await page.locator(row + " [data-af-colorswatch]").scrollIntoViewIfNeeded();
+    await page.click(row + " [data-af-colorswatch]");
+    await page.waitForTimeout(400);
+    await page.fill(row + " [data-af-colorcode]", "#ff0040");
+    await page.locator(row + " [data-af-colorcode]").press("Enter");
+    await page.locator(row + " [data-af-colorcode]").blur();
+    await page.waitForTimeout(700);
+    const accent = await page.evaluate(() => document.documentElement.style.getPropertyValue("--af-mp-accent"));
+    check(accent === "#ff0040", where + ": a typed code is put on the page for the player (" + accent + ")");
+    check(await page.evaluate(() => window.__settings.playerAccent === "#ff0040"), where + ": it is saved with the settings");
+    const bar = await drawn(page, ".af-mpsample .af-mp-bar i");
+    check(bar[0] > 200 && bar[1] < 60 && bar[2] < 110, where + ": the sample player draws its line in that color (" + bar.join(",") + ")");
+    // A slider changes the code shown.
+    const before = await page.inputValue(row + " [data-af-colorcode]");
+    await page.locator(row + ' [data-af-colorpart="h"]').fill("200");
+    await page.waitForTimeout(300);
+    const after = await page.inputValue(row + " [data-af-colorcode]");
+    check(before !== after && /^#[0-9a-f]{6}$/.test(after), where + ": the hue slider changes the color (" + before + " to " + after + ")");
+    await page.click(row + " [data-af-colorback]");
+    await page.waitForTimeout(400);
+    check(await page.evaluate(() => !document.documentElement.style.getPropertyValue("--af-mp-accent") && window.__settings.playerAccent === ""), where + ": Use the theme's color clears it");
+    // The lit word.
+    const wrow = '[data-af-row="wordColor"]';
+    await page.locator(wrow + " [data-af-colorswatch]").scrollIntoViewIfNeeded();
+    await page.click(wrow + " [data-af-colorswatch]");
+    await page.waitForTimeout(400);
+    await page.fill(wrow + " [data-af-colorcode]", "#00ff88");
+    await page.locator(wrow + " [data-af-colorcode]").blur();
+    await page.waitForTimeout(500);
+    const word = await page.evaluate(() => document.documentElement.style.getPropertyValue("--af-word"));
+    check(word === "rgba(0,255,136,0.2)", where + ": the lit word takes the color at 20 per cent (" + word + ")");
+    const lit = await drawn(page, ".af-wordsample");
+    check(lit[1] > lit[0] + 20 && lit[1] > lit[2], where + ": the sample word is drawn green (" + lit.join(",") + ")");
+    const m = await page.evaluate(MEASURE, !!size.touch);
+    check(!m.overflow.length && !m.small.length, where + ": the color rows fit, with tap targets big enough. " + m.overflow.concat(m.small).slice(0, 3).join("; "));
+    await page.evaluate(() => window.__teardown());
+    check(await page.evaluate(() => !document.documentElement.style.getPropertyValue("--af-word")), where + ": teardown takes the colors off the page");
+    check(!errors.length, where + ": no page errors. " + errors.slice(0, 2).join(" | "));
+    await context.close();
+  }
+}
+
 if (section("more settings")) {
   console.log("Each person gets a voice name or ID box and the settings their engine takes");
   for (const size of SIZES) {
@@ -2208,7 +2307,7 @@ if (section("more settings")) {
     });
     check(got.picked, where + ": a typed voice ID is saved as the person's voice");
     check(got.named, where + ": a typed voice name that is in the list picks that voice");
-    check(got.engine === "eleven_v3" && got.labels.indexOf("Speaker boost") >= 0 && got.labels.indexOf("Voice direction") < 0 && got.labels.indexOf("Exaggeration") < 0, where + ": an ElevenLabs voice shows only ElevenLabs settings (" + got.labels.join(", ") + ")");
+    check(got.engine === "eleven_v3" && got.labels.indexOf("Language") >= 0 && ["Speaker boost", "Style", "Speed", "Similarity"].every((x) => got.labels.indexOf(x) < 0) && got.labels.indexOf("Voice direction") < 0 && got.labels.indexOf("Exaggeration") < 0, where + ": an ElevenLabs voice shows only ElevenLabs settings (" + got.labels.join(", ") + ")");
     check(got.wide === 0, where + ": nothing runs off the side (" + got.wide + ")");
     check(!errors.length, where + ": no page errors. " + errors.slice(0, 2).join(" | "));
     await context.close();
@@ -2235,6 +2334,38 @@ if (section("switch rows")) {
   const end = await page.evaluate(() => window.__row.querySelector(".af-sub").getBoundingClientRect().height);
   check(mid.same, "the tab is not drawn again when Autoplay changes");
   check(!mid.hidden && mid.h > 0 && mid.h < end, "Wait before autoplay opens over several frames (" + mid.h.toFixed(1) + " of " + end.toFixed(1) + " px)");
+  await context.close();
+}
+
+if (section("person close")) {
+  console.log("A person in the Cast tab opens and closes over several frames, with CSS transitions");
+  const { context, page, errors } = await open(THEMES[0], SIZES[0]);
+  await page.click('.af-tab[data-tab="cast"]');
+  await page.waitForTimeout(300);
+  const run = (open) =>
+    page.evaluate(async (open) => {
+      const head = document.querySelector(".af-person-head");
+      const body = head.closest(".af-person").querySelector(".af-person-body");
+      head.scrollIntoView({ block: "start" });
+      await new Promise((r) => requestAnimationFrame(r));
+      head.click();
+      const hs = [];
+      const anims = body.getAnimations().filter((a) => !(a instanceof CSSTransition)).length;
+      for (let k = 0; k < 24; k++) {
+        await new Promise((r) => requestAnimationFrame(r));
+        hs.push(Math.round(body.getBoundingClientRect().height));
+      }
+      await new Promise((r) => setTimeout(r, 300));
+      return { hs, anims, hidden: body.hidden, left: ["height", "opacity", "transform", "overflow", "transition"].filter((k) => body.style[k]) };
+    }, open);
+  const opened = await run(true);
+  const closed = await run(false);
+  const mids = (hs) => { const top = Math.max(...hs); return hs.filter((h) => h > 2 && h < top - 2).length; };
+  check(mids(opened.hs) >= 3 && !opened.hidden, "opening moves over several frames (" + opened.hs.slice(0, 10).join(",") + ")");
+  check(mids(closed.hs) >= 3 && closed.hidden, "closing moves over several frames and ends hidden (" + closed.hs.slice(0, 10).join(",") + ")");
+  check(opened.anims === 0 && closed.anims === 0, "it uses CSS transitions, not the Web Animations API");
+  check(!opened.left.length && !closed.left.length, "no motion styles are left on it (" + opened.left.concat(closed.left).join(",") + ")");
+  check(!errors.length, "no page errors. " + errors.slice(0, 2).join(" | "));
   await context.close();
 }
 
@@ -2486,8 +2617,26 @@ if (section("widget low")) {
         await page.waitForTimeout(200);
         const pos = () => page.evaluate(() => ({ x: parseFloat(window.__widget.style.left), y: parseFloat(window.__widget.style.top), w: parseFloat(window.__widget.style.width), h: parseFloat(window.__widget.style.height) }));
         const home = await pos();
-        await page.evaluate(() => window.__widget.querySelector(".af-float").click());
-        await page.waitForTimeout(600);
+        // Moved on the next render, as Lumiverse does, the circle still
+        // starts on the button.
+        const start = await page.evaluate(async (zoom) => {
+          window.__lateMove = true;
+          const btn = window.__widget.querySelector(".af-float").getBoundingClientRect();
+          window.__widget.querySelector(".af-float").click();
+          const card = window.__widget.querySelector(".af-pl");
+          // Read once the first frame is drawn, as it is seen. A frame runs
+          // its resize pass after the frame's callbacks and before it draws.
+          await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+          const a = card && card.getAnimations().find((x) => /circle/.test(String(x.effect.getKeyframes()[0].clipPath)));
+          const m = a && String(a.effect.getKeyframes()[0].clipPath).match(/at ([\d.-]+)px ([\d.-]+)px/);
+          await new Promise((r) => setTimeout(r, 120));
+          const r = card.getBoundingClientRect();
+          window.__lateMove = false;
+          if (!m) return null;
+          return { dx: r.left + parseFloat(m[1]) * zoom - (btn.left + btn.width / 2), dy: r.top + parseFloat(m[2]) * zoom - (btn.top + btn.height / 2) };
+        }, zoom);
+        check(!!start && Math.abs(start.dx) < 2 && Math.abs(start.dy) < 2, where + ": the opening circle starts on the button (" + JSON.stringify(start) + ")");
+        await page.waitForTimeout(500);
         const opened = await pos();
         const low = /low/.test(corner), right = /right/.test(corner);
         // A player wider or taller than the room left is held 8 px from the

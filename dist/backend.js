@@ -81,6 +81,11 @@ const DEFAULT_SETTINGS = {
     applauseVolume: 0.6,
     extrasMenu: false,
     chatHighlight: true,
+    wordColor: '',
+    wordStrength: 20,
+    playerAccent: '',
+    playerBack: '',
+    playerInk: '',
     chatterboxUrl: '',
     panelPattern: '',
     boxSolid: 60,
@@ -132,6 +137,11 @@ function str(v, max) {
 }
 function bool(v, dflt) {
     return typeof v === 'boolean' ? v : dflt;
+}
+// A color code as #rrggbb, or empty for anything else, which uses the theme.
+function hexColor(v) {
+    const t = String(v == null ? '' : v).trim().toLowerCase();
+    return /^#[0-9a-f]{6}$/.test(t) ? t : '';
 }
 function pick(v, allowed, dflt) {
     return allowed.indexOf(v) >= 0 ? v : dflt;
@@ -452,6 +462,11 @@ function cleanSettings(raw) {
         applauseVolume: num(r.applauseVolume, 0, 1, d.applauseVolume),
         extrasMenu: bool(r.extrasMenu, d.extrasMenu),
         chatHighlight: bool(r.chatHighlight, d.chatHighlight),
+        wordColor: hexColor(r.wordColor),
+        wordStrength: Math.round(num(r.wordStrength, 10, 80, d.wordStrength)),
+        playerAccent: hexColor(r.playerAccent),
+        playerBack: hexColor(r.playerBack),
+        playerInk: hexColor(r.playerInk),
         chatterboxUrl: cleanServer(r.chatterboxUrl),
         panelPattern: pick(r.panelPattern, ['', 'diamonds', 'stripes', 'dots', 'hearts', 'stars'], ''),
         boxSolid: Math.round(num(r.boxSolid, 0, 100, d.boxSolid)),

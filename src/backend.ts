@@ -145,6 +145,15 @@ interface Settings {
   extrasMenu: boolean;
   // The word being spoken is lit in the message in the chat.
   chatHighlight: boolean;
+  // The color of the lit word, as #rrggbb, and how strong it is, from 10 to
+  // 80 per cent. Empty uses the theme's accent.
+  wordColor: string;
+  wordStrength: number;
+  // The player under a message: its accent, its background and its words, as
+  // #rrggbb. Empty uses the theme's own.
+  playerAccent: string;
+  playerBack: string;
+  playerInk: string;
   // The address of a Chatterbox-TTS-Server Auto Foley talks to itself, with
   // no Lumiverse connection between, so its own settings can be sent.
   chatterboxUrl: string;
@@ -283,6 +292,11 @@ const DEFAULT_SETTINGS: Settings = {
   applauseVolume: 0.6,
   extrasMenu: false,
   chatHighlight: true,
+  wordColor: '',
+  wordStrength: 20,
+  playerAccent: '',
+  playerBack: '',
+  playerInk: '',
   chatterboxUrl: '',
   panelPattern: '',
   boxSolid: 60,
@@ -338,6 +352,12 @@ function str(v: any, max: number): string {
 
 function bool(v: any, dflt: boolean): boolean {
   return typeof v === 'boolean' ? v : dflt;
+}
+
+// A color code as #rrggbb, or empty for anything else, which uses the theme.
+function hexColor(v: any): string {
+  const t = String(v == null ? '' : v).trim().toLowerCase();
+  return /^#[0-9a-f]{6}$/.test(t) ? t : '';
 }
 
 function pick<T extends string>(v: any, allowed: readonly T[], dflt: T): T {
@@ -645,6 +665,11 @@ function cleanSettings(raw: any): Settings {
     applauseVolume: num(r.applauseVolume, 0, 1, d.applauseVolume),
     extrasMenu: bool(r.extrasMenu, d.extrasMenu),
     chatHighlight: bool(r.chatHighlight, d.chatHighlight),
+    wordColor: hexColor(r.wordColor),
+    wordStrength: Math.round(num(r.wordStrength, 10, 80, d.wordStrength)),
+    playerAccent: hexColor(r.playerAccent),
+    playerBack: hexColor(r.playerBack),
+    playerInk: hexColor(r.playerInk),
     chatterboxUrl: cleanServer(r.chatterboxUrl),
     panelPattern: pick(r.panelPattern, ['', 'diamonds', 'stripes', 'dots', 'hearts', 'stars'] as const, ''),
     boxSolid: Math.round(num(r.boxSolid, 0, 100, d.boxSolid)),

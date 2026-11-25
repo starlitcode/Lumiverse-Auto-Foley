@@ -12,6 +12,7 @@ _Not yet released_
 
 ### Added
 
+- **Colors for the player and the lit word**, in the Settings tab. Under **A player under each message**, pick the player's accent, background, and text and icons. Under **Light up words in the chat**, pick the color of the lit word and how strong it is. Each color has its own editor: type a code such as #ff0040, move the hue, saturation and lightness sliders, or take one of your theme's colors. **Use the theme's color** goes back to your theme.
 - **More vocal sounds for Gemini 3.8**: moan, growl, grunt, hiss, scream, shout, shriek, cheer and phew, from Google's own list.
 - **Saved audio**, on the Stage tab. It lists every message with a saved script, newest first, with whose script it is, the day and its first line. **Play**, **Download** and **Delete** are on each row. Play and Download use only saved audio, so nothing is spent.
 - **A player under each message**, on by default. A message Auto Foley has performed gets a small player under its text, where Lumiverse puts its own. It has Back, Play and Next, and a line you tap to go to any point. It says which part is playing, and plays the saved audio again with nothing spent. It follows your theme: its colors, the message font, and the side and alignment of the message text, centered too.
@@ -40,6 +41,7 @@ _Not yet released_
 
 ### Changed
 
+- **The Debug info box has no ring around it while you type in it**, the same as in Auto Retry.
 - **Gemini 2.5 and 3.1 are no longer used.** Google shuts down these TTS models on December 18, 2026. A person who speaks through one is not spoken, and the panel says to pick Gemini 3.8 Flash TTS instead. Their notes, tags and settings are gone.
 - **ElevenLabs shows only the settings Eleven v3 and v4 take.** ElevenLabs' docs say v3 takes Stability only, and v4 Stability and Similarity. **Style**, **Speed** and **Speaker boost** are gone for them, and Similarity shows on Eleven v4 only. They did nothing on these models.
 - **A message the Director could not direct is saved, read as written.** Before, nothing was saved, so every play asked the Director again and it did not show in Saved audio. Now it plays from saved audio, and **Now playing** and **Saved audio** say "read as written" and why. **Direct again** tries the Director. A script saved with the Director off says so too.
@@ -51,7 +53,7 @@ _Not yet released_
 - **The floating player's quick switches** flip only when the switch itself is pressed, the same as every other switch.
 - **The moving bars** next to the speaker in the floating player are gone.
 - **A color for each kind of part.** The narrator is slate, characters violet, you teal, NPCs pink, sounds amber and voice tags blue, on the pictures, the marks for each part and the tags in Now playing. The colors are the same in every theme.
-- **Warnings that fit the engine.** The Director tab says when Big moments change only the audience on an engine other than ElevenLabs, and when an engine cannot sing.
+- **Warnings that fit the engine.** The Director tab says when Big moments do nothing on the engine in use, and when an engine cannot sing.
 - **A new look for the players.** The floating player and **Now playing** on the Stage tab show the line like a page of a script, with a line on its left side in the color of whoever is speaking. An **On air** light shows red while a message plays and amber while it is paused. A thin striped band runs along the top of each player.
 - **Groups have an editor.** **New group** and **Edit** open it, with the group's name and a switch for each person in the cast, so you can pick everyone in a group in one place. **Save** keeps it and **Cancel** changes nothing. **Edit** takes the place of **Rename**.
 - **Scripts.** The panel calls what the Director makes from a message its script, such as **Kept audio and scripts** in **Start again**. While a message gets ready, the status says "Getting the script", and "The Director is writing the script" only once the Director is asked. A message played from its kept script never says the Director is writing. **Now playing** and the floating player name what plays as a script, such as "Tamsin’s script".
@@ -60,6 +62,8 @@ _Not yet released_
 
 ### Fixed
 
+- **The Cast tab could blink on a phone.** Opening or closing a person could draw the whole tab blank for a moment. Rows now open and close the same way as in Auto Retry and Auto Refine.
+- **The floating player could open from beside the round button.** When the player had to move to fit on the screen, the circle it grows from started where the card was first placed, not on the button. It now starts on the button.
 - **A line Gemini sent back with no audio waited 15 seconds or more.** Gemini's preview models now and then answer with no audio, and the line was waited out as if the service were busy. It is asked for again after a moment, and the Log says so.
 - **A new person's lines could be made again on the next play, in two voices.** Lines are made ahead, several at once. Two lines of someone new each picked a voice, so the lines had different voices, and a line spoken before the person joined the cast used the connection's voice. On the next play, those lines did not match and were made, and paid for, again. Now one voice is picked for each new person, and every line waits for it.
 - **The Director's tokens were counted with the tokenizer of your main connection.** When the provider sends no count, Lumiverse counts them, and it now counts for the Director's own model. Auto Refine does the same.

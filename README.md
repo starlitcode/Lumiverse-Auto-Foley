@@ -22,8 +22,9 @@ You also need a TTS connection in Lumiverse, under **Connections**, in the TTS s
 
 ## Where it is
 
-- **The drawer:** a tab called **Foley**, with a headphones icon. It has five tabs: Stage, Cast, Director, Sounds and Settings.
-- **Each message:** the Auto Foley button in its row of buttons. Press it to perform the message. Press it again to stop.
+- **The drawer:** a tab called **Foley**, with a headphones icon. It has five tabs: Stage, Cast, Director, Sounds and Settings. **Play**, under **Now playing** on the Stage tab, performs the latest reply.
+- **Under each message:** once a message has been performed, a small player sits under its text, with Back, Play and Next. It plays the saved audio again, so nothing is spent.
+- **A button on every message:** off by default. Turn it on in the Settings tab to perform any message with one tap.
 - **The floating player:** a round button over the chat. Turn on **A floating player** in the Settings tab. See [The floating player](docs/getting-started.md#the-floating-player).
 
 ## Documentation

@@ -8,7 +8,8 @@
 - **Two outside services**, through Lumiverse's CORS proxy, for sound effects and for testing their keys:
   - Freesound: searches go to `freesound.org`, with your Freesound key. Previews are downloaded from Freesound's own addresses, with no key.
   - ElevenLabs: `api.elevenlabs.io`, with your ElevenLabs key.
-  - Auto Foley calls no other host.
+- **Your own Chatterbox server**, only when you add its address under **Chatterbox server (direct)** in the Settings tab. It is reached at that address, through the same CORS proxy, with no key.
+- Auto Foley calls no other host.
 - **Sounds you add by link.** Your browser plays them from the address you gave, as with any link you open. Auto Foley only keeps the link.
 
 ## What it keeps

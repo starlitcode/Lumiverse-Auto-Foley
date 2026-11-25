@@ -14,6 +14,57 @@ const VERSION = '1.1.0';
 // The marks Lumiverse puts on another extension's part of the page. Nothing
 // inside one is read, written or pressed.
 const OTHER_UI = '[data-spindle-extension-root],[data-spindle-ext],[data-spindle-modal]';
+// Color codes for the color editor. A code is #rrggbb, typed with or without
+// the #, or the three-letter short form.
+function rgbHex(r, g, b) {
+    const two = (n) => ('0' + Math.max(0, Math.min(255, Math.round(n))).toString(16)).slice(-2);
+    return '#' + two(r) + two(g) + two(b);
+}
+function colorCode(typed) {
+    const t = String(typed || '').trim().replace(/^#/, '');
+    if (/^[0-9a-f]{6}$/i.test(t))
+        return '#' + t.toLowerCase();
+    if (/^[0-9a-f]{3}$/i.test(t))
+        return '#' + t.split('').map((c) => c + c).join('').toLowerCase();
+    return null;
+}
+function hexHsl(hex) {
+    const n = parseInt(hex.slice(1), 16);
+    const r = ((n >> 16) & 255) / 255;
+    const g = ((n >> 8) & 255) / 255;
+    const b = (n & 255) / 255;
+    const max = Math.max(r, g, b);
+    const min = Math.min(r, g, b);
+    const l = (max + min) / 2;
+    let h = 0;
+    let s = 0;
+    if (max !== min) {
+        const d = max - min;
+        s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+        h = max === r ? (g - b) / d + (g < b ? 6 : 0) : max === g ? (b - r) / d + 2 : (r - g) / d + 4;
+        h /= 6;
+    }
+    return { h: Math.round(h * 360), s: Math.round(s * 100), l: Math.round(l * 100) };
+}
+function hslHex(h, s, l) {
+    const S = s / 100;
+    const L = l / 100;
+    const k = (n) => (n + h / 30) % 12;
+    const a = S * Math.min(L, 1 - L);
+    const f = (n) => L - a * Math.max(-1, Math.min(k(n) - 3, Math.min(9 - k(n), 1)));
+    return rgbHex(f(0) * 255, f(8) * 255, f(4) * 255);
+}
+// A color the browser computed, which is always rgb() or rgba(), as
+// #rrggbb. Anything else is null.
+function computedHex(c) {
+    const m = String(c || '').match(/^rgba?\(([^)]+)\)$/i);
+    if (!m)
+        return null;
+    const p = m[1].replace(/\//g, ' ').replace(/,/g, ' ').split(/\s+/).filter(Boolean).map(parseFloat);
+    if (p.length < 3 || p.slice(0, 3).some((v) => !Number.isFinite(v)))
+        return null;
+    return rgbHex(p[0], p[1], p[2]);
+}
 const STORE_KEY = 'lv-auto-foley:settings:v1';
 const API = '/api/v1';
 // The ElevenLabs models that act out tags, used when the connection cannot
@@ -850,6 +901,28 @@ const PANEL_CSS = `
 
 .af-col { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
 .af-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0; }
+/* The color editor. The swatch is the size of a switch. The sliders are tall
+   enough to drag with a finger, and each selector outranks the panel's own
+   sliders and Lumiverse's, so the track and knob drawn are these. Each track
+   shows the colors its slider reaches, and the knob holds the color in use. */
+.af-colorswatch { flex: none; width: 44px; height: 28px; padding: 0; cursor: pointer; border: 1px solid var(--af-line); border-radius: 8px; }
+.af-colorswatch:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--af-accent-soft); }
+.af-coloredit { gap: 10px; padding-top: 4px; }
+.af-colorcode { width: 110px; flex: none; }
+.af-colorline { display: grid; grid-template-columns: 76px minmax(0, 1fr) 40px; align-items: center; gap: 8px; }
+.af-colorname, .af-colorvalue { font-size: 12px; color: var(--af-muted); }
+.af-colorvalue { text-align: right; font-variant-numeric: tabular-nums; }
+.af-colorbad { font-size: 12px; color: var(--af-warn, var(--lumiverse-warning, #f59e0b)); }
+.af.af input.af-colorrange[type="range"] { height: 28px; }
+.af.af input.af-colorrange[type="range"]::-webkit-slider-runnable-track { height: 12px; border-radius: 999px; background: var(--af-track, var(--af-fill)); box-shadow: inset 0 0 0 1px rgba(0,0,0,.25); }
+.af.af input.af-colorrange[type="range"]::-moz-range-track { height: 12px; border-radius: 999px; background: var(--af-track, var(--af-fill)); box-shadow: inset 0 0 0 1px rgba(0,0,0,.25); }
+.af.af input.af-colorrange[type="range"]::-moz-range-progress { background: transparent; }
+.af.af input.af-colorrange[type="range"]::-webkit-slider-thumb { width: 22px; height: 22px; margin-top: -5px; border: 3px solid #fff; border-radius: 50%; background: var(--af-thumb, #fff); box-shadow: 0 0 0 1px rgba(0,0,0,.35), 0 2px 6px rgba(0,0,0,.4); }
+.af.af input.af-colorrange[type="range"]::-moz-range-thumb { width: 16px; height: 16px; border: 3px solid #fff; border-radius: 50%; background: var(--af-thumb, #fff); box-shadow: 0 0 0 1px rgba(0,0,0,.35), 0 2px 6px rgba(0,0,0,.4); }
+.af-colordot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; vertical-align: -1px; border: 1px solid var(--af-line); }
+.af-wordsample { padding: 0 2px; border-radius: 3px; background-color: var(--af-word, var(--lumiverse-primary-020, rgba(147,112,219,.3))); }
+.af-mpsample { pointer-events: none; }
+@media (pointer: coarse) { .af-colorswatch { width: 52px; height: 36px; } .af.af input.af-colorrange[type="range"] { height: 36px; } .af-colorcode { height: 36px; } }
 .af-between { display: flex; align-items: center; justify-content: space-between; gap: 9px; min-width: 0; }
 .af-grow { flex: 1 1 160px; min-width: 0; }
 .af-grid2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
@@ -909,6 +982,8 @@ const PANEL_CSS = `
   transition: border-color var(--af-fast), box-shadow var(--af-fast);
 }
 input.af-field:focus, textarea.af-field:focus { outline: none; border-color: var(--af-accent); box-shadow: 0 0 0 2px var(--af-accent-soft); }
+/* The Debug info box keeps its plain edge while typed in, as in Auto Retry. */
+textarea.af-field.af-debugarea:focus { border-color: var(--af-line); box-shadow: none; }
 select.af-field { cursor: pointer; }
 select.af-field:focus, select.af-field:focus-visible { outline: none; box-shadow: none; border-color: var(--af-line-hover); }
 textarea.af-field { resize: vertical; min-height: 64px; }
@@ -1245,6 +1320,11 @@ const DEFAULTS = {
     applauseVolume: 0.6,
     extrasMenu: false,
     chatHighlight: true,
+    wordColor: '',
+    wordStrength: 20,
+    playerAccent: '',
+    playerBack: '',
+    playerInk: '',
     chatterboxUrl: '',
     panelPattern: '',
     boxSolid: 60,
@@ -1406,8 +1486,11 @@ export function setup(ctx, overrides) {
         const out = [];
         if (!eng.supported || !S.directorOn)
             return out;
-        if (S.bigMoments && !eng.eleven)
-            out.push('Big moments make the voice looser only on ElevenLabs. On this engine they only mark when the audience can cheer.');
+        // Off ElevenLabs, a big moment only lets the audience cheer, and only
+        // when the audience is set to cheer on big moments. Otherwise it does
+        // nothing, which is the only case worth saying.
+        if (S.bigMoments && !eng.eleven && !(S.applauseOn && S.applauseWhen === 'big'))
+            out.push('Big moments do nothing on this engine. Only ElevenLabs makes the voice stronger on a big moment. You can turn Big moments off.');
         if (!eng.singTag && !eng.singStyle)
             out.push('This engine cannot sing, so a sung line is spoken.');
         return out;
@@ -4242,8 +4325,60 @@ export function setup(ctx, overrides) {
             requestAnimationFrame(() => putBack(true));
         });
     }
+    // A theme color, read off the page as #rrggbb, from a probe inside the
+    // panel so nothing is added to the chat.
+    function themeHex(name, backup) {
+        try {
+            const probe = document.createElement('span');
+            probe.style.color = 'var(' + name + ',' + backup + ')';
+            root.appendChild(probe);
+            const c = computedHex(getComputedStyle(probe).color);
+            probe.remove();
+            return c || backup;
+        }
+        catch (_) {
+            return backup;
+        }
+    }
+    // The colors picked for the player and the lit word, put on the page's
+    // root, where the player and the chat can read them. An empty one is taken
+    // off, so the theme's own is used.
+    function paintColors() {
+        try {
+            const st = document.documentElement.style;
+            const put = (name, v) => {
+                if (v)
+                    st.setProperty(name, v);
+                else
+                    st.removeProperty(name);
+            };
+            const hex = (v) => (/^#[0-9a-f]{6}$/i.test(String(v || '')) ? String(v).toLowerCase() : '');
+            put('--af-mp-accent', hex(S.playerAccent));
+            put('--af-mp-back', hex(S.playerBack));
+            put('--af-mp-ink', hex(S.playerInk));
+            // Untouched, the lit word uses the theme's own accent at 20 per cent.
+            const strength = Math.min(80, Math.max(10, Number(S.wordStrength) || 20));
+            const own = hex(S.wordColor);
+            if (!own && strength === 20)
+                put('--af-word', '');
+            else {
+                const base = own || themeHex('--lumiverse-primary', '#9370db');
+                const n = parseInt(base.slice(1), 16);
+                put('--af-word', 'rgba(' + ((n >> 16) & 255) + ',' + ((n >> 8) & 255) + ',' + (n & 255) + ',' + strength / 100 + ')');
+            }
+        }
+        catch (_) { }
+    }
+    disposers.push(() => {
+        try {
+            for (const name of ['--af-mp-accent', '--af-mp-back', '--af-mp-ink', '--af-word'])
+                document.documentElement.style.removeProperty(name);
+        }
+        catch (_) { }
+    });
     function paintHead() {
         paintStill();
+        paintColors();
         paintLook();
         pill.dataset.on = S.enabled ? 'true' : 'false';
         pill.textContent = S.enabled ? 'On' : 'Off';
@@ -4557,45 +4692,73 @@ export function setup(ctx, overrides) {
         box._afClosing = !open;
         reveal(box, open);
     }
+    // CSS transitions, the same as Auto Retry and Auto Refine. Phones can draw
+    // the whole tab blank for a frame when a box like this is moved with the
+    // Web Animations API. The styles set here are taken off once it has
+    // settled, and a second change while one runs starts from where the first
+    // one is.
+    const MOVE_STYLES = ['transition', 'height', 'opacity', 'transform', 'overflow'];
     function reveal(box, open) {
         const anyBox = box;
-        if (anyBox._afAnim) {
-            try {
-                anyBox._afAnim.cancel();
-            }
-            catch (_) { }
-            anyBox._afAnim = null;
-        }
-        const settle = () => {
-            box.style.overflow = '';
-            anyBox._afAnim = null;
+        const run = (anyBox._afRun = (anyBox._afRun || 0) + 1);
+        const clear = () => {
+            for (const k of MOVE_STYLES)
+                box.style[k] = '';
         };
-        if (calm() || typeof box.animate !== 'function') {
+        if (calm()) {
             box.hidden = !open;
-            settle();
+            clear();
             return;
         }
+        const wasHidden = box.hidden;
+        // Where it is now, mid-way through a change or at rest.
+        const fromH = wasHidden ? 0 : box.offsetHeight;
+        const fromO = wasHidden ? 0 : parseFloat(getComputedStyle(box).opacity) || 0;
+        box.style.transition = 'none';
         box.style.overflow = 'hidden';
+        let goal = 0;
         if (open) {
             box.hidden = false;
-            const h = box.scrollHeight;
-            anyBox._afAnim = box.animate([
-                { height: '0px', opacity: 0, transform: 'translateY(-4px)' },
-                { height: h + 'px', opacity: 1, transform: 'none' },
-            ], { duration: 240, easing: 'cubic-bezier(.2,.7,.2,1)' });
-            anyBox._afAnim.onfinish = settle;
+            box.style.height = '';
+            goal = box.scrollHeight;
+        }
+        box.style.height = fromH + 'px';
+        box.style.opacity = String(open && wasHidden ? 0 : fromO);
+        if (open && wasHidden)
+            box.style.transform = 'translateY(-4px)';
+        // Read the layout between the two, or there is nothing to travel between.
+        void box.offsetWidth;
+        if (open) {
+            const ease = '240ms cubic-bezier(.2,.8,.28,1)';
+            box.style.transition = 'height ' + ease + ',transform ' + ease + ',opacity 200ms ease-out 60ms';
+            box.style.height = goal + 'px';
+            box.style.opacity = '1';
+            box.style.transform = 'none';
         }
         else {
-            const h = box.scrollHeight;
-            anyBox._afAnim = box.animate([
-                { height: h + 'px', opacity: 1, transform: 'none' },
-                { height: '0px', opacity: 0, transform: 'translateY(-4px)' },
-            ], { duration: 200, easing: 'cubic-bezier(.4,0,.6,1)' });
-            anyBox._afAnim.onfinish = () => {
-                box.hidden = true;
-                settle();
-            };
+            const ease = '220ms ease-out';
+            box.style.transition = 'height ' + ease + ',opacity ' + ease + ',transform ' + ease;
+            box.style.height = '0px';
+            box.style.opacity = '0';
+            box.style.transform = 'translateY(-4px)';
         }
+        let ended = false;
+        const end = (e) => {
+            if (e && (e.target !== box || e.propertyName !== 'height'))
+                return;
+            if (ended)
+                return;
+            ended = true;
+            box.removeEventListener('transitionend', end);
+            // A later change owns the styles now.
+            if (anyBox._afRun !== run)
+                return;
+            if (!open)
+                box.hidden = true;
+            clear();
+        };
+        box.addEventListener('transitionend', end);
+        setTimeout(() => end(), 500);
     }
     // A dropdown. Options with a group are sorted under that heading, in the
     // order the groups first come, the same as Auto Refine's lists.
@@ -4659,6 +4822,149 @@ export function setup(ctx, overrides) {
         });
         f.appendChild(r);
         return f;
+    }
+    // A color with its own editor rather than the browser's color input, which
+    // on a phone often has no way to type a code. The swatch opens the editor
+    // under the row: a box for a code such as #ff0040, sliders for hue,
+    // saturation and lightness, and the theme's own colors to pick from.
+    // Use the theme's color clears it.
+    function colorRow(key, label, help, themeVar, fallback) {
+        const wrap = el('<div class="af-col"></div>');
+        wrap.setAttribute('data-af-row', key);
+        const swatch = el('<button type="button" class="af-colorswatch" aria-expanded="false" title="Change the color"></button>');
+        swatch.setAttribute('data-af-colorswatch', key);
+        const back = button('Use the theme\u2019s color', () => {
+            set({ [key]: '' });
+            bad.textContent = '';
+            paint();
+            paintColors();
+        });
+        back.setAttribute('data-af-colorback', key);
+        const tools = el('<div class="af-row"></div>');
+        tools.appendChild(back);
+        tools.appendChild(swatch);
+        const row = labelRow(label, help, undefined, tools);
+        const lab = row.querySelector('.af-lab');
+        lab.id = rid('cl');
+        swatch.setAttribute('aria-labelledby', lab.id);
+        wrap.appendChild(row);
+        const own = () => /^#[0-9a-f]{6}$/i.test(String(S[key] || ''));
+        const now = () => (own() ? String(S[key]).toLowerCase() : themeHex(themeVar, fallback));
+        const editor = el('<div class="af-sub"><div class="af-col af-under af-coloredit"></div></div>');
+        editor.hidden = true;
+        const inner = editor.firstElementChild;
+        const codeRow = el('<div class="af-row"></div>');
+        const code = el('<input type="text" class="af-field af-colorcode" maxlength="7" spellcheck="false" autocomplete="off" autocapitalize="off" placeholder="#ff0040">');
+        code.setAttribute('aria-label', label + ', color code');
+        code.setAttribute('data-af-colorcode', key);
+        const bad = el('<span class="af-colorbad" aria-live="polite"></span>');
+        codeRow.appendChild(code);
+        codeRow.appendChild(bad);
+        inner.appendChild(codeRow);
+        const sliders = {};
+        const shown = {};
+        for (const [part, name, max] of [['h', 'Hue', 360], ['s', 'Saturation', 100], ['l', 'Lightness', 100]]) {
+            const line = el('<div class="af-colorline"><span class="af-colorname"></span><input type="range" class="af-colorrange" min="0" step="1"><span class="af-colorvalue"></span></div>');
+            line.firstElementChild.textContent = name;
+            const range = line.querySelector('input');
+            range.max = String(max);
+            range.setAttribute('aria-label', label + ', ' + name);
+            range.setAttribute('data-af-colorpart', part);
+            sliders[part] = range;
+            shown[part] = line.lastElementChild;
+            inner.appendChild(line);
+        }
+        const picks = el('<div class="af-row"></div>');
+        for (const [name, v, b] of [
+            ['Accent', '--lumiverse-primary', '#9370db'],
+            ['Text', '--lumiverse-text', '#eeeeee'],
+            ['Card', '--lumiverse-bg-elevated', '#231e30'],
+        ]) {
+            const one = button(name, () => take(themeHex(v, b), true));
+            one.setAttribute('data-af-colorpick', name.toLowerCase());
+            const dot = el('<span class="af-colordot"></span>');
+            dot.style.background = 'var(' + v + ',' + b + ')';
+            one.insertBefore(dot, one.firstChild);
+            picks.appendChild(one);
+        }
+        inner.appendChild(picks);
+        wrap.appendChild(editor);
+        // The sliders keep their own hue, saturation and lightness. A code holds
+        // less: hue 360 is the same red as hue 0, and with no saturation there is
+        // no hue. So the sliders set the code, and the code sets the sliders only
+        // when it comes from somewhere else.
+        let hsl = hexHsl(now());
+        const showSliders = () => {
+            const { h, s, l } = hsl;
+            const hues = [0, 60, 120, 180, 240, 300, 360].map((x) => 'hsl(' + x + ',' + s + '%,' + l + '%)').join(',');
+            const tracks = {
+                h: 'linear-gradient(to right,' + hues + ')',
+                s: 'linear-gradient(to right,hsl(' + h + ',0%,' + l + '%),hsl(' + h + ',100%,' + l + '%))',
+                l: 'linear-gradient(to right,hsl(' + h + ',' + s + '%,0%),hsl(' + h + ',' + s + '%,50%),hsl(' + h + ',' + s + '%,100%))',
+            };
+            const thumb = now();
+            for (const part of ['h', 's', 'l']) {
+                sliders[part].value = String(hsl[part]);
+                sliders[part].style.setProperty('--af-track', tracks[part]);
+                sliders[part].style.setProperty('--af-thumb', thumb);
+                shown[part].textContent = String(hsl[part]) + (part === 'h' ? '' : '%');
+            }
+        };
+        const paint = (fromSliders) => {
+            const hex = now();
+            swatch.style.background = hex;
+            back.hidden = !own();
+            if (document.activeElement !== code)
+                code.value = hex;
+            if (!fromSliders)
+                hsl = hexHsl(hex);
+            showSliders();
+        };
+        // A color from any part of the editor. Saved when the change ends, so a
+        // drag is one save.
+        function take(hex, save, fromSliders) {
+            S[key] = hex.toLowerCase();
+            bad.textContent = '';
+            paint(fromSliders);
+            paintColors();
+            if (save)
+                set({});
+        }
+        // While typing, only a whole six-digit code is shown. Partway through
+        // one, three digits are a short code for another color.
+        code.addEventListener('input', () => {
+            if (code.value.trim().replace(/^#/, '').length !== 6)
+                return;
+            const hex = colorCode(code.value);
+            if (hex)
+                take(hex, false);
+        });
+        code.addEventListener('change', () => {
+            const hex = colorCode(code.value);
+            if (hex)
+                take(hex, true);
+            else {
+                bad.textContent = 'Type a color code such as #ff0040.';
+                code.value = now();
+            }
+        });
+        for (const part of ['h', 's', 'l']) {
+            const slide = (save) => {
+                hsl = { ...hsl, [part]: Number(sliders[part].value) };
+                take(hslHex(hsl.h, hsl.s, hsl.l), save, true);
+            };
+            sliders[part].addEventListener('input', () => slide(false));
+            sliders[part].addEventListener('change', () => slide(true));
+        }
+        swatch.addEventListener('click', () => {
+            const open = swatch.getAttribute('aria-expanded') !== 'true';
+            swatch.setAttribute('aria-expanded', open ? 'true' : 'false');
+            if (open)
+                paint();
+            reveal(editor, open);
+        });
+        paint();
+        return wrap;
     }
     function text(label, value, onChange, placeholder, help, max) {
         const id = rid('tx');
@@ -5004,7 +5310,7 @@ export function setup(ctx, overrides) {
         '.af-w{color:var(--lumiverse-text-muted,rgba(255,255,255,.65));transition:color .25s ease}' +
         '.af-w.af-said{color:var(--lumiverse-text,rgba(255,255,255,.92))}' +
         // The word being said, in the chat.
-        '::highlight(auto-foley-word){background-color:var(--lumiverse-primary-020,rgba(147,112,219,.3));color:inherit}' +
+        '::highlight(auto-foley-word){background-color:var(--af-word,var(--lumiverse-primary-020,rgba(147,112,219,.3)));color:inherit}' +
         // The player in a message. Its space opens over several frames, and it
         // fades and slides 4 pixels. It takes the message's font and color, and
         // the theme's own fill, border and rounding.
@@ -5017,9 +5323,9 @@ export function setup(ctx, overrides) {
         '.af-mp-box{display:inline-grid;grid-template-columns:auto auto auto minmax(0,max-content);align-items:center;column-gap:6px;box-sizing:border-box;max-width:100%;min-width:0;margin:6px 0;padding:3px 12px 3px 3px;border-radius:999px;' +
         // Solid, the same as Auto Foley's other floating parts, so the words never
         // sit on a picture or pattern behind the message.
-        'border:1px solid var(--lumiverse-border,rgba(147,112,219,.2));background-color:var(--lumiverse-card-bg-solid,rgb(24,20,34));' +
-        'background-image:linear-gradient(var(--lumiverse-bg-elevated,rgba(35,30,48,.98)),var(--lumiverse-bg-elevated,rgba(35,30,48,.98)));' +
-        'color:var(--lumiverse-text,rgba(255,255,255,.92));font:inherit;font-size:.85em;line-height:1.3;box-shadow:var(--lumiverse-shadow-sm,0 2px 8px rgba(0,0,0,.25))}' +
+        'border:1px solid var(--lumiverse-border,rgba(147,112,219,.2));background-color:var(--af-mp-back,var(--lumiverse-card-bg-solid,rgb(24,20,34)));' +
+        'background-image:linear-gradient(var(--af-mp-back,var(--lumiverse-bg-elevated,rgba(35,30,48,.98))),var(--af-mp-back,var(--lumiverse-bg-elevated,rgba(35,30,48,.98))));' +
+        'color:var(--af-mp-ink,var(--lumiverse-text,rgba(255,255,255,.92)));font:inherit;font-size:.85em;line-height:1.3;box-shadow:var(--lumiverse-shadow-sm,0 2px 8px rgba(0,0,0,.25))}' +
         '.af-mp .af-mp-box > *, .af-mp .af-mp-run > *{margin:0;min-width:0;box-sizing:border-box}' +
         // The line gives up its room before the words do, so the words are cut
         // short only when the line is already at its smallest. Flex shares a
@@ -5031,9 +5337,9 @@ export function setup(ctx, overrides) {
         '.af-mp-play{flex:none;display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;padding:0;border-radius:50%;cursor:pointer;' +
         // The icon is in the text color, which reads on the pill in every theme.
         // The accent color is only the ring.
-        'border:1.5px solid var(--lumiverse-primary,rgb(147,112,219));background:transparent;color:var(--lumiverse-text,rgba(255,255,255,.92))}' +
+        'border:1.5px solid var(--af-mp-accent,var(--lumiverse-primary,rgb(147,112,219)));background:transparent;color:var(--af-mp-ink,var(--lumiverse-text,rgba(255,255,255,.92)))}' +
         '.af-mp-play svg{width:14px;height:14px}' +
-        '.af-mp-ic{flex:none;display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;padding:0;border:none;border-radius:50%;cursor:pointer;background:transparent;color:var(--lumiverse-text,rgba(255,255,255,.92))}' +
+        '.af-mp-ic{flex:none;display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;padding:0;border:none;border-radius:50%;cursor:pointer;background:transparent;color:var(--af-mp-ink,var(--lumiverse-text,rgba(255,255,255,.92)))}' +
         '.af-mp-ic svg{width:14px;height:14px}' +
         '.af-mp-ic:disabled{opacity:.35;cursor:default}' +
         '@media (hover:hover){.af-mp-ic:not(:disabled):hover{background:var(--lumiverse-primary-020,rgba(147,112,219,.2))}}' +
@@ -5047,7 +5353,7 @@ export function setup(ctx, overrides) {
         '@media (pointer:coarse){.af-mp-seek{height:32px}}' +
         // The line fills its column, which gives up room before the words do.
         '.af-mp-bar{position:relative;display:block;width:100%;height:4px;border-radius:2px;overflow:hidden;background:var(--lumiverse-border,rgba(147,112,219,.25))}' +
-        '.af-mp-bar i{position:absolute;left:0;top:0;bottom:0;width:0;background:var(--lumiverse-primary,rgb(147,112,219))}' +
+        '.af-mp-bar i{position:absolute;left:0;top:0;bottom:0;width:0;background:var(--af-mp-accent,var(--lumiverse-primary,rgb(147,112,219)))}' +
         '.af-mp-text{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:inherit;font-variant-numeric:tabular-nums}' +
         '@media (prefers-reduced-motion: reduce){.af-mp{transition:none}}' +
         'html[data-af-still] .af-mp{transition:none}' +
@@ -5249,8 +5555,10 @@ export function setup(ctx, overrides) {
                 const y = Math.round(Math.max(8, Math.min(wantY, vh - h - 8)));
                 if (x !== at.x || y !== at.y)
                     widget.moveTo(x, y);
-                if (playerOpen && floatHome)
+                if (playerOpen && floatHome) {
                     placedAt = { x, y };
+                    aimCircle();
+                }
             }
         }
         catch (_) { }
@@ -5259,6 +5567,36 @@ export function setup(ctx, overrides) {
     // and closing draws it back in, then shows the button. With reduce motion
     // on, it opens and closes at once.
     let playerMoving = null;
+    // The opening circle, aimed again each time the widget is placed while it
+    // opens. Lumiverse can size and place the widget more than once before the
+    // first frame is drawn, and it draws a move on its next render.
+    let opening = null;
+    function aimCircle() {
+        const o = opening;
+        if (!o || !o.anim || o.anim.playState === 'finished')
+            return;
+        // The button and the card both sit at the widget's corner, so the circle
+        // starts where the button was, from where the widget was and where it
+        // goes, whenever it is drawn there.
+        const home = floatHome;
+        const goes = placedAt;
+        let x = o.r0;
+        let y = o.r0;
+        if (home && goes) {
+            x += home.x - goes.x;
+            y += home.y - goes.y;
+        }
+        else {
+            const r = o.card.getBoundingClientRect();
+            x = (o.from.left + o.from.width / 2 - r.left) / o.z;
+            y = (o.from.top + o.from.height / 2 - r.top) / o.z;
+        }
+        const far = Math.hypot(Math.max(x, o.card.offsetWidth - x), Math.max(y, o.card.offsetHeight - y)) + 2;
+        try {
+            o.anim.effect.setKeyframes([{ clipPath: 'circle(' + o.r0 + 'px at ' + x + 'px ' + y + 'px)' }, { clipPath: 'circle(' + far + 'px at ' + x + 'px ' + y + 'px)' }]);
+        }
+        catch (_) { }
+    }
     // While the card or its fold moves, the widget keeps its size, so the
     // movement is not cut off by a box that shrank first.
     let holdSize = false;
@@ -5270,6 +5608,7 @@ export function setup(ctx, overrides) {
             catch (_) { }
             playerMoving = null;
         }
+        opening = null;
         const zoomNow = () => {
             try {
                 return parseFloat(getComputedStyle(document.documentElement).zoom) || 1;
@@ -5296,14 +5635,18 @@ export function setup(ctx, overrides) {
             if (!card || !from)
                 return;
             const z = zoomNow();
-            const r = card.getBoundingClientRect();
-            const x = (from.left + from.width / 2 - r.left) / z;
-            const y = (from.top + from.height / 2 - r.top) / z;
             const r0 = from.width / 2 / z;
-            const far = Math.hypot(Math.max(x, card.offsetWidth - x), Math.max(y, card.offsetHeight - y)) + 2;
             try {
-                playerMoving = card.animate([{ clipPath: 'circle(' + r0 + 'px at ' + x + 'px ' + y + 'px)' }, { clipPath: 'circle(' + far + 'px at ' + x + 'px ' + y + 'px)' }], { duration: 320, easing: 'cubic-bezier(.2,.8,.2,1)' });
-                playerMoving.onfinish = () => (playerMoving = null);
+                playerMoving = card.animate([{ clipPath: 'circle(' + r0 + 'px at ' + r0 + 'px ' + r0 + 'px)' }, { clipPath: 'circle(' + r0 + 'px at ' + r0 + 'px ' + r0 + 'px)' }], {
+                    duration: 320,
+                    easing: 'cubic-bezier(.2,.8,.2,1)',
+                });
+                opening = { anim: playerMoving, card, r0, from, z };
+                aimCircle();
+                playerMoving.onfinish = () => {
+                    playerMoving = null;
+                    opening = null;
+                };
                 Array.prototype.forEach.call(card.children, (kid) => {
                     kid.animate([{ opacity: 0, transform: 'translateY(4px)' }, { opacity: 1, transform: 'none' }], { duration: 220, delay: 90, easing: 'ease-out', fill: 'backwards' });
                 });
@@ -6105,6 +6448,16 @@ export function setup(ctx, overrides) {
         c.appendChild(toggle('Light up words in the chat', 'On by default. The word being spoken is lit in the message itself, as it is said. It changes nothing in the message. Some older browsers cannot light words.', 'chatHighlight', () => {
             if (!S.chatHighlight)
                 clearChatWords();
+        }, () => {
+            const sample = el('<p class="af-note">A line with <span class="af-wordsample">this</span> word lit.</p>');
+            return [
+                colorRow('wordColor', 'Color of the lit word', 'Empty uses your theme\u2019s accent. Tap the swatch to type a color code or pick one.', '--lumiverse-primary', '#9370db'),
+                slider('How strong it is', Math.min(80, Math.max(10, Number(S.wordStrength) || 20)), 10, 80, 5, (v) => v + '%', (v) => {
+                    set({ wordStrength: v });
+                    paintColors();
+                }, '20% by default. Higher makes the lit word stand out more.'),
+                sample,
+            ];
         }));
         c.appendChild(toggle('A floating player', 'Off by default. A round button over the chat that opens a small player: Play, the lines, the volume and quick switches. Drag it to move it. It needs the UI panels permission.', 'widgetOn', () => syncWidget(), () => [
             slider('How big it is', Number(S.widgetSize) || 44, 28, 96, 2, (v) => v + ' px', (v) => {
@@ -7784,7 +8137,7 @@ export function setup(ctx, overrides) {
             ]));
             rows.push(warnBox);
             rows.push(toggle('Find new speakers', 'On by default. Someone who speaks and is not in the cast is added to it, and given a voice nobody else uses.', 'findSpeakers'));
-            rows.push(toggle('Big moments', 'On by default. The Director can mark an emotional peak, such as a scream. On ElevenLabs, that line gets a looser, more expressive voice. The audience can cheer on it.', 'bigMoments'));
+            rows.push(toggle('Big moments', 'On by default. The Director can mark an emotional peak, such as a scream. On ElevenLabs, that line gets a looser, more expressive voice. The audience can cheer on it.', 'bigMoments', () => paintWarn()));
             return rows;
         }));
         page.appendChild(main);
@@ -8385,7 +8738,19 @@ export function setup(ctx, overrides) {
         }));
         page.appendChild(a);
         const btns = card('Buttons', 'Where the Auto Foley button appears.');
-        btns.appendChild(toggle('A player under each message', 'On by default. A message Auto Foley has performed gets a small player under its text, in your theme. It plays the saved audio again, and spends nothing.', 'messagePlayer', () => syncSlots()));
+        btns.appendChild(toggle('A player under each message', 'On by default. A message Auto Foley has performed gets a small player under its text, in your theme. It plays the saved audio again, and spends nothing.', 'messagePlayer', () => syncSlots(), () => {
+            // A still copy of the player, so a color can be seen as it is picked.
+            const sample = el('<div class="af-mp af-mpsample" data-open aria-hidden="true"><div class="af-mp-in"><div class="af-mp-box">' +
+                '<span class="af-mp-ic">' + ICON_BACK + '</span><span class="af-mp-play">' + ICON_PAUSE + '</span><span class="af-mp-ic">' + ICON_SKIP + '</span>' +
+                '<span class="af-mp-run"><span class="af-mp-seek"><span class="af-mp-bar"><i style="width:40%"></i></span></span><span class="af-mp-text">Part 2 of 5</span></span>' +
+                '</div></div></div>');
+            return [
+                colorRow('playerAccent', 'Player accent', 'The ring around Play and the line that fills. Empty uses your theme\u2019s accent.', '--lumiverse-primary', '#9370db'),
+                colorRow('playerBack', 'Player background', 'Empty uses your theme\u2019s card color.', '--lumiverse-bg-elevated', '#231e30'),
+                colorRow('playerInk', 'Player text and icons', 'Empty uses your theme\u2019s text color.', '--lumiverse-text', '#eeeeee'),
+                sample,
+            ];
+        }));
         btns.appendChild(toggle('A button on every message', 'Off by default. One tap performs that message, an older one or the greeting too. It sits in each message\u2019s own row of buttons, in the space Lumiverse leaves for extensions.', 'messageButton', () => syncSlots()));
         btns.appendChild(toggle('A button in the chat\u2019s row of controls', 'Off by default. One tap performs the newest reply. It goes in Lumiverse\u2019s own row of chat buttons, in the place the app leaves there for extensions.', 'barButton', () => syncSlots()));
         btns.appendChild(toggle('In the Extras menu', 'Off by default. Adds Perform the latest reply to the Extras menu of the message box, and Stop Auto Foley while something plays.', 'extrasMenu', () => syncExtras()));
@@ -9301,7 +9666,7 @@ export function setup(ctx, overrides) {
             });
             c.appendChild(labelRow(part.label, '', undefined, box));
         }
-        const area = el('<textarea class="af-field af-mono" rows="8" spellcheck="false" aria-label="Debug info" placeholder="Press Build preview to fill this, then edit out anything private before copying."></textarea>');
+        const area = el('<textarea class="af-field af-mono af-debugarea" rows="8" spellcheck="false" aria-label="Debug info" placeholder="Press Build preview to fill this, then edit out anything private before copying."></textarea>');
         const status = el('<p class="af-status"></p>');
         const row = el('<div class="af-row"></div>');
         row.appendChild(button('Build preview', async () => {
@@ -9450,7 +9815,7 @@ export function setup(ctx, overrides) {
         catch (_) { }
     };
 }
-export const __testing = { wavBlob, noConnectionWhy, perSentence, clipLevel, levelGain, voiceGender, describeWords, markText, movedFor, movedRowMark, MOVED_DEFAULTS, looksLikeDate, voicedFrames, wordWeight, partTimes, engineOf, noTagsWhy, fitTag, tagSound, textFor, styleFor, stripTags, stabilityFor, ENGINES };
+export const __testing = { wavBlob, noConnectionWhy, perSentence, clipLevel, levelGain, voiceGender, describeWords, markText, movedFor, movedRowMark, MOVED_DEFAULTS, looksLikeDate, voicedFrames, wordWeight, partTimes, engineOf, noTagsWhy, colorCode, hexHsl, hslHex, computedHex, fitTag, tagSound, textFor, styleFor, stripTags, stabilityFor, ENGINES };
 // The built-in cheer: "Cheering and clapping crowd 1" by freesound_community,
 // a free sound from Pixabay (pixabay.com/sound-effects/people-cheering-and-clapping-crowd-1-5995/),
 // made mono at 64 kbps so it stays small. assets/applause.mp3 is the same

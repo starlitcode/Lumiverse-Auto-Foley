@@ -795,6 +795,10 @@ describe("more settings and Chatterbox, direct", () => {
     expect(oriel.params).toEqual({ exaggeration: 2, cfg_weight: 0.3, direction: "soft and low" });
     expect(s.chatterboxUrl).toBe("http://192.0.2.4:8004");
     expect(h.box.cleanSettings({ chatterboxUrl: "javascript:alert(1)" }).chatterboxUrl).toBe("");
+    // A color is kept only as a real #rrggbb code, and the strength stays in range.
+    const c = h.box.cleanSettings({ playerAccent: "#FF0040", playerBack: "red", playerInk: "url(x)", wordColor: "#12345", wordStrength: 500 });
+    expect([c.playerAccent, c.playerBack, c.playerInk, c.wordColor, c.wordStrength]).toEqual(["#ff0040", "", "", "", 80]);
+    expect(h.box.cleanSettings({}).wordStrength).toBe(20);
   });
 
   test("How they speak keeps up to 1000 characters, and a direction up to 300", () => {

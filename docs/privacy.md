@@ -3,7 +3,7 @@
 ## In short
 
 - Your messages are sent to the Director's connection and, when it is on, to your Decision connection. Both are connections you set up in Lumiverse.
-- Spoken lines go to your TTS engine through your TTS connection in Lumiverse.
+- Spoken lines go to your TTS engine through your TTS connection in Lumiverse. With **Chatterbox server (direct)**, they go to the server address you gave, through Lumiverse's CORS proxy.
 - The key words of a sound description go to Freesound when a new sound is searched for. A description goes to ElevenLabs only when a new sound is made there.
 - Your settings, cast and sound library are kept in Lumiverse, under your account. With **Keep made audio** on, so are the lines it spoke and the scripts.
 
@@ -12,8 +12,11 @@
 | What | Where it goes | When |
 | --- | --- | --- |
 | The message, split into lines, and your cast with its notes | The Director's connection | Each message performed or prepared, while the Director is on |
+| The same as the Director gets | Your **Second Director**'s connection | Only when the Director refuses or sends back nothing usable, while **Second Director** is on |
 | The message lines, and up to 12 cast names with the start of their notes | Your Decision connection | Each message, while the Decision model is on |
 | Each line, with the tags its engine reads, and a note on how it is said for Gemini | Your TTS engine, through your Lumiverse TTS connection | Each line spoken |
+| Each line, with its tags, voice and settings | Your Chatterbox server, at the address you gave, through Lumiverse's CORS proxy | Each line spoken, with **Chatterbox server (direct)** picked |
+| A request for the server's model and voices | Your Chatterbox server | When you press **Save and test** for it |
 | The key words of a sound description | `freesound.org`, with your Freesound key | Each new sound searched for |
 | A request for the sound's preview, with no key | Freesound, at the preview's address | Each new sound found |
 | A short sound description | `api.elevenlabs.io`, with your ElevenLabs key | Each new sound made |
@@ -47,10 +50,10 @@ With **Save the performance to the message** on, the finished audio is saved to 
 | --- | --- |
 | Generation | Asking the Director, listing your connections for **Which connection**, and reading the thinking Prefix and Suffix saved on them |
 | Decision models | Asking the Decision model, and listing your Decision connections |
-| CORS proxy | Finding sounds on Freesound, making them with ElevenLabs, and testing the keys |
+| CORS proxy | Finding sounds on Freesound, making them with ElevenLabs, testing the keys, and reaching a Chatterbox server you added |
 | UI panels | The floating player, when you turn it on in the Settings tab |
 
-Refusing **UI panels** stops only the floating player. Refusing **CORS proxy** stops only new sound effects. Refusing **Decision models** turns the Decision model off. Refusing **Generation** turns the Director off, and messages are read as written.
+Refusing **UI panels** stops only the floating player. Refusing **CORS proxy** stops new sound effects and a Chatterbox server reached directly. Refusing **Decision models** turns the Decision model off. Refusing **Generation** turns the Director off, and messages are read as written.
 
 ---
 

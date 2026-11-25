@@ -6,7 +6,7 @@ import { join } from "node:path";
 import vm from "node:vm";
 import { __testing } from "../src/frontend";
 
-const { engineOf, noTagsWhy, fitTag, tagSound, textFor, styleFor, stripTags, stabilityFor, ENGINES } = __testing;
+const { engineOf, noTagsWhy, colorCode, hexHsl, hslHex, computedHex, fitTag, tagSound, textFor, styleFor, stripTags, stabilityFor, ENGINES } = __testing;
 
 describe("which engine a connection runs", () => {
   test("ElevenLabs: v3 and v4 act, and the older models are not used", () => {
@@ -314,5 +314,28 @@ describe("Download audio", () => {
     expect(v.getInt16(44 + 4, true)).toBe(16383);
     expect(v.getInt16(44 + 14, true)).toBe(-32768);
     expect(b.type).toBe("audio/wav");
+  });
+});
+
+describe("color codes for the color editor", () => {
+  test("a code is taken with or without the #, and in the short form", () => {
+    expect(colorCode("#FF0040")).toBe("#ff0040");
+    expect(colorCode("ff0040")).toBe("#ff0040");
+    expect(colorCode("#0f8")).toBe("#00ff88");
+    expect(colorCode("#ff004")).toBe(null);
+    expect(colorCode("teal")).toBe(null);
+  });
+  test("hue, saturation and lightness go there and back", () => {
+    for (const hex of ["#ff0040", "#3a7bd5", "#808080", "#000000", "#ffffff", "#9370db"]) {
+      const { h, s, l } = hexHsl(hex);
+      const back = hslHex(h, s, l);
+      const diff = [1, 3, 5].map((i) => Math.abs(parseInt(back.slice(i, i + 2), 16) - parseInt(hex.slice(i, i + 2), 16)));
+      expect(Math.max(...diff)).toBeLessThanOrEqual(3);
+    }
+  });
+  test("a color the browser computed is read as a code", () => {
+    expect(computedHex("rgb(147, 112, 219)")).toBe("#9370db");
+    expect(computedHex("rgba(10 20 30 / 0.5)")).toBe("#0a141e");
+    expect(computedHex("hsl(0 0% 0%)")).toBe(null);
   });
 });
