@@ -4002,6 +4002,32 @@ export function setup(ctx, overrides) {
         box._afClosing = !open;
         reveal(box, open);
     }
+    // How much of a box can be seen, from its top down to the bottom of the
+    // nearest box that scrolls, or of the screen, in its own CSS pixels, with
+    // a few pixels spare. A part taller than that opens and closes only what
+    // can be seen. Otherwise most of the movement would happen below the edge,
+    // and the part that can be seen would go by in a few frames, which reads as
+    // a snap.
+    function roomBelow(node) {
+        try {
+            const r = node.getBoundingClientRect();
+            let bottom = window.innerHeight || Infinity;
+            for (let p = node.parentElement; p; p = p.parentElement) {
+                const oy = getComputedStyle(p).overflowY;
+                if (oy === 'auto' || oy === 'scroll')
+                    bottom = Math.min(bottom, p.getBoundingClientRect().bottom);
+            }
+            let zoom = 1;
+            try {
+                zoom = node.currentCSSZoom || parseFloat(getComputedStyle(document.documentElement).zoom) || 1;
+            }
+            catch (_) { }
+            return Math.max(0, (bottom - r.top) / zoom + 8);
+        }
+        catch (_) {
+            return Infinity;
+        }
+    }
     function reveal(box, open) {
         const anyBox = box;
         if (anyBox._afAnim) {
@@ -4023,7 +4049,11 @@ export function setup(ctx, overrides) {
         box.style.overflow = 'hidden';
         if (open) {
             box.hidden = false;
-            const h = box.scrollHeight;
+            // Only as far as can be seen. The rest is added out of sight when it
+            // ends, the same as Auto Retry and Auto Refine.
+            const h = Math.min(box.scrollHeight, roomBelow(box));
+            if (h <= 9)
+                return settle();
             anyBox._afAnim = box.animate([
                 { height: '0px', opacity: 0, transform: 'translateY(-4px)' },
                 { height: h + 'px', opacity: 1, transform: 'none' },
@@ -4031,7 +4061,14 @@ export function setup(ctx, overrides) {
             anyBox._afAnim.onfinish = settle;
         }
         else {
-            const h = box.scrollHeight;
+            // Cut first to the part that can be seen, so the whole close is the
+            // part that can be seen moving. With none of it in sight, it closes at
+            // once.
+            const h = Math.min(box.scrollHeight, roomBelow(box));
+            if (h <= 9) {
+                box.hidden = true;
+                return settle();
+            }
             anyBox._afAnim = box.animate([
                 { height: h + 'px', opacity: 1, transform: 'none' },
                 { height: '0px', opacity: 0, transform: 'translateY(-4px)' },

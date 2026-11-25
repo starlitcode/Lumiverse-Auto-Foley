@@ -1727,6 +1727,8 @@ if (section("switch rows")) {
   await page.waitForTimeout(250);
   await page.evaluate(() => {
     window.__row = document.querySelector('[data-af-row="autoplay"]');
+    // In sight, since a row with none of it in sight opens at once.
+    window.__row.scrollIntoView({ block: "start" });
     window.__row.querySelector(".af-box").click();
   });
   const mid = await page.evaluate(async () => {
@@ -2021,6 +2023,9 @@ if (section("under a pick")) {
         });
         const sel = row.querySelector("select");
         const under = row.nextElementSibling;
+        // In sight, since a row with none of it in sight opens at once.
+        row.scrollIntoView({ block: "start" });
+        await new Promise((r) => requestAnimationFrame(r));
         const card = row.closest(".af-card");
         card.__mark = 1;
         sel.value = value;
