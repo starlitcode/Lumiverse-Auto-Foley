@@ -307,3 +307,22 @@ describe("Even out voice levels", () => {
     expect(levelGain(-26, -20)).toBe(1);
   });
 });
+
+describe("Download audio", () => {
+  const { wavBlob } = __testing as any;
+  test("a WAV file has the right header and length", async () => {
+    const left = new Float32Array([0, 0.5, -0.5, 1]);
+    const right = new Float32Array([0, -0.25, 0.25, -1]);
+    const b = wavBlob([left, right], 8000);
+    const v = new DataView(await b.arrayBuffer());
+    const tag = (o: number) => String.fromCharCode(v.getUint8(o), v.getUint8(o + 1), v.getUint8(o + 2), v.getUint8(o + 3));
+    expect(tag(0)).toBe("RIFF");
+    expect(tag(8)).toBe("WAVE");
+    expect(v.getUint16(22, true)).toBe(2);
+    expect(v.getUint32(24, true)).toBe(8000);
+    expect(v.getUint32(40, true)).toBe(4 * 2 * 2);
+    expect(v.getInt16(44 + 4, true)).toBe(16383);
+    expect(v.getInt16(44 + 14, true)).toBe(-32768);
+    expect(b.type).toBe("audio/wav");
+  });
+});

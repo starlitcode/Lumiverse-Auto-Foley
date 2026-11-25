@@ -152,6 +152,24 @@ With **Keep made audio** on, in the Settings tab:
 - **Up to 100 MB** is the default. When the total passes it, the oldest lines go first.
 - **Clear kept audio**, under it, deletes them all. It asks first.
 
+## Downloads and videos
+
+Three buttons under **Now playing**, on the Stage tab, keep what you heard. None of them spends anything.
+
+- **Download audio** saves the last performance as one WAV file: every line and sound you heard, in order. Parts you skipped are not in it.
+- **Download this part** saves the part playing now, as the voice service made it.
+- **Make a video** saves a video of the script page: who is speaking, the words lighting up as they are said, the **On air** light, and the strip of parts.
+
+About the video:
+
+1. Press **Make a video** after a message has played.
+2. The video is made from the audio you heard, as it plays, so it takes as long as the performance. You do not hear it while it is made.
+3. The line under the buttons counts the time. Keep this tab open until it is done, since a phone pauses a tab in the background.
+4. The video is saved when it ends. **Stop the video** stops it and saves nothing.
+
+- The video is 1280 by 720, in your theme's colors. Most browsers save it as WebM, and Safari saves it as MP4.
+- A browser that cannot make videos says so, and nothing is saved.
+
 ## What it costs
 
 - **Voice credits** for every line spoken, the same as Lumiverse's own TTS. A local engine, such as Chatterbox, costs nothing.

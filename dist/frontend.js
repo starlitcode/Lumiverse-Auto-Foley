@@ -269,6 +269,42 @@ function levelGain(mine, quietest) {
         return 1;
     return Math.round(Math.pow(10, -down / 20) * 1000) / 1000;
 }
+// A WAV file of 16-bit samples, from one channel or two.
+function wavBlob(channels, rate) {
+    const ch = Math.max(1, Math.min(2, channels.length));
+    const n = channels.length ? channels[0].length : 0;
+    const buf = new ArrayBuffer(44 + n * ch * 2);
+    const v = new DataView(buf);
+    const ascii = (o, t) => {
+        for (let k = 0; k < t.length; k++)
+            v.setUint8(o + k, t.charCodeAt(k));
+    };
+    ascii(0, 'RIFF');
+    v.setUint32(4, 36 + n * ch * 2, true);
+    ascii(8, 'WAVE');
+    ascii(12, 'fmt ');
+    v.setUint32(16, 16, true);
+    v.setUint16(20, 1, true);
+    v.setUint16(22, ch, true);
+    v.setUint32(24, rate, true);
+    v.setUint32(28, rate * ch * 2, true);
+    v.setUint16(32, ch * 2, true);
+    v.setUint16(34, 16, true);
+    ascii(36, 'data');
+    v.setUint32(40, n * ch * 2, true);
+    let o = 44;
+    for (let i = 0; i < n; i++)
+        for (let c = 0; c < ch; c++) {
+            const x = Math.max(-1, Math.min(1, Number(channels[c][i]) || 0));
+            v.setInt16(o, x < 0 ? x * 0x8000 : x * 0x7fff, true);
+            o += 2;
+        }
+    return new Blob([buf], { type: 'audio/wav' });
+}
+// A name that is safe as a file name on every system.
+function fileName(text) {
+    return String(text || '').replace(/[^\p{L}\p{N} _-]+/gu, ' ').replace(/\s+/g, ' ').trim().slice(0, 60) || 'performance';
+}
 // How long a word takes to say, roughly: its groups of vowels, at least one.
 // Text with no Latin vowels, such as Japanese, is counted by its length.
 function wordWeight(word) {
@@ -676,6 +712,8 @@ const ICON_PLAY = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="tru
 const ICON_PAUSE = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6.5" y="5" width="4" height="14" rx="1"/><rect x="13.5" y="5" width="4" height="14" rx="1"/></svg>';
 const ICON_STOP = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="1.5"/></svg>';
 const ICON_SKIP = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6 6.5v11a1 1 0 0 0 1.55.83L15 13.2V17a1 1 0 0 0 2 0V7a1 1 0 0 0-2 0v3.8L7.55 5.67A1 1 0 0 0 6 6.5Z"/></svg>';
+const ICON_DOWNLOAD = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11"/><path d="m7 10 5 5 5-5"/><path d="M5 20h14"/></svg>';
+const ICON_VIDEO = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="6" width="13" height="12" rx="2"/><path d="m16 10 5-3v10l-5-3"/></svg>';
 const ICON_REDO = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/></svg>';
 // The On air light, as in a recording studio: lit while a performance plays,
 // amber while it is paused, and dim the rest of the time. It does not blink.
@@ -2224,9 +2262,397 @@ export function setup(ctx, overrides) {
         if (s)
             s('cut');
     }
+    // The last performance, kept after it stops, and a video being made.
+    let lastShow = null;
+    let videoRun = null;
+    function keepSaid(text) {
+        keepLine = text;
+        if (stageRefs && tab === 'stage')
+            setText(stageRefs.q('keepsaid'), text);
+    }
+    let keepLine = '';
+    function saveFile(blob, name) {
+        try {
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = name;
+            a.rel = 'noopener';
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            setTimeout(() => URL.revokeObjectURL(url), 60000);
+            return true;
+        }
+        catch (_) {
+            return false;
+        }
+    }
+    // The performance to keep: the one playing, or the last one.
+    function keptShow() {
+        if (show && show.played.length)
+            return show;
+        return lastShow;
+    }
+    function showName(sh) {
+        return 'auto-foley ' + fileName(chatInfo.name || 'chat') + ' ' + new Date(sh.startedAt).toISOString().slice(0, 10);
+    }
+    // Every clip heard, decoded at one rate and joined end to end, with when
+    // each one starts. Null when the browser cannot decode them.
+    // A clip that cannot be read is left out, and counted in skipped.
+    async function joinedAudio(sh) {
+        const w = window;
+        const Off = w.OfflineAudioContext || w.webkitOfflineAudioContext;
+        if (!Off)
+            return null;
+        const rate = 44100;
+        const bufs = [];
+        const used = [];
+        let skipped = 0;
+        for (let i = 0; i < sh.played.length; i++) {
+            try {
+                const data = await sh.played[i].blob.arrayBuffer();
+                const ctxA = new Off(1, 1, rate);
+                const b = await new Promise((done, fail) => {
+                    const r = ctxA.decodeAudioData(data, done, fail);
+                    if (r && typeof r.then === 'function')
+                        r.then(done, fail);
+                });
+                if (!b || !b.length)
+                    throw new Error('empty');
+                bufs.push(b);
+                used.push(i);
+            }
+            catch (_) {
+                skipped++;
+            }
+        }
+        if (!bufs.length)
+            return null;
+        const ch = bufs.some((b) => b.numberOfChannels > 1) ? 2 : 1;
+        const total = bufs.reduce((n, b) => n + b.length, 0);
+        const channels = Array.from({ length: ch }, () => new Float32Array(total));
+        const starts = [];
+        const lens = [];
+        let at = 0;
+        for (const b of bufs) {
+            starts.push(at / rate);
+            lens.push(b.length / rate);
+            for (let c = 0; c < ch; c++)
+                channels[c].set(b.getChannelData(Math.min(c, b.numberOfChannels - 1)), at);
+            at += b.length;
+        }
+        return { channels, rate, starts, lens, used, skipped };
+    }
+    async function downloadPerformance() {
+        const sh = keptShow();
+        if (!sh)
+            return keepSaid('Play a message first. What you hear can then be downloaded.');
+        keepSaid('Joining the audio');
+        try {
+            const j = await joinedAudio(sh);
+            if (!j)
+                return keepSaid('This browser cannot join the audio into one file.');
+            const ok = saveFile(wavBlob(j.channels, j.rate), showName(sh) + '.wav');
+            keepSaid(!ok ? 'The browser would not save the file. Some private windows block downloads.' : j.skipped ? j.skipped + (j.skipped === 1 ? ' part' : ' parts') + ' could not be read by the browser, so the file does not have them.' : '');
+            if (!ok)
+                notify('warning', 'The audio could not be saved. Some private windows block downloads.');
+        }
+        catch (e) {
+            keepSaid('The audio could not be joined: ' + String((e && e.message) || e).slice(0, 160));
+        }
+    }
+    async function downloadPart() {
+        const sh = show;
+        if (!sh)
+            return keepSaid('Play a message first. The part playing can then be downloaded.');
+        const k = Math.min(sh.index, sh.items.length - 1);
+        const got = await clipFor(sh, k);
+        if (!got.blob || typeof got.blob === 'string')
+            return keepSaid('This part has no audio file to save. A sound linked from the web is played from its page.');
+        const type = String(got.blob.type || '');
+        const ext = /wav/.test(type) ? 'wav' : /ogg|opus/.test(type) ? 'ogg' : /webm/.test(type) ? 'webm' : 'mp3';
+        const ok = saveFile(got.blob, showName(sh) + ' part ' + (k + 1) + '.' + ext);
+        keepSaid(ok ? '' : 'The browser would not save the file. Some private windows block downloads.');
+    }
+    // A video of the script page, made from the audio already heard, so it
+    // costs nothing. It is recorded as it plays, silently, so it takes as long
+    // as the performance. The words light up as they are said.
+    async function makeVideo() {
+        const sh = keptShow();
+        if (!sh)
+            return keepSaid('Play a message first. A video can then be made of it.');
+        const w = window;
+        const ACtx = w.AudioContext || w.webkitAudioContext;
+        const canvas = document.createElement('canvas');
+        const types = ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm', 'video/mp4'];
+        const Rec = w.MediaRecorder;
+        const type = Rec && typeof Rec.isTypeSupported === 'function' ? types.find((t) => Rec.isTypeSupported(t)) : '';
+        if (!ACtx || !Rec || !type || typeof canvas.captureStream !== 'function')
+            return keepSaid('This browser cannot make a video.');
+        keepSaid('Getting the audio ready');
+        let j = null;
+        try {
+            j = await joinedAudio(sh);
+        }
+        catch (_) { }
+        if (!j)
+            return keepSaid('This browser cannot read the audio for a video.');
+        const joined = j;
+        const W = 1280;
+        const H = 720;
+        canvas.width = W;
+        canvas.height = H;
+        const g = canvas.getContext('2d');
+        // The panel's own colors and font, so the video looks like the theme.
+        const css = getComputedStyle(root);
+        const pick = (name, fallback) => String(css.getPropertyValue(name) || '').trim() || fallback;
+        const C = {
+            bg: pick('--lumiverse-bg-elevated', '#1f1a2e'),
+            text: pick('--lumiverse-text', '#ece8f6'),
+            muted: pick('--lumiverse-text-muted', '#a49cb8'),
+            accent: pick('--lumiverse-primary', '#9370db'),
+            narrator: '#8b9cb8', character: '#a78bfa', persona: '#2dd4bf', npc: '#f472b6', sound: '#f59e0b',
+        };
+        const font = css.fontFamily || 'sans-serif';
+        // A theme's background can be see-through, and a frame drawn on a
+        // see-through color shows the one before it. So a solid base goes first:
+        // dark under light text and light under dark text.
+        let base = '#16131f';
+        try {
+            g.fillStyle = C.text;
+            g.fillRect(0, 0, 1, 1);
+            const px = g.getImageData(0, 0, 1, 1).data;
+            if (px[0] * 0.3 + px[1] * 0.59 + px[2] * 0.11 < 128)
+                base = '#f7f5fb';
+        }
+        catch (_) { }
+        const pageBg = pick('--lumiverse-bg', base);
+        const actx = new ACtx();
+        const buf = actx.createBuffer(joined.channels.length, joined.channels[0].length, joined.rate);
+        joined.channels.forEach((d, c) => buf.getChannelData(c).set(d));
+        const src = actx.createBufferSource();
+        src.buffer = buf;
+        const dest = actx.createMediaStreamDestination();
+        src.connect(dest);
+        const stream = canvas.captureStream(30);
+        dest.stream.getAudioTracks().forEach((t) => stream.addTrack(t));
+        const chunks = [];
+        let rec;
+        try {
+            rec = new Rec(stream, { mimeType: type, videoBitsPerSecond: 4000000, audioBitsPerSecond: 128000 });
+        }
+        catch (e) {
+            try {
+                actx.close();
+            }
+            catch (_) { }
+            return keepSaid('This browser cannot make a video: ' + String((e && e.message) || e).slice(0, 160));
+        }
+        rec.ondataavailable = (e) => e.data && e.data.size && chunks.push(e.data);
+        const total = buf.duration;
+        // The parts heard, with where each starts and the timing of its words.
+        const parts = joined.used.map((pi, i) => {
+            const p = sh.played[pi];
+            const it = sh.items[p.k];
+            const line = it && it.kind === 'voice' ? it.line : null;
+            const lp = line ? lineParts(line) : null;
+            return {
+                it,
+                line,
+                start: joined.starts[i],
+                len: joined.lens[i],
+                parts: lp ? lp.parts : [],
+                times: lp ? partTimes(lp.weights, sh.voiced.get(p.k) || [], joined.lens[i]) : [],
+                who: line ? partWho(line) : 'sound',
+                name: line ? (line.kind === 'narration' ? 'Narrator' : line.speaker) : it && it.kind === 'applause' ? 'The audience' : 'A sound',
+            };
+        });
+        const wrap = (words, max) => {
+            const rows = [[]];
+            for (const wd of words) {
+                const row = rows[rows.length - 1];
+                if (row.length && g.measureText(row.concat([wd]).join(' ')).width > max)
+                    rows.push([wd]);
+                else
+                    row.push(wd);
+            }
+            return rows;
+        };
+        const drawPart = (p, local, alpha) => {
+            g.save();
+            g.globalAlpha = alpha;
+            // Who is speaking: a ring in their color, their first letter and name.
+            const ring = C[p.who] || C.character;
+            g.lineWidth = 4;
+            g.strokeStyle = ring;
+            g.beginPath();
+            g.arc(100, 170, 34, 0, Math.PI * 2);
+            g.stroke();
+            g.fillStyle = C.text;
+            g.font = '700 30px ' + font;
+            g.textAlign = 'center';
+            g.fillText(p.line ? firstLetter(p.name) : '\u266a', 100, 171);
+            g.textAlign = 'left';
+            g.font = '700 26px ' + font;
+            g.fillText(String(p.name).toUpperCase().slice(0, 48), 152, 171);
+            // The margin rule, and the line, word by word.
+            g.fillStyle = ring;
+            g.fillRect(64, 230, 6, H - 340);
+            if (p.line) {
+                g.font = '500 40px ' + font;
+                const words = [];
+                p.parts.forEach((pt, k) => {
+                    if (pt.kind === 'word')
+                        words.push({ text: pt.text, k });
+                });
+                const rows = wrap(words.map((x) => x.text), W - 200);
+                let n = 0;
+                rows.slice(0, 8).forEach((row, r) => {
+                    let x = 100;
+                    for (const wd of row) {
+                        const k = words[n] ? words[n].k : 0;
+                        n++;
+                        g.fillStyle = (p.times[k] || 0) <= local ? C.text : C.muted;
+                        g.fillText(wd, x, 270 + r * 54);
+                        x += g.measureText(wd + ' ').width;
+                    }
+                });
+            }
+            else {
+                g.font = 'italic 500 40px ' + font;
+                g.fillStyle = C.sound;
+                const what = p.it && p.it.kind === 'applause' ? 'The audience cheers' : (p.it && p.it.sound) || 'A sound';
+                wrap(String(what).split(/\s+/), W - 200).slice(0, 6).forEach((row, r) => g.fillText(row.join(' '), 100, 270 + r * 54));
+            }
+            g.restore();
+        };
+        const draw = (t) => {
+            let i = 0;
+            while (i + 1 < parts.length && t >= parts[i + 1].start)
+                i++;
+            const p = parts[i];
+            const local = t - p.start;
+            g.fillStyle = base;
+            g.fillRect(0, 0, W, H);
+            g.fillStyle = pageBg;
+            g.fillRect(0, 0, W, H);
+            g.fillStyle = C.bg;
+            g.fillRect(0, 0, W, H);
+            // The slate stripe along the top.
+            g.save();
+            g.globalAlpha = 0.5;
+            g.fillStyle = C.accent;
+            for (let x = -20; x < W + 20; x += 24) {
+                g.beginPath();
+                g.moveTo(x, 0);
+                g.lineTo(x + 12, 0);
+                g.lineTo(x + 4, 10);
+                g.lineTo(x - 8, 10);
+                g.closePath();
+                g.fill();
+            }
+            g.restore();
+            // The chat's name, and the On air light.
+            g.font = '600 26px ' + font;
+            g.fillStyle = C.muted;
+            g.textBaseline = 'middle';
+            g.fillText(chatInfo.name || 'Auto Foley', 64, 60);
+            g.font = '700 20px ' + font;
+            const airW = g.measureText('ON AIR').width + 52;
+            g.strokeStyle = 'rgba(239,68,68,.6)';
+            g.lineWidth = 2;
+            g.beginPath();
+            g.roundRect ? g.roundRect(W - 64 - airW, 40, airW, 40, 20) : g.rect(W - 64 - airW, 40, airW, 40);
+            g.stroke();
+            g.fillStyle = '#ef4444';
+            g.beginPath();
+            g.arc(W - 64 - airW + 22, 60, 6, 0, Math.PI * 2);
+            g.fill();
+            g.fillStyle = C.text;
+            g.fillText('ON AIR', W - 64 - airW + 36, 61);
+            // A new part fades in over a third of a second as the last one fades
+            // out, rather than replacing it in one frame.
+            const FADE = 0.3;
+            const mix = i > 0 && local < FADE ? local / FADE : 1;
+            if (mix < 1)
+                drawPart(parts[i - 1], t - parts[i - 1].start, 1 - mix);
+            drawPart(p, local, mix);
+            // The strip of parts, in their colors, filled up to now.
+            const y = H - 70;
+            parts.forEach((q2) => {
+                const x0 = 64 + ((W - 128) * q2.start) / total;
+                const x1 = 64 + ((W - 128) * (q2.start + q2.len)) / total;
+                g.fillStyle = C[q2.who] || C.character;
+                g.globalAlpha = q2.start + q2.len <= t ? 0.95 : q2.start <= t ? 0.75 : 0.3;
+                g.fillRect(x0 + 2, y, Math.max(1, x1 - x0 - 4), 10);
+            });
+            g.globalAlpha = 1;
+        };
+        let ended = false;
+        let raf = 0;
+        const t0 = actx.currentTime + 0.1;
+        const finish = (keep) => {
+            if (ended)
+                return;
+            ended = true;
+            videoRun = null;
+            if (raf)
+                cancelAnimationFrame(raf);
+            try {
+                src.stop();
+            }
+            catch (_) { }
+            rec.onstop = () => {
+                try {
+                    actx.close();
+                }
+                catch (_) { }
+                if (!keep) {
+                    keepSaid('The video was stopped. Nothing was saved.');
+                    paintStage();
+                    return;
+                }
+                const blob = new Blob(chunks, { type: type.split(';')[0] });
+                const ok = saveFile(blob, showName(sh) + (/mp4/.test(type) ? '.mp4' : '.webm'));
+                keepSaid(ok ? 'The video is saved.' : 'The browser would not save the video. Some private windows block downloads.');
+                paintStage();
+            };
+            try {
+                rec.stop();
+            }
+            catch (_) { }
+        };
+        videoRun = { cancel: () => finish(false) };
+        const tick = () => {
+            if (ended)
+                return;
+            const t = Math.max(0, actx.currentTime - t0);
+            draw(Math.min(t, total));
+            keepSaid('Making the video: ' + mmss(Math.min(t, total)) + ' of ' + mmss(total) + '. Keep this tab open.');
+            raf = requestAnimationFrame(tick);
+        };
+        draw(0);
+        try {
+            await actx.resume();
+        }
+        catch (_) { }
+        rec.start(1000);
+        src.onended = () => setTimeout(() => finish(true), 300);
+        src.start(t0);
+        tick();
+        paintStage();
+    }
+    disposers.push(() => {
+        if (videoRun)
+            videoRun.cancel();
+    });
     function stop(why) {
         const had = show;
         show = null;
+        // What was heard is kept, for Download audio and Make a video.
+        if (had && had.played.length)
+            lastShow = had;
         clearChatWords();
         if (had) {
             try {
@@ -2277,7 +2703,7 @@ export function setup(ctx, overrides) {
             // The cheer is not saved with the message: it is the audience, not
             // the performance. A linked sound cannot be saved.
             if (how === 'ended' && sh.items[at].kind !== 'applause' && typeof got.blob !== 'string')
-                sh.played.push({ blob: got.blob });
+                sh.played.push({ blob: got.blob, k: at });
             if (sh.jumped) {
                 sh.jumped = false;
                 continue;
@@ -3076,6 +3502,8 @@ export function setup(ctx, overrides) {
                 stop('The message was deleted, so it stopped.');
             if (busyMessage === id)
                 busyMessage = '';
+            if (lastShow && lastShow.messageId === id)
+                lastShow = null;
             if (lastMeta.messageId === id) {
                 lastScript = null;
                 lastMeta = Object.assign({}, lastMeta, { messageId: '' });
@@ -3565,6 +3993,16 @@ export function setup(ctx, overrides) {
     // under it move too, and it fades and slides 4 pixels. Overflow is hidden
     // only while it moves, so a focus ring or a box edge is never cut off once
     // it has settled. With reduce motion on, it appears and goes at once.
+    // A part under a setting, shown or hidden as the setting changes. It moves
+    // only when it changes, so picking another value that keeps it shown does
+    // not open it again.
+    function showUnder(box, open) {
+        const shown = !box.hidden && !box._afClosing;
+        if (shown === open)
+            return;
+        box._afClosing = !open;
+        reveal(box, open);
+    }
     function reveal(box, open) {
         const anyBox = box;
         if (anyBox._afAnim) {
@@ -4134,9 +4572,15 @@ export function setup(ctx, overrides) {
         catch (_) { }
         return null;
     }
+    // Where the round button sits while the player is open, so the player
+    // opens from it and closing puts the button back there. Null once the open
+    // player is dragged somewhere else.
+    let floatHome = null;
+    // Where the open player was put, to tell a drag from a tap.
+    let placedAt = null;
     function keepFloat() {
         try {
-            const at = widget && typeof widget.getPosition === 'function' ? widget.getPosition() : null;
+            const at = playerOpen && floatHome ? floatHome : widget && typeof widget.getPosition === 'function' ? widget.getPosition() : null;
             const was = floatAt() || { x: 16, y: 160 };
             localStorage.setItem(FLOAT_KEY, JSON.stringify({ x: Math.round(at ? at.x : was.x), y: Math.round(at ? at.y : was.y), open: playerOpen, levels: levelsOpen }));
         }
@@ -4193,10 +4637,22 @@ export function setup(ctx, overrides) {
             widget.setSize(w, h);
             if (typeof widget.getPosition === 'function' && typeof widget.moveTo === 'function') {
                 const at = widget.getPosition();
-                const x = Math.max(8, Math.min(at.x, vw - w - 8));
-                const y = Math.max(8, Math.min(at.y, vh - h - 8));
+                // Open, the player grows away from the side of the screen the button
+                // is nearest: up from a button low on the screen, and to the left
+                // from one on the right. It stays where the button was, rather than
+                // being pushed up to wherever it first fits.
+                let wantX = at.x;
+                let wantY = at.y;
+                if (playerOpen && floatHome) {
+                    wantX = floatHome.x + d / 2 > vw / 2 ? floatHome.x + d - w : floatHome.x;
+                    wantY = floatHome.y + d / 2 > vh / 2 ? floatHome.y + d - h : floatHome.y;
+                }
+                const x = Math.round(Math.max(8, Math.min(wantX, vw - w - 8)));
+                const y = Math.round(Math.max(8, Math.min(wantY, vh - h - 8)));
                 if (x !== at.x || y !== at.y)
                     widget.moveTo(x, y);
+                if (playerOpen && floatHome)
+                    placedAt = { x, y };
             }
         }
         catch (_) { }
@@ -4227,6 +4683,14 @@ export function setup(ctx, overrides) {
         const still = calm() || !floatBox || typeof document.body.animate !== 'function';
         if (open) {
             const from = !still && floatBtn ? floatBtn.getBoundingClientRect() : null;
+            try {
+                if (widget && typeof widget.getPosition === 'function' && !playerOpen) {
+                    const at = widget.getPosition();
+                    floatHome = { x: at.x, y: at.y };
+                }
+            }
+            catch (_) { }
+            placedAt = null;
             playerOpen = true;
             keepFloat();
             drawFloat();
@@ -4253,8 +4717,17 @@ export function setup(ctx, overrides) {
         const done = () => {
             playerMoving = null;
             playerOpen = false;
-            keepFloat();
+            const home = floatHome;
+            floatHome = null;
+            placedAt = null;
             drawFloat();
+            // The button goes back where it was before the player opened.
+            try {
+                if (home && widget && typeof widget.moveTo === 'function')
+                    widget.moveTo(home.x, home.y);
+            }
+            catch (_) { }
+            keepFloat();
         };
         if (still || !card)
             return done();
@@ -4263,15 +4736,27 @@ export function setup(ctx, overrides) {
         // button's own place and size, so the swap at the end does not show.
         const d = widgetSize;
         const far = Math.hypot(card.offsetWidth, card.offsetHeight) + 2;
+        // The circle closes on the place the button goes back to, which is not
+        // the card's corner when the player opened upward or to the left.
+        let cx = d / 2;
+        let cy = d / 2;
+        try {
+            if (floatHome && widget && typeof widget.getPosition === 'function') {
+                const at = widget.getPosition();
+                cx = floatHome.x - at.x + d / 2;
+                cy = floatHome.y - at.y + d / 2;
+            }
+        }
+        catch (_) { }
         holdSize = true;
         try {
             Array.prototype.forEach.call(card.children, (kid) => {
                 kid.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 140, easing: 'ease-in', fill: 'forwards' });
             });
             playerMoving = card.animate([
-                { clipPath: 'circle(' + far + 'px at ' + d / 2 + 'px ' + d / 2 + 'px)', offset: 0 },
-                { clipPath: 'circle(' + far + 'px at ' + d / 2 + 'px ' + d / 2 + 'px)', offset: 0.25 },
-                { clipPath: 'circle(' + d / 2 + 'px at ' + d / 2 + 'px ' + d / 2 + 'px)', offset: 1 },
+                { clipPath: 'circle(' + far + 'px at ' + cx + 'px ' + cy + 'px)', offset: 0 },
+                { clipPath: 'circle(' + far + 'px at ' + cx + 'px ' + cy + 'px)', offset: 0.25 },
+                { clipPath: 'circle(' + d / 2 + 'px at ' + cx + 'px ' + cy + 'px)', offset: 1 },
             ], { duration: 380, easing: 'cubic-bezier(.45,0,.2,1)', fill: 'forwards' });
             playerMoving.onfinish = () => {
                 holdSize = false;
@@ -4835,6 +5320,8 @@ export function setup(ctx, overrides) {
         playerOpen = !!(at && at.open);
         levelsOpen = !!(at && at.levels);
         const start = at ? { x: Math.max(8, Math.min(at.x, vw - d - 8)), y: Math.max(8, Math.min(at.y, vh - d - 8)) } : { x: 16, y: Math.max(16, Math.min(160, vh - d - 8)) };
+        // Saved open, the place kept is the button's, and the player opens from it.
+        floatHome = playerOpen ? { x: start.x, y: start.y } : null;
         try {
             widget = ctx.ui.createFloatWidget({ width: d, height: d, initialPosition: start, snapToEdge: false, tooltip: 'Auto Foley', chromeless: true });
         }
@@ -4867,7 +5354,21 @@ export function setup(ctx, overrides) {
             catch (_) {
                 playerSeen = null;
             }
-            const onDrop = () => setTimeout(keepFloat, 50);
+            const onDrop = () => setTimeout(() => {
+                // The open player was dragged: it stays where it was put, and
+                // closing leaves the button there too.
+                try {
+                    if (playerOpen && placedAt && widget && typeof widget.getPosition === 'function') {
+                        const at = widget.getPosition();
+                        if (Math.abs(at.x - placedAt.x) > 2 || Math.abs(at.y - placedAt.y) > 2) {
+                            floatHome = null;
+                            placedAt = null;
+                        }
+                    }
+                }
+                catch (_) { }
+                keepFloat();
+            }, 50);
             window.addEventListener('spindle:float-drag-end', onDrop);
             window.addEventListener('pointerup', onDrop, true);
             widgetOff = () => {
@@ -4993,16 +5494,16 @@ export function setup(ctx, overrides) {
         ], String(S.panelPattern || ''), (v) => {
             set({ panelPattern: v });
             paintLook();
-            renderTab();
+            showUnder(solid, PATTERNS.indexOf(String(v)) > 0);
         }, 'None by default. A faint pattern in your theme’s color, drawn behind the cards.'));
-        if (PATTERNS.indexOf(String(S.panelPattern)) > 0) {
-            const under = el('<div class="af-sub"><div class="af-under"></div></div>');
-            under.firstElementChild.appendChild(slider('How solid the boxes are (%)', Number(S.boxSolid), 0, 100, 5, (v) => v + '%', (v) => {
-                set({ boxSolid: v });
-                paintLook();
-            }, '60 by default. Lower lets more of the pattern show through the cards and the tabs. Higher makes them more solid.'));
-            c.appendChild(under);
-        }
+        // Only with a pattern. Built either way, so it opens and closes smoothly.
+        const solid = el('<div class="af-sub"><div class="af-under"></div></div>');
+        solid.firstElementChild.appendChild(slider('How solid the boxes are (%)', Number(S.boxSolid), 0, 100, 5, (v) => v + '%', (v) => {
+            set({ boxSolid: v });
+            paintLook();
+        }, '60 by default. Lower lets more of the pattern show through the cards and the tabs. Higher makes them more solid.'));
+        solid.hidden = PATTERNS.indexOf(String(S.panelPattern)) <= 0;
+        c.appendChild(solid);
         c.appendChild(toggle('Light up words in the chat', 'On by default. The word being spoken is lit in the message itself, as it is said. It changes nothing in the message. Some older browsers cannot light words.', 'chatHighlight', () => {
             if (!S.chatHighlight)
                 clearChatWords();
@@ -5065,6 +5566,21 @@ export function setup(ctx, overrides) {
         }, 'af-primary', ICON_REDO));
         now.appendChild(againRow);
         now.appendChild(retryRow);
+        // Keeping what was heard: the whole performance as one file, the part
+        // playing as it came from the voice service, and a video of the script
+        // page.
+        const keepRow = el('<div class="af-row" data-af="keeprow"></div>');
+        const dlAll = button('Download audio', () => downloadPerformance(), '', ICON_DOWNLOAD);
+        dlAll.setAttribute('data-af', 'dlall');
+        const dlPart = button('Download this part', () => downloadPart(), '', ICON_DOWNLOAD);
+        dlPart.setAttribute('data-af', 'dlpart');
+        const video = button('Make a video', () => (videoRun ? videoRun.cancel() : makeVideo()), '', ICON_VIDEO);
+        video.setAttribute('data-af', 'video');
+        keepRow.appendChild(dlAll);
+        keepRow.appendChild(dlPart);
+        keepRow.appendChild(video);
+        now.appendChild(keepRow);
+        now.appendChild(el('<p class="af-note" data-af="keepsaid" role="status"></p>'));
         page.appendChild(now);
         const q = (k) => now.querySelector('[data-af="' + k + '"]');
         // Playing or paused, Play pauses or goes on. With nothing playing, it
@@ -5285,6 +5801,18 @@ export function setup(ctx, overrides) {
         if (!stageRefs || tab !== 'stage')
             return;
         const q = stageRefs.q;
+        {
+            const kept = !!keptShow();
+            q('dlall').disabled = !kept || !!videoRun;
+            q('dlpart').disabled = !show;
+            const vb = q('video');
+            vb.disabled = !kept && !videoRun;
+            const vWords = videoRun ? 'Stop the video' : 'Make a video';
+            const vText = vb.querySelector('span:last-child') || vb;
+            if (vText.textContent !== vWords)
+                vText.textContent = vWords;
+            setText(q('keepsaid'), keepLine);
+        }
         const playBtn = q('play');
         const script = currentScript();
         const playing = !!show && !paused;
@@ -6586,10 +7114,13 @@ export function setup(ctx, overrides) {
             { id: 'custom', label: 'Yes, and I will say how much' },
         ], S.thinkingMode, (v) => {
             set({ thinkingMode: v });
-            renderTab();
+            showUnder(thinkUnder, v === 'custom');
         }, 'Off by default, since directing rarely needs thinking and thinking costs more and takes longer.'));
-        if (S.thinkingMode === 'custom') {
-            const under = el('<div class="af-sub"><div class="af-under"></div></div>');
+        // Only with Yes, and I will say how much. Built either way, so it opens
+        // and closes smoothly.
+        const thinkUnder = el('<div class="af-sub"><div class="af-under"></div></div>');
+        {
+            const under = thinkUnder;
             under.firstElementChild.appendChild(select('How much thinking', [
                 { id: 'auto', label: 'Auto, whatever the provider does' },
                 { id: 'none', label: 'None' },
@@ -6600,6 +7131,7 @@ export function setup(ctx, overrides) {
                 { id: 'xhigh', label: 'Extra high' },
                 { id: 'max', label: 'Max' },
             ], S.thinkingEffort, (v) => set({ thinkingEffort: v }), 'Each provider decides what each level means. Directing rarely needs more than low.'));
+            under.hidden = S.thinkingMode !== 'custom';
             model.appendChild(under);
         }
         model.appendChild(select('Give up waiting after', [
@@ -8190,7 +8722,7 @@ export function setup(ctx, overrides) {
         catch (_) { }
     };
 }
-export const __testing = { noConnectionWhy, perSentence, clipLevel, levelGain, voiceGender, describeWords, markText, movedFor, movedRowMark, MOVED_DEFAULTS, looksLikeDate, voicedFrames, wordWeight, partTimes, engineOf, fitTag, tagSound, textFor, styleFor, stripTags, stabilityFor, ENGINES };
+export const __testing = { wavBlob, noConnectionWhy, perSentence, clipLevel, levelGain, voiceGender, describeWords, markText, movedFor, movedRowMark, MOVED_DEFAULTS, looksLikeDate, voicedFrames, wordWeight, partTimes, engineOf, fitTag, tagSound, textFor, styleFor, stripTags, stabilityFor, ENGINES };
 // The built-in cheer: "Cheering and clapping crowd 1" by freesound_community,
 // a free sound from Pixabay (pixabay.com/sound-effects/people-cheering-and-clapping-crowd-1-5995/),
 // made mono at 64 kbps so it stays small. assets/applause.mp3 is the same

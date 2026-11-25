@@ -208,13 +208,13 @@ window.__ctx = {
       document.body.appendChild(surface);
       window.__widget = surface;
       let at = { x: o.initialPosition.x, y: o.initialPosition.y };
-      return {
+      return (window.__floatApi = {
         root: r,
         destroy() { surface.remove(); window.__widgetGone = true; },
         setSize(w, h) { surface.style.width = w + 'px'; surface.style.height = h + 'px'; },
         getPosition() { return at; },
         moveTo(x, y) { at = { x, y }; surface.style.left = x + 'px'; surface.style.top = y + 'px'; },
-      };
+      });
     },
   },
   uploads: {
@@ -1951,6 +1951,134 @@ if (section("setup check")) {
   });
   check(changes.length <= 2 && changes[changes.length - 1] !== "0", "the answers appear together, not one by one (" + changes.join(" > ") + ")");
   await context.close();
+}
+
+if (section("widget low")) {
+  console.log("The player opens from the round button, wherever it sits");
+  for (const size of SIZES) {
+    for (const zoom of [0.85, 1, 1.25]) {
+      for (const corner of ["low left", "low right", "high left"]) {
+        const { context, page, errors } = await open(THEMES[0], size, zoom);
+        const where = size.name + ", zoom " + zoom + ", " + corner;
+        await page.click('.af-tab[data-tab="settings"]');
+        await page.waitForTimeout(200);
+        await page.evaluate(() => document.querySelector('[data-af-row="widgetOn"] .af-box').click());
+        await page.waitForTimeout(300);
+        // The button is dragged to the corner, as Lumiverse moves it.
+        await page.evaluate(({ corner, zoom }) => {
+          const vw = window.innerWidth / zoom, vh = window.innerHeight / zoom;
+          const d = parseFloat(window.__widget.style.width);
+          window.__floatApi.moveTo(/right/.test(corner) ? vw - d - 20 : 20, /low/.test(corner) ? vh - d - 30 : 90);
+          window.dispatchEvent(new Event("spindle:float-drag-end"));
+        }, { corner, zoom });
+        await page.waitForTimeout(200);
+        const pos = () => page.evaluate(() => ({ x: parseFloat(window.__widget.style.left), y: parseFloat(window.__widget.style.top), w: parseFloat(window.__widget.style.width), h: parseFloat(window.__widget.style.height) }));
+        const home = await pos();
+        await page.evaluate(() => window.__widget.querySelector(".af-float").click());
+        await page.waitForTimeout(600);
+        const opened = await pos();
+        const low = /low/.test(corner), right = /right/.test(corner);
+        // A player wider or taller than the room left is held 8 px from the
+        // edge, which is the most it can do.
+        const vert = low ? Math.abs(opened.y + opened.h - (home.y + home.h)) < 2 || opened.y <= 9 : Math.abs(opened.y - home.y) < 2;
+        const horiz = right ? Math.abs(opened.x + opened.w - (home.x + home.w)) < 2 || opened.x <= 9 : Math.abs(opened.x - home.x) < 2 || opened.x <= 9;
+        check(vert && horiz, where + ": the player grows away from the side the button is near (" + JSON.stringify({ home, opened }) + ")");
+        await page.evaluate(() => window.__widget.querySelector('[data-p="close"]').click());
+        await page.waitForTimeout(700);
+        const back = await pos();
+        check(Math.abs(back.x - home.x) < 1 && Math.abs(back.y - home.y) < 1, where + ": closing puts the button back where it was (" + JSON.stringify({ home, back }) + ")");
+        check(!errors.length, where + ": no console errors. " + errors.slice(0, 2).join("; "));
+        await context.close();
+      }
+    }
+  }
+}
+
+if (section("under a pick")) {
+  console.log("A setting under a pick opens and closes smoothly");
+  for (const size of SIZES) {
+    const { context, page, errors } = await open(THEMES[0], size);
+    const watch = (tab, label, value) =>
+      page.evaluate(async ({ label, value }) => {
+        const row = Array.from(document.querySelectorAll(".af-page .af-col")).find((c) => {
+          const l = c.querySelector(":scope > .af-between .af-lab, :scope > label, .af-lab");
+          return l && l.textContent.trim() === label && c.querySelector("select");
+        });
+        const sel = row.querySelector("select");
+        const under = row.nextElementSibling;
+        const card = row.closest(".af-card");
+        card.__mark = 1;
+        sel.value = value;
+        sel.dispatchEvent(new Event("change", { bubbles: true }));
+        const hs = [];
+        for (let k = 0; k < 24; k++) {
+          await new Promise((r) => requestAnimationFrame(r));
+          hs.push(Math.round(under.getBoundingClientRect().height));
+        }
+        return { hs, kept: card.isConnected && card.__mark === 1, hidden: under.hidden };
+      }, { label, value });
+    const smooth = (hs, opening) => {
+      const end = opening ? Math.max(...hs) : hs[0];
+      const mids = hs.filter((h) => h > 2 && h < end - 2).length;
+      return end > 20 && mids >= 3;
+    };
+    await page.click('.af-tab[data-tab="director"]');
+    await page.waitForTimeout(300);
+    const open1 = await watch("director", "Let it think first", "custom");
+    check(open1.kept, size.name + ": picking Yes does not draw the tab again");
+    check(smooth(open1.hs, true), size.name + ": How much thinking opens over several frames (" + open1.hs.join(",") + ")");
+    const shut1 = await watch("director", "Let it think first", "off");
+    check(smooth(shut1.hs, false) && shut1.hidden, size.name + ": and closes over several frames (" + shut1.hs.join(",") + ")");
+    await page.click('.af-tab[data-tab="settings"]');
+    await page.waitForTimeout(300);
+    const open2 = await watch("settings", "Pattern behind the panel", "dots");
+    check(open2.kept && smooth(open2.hs, true), size.name + ": How solid the boxes are opens over several frames (" + open2.hs.join(",") + ")");
+    const same = await watch("settings", "Pattern behind the panel", "stars");
+    check(same.hs.every((h) => h === same.hs[0]) && same.hs[0] > 20, size.name + ": picking another pattern leaves it open and still (" + same.hs.join(",") + ")");
+    check(!errors.length, size.name + ": no console errors. " + errors.slice(0, 2).join("; "));
+    await context.close();
+  }
+}
+
+if (section("downloads")) {
+  console.log("Download audio, a part, and a video");
+  for (const size of SIZES) {
+    const { context, page, errors } = await open(THEMES[0], size);
+    const where = size.name;
+    await page.evaluate(() => { window.__wav = [0.1, 0.5]; window.__clipMs = 1500; });
+    await page.click('.af-tab[data-tab="stage"]');
+    await page.waitForTimeout(300);
+    const state = () => page.evaluate(() => ["dlall", "dlpart", "video"].map((k) => document.querySelector('[data-af="' + k + '"]').disabled));
+    check((await state()).join() === "true,true,true", where + ": with nothing played, the three are off (" + (await state()).join() + ")");
+    await page.click('#mount [data-af-slot="message"]');
+    await page.waitForTimeout(900);
+    const part = page.waitForEvent("download", { timeout: 8000 }).catch(() => null);
+    await page.click('[data-af="dlpart"]');
+    const p1 = await part;
+    check(!!p1 && /part 1\.wav$/.test(p1.suggestedFilename()), where + ": Download this part saves the part playing (" + (p1 && p1.suggestedFilename()) + ")");
+    // Let the message play to the end.
+    await page.waitForFunction(() => !document.querySelector('[data-af="dlpart"]') || document.querySelector('[data-af="dlpart"]').disabled, null, { timeout: 20000 });
+    await page.waitForTimeout(300);
+    const all = page.waitForEvent("download", { timeout: 8000 }).catch(() => null);
+    await page.click('[data-af="dlall"]');
+    const p2 = await all;
+    let size2 = 0;
+    if (p2) { const fs = await import("node:fs"); size2 = fs.statSync(await p2.path()).size; }
+    check(!!p2 && /\.wav$/.test(p2.suggestedFilename()) && size2 > 44 + 8000, where + ": Download audio saves the whole performance as one WAV (" + (p2 && p2.suggestedFilename()) + ", " + size2 + " bytes)");
+    const vid = page.waitForEvent("download", { timeout: 30000 }).catch(() => null);
+    await page.click('[data-af="video"]');
+    await page.waitForTimeout(400);
+    const making = await page.evaluate(() => ({ said: document.querySelector('[data-af="keepsaid"]').textContent, label: document.querySelector('[data-af="video"]').textContent }));
+    check(/Making the video/.test(making.said) && /Stop the video/.test(making.label), where + ": while it is made, the count shows and the button stops it (" + making.said + ")");
+    const p3 = await vid;
+    let size3 = 0;
+    if (p3) { const fs = await import("node:fs"); size3 = fs.statSync(await p3.path()).size; if (process.env.UI_VIDEO) await p3.saveAs(process.env.UI_VIDEO + "-" + size.name + ".webm"); }
+    check(!!p3 && /\.(webm|mp4)$/.test(p3.suggestedFilename()) && size3 > 1000, where + ": Make a video saves a video (" + (p3 && p3.suggestedFilename()) + ", " + size3 + " bytes)");
+    const m = await page.evaluate(MEASURE, size.touch);
+    check(!m.overflow.length && !m.small.length, where + ": the buttons fit and are big enough. " + m.overflow.concat(m.small).slice(0, 3).join("; "));
+    check(!errors.length, where + ": no console errors. " + errors.slice(0, 2).join("; "));
+    await context.close();
+  }
 }
 
 if (section("widget steady")) {
