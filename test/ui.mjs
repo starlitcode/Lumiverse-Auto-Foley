@@ -2809,6 +2809,8 @@ if (section("pictures")) {
     check(frameFits, size.name + ": the crop frame stays on screen");
     // Dragged right as far as it goes, the left, red half fills the frame.
     const frame = head.locator(".af-crop-frame");
+    // On screen first: a drag aimed below the window presses nothing.
+    await frame.scrollIntoViewIfNeeded();
     const box = await frame.boundingBox();
     await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
     await page.mouse.down();

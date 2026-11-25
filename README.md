@@ -1,8 +1,10 @@
+<p align="center">
+  <img src="docs/foley-banner.png" width="100%" alt="Auto Foley: in a recording booth at night, a woman in headphones speaks into a microphone. A ribbon of light carries sounds past the window: a door, footsteps and breaking glass. A pair of boots stands in a tray of gravel.">
+</p>
+
 # Auto Foley
 
 A Lumiverse extension. It gives voice acting and sound effects to your TTS, so a reply is read like a performance, with a voice for everyone in it.
-
-It works alongside [Auto Retry](https://github.com/starlitcode/Lumiverse-Auto-Retry) and [Auto Refine](https://github.com/starlitcode/Lumiverse-Auto-Refine). Auto Retry catches a reply that went wrong, Auto Refine improves it, and Auto Foley performs it.
 
 ## What it does
 
@@ -76,6 +78,5 @@ Auto Foley is for adults, 18 and older. It is not for sexual content involving m
 - **[Claude](https://claude.ai)** (Anthropic): wrote the code, directed and tested by starlitcode
 - **[Choir](https://github.com/patatasbravasch-arch/Choir)**: the extension that showed a voice for every character, with sound effects, was worth having, and inspired the floating player. Auto Foley is written from scratch and shares no code with it
 - **[Chat Voice](https://github.com/WanderingMonk8/custom_voice)** by WanderingMonk8: the extension that showed a TTS voice for each speaker in a chat was worth having. Auto Foley is written from scratch and shares no code with it
-- Sister extensions: [Auto Retry](https://github.com/starlitcode/Lumiverse-Auto-Retry) and [Auto Refine](https://github.com/starlitcode/Lumiverse-Auto-Refine)
 
 Licensed under the GNU General Public License v3.0. See [LICENSE](LICENSE).
