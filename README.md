@@ -64,7 +64,7 @@ Once a message has been performed, a small player sits under its text, with Back
 
 ## Help and feedback
 
-Questions, bug reports and ideas are welcome as a [GitHub issue](https://github.com/starlitcode/Lumiverse-Auto-Foley/issues). [Contributing](CONTRIBUTING.md) says what to put in a bug report.
+Questions, bug reports and ideas are welcome in my [Auto Foley post](https://discord.com/channels/1484149939167821915/1573804219419590667) on the Lumiverse Discord server, or as a [GitHub issue](https://github.com/starlitcode/Lumiverse-Auto-Foley/issues). [Contributing](CONTRIBUTING.md) says what to put in a bug report.
 
 ## Made for adults
 

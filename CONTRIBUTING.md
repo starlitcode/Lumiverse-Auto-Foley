@@ -20,7 +20,7 @@ Questions and ideas are welcome too.
 
 ## Where to send it
 
-- Post in my Auto Foley post on the Lumiverse Discord server, or
+- Post in my [Auto Foley post](https://discord.com/channels/1484149939167821915/1573804219419590667) on the Lumiverse Discord server, or
 - [open an issue](https://github.com/starlitcode/Lumiverse-Auto-Foley/issues).
 
 For anything sensitive, such as a security problem, follow [SECURITY.md](SECURITY.md) instead.
