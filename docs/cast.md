@@ -32,7 +32,7 @@ Someone the AI added has no voice picked. The first time they speak, Auto Foley 
 - **Similarity and Style.** ElevenLabs only. Sent to ElevenLabs as they are.
 - **Speed.** Sent to every engine but Gemini, which has no speed.
 - **More settings.** A fold under the voice, with only the settings their engine takes. **Back to defaults** clears them.
-- **How they speak.** A note for the Director, such as "soft-spoken and dry, rarely raises their voice". It holds up to 1000 characters. See [How much a box holds](#how-much-a-box-holds).
+- **How they speak.** A note for the Director, such as "soft-spoken and dry, rarely raises their voice". It holds up to 1000 characters. See [How much a box holds](#how-much-a-box-holds), and [Writing for each voice engine](writing.md) for what helps on each engine.
 - **Do not voice.** Their lines are skipped.
 - **Hear a sample** speaks a test line with these settings. It costs a few credits.
 - **Remove** takes them out of the cast. The narrator cannot be removed.

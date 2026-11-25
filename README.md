@@ -37,12 +37,14 @@ You also need a TTS connection in Lumiverse, under **Connections**, in the TTS s
 - [Voice engines](docs/engines.md): what each engine can do, and how to set up Chatterbox.
 - [The Director](docs/director.md): what it does, what it is sent, and its prompt.
 - [The cast](docs/cast.md): voices for personas, characters and NPCs.
+- [Writing for each voice engine](docs/writing.md): what to write in How they speak and the notes, for each engine, with an example.
 - [Sounds](docs/sounds.md): sounds in the voice, sound effects and your library.
 
 **About it**
 
 - [Privacy](docs/privacy.md): what is sent where, and what is kept.
 - [Security](SECURITY.md): what it can reach and how to check it.
+- [Contributing](CONTRIBUTING.md): what to put in a bug report.
 - [Changelog](CHANGELOG.md)
 
 ## Made for adults
