@@ -1593,24 +1593,6 @@ export function setup(ctx: Ctx, overrides?: any) {
   let ttsSeen: { name: string; provider: string; model: string }[] = [];
   let ttsListed = -1;
 
-  // When the list has nothing Auto Foley can use, the connection picked in
-  // Lumiverse's own voice settings is read on its own, by its id. A usable
-  // one is added. Either way it is named in the message.
-  async function addVoiceSettingsPick(all: any[]): Promise<void> {
-    try {
-      const res = await api('/settings/voiceSettings');
-      if (!res.ok) return;
-      const j = await res.json();
-      const id = j && j.value && typeof j.value === 'object' ? String(j.value.ttsConnectionId || '') : '';
-      if (!id || all.some((c: any) => c && c.id === id)) return;
-      const one = await api('/tts-connections/' + encodeURIComponent(id));
-      if (!one.ok) return;
-      const c = await one.json();
-      if (!c || !c.id) return;
-      ttsSeen.push({ name: String(c.name || 'Unnamed'), provider: String(c.provider || ''), model: String(c.model || '') });
-      if (USABLE_PROVIDERS.indexOf(String(c.provider || '').toLowerCase()) >= 0) ttsConnections.push(c);
-    } catch (_) {}
-  }
   // ---- Chatterbox, direct ----
   // A Chatterbox-TTS-Server whose address is saved in Settings is listed as
   // one more connection, Chatterbox server (direct). Lines for it go through
@@ -1649,7 +1631,6 @@ export function setup(ctx: Ctx, overrides?: any) {
       ttsConnections = all.filter((c: any) => c && c.id && USABLE_PROVIDERS.indexOf(String(c.provider || '').toLowerCase()) >= 0);
       ttsSeen = all.filter((c: any) => c && c.id).map((c: any) => ({ name: String(c.name || 'Unnamed'), provider: String(c.provider || ''), model: String(c.model || '') }));
       ttsListed = all.length;
-      if (!ttsConnections.length) await addVoiceSettingsPick(all);
       withChatterbox();
       if (S.chatterboxUrl && !cbxInfo) await readChatterbox();
       ttsWhy = ttsConnections.length ? '' : noConnectionWhy(ttsSeen);

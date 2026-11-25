@@ -152,7 +152,6 @@ window.__fetch = async (url, init) => {
   const u = String(url);
   const json = (o) => new Response(JSON.stringify(o), { status: 200, headers: { 'Content-Type': 'application/json' } });
   if (u.includes('/tts-connections?') && window.__ttsList) return json({ data: window.__ttsList, total: window.__ttsList.length });
-  if (u.includes('/tts-connections/') && !u.includes('/voices') && !u.includes('/models')) return window.__ttsOne ? json(window.__ttsOne) : new Response('{"error":"not found"}', { status: 404 });
   if (u.includes('/tts-connections?')) return json({ data: [{ id: 't1', name: 'My ElevenLabs', provider: 'elevenlabs', model: 'eleven_v3', voice: 'v0', is_default: true, has_api_key: true }, { id: 't2', name: 'Fish on the side', provider: 'fish_audio', model: 's2.1-pro', has_api_key: true }, { id: 't3', name: 'Box at home', provider: 'openai_tts', api_url: 'http://192.0.2.10:8004/v1', model: 'chatterbox', has_api_key: true }, { id: 't4', name: 'Old flash', provider: 'elevenlabs', model: 'eleven_flash_v2_5', has_api_key: true }, { id: 't5', name: 'Kokoro here', provider: 'kokoro', has_api_key: true }], total: 5 });
   if (u.includes('/models')) return json({ models: [{ id: 's2.1-pro', label: 'Fish S2.1 Pro' }, { id: 'drama-3-preview', label: 'Drama 3 (Preview)' }], provider: 'fish_audio' });
   if (u.includes('/voices')) return json({ voices: [{ id: 'v1', name: 'Hollow Bell', gender: 'female' }, { id: 'v2', name: 'Grit', gender: 'male' }, { id: 'v3', name: 'Lark', gender: 'female' }], provider: 'elevenlabs' });
@@ -958,10 +957,9 @@ if (section("voice levels")) {
 if (section("connection list")) {
   console.log("The TTS connection list says what Lumiverse sent");
   const cases = [
-    { name: "no connections", list: [], one: null, want: /Lumiverse found no TTS connection on your account/, usable: false },
-    { name: "only an unusable service", list: [{ id: "k1", name: "Read aloud", provider: "kokoro" }], one: null, want: /Lumiverse sent: Read aloud \(kokoro\)/, usable: false },
-    { name: "the voice settings pick, read by its id", list: [], one: { id: "t1", name: "Fish by itself", provider: "fish_audio", model: "s2.1-pro", has_api_key: true }, want: /Fish by itself/, usable: true },
-    { name: "Gemini through OpenRouter", list: [{ id: "o1", name: "Router voices", provider: "openrouter_tts", model: "google/gemini-3.8-flash-tts", has_api_key: true }], one: null, want: /Router voices/, usable: true },
+    { name: "no connections", list: [], want: /Lumiverse found no TTS connection on your account/, usable: false },
+    { name: "only an unusable service", list: [{ id: "k1", name: "Read aloud", provider: "kokoro" }], want: /Lumiverse sent: Read aloud \(kokoro\)/, usable: false },
+    { name: "Gemini through OpenRouter", list: [{ id: "o1", name: "Router voices", provider: "openrouter_tts", model: "google/gemini-3.8-flash-tts", has_api_key: true }], want: /Router voices/, usable: true },
   ];
   for (const size of SIZES) {
     for (const c of cases) {
@@ -971,7 +969,6 @@ if (section("connection list")) {
         window.__teardown();
         document.getElementById("drawer").innerHTML = "";
         window.__ttsList = c.list;
-        window.__ttsOne = c.one;
         window.__teardown = window.__setup(window.__ctx, { fetch: window.__fetch, Audio: window.__Audio });
       }, c);
       await page.waitForTimeout(200);
