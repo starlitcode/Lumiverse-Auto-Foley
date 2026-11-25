@@ -1185,7 +1185,9 @@ input.af-field:focus, textarea.af-field:focus { outline: none; border-color: var
 /* The Debug info box keeps its plain edge while typed in, as in Auto Retry. */
 textarea.af-field.af-debugarea:focus { border-color: var(--af-line); box-shadow: none; }
 select.af-field { cursor: pointer; }
-select.af-field:focus, select.af-field:focus-visible { outline: none; box-shadow: none; border-color: var(--af-line-hover); }
+/* A pressed dropdown keeps its plain edge, as in Auto Retry and Auto Refine:
+   the list opening is what shows it was pressed. */
+select.af-field:focus, select.af-field:focus-visible { outline: none; box-shadow: none; border-color: var(--af-line); }
 textarea.af-field { resize: vertical; min-height: 64px; }
 textarea.af-mono, .af-mono { font-family: var(--lumiverse-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace); font-size: 12px; }
 textarea.af-tall { min-height: 260px; }

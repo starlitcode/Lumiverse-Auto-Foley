@@ -2214,6 +2214,28 @@ if (section("number boxes")) {
   }
 }
 
+if (section("dropdown press")) {
+  console.log("A pressed dropdown keeps its plain edge, as in Auto Retry and Auto Refine");
+  for (const size of SIZES) {
+    const { context, page, errors } = await open(THEMES[0], size);
+    await page.click('.af-tab[data-tab="settings"]');
+    await page.waitForTimeout(300);
+    const got = await page.evaluate(async () => {
+      const sel = Array.from(document.querySelectorAll(".af select.af-field")).find((s) => s.getClientRects().length);
+      const edge = () => { const c = getComputedStyle(sel); return [c.borderTopColor, c.boxShadow, c.outlineStyle].join(" | "); };
+      sel.blur();
+      await new Promise((r) => setTimeout(r, 250));
+      const before = edge();
+      sel.focus();
+      await new Promise((r) => setTimeout(r, 250));
+      return { before, after: edge() };
+    });
+    check(got.before === got.after, size.name + ": the edge does not change when it is pressed (" + JSON.stringify(got) + ")");
+    check(!errors.length, size.name + ": no page errors. " + errors.slice(0, 2).join(" | "));
+    await context.close();
+  }
+}
+
 if (section("reorder")) {
   console.log("People and groups can be picked up and moved");
   const order = (page, sel, attr) => page.evaluate(([sel, attr]) => Array.from(document.querySelectorAll(sel)).map((n) => n.getAttribute(attr)), [sel, attr]);
