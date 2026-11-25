@@ -4902,7 +4902,11 @@ export function setup(ctx: Ctx, overrides?: any) {
     '.af-mp{display:grid;grid-template-rows:0fr;opacity:0;transform:translateY(4px);transition:grid-template-rows .28s ease-out,opacity .22s ease-out,transform .22s ease-out}' +
     '.af-mp[data-open]{grid-template-rows:1fr;opacity:1;transform:none}' +
     '.af-mp-in{overflow:hidden;min-height:0;display:flex;min-width:0}' +
-    '.af-mp-box{display:inline-flex;align-items:center;gap:8px;max-width:100%;min-width:0;margin:6px 0;padding:3px 12px 3px 3px;border-radius:999px;' +
+    // A grid, so every button keeps its column and the pill is never
+    // narrower than what is in it, whatever a theme does to buttons. Only the
+    // words shrink, and only when there is no room left.
+    '.af-mp-box{display:inline-grid;grid-template-columns:auto auto auto minmax(24px,120px) minmax(0,max-content) auto;align-items:center;column-gap:6px;box-sizing:border-box;max-width:100%;min-width:0;margin:6px 0;padding:3px 6px 3px 3px;border-radius:999px;' +
+    '.af-mp .af-mp-box > *{margin:0;min-width:0;box-sizing:border-box}' +
     // Solid, the same as Auto Foley's other floating parts, so the words never
     // sit on a picture or pattern behind the message.
     'border:1px solid var(--lumiverse-border,rgba(147,112,219,.2));background-color:var(--lumiverse-card-bg-solid,rgb(24,20,34));' +
@@ -4922,16 +4926,14 @@ export function setup(ctx: Ctx, overrides?: any) {
     '@media (pointer:coarse){.af-mp-play,.af-mp-ic{width:32px;height:32px}}' +
     // The line is thin, in a button 28 pixels tall, 32 on a touch screen, so
     // it is easy to tap.
-    '.af-mp-seek{flex:0 50 120px;width:120px;min-width:24px;height:28px;display:flex;align-items:center;padding:0;border:none;background:transparent;cursor:pointer}' +
+    '.af-mp-seek{width:100%;height:28px;display:flex;align-items:center;padding:0;border:none;background:transparent;cursor:pointer}' +
     '.af-mp-seek:disabled{cursor:default}' +
     '.af-mp-seek .af-mp-bar{flex:1 1 auto;width:100%}' +
     '@media (pointer:coarse){.af-mp-seek{height:32px}}' +
-    // The bar gives up its room before the words do. It has a width of its
-    // own, since an empty element counts as no width when the browser sizes
-    // the pill to fit.
-    '.af-mp-bar{position:relative;flex:0 50 120px;width:120px;min-width:24px;height:4px;border-radius:2px;overflow:hidden;background:var(--lumiverse-border,rgba(147,112,219,.25))}' +
+    // The line fills its column, which gives up room before the words do.
+    '.af-mp-bar{position:relative;display:block;width:100%;height:4px;border-radius:2px;overflow:hidden;background:var(--lumiverse-border,rgba(147,112,219,.25))}' +
     '.af-mp-bar i{position:absolute;left:0;top:0;bottom:0;width:0;background:var(--lumiverse-primary,rgb(147,112,219))}' +
-    '.af-mp-text{flex:0 0.01 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:inherit;font-variant-numeric:tabular-nums}' +
+    '.af-mp-text{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:inherit;font-variant-numeric:tabular-nums}' +
     '@media (prefers-reduced-motion: reduce){.af-mp{transition:none}}' +
     'html[data-af-still] .af-mp{transition:none}' +
     '.af-theater-cue:empty{display:none}' +
@@ -6529,12 +6531,8 @@ export function setup(ctx: Ctx, overrides?: any) {
   const HIGHLIGHT_NAME = 'auto-foley-word';
   const highlights: any = (globalThis as any).CSS && (globalThis as any).CSS.highlights ? (globalThis as any).CSS.highlights : null;
   const HighlightCtor: any = typeof Highlight !== 'undefined' ? Highlight : null;
-  // The words of the line being read, found in the message, and where in the
-  // message this line started.
-  let chatWords: { key: string; ranges: (Range | null)[]; lit: number; from: number } | null = null;
-  // Where the last line found ended, in the message's text, so each line is
-  // looked for after the one before it.
-  let chatAt = { show: 0, item: -1, at: 0 };
+  // The words of the line being read, found in the message.
+  let chatWords: { key: string; ranges: (Range | null)[]; lit: number } | null = null;
   function clearChatWords() {
     chatWords = null;
     try {
@@ -6583,6 +6581,42 @@ export function setup(ctx: Ctx, overrides?: any) {
     }
   }
   const wordCore = (w: string) => w.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, '').toLowerCase();
+  // Each word of a line in the message text, from a place on: where it
+  // starts and ends, or null when it is not found close enough. The first
+  // word may come after narration that is not read, and the words after it
+  // follow closely.
+  function locateWords(parts: Part[], low: string, from: number): { at: ([number, number] | null)[]; end: number } {
+    const at: ([number, number] | null)[] = [];
+    let cursor = from;
+    let first = true;
+    for (const p of parts) {
+      const core = p.kind === 'word' ? wordCore(p.text) : '';
+      const i = core ? low.indexOf(core, cursor) : -1;
+      if (i < 0 || i - cursor > (first ? 4000 : 80)) {
+        at.push(null);
+        continue;
+      }
+      first = false;
+      at.push([i, i + core.length]);
+      cursor = i + core.length;
+    }
+    return { at, end: cursor };
+  }
+  // Where each voice part of the show starts in the message text, worked out
+  // once for each show and text, in order from the first.
+  let lineStarts: { mark: string; starts: number[] } | null = null;
+  function lineStartIn(low: string, item: number): number {
+    if (!show) return 0;
+    const mark = show.startedAt + ':' + low.length;
+    if (!lineStarts || lineStarts.mark !== mark) lineStarts = { mark, starts: [] };
+    const st = lineStarts.starts;
+    for (let j = st.length; j <= item && j < show.items.length; j++) {
+      const prev = j ? st[j - 1] : 0;
+      const before = j ? show.items[j - 1] : null;
+      st.push(before && before.kind === 'voice' && before.line ? locateWords(lineParts(before.line).parts, low, prev).end : prev);
+    }
+    return st[Math.min(item, st.length - 1)] || 0;
+  }
   function paintChatWords(v: { k: number; parts: Part[]; item: number } | null) {
     if (!highlights || !HighlightCtor || !S.chatHighlight || !v || !show) {
       if (chatWords) clearChatWords();
@@ -6596,36 +6630,20 @@ export function setup(ctx: Ctx, overrides?: any) {
         msg = document.querySelector('[data-message-id="' + String(show.messageId).replace(/["\\]/g, '') + '"]');
       } catch (_) {}
       if (msg && msg.closest(OTHER_UI)) msg = null;
-      if (chatAt.show !== show.startedAt || v.item < chatAt.item) chatAt = { show: show.startedAt, item: v.item, at: 0 };
-      chatAt.item = v.item;
       // Only the message text, which Lumiverse marks in both chat modes. The
       // rest of the row holds the name and the time, and a name that starts
       // the text too would be lit in the wrong place.
       const body = msg ? msg.querySelector('[data-component="MessageContent"]') || msg : null;
       const flat = body ? messageText(body) : null;
       const low = flat ? flat.text.toLowerCase() : '';
-      const from = chatAt.at;
-      let cursor = chatAt.at;
-      let first = true;
-      for (const p of v.parts) {
-        const core = p.kind === 'word' ? wordCore(p.text) : '';
-        if (!flat || !core) {
-          ranges.push(null);
-          continue;
-        }
-        const i = low.indexOf(core, cursor);
-        // The first word of a line may come after narration that is not read.
-        // The words after it follow closely.
-        if (i < 0 || i - cursor > (first ? 4000 : 80)) {
-          ranges.push(null);
-          continue;
-        }
-        first = false;
-        ranges.push(rangeAt(flat.at, i, i + core.length));
-        cursor = i + core.length;
-      }
-      chatAt.at = cursor;
-      chatWords = { key, ranges, lit: -2, from };
+      // Where this line starts in the text, found by walking the lines before
+      // it in order, so Back, Next and a tap on the line land in the right
+      // place. Each part is found after the one before it, and a word that
+      // comes earlier in the message is never taken for it.
+      const from = flat ? lineStartIn(low, v.item) : 0;
+      const hits = locateWords(v.parts, low, from);
+      for (const h of hits.at) ranges.push(flat && h ? rangeAt(flat.at, h[0], h[1]) : null);
+      chatWords = { key, ranges, lit: -2 };
     }
     // Lumiverse can draw the message again while it is read, such as just
     // after a reply finishes, which is when Autoplay starts. The words found
@@ -6637,7 +6655,6 @@ export function setup(ctx: Ctx, overrides?: any) {
     // since the browser moves it to the box the text was in. A copy just
     // found has every word in place, so this happens once each time.
     if (was && (was.collapsed || !was.startContainer.isConnected)) {
-      chatAt.at = chatWords.from;
       chatWords = null;
       paintChatWords(v);
       return;

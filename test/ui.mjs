@@ -132,7 +132,8 @@ function answer(msg) {
       // A check can hold the answer, and send the note that the Director is
       // being asked, as the backend does when no kept script is found.
       if (window.__directingAt != null) setTimeout(() => backendFns.forEach((fn) => fn({ type: 'directing', messageId: msg.messageId })), window.__directingAt);
-      let sc = window.__fromKept ? Object.assign({}, SCRIPT, { fromKept: true }) : SCRIPT;
+      const base = window.__script || SCRIPT;
+      let sc = window.__fromKept ? Object.assign({}, base, { fromKept: true }) : base;
       if (window.__fallback) sc = Object.assign({}, sc, { directed: false, fallback: true });
       if (window.__directHold) return setTimeout(() => reply({ type: 'script', script: sc }), window.__directHold);
       return reply({ type: 'script', script: sc });
@@ -1077,15 +1078,20 @@ if (section("message player")) {
     await page.evaluate(() => document.querySelector("[data-af-player] [data-af-mp=save]").click());
     const file = await dl;
     check(!!file && /\.wav$/.test(file.suggestedFilename()), where + ": Download saves the message's saved audio as one WAV (" + (file && file.suggestedFilename()) + ")");
-    // A theme with centered text and a large font centers the player and
-    // keeps it inside the message.
-    await page.addStyleTag({ content: '[data-message-id="m1"]{font-size:26px} [data-message-id="m1"] p{text-align:center}' });
+    // A theme with centered text, a large wide font and its own look for
+    // every button centers the player and keeps all of it inside the message.
+    await page.addStyleTag({ content: '[data-message-id="m1"]{font-size:26px;font-family:"Comic Sans MS",cursive} [data-message-id="m1"] p{text-align:center} button{padding:6px 14px;min-width:44px;margin:2px 4px;border:2px solid currentColor}' });
     await page.evaluate(() => document.body.appendChild(document.createElement("i")));
     await page.waitForTimeout(500);
     const big = await look();
     const at = await page.evaluate(() => getComputedStyle(document.querySelector("[data-af-player]").firstElementChild).justifyContent);
     check(at === "center" && !!big && big.mid <= 2, where + ": with the message text centered, the player is centered (" + at + ", " + (big && big.mid) + ")");
     check(!!big && big.inside && !big.sideways, where + ": with a large font, it still fits inside the message (" + JSON.stringify(big) + ")");
+    const allIn = await page.evaluate(() => {
+      const pill = document.querySelector("[data-af-player] .af-mp-box").getBoundingClientRect();
+      return Array.from(document.querySelectorAll("[data-af-player] .af-mp-box > *")).every((n) => { const r = n.getBoundingClientRect(); return r.left >= pill.left - 1 && r.right <= pill.right + 1; });
+    });
+    check(allIn, where + ": with a theme that styles every button, every part stays inside the pill");
     // Turned off, it goes.
     await page.click('.af-tab[data-tab="settings"]');
     await page.waitForTimeout(200);
@@ -2072,6 +2078,52 @@ if (section("chat words")) {
   await page.evaluate(() => document.querySelector('[data-af-row="chatHighlight"] .af-box').click());
   await page.waitForTimeout(150);
   check(await page.evaluate(() => !CSS.highlights.get("auto-foley-word")), "turning Light up words in the chat off clears it");
+  check(!errors.length, "no page errors. " + errors.slice(0, 2).join(" | "));
+  await context.close();
+}
+
+if (section("chat words jump")) {
+  console.log("After Back, Next or a tap on a part, the lit words are in the line playing");
+  const { context, page, errors } = await open(THEMES[0], SIZES[1]);
+  await page.click('.af-tab[data-tab="stage"]');
+  await page.waitForTimeout(200);
+  await page.evaluate(() => {
+    window.__wav = [0.1, 2.3];
+    window.__clipMs = 2400;
+    const line = (i, kind, speaker, text) => ({ i, kind, speaker, text, plain: '', tags: [], inSounds: [], big: false, before: '', after: '', note: '' });
+    // Each line starts with the same words, so a search that starts in the
+    // wrong place finds them in another line.
+    window.__script = { key: 'kj', messageId: 'm1', author: 'Ysolde Marrow-Kestrel of the Lower Quays', directed: true, added: [], sent: 10, back: 10, counted: true, log: [], lines: [
+      line(0, 'narration', 'Narrator', 'Rain hit the glass of the low window.'),
+      line(1, 'speech', 'Ysolde Marrow-Kestrel of the Lower Quays', 'Rain hit the roof and ran down the gutter.'),
+      line(2, 'speech', 'Ferryman', 'Rain hit the road as the cart rolled in.'),
+    ] };
+    document.querySelector('[data-message-id="m1"] p').innerHTML = '<span id="s0">Rain hit the glass of the low window.</span> "<span id="s1">Rain hit the roof and ran down the gutter.</span>" "<span id="s2">Rain hit the road as the cart rolled in.</span>"';
+  });
+  await page.click('#mount [data-af-slot="message"]');
+  const litIn = () => page.evaluate(async () => {
+    const out = new Set();
+    for (let k = 0; k < 24; k++) {
+      const h = CSS.highlights.get("auto-foley-word");
+      if (h) for (const r of h) { const sp = r.startContainer.parentElement && r.startContainer.parentElement.closest("span[id]"); out.add(sp ? sp.id : "none"); }
+      await new Promise((r) => setTimeout(r, 25));
+    }
+    return Array.from(out);
+  });
+  const first = await litIn();
+  await page.click('[data-af="parts"] [data-at="2"]');
+  await page.waitForTimeout(150);
+  const jumped = await litIn();
+  await page.click('[data-af="back"]');
+  await page.waitForTimeout(150);
+  const back = await litIn();
+  await page.click('[data-af="skip"]');
+  await page.waitForTimeout(150);
+  const next = await litIn();
+  check(first.join() === "s0", "the first line lights its own words (" + first.join() + ")");
+  check(jumped.join() === "s2", "a tap on the third part lights the third line (" + jumped.join() + ")");
+  check(back.join() === "s1", "Back lights the second line (" + back.join() + ")");
+  check(next.join() === "s2", "Next lights the third line again (" + next.join() + ")");
   check(!errors.length, "no page errors. " + errors.slice(0, 2).join(" | "));
   await context.close();
 }
