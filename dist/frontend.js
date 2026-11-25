@@ -10,7 +10,7 @@
 // The key for speech stays in Lumiverse. Lines are spoken through
 // Lumiverse's own TTS route, as the signed-in reader, so this file never sees
 // that key.
-const VERSION = '1.6.3';
+const VERSION = '1.6.4';
 // The marks Lumiverse puts on another extension's part of the page. Nothing
 // inside one is read, written or pressed.
 const OTHER_UI = '[data-spindle-extension-root],[data-spindle-ext],[data-spindle-modal]';
@@ -8355,16 +8355,16 @@ export function setup(ctx, overrides) {
             out.push(words('lang', 'Language', 'en, de, ja', 'Empty lets ElevenLabs tell from the text. A two-letter code, such as en or fr, makes it read the text in that language.'));
         }
         if (prov === 'fish_audio') {
-            out.push(words('direction', 'Fish Audio direction', 'warm and tired', 'Sent to Fish Audio with every line of theirs, such as warm and tired. A line\u2019s own tags still apply. Empty sends none.', 300));
+            out.push(words('direction', 'Fish Audio direction', 'warm and tired', 'Optional. Sent to Fish Audio with every line of theirs, such as warm and tired. A custom voice may not need it.', 300));
             out.push(num('temperature', 'Temperature', 0, 1, 0.05, 0.7, 'How much each take varies. 0.70 by default. Lower is steadier.'));
             out.push(num('top_p', 'Top P', 0, 1, 0.05, 0.7, 'How wide the choice of sounds is. 0.70 by default.'));
             out.push(personSwitch('Steady loudness', 'On by default. Keeps lines at the same loudness.', own.normalize !== false, (v) => setP('normalize', v ? undefined : false)));
         }
         if (prov === 'openrouter_tts' && eng.style)
-            out.push(words('style_base', 'Gemini style', 'calm and dry', 'Sent to Gemini with every line of theirs, before that line\u2019s own note, such as calm and dry.', 300));
+            out.push(words('style_base', 'Gemini style', 'calm and dry', 'Optional. Sent to Gemini with every line of theirs, before that line\u2019s own note, such as calm and dry. A custom voice may not need it.', 300));
         if (prov === 'google_tts' || prov === 'google_vertex_tts') {
             if (eng.style)
-                out.push(words('style_base', 'Gemini style', 'calm and dry', 'Sent to Gemini with every line of theirs, before that line\u2019s own note, such as calm and dry.', 300));
+                out.push(words('style_base', 'Gemini style', 'calm and dry', 'Optional. Sent to Gemini with every line of theirs, before that line\u2019s own note, such as calm and dry. A custom voice may not need it.', 300));
             out.push(num('temperature', 'Temperature', 0, 2, 0.05, 1, 'How much each take varies. 1.00 by default.'));
             out.push(words('lang', 'Language', 'en-US', 'Empty lets Gemini tell from the text. A code such as en-US or fr-FR sets the language and accent.'));
         }

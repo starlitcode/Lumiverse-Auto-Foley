@@ -18,6 +18,7 @@
 | **Fish Audio direction** | Cast tab, under **More settings**, on Fish Audio | Fish Audio, with every line of theirs | How they always sound | "a warm, steady young man, relaxed and unhurried" |
 | **Notes for each voice engine** | Director tab | The Director, for the engine in use | A rule for every line on that engine | "Use at most two tags in a line." |
 
+- **Gemini style** and **Fish Audio direction** are optional. Left empty, each line still gets the Director's own note or tags.
 - **Gemini style** shows on Gemini 3.8 direct and through OpenRouter.
 - **Fish Audio direction** shows only on a Fish Audio connection. Through OpenRouter, Lumiverse sends only the text, the voice and the speed, so it is not shown there.
 
@@ -78,6 +79,14 @@ A description written for a voice service often holds several kinds of thing at 
 | "Studio quality audio" | Nowhere. It is not about how she speaks. |
 
 Writing the whole description in both **Acting notes** and **Gemini style** does no harm, but most of it is wasted. The Director cannot change the voice, and the voice service does not need the moments that change.
+
+### With a custom voice
+
+A voice you designed or cloned already carries its sound: the pitch, the texture, the age, and often the accent. So **Gemini style** and **Fish Audio direction** can stay short, or empty.
+
+- Write only how they speak, such as "measured and restrained, a little tired". Leave out what the voice already does.
+- Add the accent only if the voice loses it on some lines.
+- To check, play the same message with the box filled and with it empty, and listen.
 
 ## Examples for each engine
 

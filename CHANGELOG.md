@@ -6,6 +6,17 @@ Versions follow [Semantic Versioning](https://semver.org). A new major version m
 
 ---
 
+## 1.6.4
+
+_2026-11-25_
+
+### Changed
+
+- **Gemini style and Fish Audio direction say they are optional.** The hint under each says so, and that a custom voice may not need it, since the voice already carries its sound.
+- **The writing guide on GitHub has a part on custom voices.** It says what to leave out of **Gemini style** and **Fish Audio direction** when the voice already does it, and how to check.
+
+---
+
 ## 1.6.3
 
 _2026-11-25_

@@ -15,7 +15,7 @@ declare const spindle: any;
 declare function setTimeout(fn: () => void, ms: number): any;
 declare function clearTimeout(handle: any): void;
 
-const VERSION = '1.6.3';
+const VERSION = '1.6.4';
 
 // ---------------------------------------------------------------------------
 // Settings
