@@ -13,7 +13,7 @@
 
 type Ctx = any;
 
-const VERSION = '1.4.0';
+const VERSION = '1.5.0';
 // The marks Lumiverse puts on another extension's part of the page. Nothing
 // inside one is read, written or pressed.
 const OTHER_UI = '[data-spindle-extension-root],[data-spindle-ext],[data-spindle-modal]';
