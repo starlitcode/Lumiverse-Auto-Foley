@@ -128,7 +128,13 @@ function answer(msg) {
   switch (msg.type) {
     case 'load': return reply({ type: 'state', fresh: window.__fresh !== false, settings: window.__settings, sounds: window.__sounds, hasKey: true, builtInPrompt: '<the_director>\\nYou direct.\\n</the_director>', builtInSkips: '^[ \\\\t]*\\\\|.*\\\\|[ \\\\t]*$\\n【[^】\\\\n]*】', version: '0', decisions: true });
     case 'save': window.__settings = msg.settings; return reply({ type: 'saved', ok: true, settings: msg.settings });
-    case 'direct': return reply({ type: 'script', script: SCRIPT });
+    case 'direct': {
+      // A check can hold the answer, and send the note that the Director is
+      // being asked, as the backend does when no kept script is found.
+      if (window.__directingAt != null) setTimeout(() => backendFns.forEach((fn) => fn({ type: 'directing', messageId: msg.messageId })), window.__directingAt);
+      if (window.__directHold) return setTimeout(() => reply({ type: 'script', script: SCRIPT }), window.__directHold);
+      return reply({ type: 'script', script: SCRIPT });
+    }
     case 'sound': return reply({ type: 'sound', base64: 'AAAA', mime: 'audio/mpeg' });
     case 'list_connections': return reply({ type: 'connections', list: window.__llmList || [{ id: 'l1', name: 'Fast helper with a very long connection name for testing', model: 'maker/tiny-fast-model' }] });
     case 'list_decision_connections': return reply({ type: 'decision_connections', list: window.__decList || [{ id: 'd1', name: 'Quick', model: 'fast-judge', isDefault: true, hasKey: true }], state: 'ok' });
@@ -411,7 +417,8 @@ if (section("perform")) {
   check((await page.locator('[data-af="parts"] [data-at]').count()) >= 3, "Now playing has a mark for each part of the message");
   check((await page.locator('[data-af="parts"] [data-k="sound"]').count()) === 1, "a separate sound effect has a mark of its own");
   check((await page.locator(".af-script, .af-line").count()) === 0, "there is no script list beside Now playing");
-  check(((await page.locator('[data-af="used"]').textContent()) || "").includes("1,840 tokens"), "Now playing says how many tokens the Director read and wrote");
+  check(((await page.locator('[data-af="used"]').textContent()) || "").includes("1,840 input tokens and 212 output tokens"), "Now playing says how many input and output tokens the script used");
+  check(!((await page.locator('[data-af="used"]').textContent()) || "").includes("Cost"), "with no prices set, no cost is shown");
   await page.waitForTimeout(700);
   const synth = await page.evaluate(() => window.__synth || []);
   check(synth.length >= 2, "lines are spoken through Lumiverse's TTS route (" + synth.length + ")");
@@ -901,6 +908,45 @@ if (section("sync")) {
   });
   check(looks.length > 0 && looks.every((x) => x[0] === 0 && (x[1] === "none" || x[1] === "normal")), "a lit word is the word itself, with nothing drawn over it");
   check(looks.every((x) => !/rgba\(0, 0, 0, 0\)|transparent/.test(x[2])), "a lit word is never see-through");
+  check(!errors.length, "no console errors. " + errors.slice(0, 2).join("; "));
+  await context.close();
+}
+
+if (section("script status")) {
+  console.log("The status says the Director is writing only when it is asked, and prices give a cost");
+  for (const asked of [false, true]) {
+    const { context, page, errors } = await open(THEMES[0], SIZES[0]);
+    await page.evaluate((asked) => {
+      window.__directHold = 900;
+      if (asked) window.__directingAt = 100;
+    }, asked);
+    await page.click('.af-tab[data-tab="stage"]');
+    await page.waitForTimeout(150);
+    await page.click('#mount [data-af-slot="message"]');
+    await page.waitForTimeout(400);
+    const said = (await page.locator('[data-af="sub"]').textContent()) || "";
+    if (!asked) check(said.includes("Getting the script") && !said.includes("Director is writing"), "a kept script says it is getting the script (" + said + ")");
+    else check(said.includes("The Director is writing the script"), "once the Director is asked, it says so (" + said + ")");
+    check(!errors.length, "no console errors. " + errors.slice(0, 2).join("; "));
+    await context.close();
+  }
+  const { context, page, errors } = await open(THEMES[0], SIZES[0]);
+  await page.click('.af-tab[data-tab="director"]');
+  await page.waitForTimeout(150);
+  await page.fill('[data-af-row="costIn"] input', "$1.00 / 1M input tokens");
+  await page.locator('[data-af-row="costIn"] input').blur();
+  await page.fill('[data-af-row="costOut"] input', "2");
+  await page.locator('[data-af-row="costOut"] input').blur();
+  await page.waitForTimeout(100);
+  check((await page.locator('[data-af-row="costIn"] input').inputValue()) === "1", "a pasted price line keeps its number");
+  await page.click('.af-tab[data-tab="stage"]');
+  await page.waitForTimeout(150);
+  await page.click('#mount [data-af-slot="message"]');
+  await page.waitForTimeout(300);
+  const used = (await page.locator('[data-af="used"]').textContent()) || "";
+  check(used.includes("Cost: about 0.0023"), "with prices set, Now playing gives the cost (" + used + ")");
+  const m = await page.evaluate(MEASURE, true);
+  check(!m.overflow.length && !m.small.length, "the Stage fits on a phone. " + m.overflow.concat(m.small).slice(0, 2).join("; "));
   check(!errors.length, "no console errors. " + errors.slice(0, 2).join("; "));
   await context.close();
 }

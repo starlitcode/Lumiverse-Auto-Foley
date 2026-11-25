@@ -33,7 +33,15 @@ Two messages, to the connection picked under **Which connection**:
 
 Nothing else from your chat is sent. The Director does not see earlier messages.
 
-Now playing says how many tokens the Director read and wrote for the message, over every ask. The count comes from the provider when it sends one, or from Lumiverse. When neither can count, it is a guess from the length, and it says "about".
+Now playing says how many input and output tokens the Director used for the message, over every ask. The count comes from the provider when it sends one, or from Lumiverse. When neither can count, it is a guess from the length, and it says "about".
+
+### What it costs
+
+- **Input price, per million tokens** and **Output price, per million tokens** are in the Director tab, under **Give up waiting after**. Type your provider's prices, or paste the whole line, such as "$0.30 / 1M input tokens".
+- With a price set, Now playing adds the cost of the script, such as "Cost: about 0.0021".
+- When the provider sends its own cost, that figure is shown instead.
+- At 0, which is the default, no cost is worked out.
+- No currency symbol is shown, since Auto Foley does not know your currency.
 
 ## An example
 

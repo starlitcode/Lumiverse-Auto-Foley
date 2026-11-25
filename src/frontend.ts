@@ -1344,6 +1344,8 @@ const DEFAULTS: any = {
   thinkingEffort: 'low',
   samplers: {},
   timeoutSecs: 120,
+  costIn: 0,
+  costOut: 0,
   rateWaits: 2,
   retryDirector: 1,
   askNote: true,
@@ -1548,6 +1550,13 @@ export function setup(ctx: Ctx, overrides?: any) {
     if (msg.type === 'sounds' && Array.isArray(msg.sounds)) {
       sounds = msg.sounds;
       if (tab === 'sounds') renderTab();
+    } else if (msg.type === 'directing') {
+      if (busyMessage && String(msg.messageId || '') === busyMessage && !directorWriting) {
+        directorWriting = true;
+        phase = busyWords();
+        paintStage();
+        paintFloat();
+      }
     } else if (msg.type === 'state_changed' && msg.settings) {
       // The backend added someone to the cast. Its copy is the newer one.
       S = Object.assign({}, DEFAULTS, msg.settings);
@@ -2932,6 +2941,14 @@ export function setup(ctx: Ctx, overrides?: any) {
 
   const preparing = new Map<string, Promise<any>>();
   let busyMessage = '';
+  // Whether the Director is writing the script for busyMessage. The backend
+  // says so only when it asks the Director, so a script played from what was
+  // kept says it is getting the script, never that the Director is writing.
+  let directorWriting = false;
+  function busyWords(): string {
+    if (directorWriting) return 'The Director is writing the script';
+    return S.directorOn ? 'Getting the script' : 'Making the script';
+  }
   // Stop while the script is being written: the panel stops waiting, and the
   // server cancels the Director's call, so nothing more is spent on it.
   function stopDirecting() {
@@ -2988,13 +3005,14 @@ export function setup(ctx: Ctx, overrides?: any) {
     const chatId = activeChatId();
     stop();
     busyMessage = messageId;
-    phase = S.directorOn ? 'The Director is writing the script' : 'Making the script';
+    directorWriting = false;
+    phase = busyWords();
     const started = Date.now();
     paintButtons();
     if (tab === 'stage') renderTab();
     const waitTick = setInterval(() => {
       if (busyMessage !== messageId) return;
-      phase = (S.directorOn ? 'The Director is writing the script' : 'Making the script') + ' (' + Math.round((Date.now() - started) / 1000) + ' s)';
+      phase = busyWords() + ' (' + Math.round((Date.now() - started) / 1000) + ' s)';
       paintStage();
     }, 1000);
     if (!activeConnection()) await loadTtsConnections();
@@ -5106,7 +5124,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       face.innerHTML = it && it.kind === 'voice' ? faceHtml(who, name) : it ? ICON_SOUND : ICON;
       face.className = 'af-avatar' + (it && it.kind === 'voice' && line ? ' af-avatar-' + partWho(line) : '');
     }
-    setText(q('who'), name || (busyMessage ? 'Writing the script' : playerWhose === 'mine' ? 'Your latest message' : 'The latest reply'));
+    setText(q('who'), name || (busyMessage ? (directorWriting ? 'Writing the script' : 'Getting the script') : playerWhose === 'mine' ? 'Your latest message' : 'The latest reply'));
     // The On air light says whether it is playing, so this says only where.
     const partOf = show ? 'Part ' + (Math.min(show.index, total - 1) + 1) + ' of ' + total : '';
     setText(q('cap'), show ? (paused ? 'Paused · ' + partOf.toLowerCase() : partOf) : busyMessage ? 'Getting ready' : 'Ready');
@@ -5133,7 +5151,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     }
     const said = q('said');
     const words = it && it.kind === 'voice' && line ? stripTags(line.text) : it && it.sound ? it.sound : '';
-    const text = words || (busyMessage ? (S.directorOn ? 'The Director is writing the script.' : 'Making the script.') : phase && !/^(Stopped|Finished)$/.test(phase) ? phase : playerWhose === 'mine' ? 'Press Play to perform your latest message.' : 'Press Play to perform the latest reply.');
+    const text = words || (busyMessage ? busyWords() + '.' : phase && !/^(Stopped|Finished)$/.test(phase) ? phase : playerWhose === 'mine' ? 'Press Play to perform your latest message.' : 'Press Play to perform the latest reply.');
     setText(said, text);
     if (words) said.removeAttribute('data-quiet');
     else said.setAttribute('data-quiet', '');
@@ -5734,8 +5752,14 @@ export function setup(ctx: Ctx, overrides?: any) {
     const n = sc0 ? Number(sc0.sent) || 0 : 0;
     used.hidden = !n;
     if (n) {
+      // Input and output, the same two words the prices are named after.
       const word = (x: number) => (sc0!.counted === false ? 'about ' : '') + x.toLocaleString();
-      setText(used, 'For this script, the Director read ' + word(n) + ' tokens and wrote ' + word(Number(sc0!.back) || 0) + '.' + (Number(sc0!.cost) > 0 ? ' It cost ' + money(Number(sc0!.cost)) + '.' : ''));
+      const back = Number(sc0!.back) || 0;
+      // The provider's own figure where it sent one, or else the prices typed
+      // in the Director tab.
+      const priced = (n / 1e6) * (Number(S.costIn) || 0) + (back / 1e6) * (Number(S.costOut) || 0);
+      const cost = Number(sc0!.cost) > 0 ? Number(sc0!.cost) : priced;
+      setText(used, 'This script used ' + word(n) + ' input tokens and ' + word(back) + ' output tokens.' + (cost > 0 ? ' Cost: about ' + money(cost) + '.' : ''));
     }
     stageRefs.retryRow.hidden = !(lastFailed && !show && !busyMessage);
     const title = q('title');
@@ -6910,6 +6934,26 @@ export function setup(ctx: Ctx, overrides?: any) {
     return wrap;
   }
 
+  // A price box. A pasted line, such as "$0.30 / 1M input tokens", keeps
+  // its first number. It saves when the box is left, so a half-typed number
+  // is not saved.
+  function priceRow(key: 'costIn' | 'costOut', label: string, help: string): HTMLElement {
+    const id = rid('price');
+    const wrap = el('<div class="af-col"></div>');
+    wrap.setAttribute('data-af-row', key);
+    wrap.appendChild(labelRow(label, help, id));
+    const i = el('<input type="text" class="af-field" id="' + id + '" inputmode="decimal" autocomplete="off" placeholder="0">') as HTMLInputElement;
+    i.value = Number(S[key]) > 0 ? String(S[key]) : '';
+    i.addEventListener('change', () => {
+      const m = i.value.replace(/,/g, '').match(/\d+(?:\.\d+)?|\.\d+/);
+      const v = m ? Math.min(10000, Math.max(0, Number(m[0]))) : 0;
+      i.value = v > 0 ? String(v) : '';
+      set({ [key]: v } as any);
+    });
+    wrap.appendChild(i);
+    return wrap;
+  }
+
   function renderDirector() {
     const main = card('The Director', 'A second model reads each message before it is spoken. It marks how every line is said, with voice tags such as [whispers] or [sighs], and adds the sounds of what happens. It never changes your words.');
     main.appendChild(
@@ -7028,6 +7072,8 @@ export function setup(ctx: Ctx, overrides?: any) {
         { id: '0', label: 'Never' },
       ], String(S.timeoutSecs), (v) => set({ timeoutSecs: Number(v) }), '2 minutes by default. A Director that has not answered by then is stopped, and the message is read as written.'),
     );
+    model.appendChild(priceRow('costIn', 'Input price, per million tokens', 'Your provider\u2019s input price per million tokens. Type the number, like 5 or 0.075, or paste the whole line. At 0, no cost is worked out.'));
+    model.appendChild(priceRow('costOut', 'Output price, per million tokens', 'Your provider\u2019s output price per million tokens, for the text the Director writes. Type the number, or paste the whole line.'));
     model.appendChild(
       fold('Samplers', (body) => {
         body.appendChild(hint('Blank leaves each one to the connection, which is right for most people. Only a value you type is sent.'));

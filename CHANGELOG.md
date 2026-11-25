@@ -12,6 +12,7 @@ _Not yet released_
 
 ### Added
 
+- **Input price and Output price, per million tokens**, in the Director tab, the same as in Auto Refine and Auto Retry. Now playing says how many input and output tokens the script used, and with a price set, what it cost. Paste your provider's whole price line if you like.
 - **A guide to writing for each voice engine**, on GitHub. It says what to write in **How they speak** and the notes for ElevenLabs, Fish Audio, Gemini and Chatterbox, with one example followed through every engine.
 - **A Contributing page**, on GitHub, with what to put in a bug report and how to build the debug report.
 - **Downloads and videos**, under **Now playing** on the Stage tab. **Download audio** saves the last performance as one WAV file, **Download this part** saves the part playing, and **Make a video** saves a video of the script page with the words lighting up as they are said. Nothing is spent on any of them.
@@ -43,7 +44,7 @@ _Not yet released_
 - **Warnings that fit the engine.** The Director tab says when Big moments change only the audience on an engine other than ElevenLabs, and when an engine cannot sing.
 - **A new look for the players.** The floating player and **Now playing** on the Stage tab show the line like a page of a script, with a line on its left side in the color of whoever is speaking. An **On air** light shows red while a message plays and amber while it is paused. A thin striped band runs along the top of each player.
 - **Groups have an editor.** **New group** and **Edit** open it, with the group's name and a switch for each person in the cast, so you can pick everyone in a group in one place. **Save** keeps it and **Cancel** changes nothing. **Edit** takes the place of **Rename**.
-- **Scripts.** The panel calls what the Director makes from a message its script, such as **Kept audio and scripts** in **Start again**. While it works, the status says "The Director is writing the script". **Now playing** and the floating player name what plays as a script, such as "Tamsin’s script".
+- **Scripts.** The panel calls what the Director makes from a message its script, such as **Kept audio and scripts** in **Start again**. While a message gets ready, the status says "Getting the script", and "The Director is writing the script" only once the Director is asked. A message played from its kept script never says the Director is writing. **Now playing** and the floating player name what plays as a script, such as "Tamsin’s script".
 - **The Director's built-in prompt** says what each kind of person in the cast is, and to mark a big moment only while **Big moments** is on. If you use a prompt of your own, a notice says the built-in one has changed.
 - **Fish Audio tags are repeated for each sentence.** Fish Audio reads a tag for how the words are said best at the start of the sentence it is for. On a line of several sentences, that tag now goes again at the start of each sentence that has none of its own, so the last sentence is said the same way as the first. Sounds and pauses are not repeated.
 

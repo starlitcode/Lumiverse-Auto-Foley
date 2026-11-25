@@ -104,6 +104,8 @@ On the **Settings** tab:
 - **Prepare replies ahead** directs each reply in the background, with Autoplay off. Play then starts at once.
 - **Read your own messages** performs your messages too, with Autoplay on.
 
+While a message gets ready, the status says **Getting the script**. It changes to **The Director is writing the script** only when the Director is asked. A message played from its kept script never asks the Director, so it never says that.
+
 **Stop**, pressed while the Director is writing the script, cancels the Director's request. Nothing more is asked or spent on that message, and nothing is kept.
 
 A message edited after it was directed is directed again. If it was playing, it starts again with the new text, so what you hear matches what is on screen.

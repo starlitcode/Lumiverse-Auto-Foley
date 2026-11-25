@@ -114,6 +114,10 @@ interface Settings {
   thinkingEffort: string;
   samplers: Record<string, number | ''>;
   timeoutSecs: number;
+  // The Director's prices, per million tokens, from the reader. 0 shows no
+  // cost worked out from them.
+  costIn: number;
+  costOut: number;
   // How many times to wait and ask again when a provider is busy.
   rateWaits: number;
   // A note sent with an ask made again, saying what went wrong with the last
@@ -256,6 +260,8 @@ const DEFAULT_SETTINGS: Settings = {
   thinkingEffort: 'low',
   samplers: {},
   timeoutSecs: 120,
+  costIn: 0,
+  costOut: 0,
   rateWaits: 2,
   askNote: true,
   askNotes: {},
@@ -613,6 +619,8 @@ function cleanSettings(raw: any): Settings {
     thinkingEffort: pick(r.thinkingEffort, EFFORTS, 'low'),
     samplers: cleanSamplerInput(r.samplers),
     timeoutSecs: Math.round(num(r.timeoutSecs, 0, 3600, d.timeoutSecs)),
+    costIn: num(r.costIn, 0, 10000, d.costIn),
+    costOut: num(r.costOut, 0, 10000, d.costOut),
     rateWaits: Math.round(num(r.rateWaits, 0, 5, d.rateWaits)),
     askNote: bool(r.askNote, d.askNote),
     askNotes: cleanNotes(r.askNotes),
@@ -2990,6 +2998,9 @@ async function direct(userId: string | undefined, p: any): Promise<Script> {
   //   changed most words is asked for again, up to Ask again when the
   //   Director's answer fails, with a note saying what went wrong.
   // Whatever happens, the message is still read, as written if need be.
+  // The panel says the Director is writing only from here, so a script
+  // played from what was kept never shows it.
+  send(userId, { type: 'directing', messageId });
   const run: DirectRun = { stopped: false, ctl: null };
   (directRuns[uid] = directRuns[uid] || new Set()).add(run);
   let firstTry: { answer: any };
