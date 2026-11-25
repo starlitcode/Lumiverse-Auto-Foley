@@ -963,8 +963,16 @@ if (section("script status")) {
   const { context, page, errors } = await open(THEMES[0], SIZES[0]);
   await page.click('.af-tab[data-tab="director"]');
   await page.waitForTimeout(150);
-  await page.fill('[data-af-row="costIn"] input', "$1.00 / 1M input tokens");
-  await page.locator('[data-af-row="costIn"] input').blur();
+  // Pasted, as a price is copied off a provider's page.
+  await page.evaluate(() => {
+    const box = document.querySelector('[data-af-row="costIn"] input');
+    const data = new DataTransfer();
+    data.setData("text", "$1.00 / 1M input tokens");
+    box.focus();
+    box.dispatchEvent(new ClipboardEvent("paste", { clipboardData: data, bubbles: true, cancelable: true }));
+    box.blur();
+  });
+  check(await page.evaluate(() => { const b = document.querySelector('[data-af-row="costIn"] input'); return b.type === "number" && b.min === "0" && b.max === "10000"; }), "a price box is a number box from 0 to 10000, as in Auto Retry and Auto Refine");
   await page.fill('[data-af-row="costOut"] input', "2");
   await page.locator('[data-af-row="costOut"] input').blur();
   await page.waitForTimeout(100);
@@ -2295,6 +2303,29 @@ if (section("sampler range")) {
     await page.waitForTimeout(500);
     const gone = await page.evaluate(() => !("top_p" in (window.__settings.samplers || {})));
     check(gone, where + ": an emptied box hands it back to the connection");
+    check(!errors.length, where + ": no page errors. " + errors.slice(0, 2).join(" | "));
+    await context.close();
+  }
+}
+
+if (section("size box")) {
+  console.log("The floating button's size is a number box held to 28 to 96, as in Auto Retry and Auto Refine");
+  for (const size of SIZES) {
+    const { context, page, errors } = await open(THEMES[0], size);
+    const where = size.name;
+    await page.click('.af-tab[data-tab="settings"]');
+    await page.waitForTimeout(200);
+    await page.evaluate(() => document.querySelector('[data-af-row="widgetOn"] .af-box').click());
+    await page.waitForTimeout(500);
+    const box = page.locator('[data-af-row="widgetSize"] input');
+    await box.scrollIntoViewIfNeeded();
+    check((await box.getAttribute("type")) === "number" && (await box.getAttribute("min")) === "28" && (await box.getAttribute("max")) === "96", where + ": it is a number box from 28 to 96");
+    await box.fill("200");
+    await box.blur();
+    await page.waitForTimeout(400);
+    const big = await page.evaluate(() => ({ box: document.querySelector('[data-af-row="widgetSize"] input').value, saved: window.__settings.widgetSize, w: parseFloat(window.__widget.style.width) }));
+    check(big.box === "96" && big.saved === 96 && big.w === 96, where + ": a number above the range is held to 96, and the button takes it (" + JSON.stringify(big) + ")");
+    if (size.touch) check((await box.boundingBox()).height >= 32, where + ": the box is at least 32 pixels tall");
     check(!errors.length, where + ": no page errors. " + errors.slice(0, 2).join(" | "));
     await context.close();
   }

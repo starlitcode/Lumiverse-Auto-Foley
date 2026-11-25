@@ -909,6 +909,7 @@ const PANEL_CSS = `
 .af-colorswatch:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--af-accent-soft); }
 .af-coloredit { gap: 10px; padding-top: 4px; }
 .af-colorcode { width: 110px; flex: none; }
+.af-numbox { width: 120px; max-width: 100%; }
 .af-colorline { display: grid; grid-template-columns: 76px minmax(0, 1fr) 40px; align-items: center; gap: 8px; }
 .af-colorname, .af-colorvalue { font-size: 12px; color: var(--af-muted); }
 .af-colorvalue { text-align: right; font-variant-numeric: tabular-nums; }
@@ -4950,6 +4951,26 @@ export function setup(ctx, overrides) {
         paint();
         return wrap;
     }
+    // A whole number in a box, the same as Auto Retry's and Auto Refine's
+    // number settings. It is held to its range and saved when the box is left.
+    function wholeRow(key, label, min, max, dflt, onChange, help) {
+        const id = rid('num');
+        const wrap = el('<div class="af-col"></div>');
+        wrap.setAttribute('data-af-row', key);
+        wrap.appendChild(labelRow(label, help, id));
+        const i = el('<input type="number" class="af-field af-numbox" id="' + id + '" inputmode="numeric" step="1" min="' + min + '" max="' + max + '">');
+        const cur = Number(S[key]);
+        i.value = String(Number.isFinite(cur) && cur > 0 ? cur : dflt);
+        i.addEventListener('change', () => {
+            const raw = String(i.value).trim();
+            const v = Number(raw);
+            const held = raw !== '' && Number.isFinite(v) ? Math.round(Math.min(max, Math.max(min, v))) : dflt;
+            i.value = String(held);
+            onChange(held);
+        });
+        wrap.appendChild(i);
+        return wrap;
+    }
     function text(label, value, onChange, placeholder, help, max) {
         const id = rid('tx');
         const f = el('<div class="af-col"></div>');
@@ -6470,10 +6491,10 @@ export function setup(ctx, overrides) {
             ];
         }));
         c.appendChild(toggle('A floating player', 'Off by default. A round button over the chat that opens a small player: Play, the lines, the volume and quick switches. Drag it to move it. It needs the UI panels permission.', 'widgetOn', () => syncWidget(), () => [
-            slider('How big it is', Number(S.widgetSize) || 44, 28, 96, 2, (v) => v + ' px', (v) => {
+            wholeRow('widgetSize', 'How big it is', 28, 96, 44, (v) => {
                 set({ widgetSize: v });
                 syncWidget();
-            }, 'How wide the button is, in pixels. 44 by default, about a comfortable thumb.'),
+            }, 'How wide the button is, in pixels. 44 is about a comfortable thumb. Larger is easier to hit on a phone, smaller keeps it out of the way.'),
         ]));
         if (S.widgetOn && widgetFailed)
             c.appendChild(notice('warn', 'The floating player could not be added. Check that Auto Foley has the UI panels permission, in Lumiverse under Extensions.'));
@@ -7708,7 +7729,7 @@ export function setup(ctx, overrides) {
             const wrap = el('<div class="af-col"></div>');
             wrap.setAttribute('data-af-row', id);
             wrap.appendChild(labelRow(label, help, id));
-            const i = el('<input type="number" class="af-field" id="' + id + '" inputmode="numeric" step="1" min="' + lo + '" max="' + hi + '">');
+            const i = el('<input type="number" class="af-field af-numbox" id="' + id + '" inputmode="numeric" step="1" min="' + lo + '" max="' + hi + '">');
             i.value = String(typeof own[k] === 'number' ? own[k] : dflt);
             i.addEventListener('change', () => {
                 const v = Number(String(i.value).trim());
@@ -8120,16 +8141,31 @@ export function setup(ctx, overrides) {
         wrap.appendChild(i);
         return wrap;
     }
-    // A price box. A pasted line, such as "$0.30 / 1M input tokens", keeps
-    // its first number. It saves when the box is left, so a half-typed number
-    // is not saved.
+    // A price box, a number from 0 to 10000, the same as in Auto Retry and
+    // Auto Refine. A pasted line, such as "$0.30 / 1M input tokens", keeps its
+    // first number. It saves when the box is left, so a half-typed number is
+    // not saved.
     function priceRow(key, label, help) {
         const id = rid('price');
         const wrap = el('<div class="af-col"></div>');
         wrap.setAttribute('data-af-row', key);
         wrap.appendChild(labelRow(label, help, id));
-        const i = el('<input type="text" class="af-field" id="' + id + '" inputmode="decimal" autocomplete="off" placeholder="0">');
+        const i = el('<input type="number" class="af-field" id="' + id + '" inputmode="decimal" step="any" min="0" max="10000" autocomplete="off" placeholder="0">');
+        i.setAttribute('data-af-price', key);
         i.value = Number(S[key]) > 0 ? String(S[key]) : '';
+        // A price is copied off a provider's own page, where it reads $5.00/M. A
+        // number box takes none of that, so the number is lifted out of the paste.
+        i.addEventListener('paste', (e) => {
+            const raw = e && e.clipboardData && e.clipboardData.getData('text');
+            if (!raw)
+                return;
+            const found = String(raw).replace(/,/g, '').match(/\d*\.?\d+/);
+            if (!found)
+                return;
+            e.preventDefault();
+            i.value = found[0];
+            i.dispatchEvent(new Event('change', { bubbles: true }));
+        });
         i.addEventListener('change', () => {
             const m = i.value.replace(/,/g, '').match(/\d+(?:\.\d+)?|\.\d+/);
             const v = m ? Math.min(10000, Math.max(0, Number(m[0]))) : 0;
