@@ -30,7 +30,7 @@ describe("which engine a connection runs", () => {
         expect(noTagsWhy({ provider }, m)).toContain("December 18, 2026");
       }
     }
-    expect(Object.keys(ENGINES).sort()).toEqual(["chatterbox_turbo", "eleven_v3", "fish", "gemini"]);
+    expect(Object.keys(ENGINES).sort()).toEqual(["cartesia", "chatterbox_turbo", "eleven_v3", "fish", "gemini", "omnivoice"]);
     expect(engineOf({ provider: "google_tts" }, "gemini-2.0-flash").supported).toBe(false);
   });
 
@@ -43,6 +43,24 @@ describe("which engine a connection runs", () => {
       expect(engineOf(or, m).supported).toBe(false);
       expect(noTagsWhy(or, m)).toContain("elevenlabs/eleven-v4");
     }
+  });
+
+  test("OpenVox: OmniVoice and Chatterbox Turbo act, its other models are not used", () => {
+    const ov = { provider: "openvox_tts" };
+    expect(engineOf(ov, "omnivoice").id).toBe("omnivoice");
+    expect(engineOf(ov, "chatterbox-turbo-small").id).toBe("chatterbox_turbo");
+    for (const m of ["kokoro", "pocket-tts", "supertonic-3", "chatterbox-multilingual", "qwen3-tts"]) {
+      expect(engineOf(ov, m).supported).toBe(false);
+      expect(noTagsWhy(ov, m)).toContain("OmniVoice and Chatterbox Turbo");
+    }
+  });
+
+  test("Cartesia: Sonic 3 and later act, older Sonic models are not used", () => {
+    const ca = { provider: "cartesia" };
+    for (const m of ["sonic-3", "sonic-3.5", "sonic-3.6", "sonic-latest"]) expect(engineOf(ca, m).id).toBe("cartesia");
+    for (const m of ["sonic-2", "sonic-english", "sonic-turbo"]) expect(engineOf(ca, m).supported).toBe(false);
+    expect(ENGINES.cartesia.emotions.length).toBe(58);
+    expect(ENGINES.cartesia.speed).toEqual([0.6, 1.5]);
   });
 
   test("OpenRouter voices come from the model's own list", () => {
@@ -113,6 +131,24 @@ describe("fitting a line to its engine", () => {
     expect(textFor(odd, ENGINES.gemini)).toBe("<sigh> Fine whatever 3 the north gate, 24/7.");
   });
 
+  test("OmniVoice keeps its own sounds, and a gasp or a tsk becomes its nearest one", () => {
+    expect(textFor({ text: "[laughs] Fine. [hmm] Sure? [gasps] Oh. [tsk] No. [whispers] Go." }, ENGINES.omnivoice)).toBe("[laughter] Fine. [question-en] Sure? [surprise-ah] Oh. [dissatisfaction-hnn] No. Go.");
+    // An engine with its own gasp keeps it.
+    expect(fitTag("gasps", ENGINES.chatterbox_turbo.list)).toBe("gasp");
+    expect(fitTag("tsk", ENGINES.chatterbox_turbo.list)).toBe("");
+  });
+
+  test("Cartesia keeps only [laughter] in the text, and an emotion is fitted to its list", () => {
+    expect(textFor({ text: "[nervously] I checked twice. [laughs] Really." }, ENGINES.cartesia)).toBe("I checked twice. [laughter] Really.");
+    expect(fitTag("nervously", ENGINES.cartesia.list)).toBe("anxious");
+    expect(fitTag("terrified", ENGINES.cartesia.list)).toBe("panicked");
+    expect(fitTag("sarcastically", ENGINES.cartesia.list)).toBe("sarcastic");
+    expect(fitTag("angry", ENGINES.cartesia.list)).toBe("angry");
+    expect(fitTag("quietly", ENGINES.cartesia.list)).toBe("");
+    // Other engines are not given an emotion.
+    expect(fitTag("angrily", ENGINES.chatterbox_turbo.list)).toBe("");
+  });
+
   test("Chatterbox keeps only its nine tags", () => {
     expect(textFor({ text: "[chuckles] Fine. [whispers] Go." }, ENGINES.chatterbox_turbo)).toBe("[chuckle] Fine. Go.");
   });
@@ -137,9 +173,9 @@ describe("the backend fits tags the same way", () => {
   const box: any = { spindle: { onFrontendMessage() {}, log: { info() {}, warn() {} } }, console, Date, Math, JSON, Promise };
   vm.createContext(box);
   vm.runInContext(readFileSync(join(import.meta.dir, "..", "dist", "backend.js"), "utf8") + "\n;globalThis.__fit = fitTag;", box);
-  const tags = ["laughs", "a soft sigh", "clears throat", "whispering", "beat", "long pause", "medium pause", "sniffles", "gasping", "deadpan", "shh", "heavy breathing", "yells", "um", "sarcastic", "rapidly", "scared"];
+  const tags = ["nervously", "terrified", "hmm", "tsk", "angry", "laughs", "a soft sigh", "clears throat", "whispering", "beat", "long pause", "medium pause", "sniffles", "gasping", "deadpan", "shh", "heavy breathing", "yells", "um", "sarcastic", "rapidly", "scared"];
   test("for every list", () => {
-    for (const list of [ENGINES.gemini.list, ENGINES.chatterbox_turbo.list]) for (const t of tags) expect(box.__fit(t, list)).toBe(fitTag(t, list));
+    for (const list of [ENGINES.gemini.list, ENGINES.chatterbox_turbo.list, ENGINES.omnivoice.list, ENGINES.cartesia.list]) for (const t of tags) expect(box.__fit(t, list)).toBe(fitTag(t, list));
   });
 });
 

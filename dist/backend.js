@@ -11,7 +11,7 @@
 // One backend process can serve every account on a server, so everything that
 // belongs to a person is kept per user id, in spindle.userStorage, and every
 // reply goes back addressed to that user.
-const VERSION = '1.2.0';
+const VERSION = '1.3.0';
 const DEFAULT_SETTINGS = {
     enabled: true,
     ttsConnection: '',
@@ -1024,7 +1024,7 @@ const MAX_TAGS = { subtle: 1, natural: 2, dramatic: 4 };
 // do. The Director is told, so it writes what that engine can read. The panel
 // fits each line again to the engine that speaks it.
 // Only models that act are used. The panel speaks nothing through any other.
-const ENGINE_IDS = ['eleven_v3', 'fish', 'gemini', 'chatterbox_turbo'];
+const ENGINE_IDS = ['eleven_v3', 'fish', 'gemini', 'chatterbox_turbo', 'omnivoice', 'cartesia'];
 // What the panel sent, checked. A message directed with no engine named is
 // directed for ElevenLabs v3, which takes every kind of direction.
 function cleanEngine(v) {
@@ -1035,7 +1035,7 @@ function cleanEngine(v) {
         id,
         label: str(e.label, 60) || 'ElevenLabs v3 or v4',
         tags,
-        list: tags === 'list' && Array.isArray(e.list) ? e.list.map((x) => str(x, 30).toLowerCase()).filter((x) => /^[a-z][a-z -]*$/.test(x)).slice(0, 60) : [],
+        list: tags === 'list' && Array.isArray(e.list) ? e.list.map((x) => str(x, 30).toLowerCase()).filter((x) => /^[a-z][a-z -]*$/.test(x)).slice(0, 80) : [],
         style: e.style === true,
         inVoiceSounds: e.inVoiceSounds === true || (!v && true),
         sing: e.sing === true || (!v && true),
@@ -1048,6 +1048,8 @@ const ENGINE_NOTES = {
     fish: 'Fish Audio acts out free tags in square brackets, like [barely holding it together] or [whispering]. Put a tag at the start of the sentence it shapes. A tag keeps going until the next one, so when a whisper ends, mark where the voice comes back up. One feeling per sentence works best. Fish can\'t make the sounds of the world, so sounds go in "before" and "after".',
     gemini: 'Gemini 3.8 knows only the tags in "tag_list", and they\'re all sounds a voice makes or pauses. Use them as written, in square brackets, right where the sound happens, even mid-sentence. How a line is said goes in its "style": a few plain words like "hushed and nervous" or "fast, out of breath". Most lines need no style at all, since Gemini reads the punctuation and the words around them. Leave age, accent and who they are out of it, since the voice already carries those.',
     chatterbox_turbo: 'Chatterbox knows only the nine tags in "tag_list", and they\'re all sounds a voice makes. Use them as written, in square brackets, and rarely: one in a line at most, and most lines get none. It can\'t take a delivery tag like [quietly], so the punctuation carries the delivery.',
+    omnivoice: 'OmniVoice knows only the tags in "tag_list", and they\'re all small sounds a voice makes: a laugh, a sigh, a questioning hum, an agreeing one, a surprised gasp, an unhappy grunt. Use them as written, in square brackets, right where the sound happens. Keep them rare, one in a line at most. It can\'t take a delivery tag like [quietly], so the words and the punctuation carry the rest.',
+    cartesia: 'Cartesia reads one feeling for a whole line, and [laughter] where someone laughs. The feelings are the other words in "tag_list". When a line needs one, put it in square brackets at the very start, like [anxious] or [sarcastic], and only one per line. The first six on the list, neutral to scared, come out the most reliably. Most lines need none, since Cartesia hears the feeling in the words.',
 };
 function engineNote(s, id) {
     const own = s.engineNotes && typeof s.engineNotes[id] === 'string' ? s.engineNotes[id].trim() : '';
@@ -1093,12 +1095,15 @@ const TAG_WORDS = {
     robotically: 'robotic',
     um: 'uhm', umm: 'uhm', uh: 'uhm', uhh: 'uhm', hesitates: 'uhm', hesitating: 'uhm', hesitantly: 'uhm',
     rapidly: 'fast',
+    // OmniVoice's own sounds: a questioning hum and an agreeing one.
+    hmm: 'question-en', huh: 'question-en', questioning: 'question-en', mhm: 'confirmation-en', 'uh-huh': 'confirmation-en',
 };
 const TAG_KNOWN = new Set([
     'argh', 'breath', 'heavy breath', 'exhales', 'cackle', 'cheer', 'chuckle', 'cough', 'cry', 'gasp', 'giggle', 'groan', 'growl',
     'grunt', 'hiss', 'laugh', 'moan', 'pant', 'phew', 'scream', 'shout', 'shriek', 'sigh', 'sneeze', 'snicker', 'snort', 'sob',
     'throat-clearing', 'tsk', 'whimper', 'whispers', 'yawn', 'short pause', 'medium pause', 'long pause', 'clear throat', 'shush', 'sniff',
     'uhm', 'sarcasm', 'robotic', 'fast',
+    'question-en', 'question-ah', 'question-oh', 'confirmation-en', 'surprise-ah', 'surprise-oh', 'dissatisfaction-hnn',
 ]);
 function tagSound(tag) {
     const t = String(tag || '').toLowerCase().replace(/[^a-z\s-]/g, ' ').replace(/\s+/g, ' ').trim();
@@ -1121,15 +1126,63 @@ function tagSound(tag) {
     }
     return '';
 }
+// The 58 emotions Cartesia's Sonic 3 takes for a whole line, from its own
+// docs. A tag that names one, such as [angrily], is fitted to it.
+const CARTESIA_EMOTIONS = [
+    'neutral', 'happy', 'excited', 'enthusiastic', 'elated', 'euphoric', 'triumphant', 'amazed', 'surprised', 'flirtatious',
+    'curious', 'content', 'peaceful', 'serene', 'calm', 'grateful', 'affectionate', 'trust', 'sympathetic', 'anticipation',
+    'mysterious', 'angry', 'mad', 'outraged', 'frustrated', 'agitated', 'threatened', 'disgusted', 'contempt', 'envious',
+    'sarcastic', 'ironic', 'sad', 'dejected', 'melancholic', 'disappointed', 'hurt', 'guilty', 'bored', 'tired',
+    'rejected', 'nostalgic', 'wistful', 'apologetic', 'hesitant', 'insecure', 'confused', 'resigned', 'anxious', 'panicked',
+    'alarmed', 'scared', 'proud', 'confident', 'distant', 'skeptical', 'contemplative', 'determined',
+];
+const EMOTION_WORDS = {
+    angrily: 'angry', furious: 'outraged', furiously: 'outraged', annoyed: 'frustrated', irritated: 'agitated',
+    irritably: 'agitated', sadly: 'sad', sorrowful: 'sad', mournful: 'melancholic', happily: 'happy',
+    cheerful: 'happy', cheerfully: 'happy', joyful: 'elated', excitedly: 'excited', nervous: 'anxious',
+    nervously: 'anxious', worried: 'anxious', afraid: 'scared', fearful: 'scared', fearfully: 'scared',
+    frightened: 'scared', terrified: 'panicked', panicking: 'panicked', calmly: 'calm',
+    sarcastically: 'sarcastic', curiously: 'curious', puzzled: 'confused', wearily: 'tired', weary: 'tired',
+    exhausted: 'tired', sleepy: 'tired', hesitantly: 'hesitant', apologetically: 'apologetic',
+    proudly: 'proud', confidently: 'confident', flirty: 'flirtatious', flirtatiously: 'flirtatious',
+    teasing: 'flirtatious', teasingly: 'flirtatious', warmly: 'affectionate', tenderly: 'affectionate',
+    lovingly: 'affectionate', coldly: 'distant', shocked: 'surprised', startled: 'surprised',
+    disgustedly: 'disgusted', jealous: 'envious', jealously: 'envious', thoughtful: 'contemplative',
+    thoughtfully: 'contemplative', wistfully: 'wistful', nostalgically: 'nostalgic', skeptically: 'skeptical',
+    doubtful: 'skeptical', mysteriously: 'mysterious', determinedly: 'determined', resolute: 'determined',
+    gratefully: 'grateful', sympathetically: 'sympathetic', guiltily: 'guilty', dejectedly: 'dejected',
+    bitterly: 'frustrated', smugly: 'proud', dryly: 'ironic', wryly: 'ironic',
+};
+// The Cartesia emotion a tag names, or empty.
+function emotionOf(tag) {
+    for (const w of String(tag || '').toLowerCase().split(/[^a-z]+/)) {
+        const e = EMOTION_WORDS[w] || w;
+        if (CARTESIA_EMOTIONS.indexOf(e) >= 0)
+            return e;
+    }
+    return '';
+}
+// A tag an engine has no spelling of can still fit one close to it: on
+// OmniVoice, a gasp is its surprised sound and a tsk its unhappy one.
+const TAG_ALT = { gasp: 'surprise-ah', tsk: 'dissatisfaction-hnn' };
 // The engine's own spelling of a tag, such as laughing for [laughs] on an
 // engine that lists laughing. Empty when the engine has none for it.
 function fitTag(tag, list) {
     const c = tagSound(tag);
-    if (!c)
-        return '';
-    for (const x of list)
-        if (tagSound(x) === c)
-            return x;
+    if (c) {
+        for (const x of list)
+            if (tagSound(x) === c)
+                return x;
+        const alt = TAG_ALT[c];
+        if (alt)
+            for (const x of list)
+                if (x === alt)
+                    return x;
+    }
+    // On Cartesia, whose list holds its emotions, a tag that names one.
+    const e = emotionOf(tag);
+    if (e && list.indexOf(e) >= 0)
+        return e;
     return '';
 }
 // A note on how a line is said, for an engine that takes it beside the line.

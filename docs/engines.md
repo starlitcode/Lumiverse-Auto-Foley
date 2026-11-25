@@ -3,7 +3,7 @@
 ## In short
 
 - Auto Foley speaks through a TTS connection you made in Lumiverse. The key for it stays in Lumiverse.
-- Auto Foley works only with models that act. Four engines have them: ElevenLabs, Fish Audio, Gemini and Chatterbox.
+- Auto Foley works only with models that act. Six engines have them: ElevenLabs, Fish Audio, Gemini, Chatterbox, OmniVoice and Cartesia.
 - Each engine reads acting directions its own way. Auto Foley tells the Director which engine it writes for.
 - Before a line is sent, it is fitted to the engine that speaks it. A tag the engine cannot read is taken out, so it is never read aloud.
 - A model that cannot act is not used. Auto Foley says which model to pick instead.
@@ -16,8 +16,10 @@
 | Fish Audio S2, S2.1 or Drama 3 | Any short tag | No | No | Yes, with `[singing]` |
 | Gemini 3.8 Flash TTS or Flash-Lite TTS | Only its own sound tags | Yes | No | Yes, with a note |
 | Chatterbox-Turbo | Only its nine sound tags | No | No | No |
+| OmniVoice, through OpenVox | Only its own sound tags | No | No | No |
+| Cartesia Sonic 3 or later | Only `[laughter]`, and one feeling for the whole line | No | No | No |
 
-These are not used: ElevenLabs models older than v3, Fish Audio S1, Gemini models older than 3.8, OpenRouter models other than those under [Through OpenRouter](#through-openrouter), Chatterbox-Multilingual, Qwen3-TTS, and every other TTS provider. A line for someone on one of them is not spoken. The Stage tab, the Cast tab and **Check my setup** say which model to pick instead.
+These are not used: ElevenLabs models older than v3, Fish Audio S1, Gemini models older than 3.8, OpenRouter models other than those under [Through OpenRouter](#through-openrouter), OpenVox models other than OmniVoice and Chatterbox Turbo, Cartesia models older than Sonic 3, Chatterbox-Multilingual, Qwen3-TTS, and every other TTS provider. A line for someone on one of them is not spoken. The Stage tab, the Cast tab and **Check my setup** say which model to pick instead.
 
 "No" under **Sounds inside a line** means the engine cannot make the sound of a door or rain itself. Its sounds are played as separate sound effects instead. See [Sounds](sounds.md).
 
@@ -59,8 +61,10 @@ Here is what each engine is sent for the quoted line:
 | Fish Audio S2 | `[exhales] [softly] Home at last.` | None |
 | Gemini 3.8 | `<exhales> Home at last.` | `worn out but warm` |
 | Chatterbox-Turbo | `Home at last.` | None |
+| OmniVoice | `Home at last.` | None |
+| Cartesia | `Home at last.` | None |
 
-On Gemini and Chatterbox, the Director is given the engine's tag list, so it picks from it. The table shows what is left when it does not. `[softly]` is not a Gemini tag. `[exhales]` is not one of Chatterbox's nine.
+On Gemini, Chatterbox, OmniVoice and Cartesia, the Director is given the engine's tag list, so it picks from it. The table shows what is left when it does not. `[softly]` is not a Gemini tag. `[exhales]` is not one of Chatterbox's nine, and neither is an OmniVoice sound or a Cartesia feeling.
 
 On every engine but Eleven v3, the bag is played as a sound effect after the first line.
 
@@ -132,6 +136,38 @@ Chatterbox runs on your own computer, through a server such as Chatterbox-TTS-Se
 
 - Chatterbox-Turbo knows nine tags: `[clear throat]`, `[sigh]`, `[shush]`, `[cough]`, `[groan]`, `[sniff]`, `[gasp]`, `[chuckle]` and `[laugh]`. It reads English only.
 - Chatterbox-Multilingual takes no tags, so Auto Foley does not use it. A connection with "multilingual" in its name is taken to run it.
+- OpenVox can run Chatterbox Turbo too. See [OmniVoice, through OpenVox](#omnivoice-through-openvox).
+
+### OmniVoice, through OpenVox
+
+OpenVox is an app for Mac and Windows that runs voice models on your own computer, with a local address such as `http://127.0.0.1:8000/v1`. In Lumiverse, add a TTS connection with the **OpenVox TTS** provider.
+
+Of the models OpenVox runs, two act:
+
+| Model in OpenVox | Engine |
+| --- | --- |
+| OmniVoice | OmniVoice |
+| Chatterbox Turbo, such as `chatterbox-turbo-small` | Chatterbox-Turbo |
+
+- Auto Foley finds the model by its name: "omnivoice" in it means OmniVoice, and "chatterbox-turbo" means Chatterbox-Turbo.
+- OpenVox's other models, such as Kokoro, Supertonic, Pocket TTS, Qwen3 TTS and Chatterbox Multilingual, take no tags, so Auto Foley does not use them.
+- OmniVoice knows these sounds, in square brackets: `[laughter]`, `[sigh]`, `[confirmation-en]` (an agreeing hum), `[question-en]`, `[question-ah]` and `[question-oh]` (questioning sounds), `[surprise-ah]` and `[surprise-oh]` (surprised sounds), and `[dissatisfaction-hnn]` (an unhappy grunt). Its four Chinese sounds are left out.
+- A tag close to one of these is changed to it: `[laughs]` becomes `[laughter]`, `[hmm]` becomes `[question-en]`, `[gasps]` becomes `[surprise-ah]` and `[tsk]` becomes `[dissatisfaction-hnn]`.
+- Lumiverse sends OpenVox the text, the voice, the speed and the language, English. Chatterbox's Exaggeration and CFG weight cannot be sent this way.
+- OpenVox runs one model at a time, so a message can take longer when its model has to load first.
+
+### Cartesia
+
+Cartesia is a voice service with its own key. In Lumiverse, add a TTS connection with the **Cartesia** provider, and pick a Sonic 3 model, such as `sonic-3.5`.
+
+- Cartesia reads one tag in the text, `[laughter]`.
+- It takes one feeling for a whole line, from a list of 58, such as `calm`, `anxious` or `sarcastic`. The Director writes it as a tag at the start of a line. Auto Foley takes it out of the text and sends it beside the line.
+- A tag that means one of the feelings is fitted to it: `[nervously]` becomes `anxious`, and `[terrified]` becomes `panicked`.
+- Cartesia's docs say six feelings work the best: `neutral`, `calm`, `angry`, `content`, `sad` and `scared`. Feelings work best with the voices Cartesia marks **Emotive**, and in English. They are in beta at Cartesia.
+- Speed goes from 0.6 to 1.5.
+- Models older than Sonic 3 take no tags, so Auto Foley does not use them.
+
+An example: the Director writes `[wearily] [exhales] Home at last. [laughs]`. Cartesia is sent `Home at last. [laughter]`, with the feeling `tired`.
 
 ## What the voice costs
 

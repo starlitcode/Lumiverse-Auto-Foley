@@ -10,7 +10,7 @@
 // The key for speech stays in Lumiverse. Lines are spoken through
 // Lumiverse's own TTS route, as the signed-in reader, so this file never sees
 // that key.
-const VERSION = '1.2.0';
+const VERSION = '1.3.0';
 // The marks Lumiverse puts on another extension's part of the page. Nothing
 // inside one is read, written or pressed.
 const OTHER_UI = '[data-spindle-extension-root],[data-spindle-ext],[data-spindle-modal]';
@@ -155,17 +155,35 @@ const GEMINI_TAGS = [
 ];
 // The nine tags Chatterbox-Turbo knows.
 const CHATTERBOX_TAGS = ['clear throat', 'sigh', 'shush', 'cough', 'groan', 'sniff', 'gasp', 'chuckle', 'laugh'];
+// The non-verbal tags OmniVoice's own page lists, in square brackets. Its
+// four Chinese sounds, question-ei, question-yi, surprise-wa and
+// surprise-yo, are left out.
+const OMNIVOICE_TAGS = ['laughter', 'sigh', 'confirmation-en', 'question-en', 'question-ah', 'question-oh', 'surprise-ah', 'surprise-oh', 'dissatisfaction-hnn'];
+// The 58 emotions Cartesia's Sonic 3 takes for a whole line, from its own
+// docs. A tag that names one, such as [angrily], is fitted to it.
+const CARTESIA_EMOTIONS = [
+    'neutral', 'happy', 'excited', 'enthusiastic', 'elated', 'euphoric', 'triumphant', 'amazed', 'surprised', 'flirtatious',
+    'curious', 'content', 'peaceful', 'serene', 'calm', 'grateful', 'affectionate', 'trust', 'sympathetic', 'anticipation',
+    'mysterious', 'angry', 'mad', 'outraged', 'frustrated', 'agitated', 'threatened', 'disgusted', 'contempt', 'envious',
+    'sarcastic', 'ironic', 'sad', 'dejected', 'melancholic', 'disappointed', 'hurt', 'guilty', 'bored', 'tired',
+    'rejected', 'nostalgic', 'wistful', 'apologetic', 'hesitant', 'insecure', 'confused', 'resigned', 'anxious', 'panicked',
+    'alarmed', 'scared', 'proud', 'confident', 'distant', 'skeptical', 'contemplative', 'determined',
+];
 const ENGINE_LIST = [
     { id: 'eleven_v3', label: 'ElevenLabs v3 or v4', tags: 'free', list: [], wrap: '[]', style: false, inVoiceSounds: true, singTag: 'sings', singStyle: false, eleven: true, supported: true },
     { id: 'fish', label: 'Fish Audio S2 or Drama 3', tags: 'free', list: [], wrap: '[]', style: false, inVoiceSounds: false, singTag: 'singing', singStyle: false, eleven: false, supported: true, perSentence: true },
     { id: 'gemini', label: 'Gemini 3.8 TTS', tags: 'list', list: GEMINI_TAGS, wrap: '<>', style: true, inVoiceSounds: false, singTag: '', singStyle: true, eleven: false, supported: true },
     { id: 'chatterbox_turbo', label: 'Chatterbox-Turbo', tags: 'list', list: CHATTERBOX_TAGS, wrap: '[]', style: false, inVoiceSounds: false, singTag: '', singStyle: false, eleven: false, supported: true },
+    { id: 'omnivoice', label: 'OmniVoice', tags: 'list', list: OMNIVOICE_TAGS, wrap: '[]', style: false, inVoiceSounds: false, singTag: '', singStyle: false, eleven: false, supported: true },
+    // Cartesia reads only [laughter] in the text. Its emotion goes beside the
+    // line, so the Director is given both and the emotion is taken out.
+    { id: 'cartesia', label: 'Cartesia Sonic 3', tags: 'list', list: ['laughter'].concat(CARTESIA_EMOTIONS), emotions: CARTESIA_EMOTIONS, speed: [0.6, 1.5], wrap: '[]', style: false, inVoiceSounds: false, singTag: '', singStyle: false, eleven: false, supported: true },
 ];
 // A model that cannot act.
 const NO_TAGS = { id: 'none', label: 'A model with no tags', tags: 'none', list: [], wrap: '[]', style: false, inVoiceSounds: false, singTag: '', singStyle: false, eleven: false, supported: false };
 // The providers Auto Foley lists. Chatterbox runs behind an OpenAI-style
 // connection.
-const USABLE_PROVIDERS = ['elevenlabs', 'fish_audio', 'google_tts', 'google_vertex_tts', 'openrouter_tts', 'openai_tts'];
+const USABLE_PROVIDERS = ['elevenlabs', 'fish_audio', 'google_tts', 'google_vertex_tts', 'openrouter_tts', 'openvox_tts', 'cartesia', 'openai_tts'];
 const ENGINES = {};
 for (const e of ENGINE_LIST)
     ENGINES[e.id] = e;
@@ -196,6 +214,19 @@ function engineOf(conn, model, chosen) {
             return ENGINES.gemini;
         return NO_TAGS;
     }
+    // OpenVox runs models on the reader's own computer. Of them, OmniVoice and
+    // Chatterbox Turbo act. Its model ids are names such as
+    // chatterbox-turbo-small, so they are found by name.
+    if (provider === 'openvox_tts') {
+        if (/omni-?voice/.test(m))
+            return ENGINES.omnivoice;
+        if (/chatterbox[-_ ]?turbo/.test(m))
+            return ENGINES.chatterbox_turbo;
+        return NO_TAGS;
+    }
+    // Cartesia's [laughter] and emotions start with Sonic 3.
+    if (provider === 'cartesia')
+        return /^sonic-(3|latest)/.test(m) ? ENGINES.cartesia : NO_TAGS;
     // A Chatterbox server Auto Foley talks to itself. Its model is read from
     // the server, and only Turbo takes tags.
     if (provider === 'chatterbox_direct')
@@ -230,6 +261,10 @@ function noTagsWhy(conn, model) {
         return what + (m || 'This OpenRouter model') + ' does not. Through OpenRouter, pick elevenlabs/eleven-v4, elevenlabs/eleven-v3, fish-audio/s2.1-pro or google/gemini-3.8-flash-tts, on the connection or for this person in the Cast tab.';
     if (provider === 'google_tts' || provider === 'google_vertex_tts')
         return what + (m || 'This Gemini model') + ' does not. Pick Gemini 3.8 Flash TTS or Gemini 3.8 Flash-Lite TTS.';
+    if (provider === 'openvox_tts')
+        return what + 'Of the models OpenVox runs, only OmniVoice and Chatterbox Turbo do. Load one of them in OpenVox, and pick it on the connection.';
+    if (provider === 'cartesia')
+        return what + 'Cartesia models older than Sonic 3 do not. Pick sonic-3.5 or sonic-3 on the connection.';
     if (provider === 'chatterbox_direct')
         return what + 'Your Chatterbox server runs the ' + (m || 'unknown') + ' model, which takes no tags. Load Chatterbox-Turbo on it, on its own web page or with model.repo_id set to chatterbox-turbo in its config.yaml.';
     if (provider === 'openai_tts' && /multilingual|\bmtl\b/.test(hay))
@@ -276,6 +311,8 @@ const TAG_WORDS = {
     robotically: 'robotic',
     um: 'uhm', umm: 'uhm', uh: 'uhm', uhh: 'uhm', hesitates: 'uhm', hesitating: 'uhm', hesitantly: 'uhm',
     rapidly: 'fast',
+    // OmniVoice's own sounds: a questioning hum and an agreeing one.
+    hmm: 'question-en', huh: 'question-en', questioning: 'question-en', mhm: 'confirmation-en', 'uh-huh': 'confirmation-en',
 };
 // Every tag name the table can end in. Each engine's list is written in
 // these words, or in a word the table turns into one of them.
@@ -284,6 +321,7 @@ const TAG_KNOWN = new Set([
     'grunt', 'hiss', 'laugh', 'moan', 'pant', 'phew', 'scream', 'shout', 'shriek', 'sigh', 'sneeze', 'snicker', 'snort', 'sob',
     'throat-clearing', 'tsk', 'whimper', 'whispers', 'yawn', 'short pause', 'medium pause', 'long pause', 'clear throat', 'shush', 'sniff',
     'uhm', 'sarcasm', 'robotic', 'fast',
+    'question-en', 'question-ah', 'question-oh', 'confirmation-en', 'surprise-ah', 'surprise-oh', 'dissatisfaction-hnn',
 ]);
 // The tags above that change how words are said, rather than making a sound.
 const TAG_MANNER = new Set(['whispers', 'shout', 'sarcasm', 'robotic', 'fast']);
@@ -308,15 +346,53 @@ function tagSound(tag) {
     }
     return '';
 }
+const EMOTION_WORDS = {
+    angrily: 'angry', furious: 'outraged', furiously: 'outraged', annoyed: 'frustrated', irritated: 'agitated',
+    irritably: 'agitated', sadly: 'sad', sorrowful: 'sad', mournful: 'melancholic', happily: 'happy',
+    cheerful: 'happy', cheerfully: 'happy', joyful: 'elated', excitedly: 'excited', nervous: 'anxious',
+    nervously: 'anxious', worried: 'anxious', afraid: 'scared', fearful: 'scared', fearfully: 'scared',
+    frightened: 'scared', terrified: 'panicked', panicking: 'panicked', calmly: 'calm',
+    sarcastically: 'sarcastic', curiously: 'curious', puzzled: 'confused', wearily: 'tired', weary: 'tired',
+    exhausted: 'tired', sleepy: 'tired', hesitantly: 'hesitant', apologetically: 'apologetic',
+    proudly: 'proud', confidently: 'confident', flirty: 'flirtatious', flirtatiously: 'flirtatious',
+    teasing: 'flirtatious', teasingly: 'flirtatious', warmly: 'affectionate', tenderly: 'affectionate',
+    lovingly: 'affectionate', coldly: 'distant', shocked: 'surprised', startled: 'surprised',
+    disgustedly: 'disgusted', jealous: 'envious', jealously: 'envious', thoughtful: 'contemplative',
+    thoughtfully: 'contemplative', wistfully: 'wistful', nostalgically: 'nostalgic', skeptically: 'skeptical',
+    doubtful: 'skeptical', mysteriously: 'mysterious', determinedly: 'determined', resolute: 'determined',
+    gratefully: 'grateful', sympathetically: 'sympathetic', guiltily: 'guilty', dejectedly: 'dejected',
+    bitterly: 'frustrated', smugly: 'proud', dryly: 'ironic', wryly: 'ironic',
+};
+// The Cartesia emotion a tag names, or empty.
+function emotionOf(tag) {
+    for (const w of String(tag || '').toLowerCase().split(/[^a-z]+/)) {
+        const e = EMOTION_WORDS[w] || w;
+        if (CARTESIA_EMOTIONS.indexOf(e) >= 0)
+            return e;
+    }
+    return '';
+}
+// A tag an engine has no spelling of can still fit one close to it: on
+// OmniVoice, a gasp is its surprised sound and a tsk its unhappy one.
+const TAG_ALT = { gasp: 'surprise-ah', tsk: 'dissatisfaction-hnn' };
 // The engine's own spelling of a tag, such as laughing for [laughs] on an
 // engine that lists laughing. Empty when the engine has none for it.
 function fitTag(tag, list) {
     const c = tagSound(tag);
-    if (!c)
-        return '';
-    for (const x of list)
-        if (tagSound(x) === c)
-            return x;
+    if (c) {
+        for (const x of list)
+            if (tagSound(x) === c)
+                return x;
+        const alt = TAG_ALT[c];
+        if (alt)
+            for (const x of list)
+                if (x === alt)
+                    return x;
+    }
+    // On Cartesia, whose list holds its emotions, a tag that names one.
+    const e = emotionOf(tag);
+    if (e && list.indexOf(e) >= 0)
+        return e;
     return '';
 }
 // ---- Word timing ----
@@ -540,7 +616,7 @@ function textFor(line, eng) {
             if (eng.tags === 'free')
                 return ' [' + tag + '] ';
             const fit = fitTag(tag, eng.list);
-            if (!fit)
+            if (!fit || (eng.emotions && eng.emotions.indexOf(fit) >= 0))
                 return ' ';
             return eng.wrap === '<>' ? ' <' + fit + '> ' : ' [' + fit + '] ';
         }));
@@ -717,6 +793,10 @@ function serviceName(conn) {
         return 'Gemini';
     if (p === 'openrouter_tts')
         return 'OpenRouter';
+    if (p === 'openvox_tts')
+        return 'OpenVox';
+    if (p === 'cartesia')
+        return 'Cartesia';
     const hay = [conn && conn.model, conn && conn.name, conn && conn.api_url].map((x) => String(x || '').toLowerCase()).join(' ');
     if (/chatterbox/.test(hay))
         return 'your Chatterbox server';
@@ -1535,6 +1615,10 @@ export function setup(ctx, overrides) {
             return 'Gemini';
         if (p === 'openrouter_tts')
             return 'OpenRouter';
+        if (p === 'openvox_tts')
+            return 'OpenVox';
+        if (p === 'cartesia')
+            return 'Cartesia';
         if (p === 'chatterbox_direct')
             return 'Chatterbox, direct';
         return 'Chatterbox and other servers';
@@ -2134,7 +2218,19 @@ export function setup(ctx, overrides) {
                 params.language_code = own.lang;
         }
         else if (!eng.eleven && speed !== 1 && provider !== 'google_tts' && provider !== 'google_vertex_tts' && provider !== 'openrouter_tts') {
-            params.speed = speed;
+            params.speed = eng.speed ? Math.min(eng.speed[1], Math.max(eng.speed[0], speed)) : speed;
+        }
+        // Cartesia: the first emotion the line names is sent for the whole line.
+        // Its text keeps only [laughter].
+        if (eng.emotions) {
+            const tags = String(line.text || '').match(/\[([^\]]*)\]/g) || [];
+            for (const t of tags) {
+                const fit = fitTag(t.slice(1, -1), eng.list);
+                if (fit && eng.emotions.indexOf(fit) >= 0) {
+                    params.emotion = fit;
+                    break;
+                }
+            }
         }
         if (provider === 'fish_audio') {
             if (has('temperature'))
@@ -7787,6 +7883,10 @@ export function setup(ctx, overrides) {
             return 'On Fish Audio: describe how they sound when calm and when upset, such as low and slow, sharp when angry. The Director turns it into tags like [calm] or [shouting].';
         if (eng.id === 'gemini')
             return 'On Gemini 3.8: describe their voice in plain words, such as hushed, dry and unhurried. The Director writes notes like that for each line. Sounds are limited to Gemini\u2019s own list.';
+        if (eng.id === 'omnivoice')
+            return 'On OmniVoice: say when they laugh, sigh or make a questioning sound. It marks only sounds like those, so how they speak comes from the voice and the punctuation.';
+        if (eng.id === 'cartesia')
+            return 'On Cartesia: describe their usual feeling in a word or two, such as calm or anxious. The Director gives a line one feeling from Cartesia\u2019s list, such as [sarcastic].';
         return 'On Chatterbox: say when they laugh, sigh or gasp. It marks only sounds like those, so how they speak comes from the voice and the punctuation. With a Chatterbox server reached directly, Exaggeration under More settings makes the voice stronger.';
     }
     // A switch for one person's setting, built like every other switch: only
@@ -8097,8 +8197,8 @@ export function setup(ctx, overrides) {
             // Speed, in the range the engine takes. Gemini, Eleven v3 and Eleven
             // v4 have no speed.
             if (!/^gemini/.test(eng.id) && !eng.eleven && !viaOpenRouter) {
-                const lo = 0.5;
-                const hi = 2;
+                const lo = eng.speed ? eng.speed[0] : 0.5;
+                const hi = eng.speed ? eng.speed[1] : 2;
                 const at = Math.min(hi, Math.max(lo, Number(m.speed) || 1));
                 g2.appendChild(slider('Speed', at, lo, hi, 0.05, (v) => v.toFixed(2) + '×', (v) => {
                     m.speed = v;
@@ -8785,7 +8885,7 @@ export function setup(ctx, overrides) {
     // ---------- Settings ----------
     let setupChecked = 0;
     function renderSettings() {
-        const a = card('Auto Foley', 'Auto Foley speaks through a TTS connection in Lumiverse, so the key for it stays in Lumiverse. It works with models that act: ElevenLabs, Fish Audio, Gemini and Chatterbox-Turbo.');
+        const a = card('Auto Foley', 'Auto Foley speaks through a TTS connection in Lumiverse, so the key for it stays in Lumiverse. It works with models that act: ElevenLabs, Fish Audio, Gemini, Chatterbox-Turbo, OmniVoice and Cartesia.');
         a.appendChild(toggle('Auto Foley is on', 'On by default. Off: no buttons on messages, nothing plays, and nothing is sent anywhere.', 'enabled', () => {
             if (!S.enabled)
                 stop();

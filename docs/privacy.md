@@ -14,7 +14,7 @@
 | The message, split into lines, and your cast with its notes | The Director's connection | Each message performed or prepared, while the Director is on |
 | The same as the Director gets | Your **Second Director**'s connection | Only when the Director refuses or sends back nothing usable, while **Second Director** is on |
 | The message lines, and up to 12 cast names with the start of their notes | Your Decision connection | Each message, while the Decision model is on |
-| Each line, with the tags its engine reads, and a note on how it is said for Gemini | Your TTS engine, through your Lumiverse TTS connection | Each line spoken |
+| Each line, with the tags its engine reads, a note on how it is said for Gemini, and a feeling for Cartesia | Your TTS engine, through your Lumiverse TTS connection | Each line spoken |
 | Each line, with its tags, voice and settings | Your Chatterbox server, at the address you gave, through Lumiverse's CORS proxy | Each line spoken, with **Chatterbox server (direct)** picked |
 | A request for the server's model and voices | Your Chatterbox server | When you press **Save and test** for it |
 | The key words of a sound description | `freesound.org`, with your Freesound key | Each new sound searched for |

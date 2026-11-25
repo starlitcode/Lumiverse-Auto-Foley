@@ -1,8 +1,8 @@
 # Working on Auto Foley
 
 Auto Foley is a Lumiverse extension built on Spindle. It gives voice acting
-and sound effects to Lumiverse's TTS: ElevenLabs, Fish Audio, Gemini and
-Chatterbox. Its sister extensions are
+and sound effects to Lumiverse's TTS: ElevenLabs, Fish Audio, Gemini,
+Chatterbox, OmniVoice and Cartesia. Its sister extensions are
 [Auto Retry](https://github.com/starlitcode/Lumiverse-Auto-Retry) and
 [Auto Refine](https://github.com/starlitcode/Lumiverse-Auto-Refine), and the three are
 kept in step: a fix to something they share, such as how a switch, a field row,
@@ -118,7 +118,10 @@ Two skills are available. Load them before starting work.
   connection in Lumiverse, with Lumiverse's own `/api/v1/tts/synthesize`
   route. Lumiverse keeps every speech key.
 - These engines act: ElevenLabs v3 and v4, Fish Audio S2 and Drama 3, Gemini
-  3.8, and Chatterbox-Turbo. Gemini 2.5 and 3.1 are not used, since Google
+  3.8, Chatterbox-Turbo, OmniVoice and Cartesia Sonic 3. OpenVox runs OmniVoice
+  and Chatterbox Turbo on the reader's own computer. Cartesia takes one
+  feeling for a whole line, sent beside it as `emotion`, and only
+  `[laughter]` in the text. Gemini 2.5 and 3.1 are not used, since Google
   shuts them down on December 18, 2026. `ENGINE_LIST` in `src/frontend.ts` says
   what each can do, and `docs/engines.md` has the same table.
 - A model that cannot act is not used: nothing is spoken through it, and
@@ -134,8 +137,8 @@ Two skills are available. Load them before starting work.
   voices for every OpenRouter model.
 - The Director writes every tag in square brackets. `textFor` fits each line
   to the engine of the person who says it, just before it is sent: free tags,
-  a closed list (Gemini 3.8 in angle brackets, Chatterbox-Turbo in square
-  brackets), or none. The Gemini list follows
+  a closed list (Gemini 3.8 in angle brackets, Chatterbox-Turbo, OmniVoice and
+  Cartesia in square brackets), or none. The Gemini list follows
   Google's own pages. Tags Google says are read aloud are never sent.
   A tag an engine cannot read is taken out, or the voice reads it aloud.
 - The backend's `fitTag` and `TAG_WORDS` match the frontend's. A test checks

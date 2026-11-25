@@ -1292,6 +1292,8 @@ if (section("connection list")) {
     { name: "Gemini through OpenRouter", list: [{ id: "o1", name: "Router voices", provider: "openrouter_tts", model: "google/gemini-3.8-flash-tts", has_api_key: true }], want: /Router voices/, usable: true },
     { name: "ElevenLabs through OpenRouter", list: [{ id: "o2", name: "Router eleven", provider: "openrouter_tts", model: "elevenlabs/eleven-v4", has_api_key: true }], want: /Router eleven/, usable: true },
     { name: "Fish Audio through OpenRouter", list: [{ id: "o3", name: "Router fish", provider: "openrouter_tts", model: "fish-audio/s2.1-pro", has_api_key: true }], want: /Router fish/, usable: true },
+    { name: "OmniVoice through OpenVox", list: [{ id: "v1x", name: "Desk voices", provider: "openvox_tts", model: "omnivoice", has_api_key: true }], want: /Desk voices/, usable: true },
+    { name: "Cartesia", list: [{ id: "c1", name: "Sonic line", provider: "cartesia", model: "sonic-3.5", has_api_key: true }], want: /Sonic line/, usable: true },
   ];
   for (const size of SIZES) {
     for (const c of cases) {
@@ -1312,6 +1314,22 @@ if (section("connection list")) {
       if (c.name === "Gemini through OpenRouter") check(/Engine: Gemini 3\.8/.test(text), size.name + ": OpenRouter's Gemini 3.8 is read as Gemini 3.8");
       if (c.name === "ElevenLabs through OpenRouter") check(/Engine: ElevenLabs v3 or v4/.test(text), size.name + ": OpenRouter's Eleven v4 is read as ElevenLabs");
       if (c.name === "Fish Audio through OpenRouter") check(/Engine: Fish Audio/.test(text), size.name + ": OpenRouter's Fish Audio S2.1 is read as Fish Audio");
+      if (c.name === "OmniVoice through OpenVox") check(/Engine: OmniVoice/.test(text), size.name + ": OpenVox's OmniVoice is read as OmniVoice");
+      if (c.name === "Cartesia") {
+        check(/Engine: Cartesia Sonic 3/.test(text), size.name + ": Cartesia's Sonic 3.5 is read as Cartesia");
+        // A line with a feeling and a laugh: the feeling goes beside the
+        // line, and only [laughter] stays in the text.
+        await page.evaluate(() => {
+          window.__clipMs = 300;
+          window.__script = { key: "kc", messageId: "m1", author: "Ysolde Marrow-Kestrel of the Lower Quays", directed: true, added: [], sent: 10, back: 10, counted: true, log: [], lines: [
+            { i: 0, kind: "speech", speaker: "Ysolde Marrow-Kestrel of the Lower Quays", text: "[nervously] We leave at dawn. [laughs] Truly.", plain: "", tags: [], inSounds: [], big: false, before: "", after: "", note: "" },
+          ] };
+        });
+        await page.click('#mount [data-af-slot="message"]');
+        await page.waitForTimeout(1500);
+        const sent = await page.evaluate(() => (window.__synth || []).map((b) => ({ text: b.text, emotion: b.parameters && b.parameters.emotion })));
+        check(sent.some((b) => b.text === "We leave at dawn. [laughter] Truly." && b.emotion === "anxious"), size.name + ": Cartesia is sent the feeling beside the line and only [laughter] in it (" + JSON.stringify(sent.slice(0, 2)) + ")");
+      }
       if (c.name === "ElevenLabs through OpenRouter") {
         // In the Cast tab: the model's own voices, and no setting that
         // cannot be sent through OpenRouter.

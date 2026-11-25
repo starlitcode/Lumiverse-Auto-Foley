@@ -1,11 +1,11 @@
 {
-  "version": "1.2.0",
+  "version": "1.3.0",
   "name": "Auto Foley",
   "identifier": "auto_foley",
   "author": "starlitcode",
   "github": "https://github.com/starlitcode/Lumiverse-Auto-Foley",
   "homepage": "https://github.com/starlitcode/Lumiverse-Auto-Foley",
-  "description": "Voice acting and sound effects for your TTS. A second model marks each reply with voice tags and sounds, then your TTS connection in Lumiverse reads it with a voice for every character, persona and NPC. For models that act: ElevenLabs, Fish Audio, Gemini and Chatterbox.",
+  "description": "Voice acting and sound effects for your TTS. A second model marks each reply with voice tags and sounds, then your TTS connection in Lumiverse reads it with a voice for every character, persona and NPC. For models that act: ElevenLabs, Fish Audio, Gemini, Chatterbox, OmniVoice and Cartesia.",
   "permissions": [
     "generation",
     "decisions",

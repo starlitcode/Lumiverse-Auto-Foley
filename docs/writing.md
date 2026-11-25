@@ -49,10 +49,13 @@ Here is what each engine is sent:
 | Fish Audio S2 | `[gruffly] Tide turns at six. [gruffly] [sighs] Miss it, and we wait a whole day.` | None |
 | Gemini 3.8 | `Tide turns at six. <sigh> Miss it, and we wait a whole day.` | `gruff and tired` |
 | Chatterbox-Turbo | `Tide turns at six. [sigh] Miss it, and we wait a whole day.` | None |
+| OmniVoice | `Tide turns at six. [sigh] Miss it, and we wait a whole day.` | None |
+| Cartesia | `Tide turns at six. Miss it, and we wait a whole day.` | None |
 
 - On Fish Audio, `[gruffly]` goes again at the start of the second sentence, so both are said the same way. `[sighs]` is a sound, so it is not repeated.
 - On Gemini 3.8, how the line is said goes in the note, and only the sigh stays in the line.
-- On Chatterbox-Turbo, `[sighs]` becomes its own `[sigh]`, and `[gruffly]` is taken out, since it cannot read it. The voice you picked has to carry the gruffness.
+- On Chatterbox-Turbo and OmniVoice, `[sighs]` becomes their own `[sigh]`, and `[gruffly]` is taken out, since they cannot read it. The voice you picked has to carry the gruffness.
+- On Cartesia, neither tag is a feeling on its list, so both are taken out. Given Cartesia's list, the Director writes a feeling instead, such as `[tired]` at the start of the line, and it is sent beside the line.
 
 ## What helps on each engine
 
@@ -81,6 +84,18 @@ Here is what each engine is sent:
 - It knows nine sound tags, such as `[sigh]`, `[laugh]` and `[gasp]`, and reads English only.
 - How strong the feeling is comes from **Exaggeration**, in a person's **More settings**, when Auto Foley talks to the server itself. See [Chatterbox](engines.md#chatterbox).
 - In **How they speak**, mention the sounds they make: "laughs a lot, clears their throat before speaking".
+
+### OmniVoice
+
+- It knows a few small sounds, such as `[laughter]`, `[sigh]` and a questioning hum. See [OmniVoice, through OpenVox](engines.md#omnivoice-through-openvox).
+- It takes no delivery tags, so how they speak comes from the voice and the punctuation.
+- In **How they speak**, mention when they laugh, sigh or answer with a questioning sound.
+
+### Cartesia Sonic 3
+
+- It takes one feeling for each line, from a list of 58, and `[laughter]` in the text. See [Cartesia](engines.md#cartesia).
+- In **How they speak**, describe their usual feeling in a word or two, such as "calm" or "anxious and quick". The Director picks a feeling from the list that fits each line.
+- Six feelings work the best: neutral, calm, angry, content, sad and scared.
 
 ## Notes for each voice engine
 

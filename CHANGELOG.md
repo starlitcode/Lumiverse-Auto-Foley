@@ -6,6 +6,18 @@ Versions follow [Semantic Versioning](https://semver.org). A new major version m
 
 ---
 
+## 1.3.0
+
+_Not yet released_
+
+### Added
+
+- **OmniVoice, through OpenVox.** An OpenVox TTS connection running OmniVoice can now be used. OmniVoice knows a few small sounds, such as `[laughter]`, `[sigh]` and a questioning hum, and the Director uses them. A tag close to one of them, such as `[gasps]`, is changed to it. See [OmniVoice, through OpenVox](docs/engines.md#omnivoice-through-openvox).
+- **Chatterbox Turbo, through OpenVox.** An OpenVox connection running Chatterbox Turbo is used the same as Chatterbox-Turbo.
+- **Cartesia Sonic 3.** A Cartesia connection running Sonic 3 or later can now be used. The Director gives a line one feeling from Cartesia's list of 58, such as anxious or sarcastic, which is sent beside the line, and `[laughter]` where someone laughs. Speed goes from 0.6 to 1.5. See [Cartesia](docs/engines.md#cartesia).
+
+---
+
 ## 1.2.0
 
 _2026-11-25_

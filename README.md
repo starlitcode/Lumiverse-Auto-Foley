@@ -12,7 +12,7 @@ It works alongside [Auto Retry](https://github.com/starlitcode/Lumiverse-Auto-Re
 - An optional **Decision model** picks who says each quoted line.
 - It never changes the words of your story. Only the copy sent to the voice gets tags.
 
-It works only with models that act: ElevenLabs v3 and v4, Fish Audio S2 and Drama 3, Gemini 3.8, and Chatterbox-Turbo. ElevenLabs, Fish Audio and Gemini also work through OpenRouter. See [Voice engines](docs/engines.md).
+It works only with models that act: ElevenLabs v3 and v4, Fish Audio S2 and Drama 3, Gemini 3.8, Chatterbox-Turbo, OmniVoice through OpenVox, and Cartesia Sonic 3. ElevenLabs, Fish Audio and Gemini also work through OpenRouter. See [Voice engines](docs/engines.md).
 
 ## Install
 
@@ -41,7 +41,7 @@ Once a message has been performed, a small player sits under its text, with Back
 
 **Going further**
 
-- [Voice engines](docs/engines.md): what each engine can do, and how to set up Chatterbox
+- [Voice engines](docs/engines.md): what each engine can do, and how to set up Chatterbox, OpenVox and Cartesia
 - [The Director](docs/director.md): what it does, what it is sent, and its prompt
 - [The cast](docs/cast.md): voices for personas, characters and NPCs
 - [Writing for each voice engine](docs/writing.md): what to write in How they speak and the notes, for each engine, with an example
