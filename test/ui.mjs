@@ -1768,6 +1768,8 @@ if (section("erase name")) {
     await page.waitForTimeout(150);
     const typed = await look();
     check(typed.name === "Wren" && typed.face === "W", size.name + ": a new name shows at once, with its own first letter (" + JSON.stringify(typed) + ")");
+    const hintName = await page.evaluate(() => document.querySelector('.af-person[data-person="b"] [data-af-display] input').placeholder);
+    check(hintName === "Wren", size.name + ": the gray name in Display name follows the name as it is typed (" + hintName + ")");
     await page.keyboard.press("Tab");
     await page.waitForTimeout(700);
     const kept = await look();

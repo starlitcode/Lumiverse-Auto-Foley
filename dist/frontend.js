@@ -10,7 +10,7 @@
 // The key for speech stays in Lumiverse. Lines are spoken through
 // Lumiverse's own TTS route, as the signed-in reader, so this file never sees
 // that key.
-const VERSION = '1.7.0';
+const VERSION = '1.7.1';
 // The marks Lumiverse puts on another extension's part of the page. Nothing
 // inside one is read, written or pressed.
 const OTHER_UI = '[data-spindle-extension-root],[data-spindle-ext],[data-spindle-modal]';
@@ -8622,7 +8622,13 @@ export function setup(ctx, overrides) {
             // The name is saved when the box is left, not with each letter, and
             // an erased name stays erased until a new one is typed. The header
             // follows the box as it is typed.
-            const nameRow = text('Name', m.name, (v) => paintName(v), '', 'The name the story uses for them. Lines are matched to a person by this name and the names below.');
+            // The gray placeholder in Display name is the name, so it follows the
+            // box as it is typed.
+            const nameRow = text('Name', m.name, (v) => {
+                paintName(v);
+                if (shownIn)
+                    shownIn.placeholder = v.trim();
+            }, '', 'The name the story uses for them. Lines are matched to a person by this name and the names below.');
             const nameIn = nameRow.querySelector('input');
             if (nameIn)
                 nameIn.addEventListener('change', () => {

@@ -6,6 +6,16 @@ Versions follow [Semantic Versioning](https://semver.org). A new major version m
 
 ---
 
+## 1.7.1
+
+_2026-11-25_
+
+### Fixed
+
+- **The gray name in Display name did not follow the name.** It showed the name as it was when the card opened, so typing a new name left the old one there. It now changes as you type the name.
+
+---
+
 ## 1.7.0
 
 _2026-11-25_
