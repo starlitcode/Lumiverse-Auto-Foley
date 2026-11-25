@@ -398,3 +398,29 @@ describe("color codes for the color editor", () => {
     expect(computedHex("hsl(0 0% 0%)")).toBe(null);
   });
 });
+
+describe("keys to pause and play", () => {
+  const { keyCombo, PAUSE_KEY_DEFAULT } = __testing;
+
+  test("a key is read by its place, so Option+P on a Mac is still P", () => {
+    expect(keyCombo({ code: "KeyP", key: "π", altKey: true })).toBe("Alt+P");
+    expect(PAUSE_KEY_DEFAULT).toBe("Alt+P");
+  });
+
+  test("the keys held with it are named in one order", () => {
+    expect(keyCombo({ code: "KeyK", ctrlKey: true, shiftKey: true })).toBe("Ctrl+Shift+K");
+    expect(keyCombo({ code: "Digit5", metaKey: true })).toBe("Cmd+5");
+    expect(keyCombo({ code: "F8", ctrlKey: true, altKey: true })).toBe("Ctrl+Alt+F8");
+  });
+
+  test("a key with no Ctrl, Alt or Cmd is not taken, so typing is never caught", () => {
+    expect(keyCombo({ code: "KeyP" })).toBe("");
+    expect(keyCombo({ code: "KeyP", shiftKey: true })).toBe("");
+  });
+
+  test("holding only Ctrl, Alt, Shift or Cmd is not a whole set of keys yet", () => {
+    expect(keyCombo({ code: "AltLeft", altKey: true })).toBe("");
+    expect(keyCombo({ code: "ControlRight", ctrlKey: true })).toBe("");
+    expect(keyCombo({ code: "MetaLeft", metaKey: true })).toBe("");
+  });
+});

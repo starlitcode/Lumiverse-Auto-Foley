@@ -2083,6 +2083,95 @@ if (section("no audio")) {
   await context.close();
 }
 
+if (section("pause keys")) {
+  console.log("Keys to pause and play");
+  for (const size of SIZES) {
+    const where = size.name;
+    const { context, page, errors } = await open(THEMES[0], size);
+    await page.evaluate(() => { window.__clipMs = 4000; });
+    await page.click('.af-tab[data-tab="settings"]');
+    await page.waitForTimeout(300);
+    const seen = (sel) => page.evaluate((sel) => { const n = document.querySelector(sel); return !!n && !n.closest("[hidden]") && n.getClientRects().length > 0; }, sel);
+    check(await seen('[data-af-row="pauseKeyOn"]'), where + ": the switch is in the Settings tab");
+    check(!(await seen("[data-af-pausekey]")), where + ": its keys are hidden while it is off");
+    await page.evaluate(() => document.querySelector('[data-af-row="pauseKeyOn"] .af-box').click());
+    await page.waitForTimeout(600);
+    check(await seen("[data-af-pausekey]"), where + ": switched on, Which keys shows under it");
+    check((await page.evaluate(() => document.querySelector("[data-af-pausekey]").textContent)) === "Alt+P", where + ": and says Alt+P");
+    const look = await page.evaluate(() => ({ h: document.querySelector("[data-af-pausekey]").getBoundingClientRect().height, side: document.documentElement.scrollWidth > window.innerWidth + 1 }));
+    if (size.touch) check(look.h >= 32, where + ": the keys box is at least 32 pixels high (" + look.h + ")");
+    check(!look.side, where + ": nothing runs off the side");
+
+    // Picked by pressing them. Escape keeps the keys there were.
+    await page.click("[data-af-pausekey]");
+    check(/Press the keys now/.test(await page.evaluate(() => document.querySelector("[data-af-pausekey]").textContent)), where + ": tapped, it asks for the keys");
+    await page.keyboard.press("Escape");
+    check((await page.evaluate(() => document.querySelector("[data-af-pausekey]").textContent)) === "Alt+P", where + ": Escape keeps Alt+P");
+    await page.click("[data-af-pausekey]");
+    await page.keyboard.press("Control+Shift+KeyK");
+    await page.waitForTimeout(150);
+    check((await page.evaluate(() => document.querySelector("[data-af-pausekey]").textContent)) === "Ctrl+Shift+K", where + ": pressed keys are shown");
+    check((await page.evaluate(() => window.__settings.pauseKey)) === "Ctrl+Shift+K", where + ": and saved");
+
+    // While a message plays, the keys pause it and play it again.
+    await page.click('#mount [data-af-slot="message"]');
+    await page.waitForTimeout(900);
+    await page.evaluate(() => document.activeElement && document.activeElement.blur());
+    const playing = () => page.evaluate(() => { const a = FakeAudio.all[FakeAudio.all.length - 1]; return !!a && !a.paused; });
+    check(await playing(), where + ": a message is playing");
+    await page.keyboard.press("Control+Shift+KeyK");
+    await page.waitForTimeout(100);
+    check(!(await playing()), where + ": the keys pause it");
+    await page.keyboard.press("Control+Shift+KeyK");
+    await page.waitForTimeout(100);
+    check(await playing(), where + ": pressed again, it plays");
+
+    // Not while typing in a box, and not in another extension's part.
+    await page.evaluate(() => {
+      const box = document.createElement("textarea");
+      box.id = "typing";
+      document.body.appendChild(box);
+      const other = document.createElement("div");
+      other.setAttribute("data-spindle-extension-root", "another_one");
+      other.innerHTML = '<button type="button" id="otherbtn">Go</button>';
+      document.body.appendChild(other);
+    });
+    await page.focus("#typing");
+    await page.keyboard.press("Control+Shift+KeyK");
+    await page.waitForTimeout(100);
+    check(await playing(), where + ": typing in a box does not pause it");
+    // Back to playing first, so this step is read on its own.
+    if (!(await playing())) {
+      await page.evaluate(() => document.activeElement && document.activeElement.blur());
+      await page.keyboard.press("Control+Shift+KeyK");
+      await page.waitForTimeout(100);
+    }
+    await page.focus("#otherbtn");
+    await page.keyboard.press("Control+Shift+KeyK");
+    await page.waitForTimeout(100);
+    check(await playing(), where + ": inside another extension's part it does not pause");
+
+    // Lumiverse marks Auto Foley's own tab the same way, with its id, and
+    // the keys still work there.
+    await page.evaluate(() => document.querySelector(".af").parentElement.setAttribute("data-spindle-extension-root", "auto_foley"));
+    await page.focus('.af-tab[data-tab="settings"]');
+    await page.keyboard.press("Control+Shift+KeyK");
+    await page.waitForTimeout(100);
+    check(!(await playing()), where + ": in Auto Foley's own tab the keys still pause");
+    await page.keyboard.press("Control+Shift+KeyK");
+    await page.waitForTimeout(100);
+
+        // Switched off, the keys do nothing.
+    await page.evaluate(() => document.querySelector('[data-af-row="pauseKeyOn"] .af-box').click());
+    await page.evaluate(() => document.activeElement && document.activeElement.blur());
+    await page.keyboard.press("Control+Shift+KeyK");
+    await page.waitForTimeout(100);
+    check(await playing(), where + ": switched off, the keys do nothing");
+    check(!errors.length, where + ": no page errors. " + errors.slice(0, 2).join(" | "));
+    await context.close();
+  }
+}
+
 if (section("chat words name")) {
   console.log("Only the message text is lit, not the name above it");
   const { context, page, errors } = await open(THEMES[0], SIZES[1]);

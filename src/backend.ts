@@ -15,7 +15,7 @@ declare const spindle: any;
 declare function setTimeout(fn: () => void, ms: number): any;
 declare function clearTimeout(handle: any): void;
 
-const VERSION = '1.3.0';
+const VERSION = '1.4.0';
 
 // ---------------------------------------------------------------------------
 // Settings
@@ -161,6 +161,8 @@ interface Settings {
   boxSolid: number;
   widgetOn: boolean;
   widgetSize: number;
+  pauseKeyOn: boolean;
+  pauseKey: string;
   // How many more times to ask the Director when its answer cannot be used.
   retryDirector: number;
   // A button on every message, and one in the chat's own row of buttons.
@@ -302,6 +304,8 @@ const DEFAULT_SETTINGS: Settings = {
   boxSolid: 60,
   widgetOn: false,
   widgetSize: 44,
+  pauseKeyOn: false,
+  pauseKey: 'Alt+P',
   retryDirector: 1,
   messageButton: false,
   barButton: false,
@@ -675,6 +679,10 @@ function cleanSettings(raw: any): Settings {
     boxSolid: Math.round(num(r.boxSolid, 0, 100, d.boxSolid)),
     widgetOn: bool(r.widgetOn, d.widgetOn),
     widgetSize: Math.round(num(r.widgetSize, 28, 96, d.widgetSize)),
+    pauseKeyOn: bool(r.pauseKeyOn, d.pauseKeyOn),
+    // Keys joined with + and ending in one key, such as Ctrl+Shift+K. Anything
+    // else is put back to the default.
+    pauseKey: /^(?=.*(?:Ctrl|Alt|Cmd)\+)(Ctrl\+)?(Alt\+)?(Shift\+)?(Cmd\+)?[A-Za-z0-9]+$/.test(String(r.pauseKey || '')) ? String(r.pauseKey).slice(0, 40) : d.pauseKey,
     retryDirector: Math.round(num(r.retryDirector, 0, 3, d.retryDirector)),
     messageButton: bool(r.messageButton, d.messageButton),
     barButton: bool(r.barButton, d.barButton),

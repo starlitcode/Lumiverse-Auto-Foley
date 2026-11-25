@@ -146,6 +146,22 @@ In the player:
 - **Who is voiced** lists the cast. The microphone beside a name is the same as **Do not voice** in the Cast tab.
 - Where it sits, and whether it is open, are kept in this browser. With reduce motion on, it opens and closes at once, and no ring is drawn.
 
+## Keys to pause and play
+
+On a computer with a keyboard, a message can be paused and played again with keys.
+
+1. Turn on **Keys to pause and play** in the Settings tab, under **Playing**.
+2. The keys are Alt+P by default. To pick others, tap the box under **Which keys**, then press the keys you want.
+3. While a message plays, press the keys to pause it. Press them again to play it.
+
+What to know:
+
+- The keys need Ctrl, Alt or Cmd, so a key on its own still types as usual. On a Mac, Option is Alt.
+- They do nothing while you type in a box, such as the chat's message box.
+- They do nothing inside another extension's part of the page.
+- They only pause and play what is already playing. They never start a new message, so they never cost anything.
+- Escape, while the box waits for keys, keeps the keys you had.
+
 ## Playing a message again
 
 With **Keep made audio** on, in the Settings tab:

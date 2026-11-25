@@ -10,10 +10,13 @@
 // The key for speech stays in Lumiverse. Lines are spoken through
 // Lumiverse's own TTS route, as the signed-in reader, so this file never sees
 // that key.
-const VERSION = '1.3.0';
+const VERSION = '1.4.0';
 // The marks Lumiverse puts on another extension's part of the page. Nothing
 // inside one is read, written or pressed.
 const OTHER_UI = '[data-spindle-extension-root],[data-spindle-ext],[data-spindle-modal]';
+// This extension's identifier, from spindle.json, which Lumiverse puts on
+// those marks.
+const OWN_ID = 'auto_foley';
 // The voices OpenRouter offers for ElevenLabs and Gemini, from its own model
 // pages. Lumiverse's OpenRouter connection lists only a few OpenAI and Gemini
 // voices, whatever the model, so a voice is picked from the model's own list.
@@ -135,6 +138,28 @@ function computedHex(c) {
     if (p.length < 3 || p.slice(0, 3).some((v) => !Number.isFinite(v)))
         return null;
     return rgbHex(p[0], p[1], p[2]);
+}
+// The keys that pause and play, as one string such as "Alt+P". Keys are read
+// from their place on the keyboard, so Option+P on a Mac, which types a
+// symbol, is still read as P. Other keys go by their name, such as F8. A combination needs Ctrl, Alt or
+// Cmd, so a key on its own never stops being a key you type with.
+const PAUSE_KEY_DEFAULT = 'Alt+P';
+function keyCombo(e) {
+    if (!e)
+        return '';
+    const code = String(e.code || '');
+    let name = '';
+    if (/^Key[A-Z]$/.test(code))
+        name = code.slice(3);
+    else if (/^Digit[0-9]$/.test(code))
+        name = code.slice(5);
+    else if (/^[A-Za-z0-9]+$/.test(code) && !/^(Shift|Control|Alt|Meta|OS|Unidentified)/.test(code))
+        name = code;
+    if (!name)
+        return '';
+    if (!e.ctrlKey && !e.altKey && !e.metaKey)
+        return '';
+    return (e.ctrlKey ? 'Ctrl+' : '') + (e.altKey ? 'Alt+' : '') + (e.shiftKey ? 'Shift+' : '') + (e.metaKey ? 'Cmd+' : '') + name;
 }
 const STORE_KEY = 'lv-auto-foley:settings:v1';
 const API = '/api/v1';
@@ -1489,6 +1514,8 @@ const DEFAULTS = {
     boxSolid: 60,
     widgetOn: false,
     widgetSize: 44,
+    pauseKeyOn: false,
+    pauseKey: PAUSE_KEY_DEFAULT,
     thinkingMode: 'off',
     thinkingEffort: 'low',
     samplers: {},
@@ -3197,6 +3224,45 @@ export function setup(ctx, overrides) {
         paintStage();
         paintButtons();
     }
+    // Keys to pause and play, read on the whole page. Not while somebody types
+    // in a box, and not inside another extension's part of the page. It only
+    // pauses and plays what is loaded, so it never starts a performance that
+    // costs a call.
+    const typingIn = (t) => {
+        if (!t)
+            return false;
+        if (t.isContentEditable)
+            return true;
+        const tag = String(t.tagName || '').toUpperCase();
+        if (tag === 'TEXTAREA' || tag === 'SELECT')
+            return true;
+        return tag === 'INPUT' && !/^(checkbox|radio|button|submit|reset|range|color|file|image)$/i.test(String(t.type || ''));
+    };
+    const onPauseKey = (e) => {
+        if (!S.enabled || !S.pauseKeyOn || !e || e.repeat || e.defaultPrevented)
+            return;
+        const combo = keyCombo(e);
+        if (!combo || combo !== String(S.pauseKey || PAUSE_KEY_DEFAULT))
+            return;
+        const t = e.target;
+        if (typingIn(t))
+            return;
+        if (t && typeof t.closest === 'function') {
+            if (t.closest('[data-af-pausekey]'))
+                return;
+            // Lumiverse marks Auto Foley's own drawer tab and player the same way,
+            // with this extension's id, so those still take the keys.
+            const mark = t.closest(OTHER_UI);
+            if (mark && (mark.getAttribute('data-spindle-extension-root') || mark.getAttribute('data-spindle-ext') || '') !== OWN_ID)
+                return;
+        }
+        if (!show)
+            return;
+        e.preventDefault();
+        togglePause();
+    };
+    document.addEventListener('keydown', onPauseKey);
+    disposers.push(() => document.removeEventListener('keydown', onPauseKey));
     // Back one line, or to the start of this one when it has played a while.
     function back() {
         if (!show)
@@ -5306,6 +5372,42 @@ export function setup(ctx, overrides) {
         }, t.maxLength > 0 ? t.maxLength : undefined));
         big.setAttribute('aria-label', 'Open ' + label + ' at full size');
         return big;
+    }
+    // The keys for Keys to pause and play. Tapped, it waits for the next keys
+    // pressed with Ctrl, Alt or Cmd. Escape, or leaving it, keeps the keys
+    // there were.
+    function pauseKeyRow() {
+        const wrap = el('<div class="af-col"></div>');
+        wrap.setAttribute('data-af-row', 'pauseKey');
+        const b = el('<button type="button" class="af-btn af-keybtn" data-af-pausekey></button>');
+        const said = () => {
+            b.textContent = String(S.pauseKey || PAUSE_KEY_DEFAULT);
+            b.removeAttribute('data-listening');
+        };
+        said();
+        b.addEventListener('click', () => {
+            b.setAttribute('data-listening', '');
+            b.textContent = 'Press the keys now';
+        });
+        b.addEventListener('keydown', (e) => {
+            if (!b.hasAttribute('data-listening'))
+                return;
+            if (e.key === 'Escape') {
+                e.preventDefault();
+                said();
+                return;
+            }
+            const combo = keyCombo(e);
+            if (!combo)
+                return;
+            e.preventDefault();
+            e.stopPropagation();
+            set({ pauseKey: combo });
+            said();
+        });
+        b.addEventListener('blur', said);
+        wrap.appendChild(labelRow('Which keys', 'Alt+P by default. Tap the box, then press the keys, holding Ctrl, Alt or Cmd. Escape keeps the keys you had.', undefined, b));
+        return wrap;
     }
     function button(label, onClick, cls, icon) {
         const b = el('<button type="button" class="af-btn ' + (cls || '') + '">' + (icon || '') + '<span>' + esc(label) + '</span></button>');
@@ -9047,6 +9149,7 @@ export function setup(ctx, overrides) {
             toggle('Read your own messages', 'Off by default. Your own messages are performed too, in your persona’s voice. The button on a message always works.', 'readOwnMessages'),
         ].concat(bothAutoplayWarning())));
         p.appendChild(toggle('Prepare replies ahead', 'Off by default. With Autoplay off, each new reply is directed in the background, so pressing Play starts at once. It costs a Director call for every reply, played or not.', 'prepareAhead'));
+        p.appendChild(toggle('Keys to pause and play', 'Off by default. On a keyboard, press the keys to pause, and again to play. They do nothing while you type in a box.', 'pauseKeyOn', undefined, () => [pauseKeyRow()]));
         p.appendChild(toggle('Save the performance to the message', 'Off by default. Auto Foley’s own player under each message already plays it again for free. On, the audio is also saved for Lumiverse’s player, which uses storage on the server.', 'saveAudio'));
         p.appendChild(keptAudioBox());
         p.appendChild(toggle('Reduce motion', 'Off by default. On, nothing in Auto Foley moves or fades. Your device’s own reduce motion setting does the same.', 'reduceMotion'));
@@ -10094,7 +10197,7 @@ export function setup(ctx, overrides) {
         catch (_) { }
     };
 }
-export const __testing = { wavBlob, noConnectionWhy, perSentence, clipLevel, levelGain, voiceGender, describeWords, markText, movedFor, movedRowMark, MOVED_DEFAULTS, looksLikeDate, voicedFrames, wordWeight, partTimes, engineOf, noTagsWhy, openRouterVoices, colorCode, hexHsl, hslHex, computedHex, fitTag, tagSound, textFor, styleFor, stripTags, stabilityFor, ENGINES };
+export const __testing = { keyCombo, PAUSE_KEY_DEFAULT, wavBlob, noConnectionWhy, perSentence, clipLevel, levelGain, voiceGender, describeWords, markText, movedFor, movedRowMark, MOVED_DEFAULTS, looksLikeDate, voicedFrames, wordWeight, partTimes, engineOf, noTagsWhy, openRouterVoices, colorCode, hexHsl, hslHex, computedHex, fitTag, tagSound, textFor, styleFor, stripTags, stabilityFor, ENGINES };
 // The built-in cheer: "Cheering and clapping crowd 1" by freesound_community,
 // a free sound from Pixabay (pixabay.com/sound-effects/people-cheering-and-clapping-crowd-1-5995/),
 // made mono at 64 kbps so it stays small. assets/applause.mp3 is the same

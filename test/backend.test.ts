@@ -311,6 +311,21 @@ describe("tags", () => {
   });
 });
 
+describe("keys to pause and play are saved", () => {
+  const h = host();
+  test("off by default, on Alt+P", () => {
+    const d = h.box.cleanSettings({});
+    expect([d.pauseKeyOn, d.pauseKey]).toEqual([false, "Alt+P"]);
+  });
+  test("keys the panel writes are kept", () => {
+    expect(h.box.cleanSettings({ pauseKey: "Ctrl+Shift+K" }).pauseKey).toBe("Ctrl+Shift+K");
+    expect(h.box.cleanSettings({ pauseKey: "Cmd+F8" }).pauseKey).toBe("Cmd+F8");
+  });
+  test("a key on its own, or anything else, goes back to Alt+P", () => {
+    for (const bad of ["P", "Shift+P", "Alt+", "<b>Alt+P</b>", 7, null]) expect(h.box.cleanSettings({ pauseKey: bad }).pauseKey).toBe("Alt+P");
+  });
+});
+
 describe("the Director's answer", () => {
   const h = host();
   const segs = () => h.box.splitSegments('Mara turned. "Not again." "Again," Tobin said.');

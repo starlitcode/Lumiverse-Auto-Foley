@@ -6,6 +6,16 @@ Versions follow [Semantic Versioning](https://semver.org). A new major version m
 
 ---
 
+## 1.4.0
+
+_2026-11-25_
+
+### Added
+
+- **Keys to pause and play**, in the Settings tab under **Playing**. Off by default. On a keyboard, press the keys to pause a message, and press them again to play it. The keys are Alt+P by default, and you can pick others under **Which keys**. They do nothing while you type in a box. See [Keys to pause and play](docs/getting-started.md#keys-to-pause-and-play). Suggested by a Discord user.
+
+---
+
 ## 1.3.0
 
 _2026-11-25_

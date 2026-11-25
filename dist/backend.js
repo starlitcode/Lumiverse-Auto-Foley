@@ -11,7 +11,7 @@
 // One backend process can serve every account on a server, so everything that
 // belongs to a person is kept per user id, in spindle.userStorage, and every
 // reply goes back addressed to that user.
-const VERSION = '1.3.0';
+const VERSION = '1.4.0';
 const DEFAULT_SETTINGS = {
     enabled: true,
     ttsConnection: '',
@@ -91,6 +91,8 @@ const DEFAULT_SETTINGS = {
     boxSolid: 60,
     widgetOn: false,
     widgetSize: 44,
+    pauseKeyOn: false,
+    pauseKey: 'Alt+P',
     retryDirector: 1,
     messageButton: false,
     barButton: false,
@@ -472,6 +474,10 @@ function cleanSettings(raw) {
         boxSolid: Math.round(num(r.boxSolid, 0, 100, d.boxSolid)),
         widgetOn: bool(r.widgetOn, d.widgetOn),
         widgetSize: Math.round(num(r.widgetSize, 28, 96, d.widgetSize)),
+        pauseKeyOn: bool(r.pauseKeyOn, d.pauseKeyOn),
+        // Keys joined with + and ending in one key, such as Ctrl+Shift+K. Anything
+        // else is put back to the default.
+        pauseKey: /^(?=.*(?:Ctrl|Alt|Cmd)\+)(Ctrl\+)?(Alt\+)?(Shift\+)?(Cmd\+)?[A-Za-z0-9]+$/.test(String(r.pauseKey || '')) ? String(r.pauseKey).slice(0, 40) : d.pauseKey,
         retryDirector: Math.round(num(r.retryDirector, 0, 3, d.retryDirector)),
         messageButton: bool(r.messageButton, d.messageButton),
         barButton: bool(r.barButton, d.barButton),
