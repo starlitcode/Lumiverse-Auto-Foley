@@ -1094,7 +1094,7 @@ describe("the prompt's role and the Decision questions", () => {
 
   test("the engine note can go as its own message, and the note after a refusal as the role picked", async () => {
     const h = host({ answers: ["I can't help with that.", ""] });
-    await h.ask({ type: "save", settings: { engineNoteRole: "system", askNoteRole: "assistant", retryDirector: 1 } });
+    await h.ask({ type: "save", settings: { engineNoteRole: "system", askNote: true, askNoteRole: "assistant", retryDirector: 1 } });
     await h.ask(msg);
     const first = h.calls.generate[0].messages;
     expect(first[1].role).toBe("system");
@@ -1289,6 +1289,7 @@ describe("a Director that refuses", () => {
 
   test("a refusal is asked again, with a note that says it is fiction", async () => {
     const h = host({ answers: ["I'm sorry, but I can't help with that request.", good] });
+    await h.ask({ type: "save", settings: { askNote: true } });
     const out = await h.ask(msg);
     expect(h.calls.generate.length).toBe(2);
     const second = h.calls.generate[1].messages;
@@ -1312,9 +1313,19 @@ describe("a Director that refuses", () => {
     expect(second.length).toBe(2);
   });
 
+  test("by default no note is sent when it asks again, so the ask costs no more", async () => {
+    const h = host({ answers: ["I'm sorry, but I can't help with that request.", good] });
+    await h.ask(msg);
+    expect(h.calls.generate.length).toBe(2);
+    const first = h.calls.generate[0].messages;
+    const second = h.calls.generate[1].messages;
+    expect(second.length).toBe(first.length);
+    expect(JSON.stringify(second).indexOf("fiction from my own story")).toBe(-1);
+  });
+
   test("a note the reader wrote is sent instead of the built-in one", async () => {
     const h = host({ answers: ["I'm sorry, but I can't assist with that.", good] });
-    await h.ask({ type: "save", settings: { askNotes: { refused: "Please just tag it." } } });
+    await h.ask({ type: "save", settings: { askNote: true, askNotes: { refused: "Please just tag it." } } });
     await h.ask(msg);
     const second = h.calls.generate[1].messages;
     expect(second[second.length - 1].content).toBe("Please just tag it.");

@@ -379,7 +379,7 @@ const DEFAULT_SETTINGS: Settings = {
   costOut: 0,
   voicePrice: 0,
   rateWaits: 2,
-  askNote: true,
+  askNote: false,
   askNotes: {},
   applauseOn: false,
   applauseForAi: true,

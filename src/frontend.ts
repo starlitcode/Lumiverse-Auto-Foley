@@ -1661,6 +1661,9 @@ const MOVED_DEFAULTS: Moved[] = [
   { key: 'messageButton', was: true, label: 'A button on every message', why: 'it is now off by default, so a new install adds nothing to your messages until you turn it on.' },
   { key: 'barButton', was: true, label: 'A button in the chat’s row of controls', why: 'it is now off by default.' },
   { key: 'extrasMenu', was: true, label: 'In the Extras menu', why: 'it is now off by default.' },
+  // 1.10.0 turned it off, the same as in the sister extension that refines
+  // replies. Each note makes the Director's next ask longer, which costs more.
+  { key: 'askNote', was: true, label: 'Send a note when it asks again', why: 'it is now off by default, since each note makes the next ask longer and costs more.' },
 ];
 // What a reader is marked with once told about a row: the setting and a mark
 // of its old value. A row added later is still told.
@@ -1771,7 +1774,7 @@ const DEFAULTS: any = {
   voicePrice: 0,
   rateWaits: 2,
   retryDirector: 1,
-  askNote: true,
+  askNote: false,
   askNotes: {},
   messageButton: false,
   barButton: false,
@@ -11076,7 +11079,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       { id: 'changed', label: 'After changed words' },
     ];
     again.appendChild(
-      toggle('Send a note when it asks again', 'On by default. The next ask ends with a short note that says what went wrong with the last answer. A model that refused a scene by mistake often does the job when told it is fiction from your own story.', 'askNote', undefined, () =>
+      toggle('Send a note when it asks again', 'Off by default. On, the next ask ends with a note on what went wrong, which helps a model that refused by mistake. It makes that ask longer, which costs more.', 'askNote', undefined, () =>
         [
           segmented('Send the notes as', [
             { id: 'system', label: 'System' },
