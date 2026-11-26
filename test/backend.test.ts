@@ -1928,6 +1928,19 @@ describe("scene music", () => {
     expect(!!out[0].base64).toBe(true);
   });
 
+  test("a mood with a track in the library never goes to Freesound, even when every track was played", async () => {
+    const corsCalls: string[] = [];
+    const h = host({
+      files: library([{ id: "a5", name: "Low strings", source: "upload", mood: "tense", uses: 3, triggers: [] }]),
+      cors: (url: string) => { corsCalls.push(url); return { status: 200, body: JSON.stringify({ results: [] }) }; },
+    });
+    await h.ask({ type: "key_save", which: "freesound", key: "fs_key_123" });
+    corsCalls.length = 0;
+    const out = await h.ask({ type: "music_for", mood: "tense", skip: ["a5"] });
+    expect(out[0].id).toBe("a5");
+    expect(corsCalls.length).toBe(0);
+  });
+
   test("with no track for the mood and Your library only, it says how to add one", async () => {
     const h = host({ files: library([{ id: "a3", name: "Chase on the docks", source: "upload", mood: "action", uses: 0, triggers: [] }]) });
     await h.ask({ type: "save", settings: { musicFrom: "library" } });
