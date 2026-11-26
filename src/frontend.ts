@@ -11904,7 +11904,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     });
     save.setAttribute('data-af-looksave', '');
     const addRow = el('<div class="af-col"></div>');
-    addRow.appendChild(labelRow('Save this look', 'Keeps the shape, words, pictures, background, edges, transition and ending under a name. Notes, Show names and Show pictures are not part of a look.', newId));
+    addRow.appendChild(labelRow('Save this look', 'Keeps the shape, words, captions, pictures, background, edges, transition and ending under a name. Notes, Show names and Show pictures are not part of a look.', newId));
     const line = el('<div class="af-row"></div>');
     line.appendChild(newName);
     line.appendChild(save);
