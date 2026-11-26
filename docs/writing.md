@@ -14,7 +14,7 @@
 | Box | Where | Read by | What to write | Example |
 | --- | --- | --- | --- | --- |
 | **Acting notes** | Cast tab, on the person's card | The Director only. Never sent to the voice. | How they act, and how that changes | "Calm and patient. Gets quiet, not loud, when upset." |
-| **Gemini style** | Cast tab, under **More settings**, on Gemini 3.8 | Gemini 3.8, with every line of theirs | How they always sound | "Warm and unhurried, with a light Southern accent." |
+| **Gemini style** | Cast tab, under **More settings**, on Gemini 3.8 | Gemini 3.8, with every line of theirs | How they always sound | "Warm and unhurried, with a light Southern accent." On a voice you designed, often empty. |
 | **Fish Audio direction** | Cast tab, under **More settings**, on Fish Audio | Fish Audio, with every line of theirs | How they always sound | "a warm, steady young man, relaxed and unhurried" |
 | **Notes for each voice engine** | Director tab | The Director, for the engine in use | A rule for every line on that engine | "Use at most two tags in a line." |
 
@@ -88,6 +88,21 @@ A voice you designed or cloned already carries its sound: the pitch, the texture
 - Add the accent only if the voice loses it on some lines.
 - To check, play the same message with the box filled and with it empty, and listen.
 
+### Designing a Gemini voice
+
+Google's [Voice Design guide](https://aistudio.google.com/docs/voice-design) gives this advice for the description you write there:
+
+- Keep it to one or two clear sentences. Google says a long or contradictory paragraph gives less consistent results.
+- Write what never changes: age, gender, timbre, texture, accent, and how they usually speak.
+- Leave out moods that come and go, such as anger or a whisper. Put those in **Acting notes**. The Director adds them line by line.
+
+Marisol is a made-up cheerful baker:
+
+- **Voice Design description:** `A cheerful woman in her mid 30s with a bright, slightly raspy alto and a light Puerto Rican accent, speaking quickly and warmly.`
+- **Gemini style:** empty, since the voice already has her sound and her accent.
+- **Acting notes:** `Quick and warm. Talks faster when excited about a new recipe. Goes flat and short when someone wastes her time.`
+- A line where the Director writes `flat and short` is sent with only that as its style.
+
 ## Examples for each engine
 
 Every example below is for a made-up person. Copy the shape, and write your own words.
@@ -108,11 +123,12 @@ Bram is a patient old blacksmith.
 
 ### Gemini 3.8
 
-Tobiah is a soft-spoken young bookbinder.
+Tobiah is a soft-spoken young bookbinder, on a stock Gemini voice.
 
 - **Acting notes:** `Steady and unhurried, even when things are tense. Gets quieter, not louder, when upset. Teases his friends in a dry way.`
 - **Gemini style:** `Warm, relaxed and unhurried, in a smooth low voice, with a light Southern accent.`
 - A line where the Director writes `quiet and hurt` is sent with: `Warm, relaxed and unhurried, in a smooth low voice, with a light Southern accent. This line: quiet and hurt`
+- His **Gemini style** holds his low voice and his accent because a stock voice does not have them. On a voice designed for him, they go in the design instead. See [Designing a Gemini voice](#designing-a-gemini-voice).
 
 ### Chatterbox-Turbo
 
