@@ -553,6 +553,37 @@ function wavBlob(channels: ArrayLike<number>[], rate: number): Blob {
   return new Blob([buf], { type: 'audio/wav' });
 }
 
+// ---- hiding words ----
+// A word as it is matched: small letters, with the marks around it and a
+// final 's taken off, so "Ilse's," matches "Ilse".
+function plainWord(w: string): string {
+  return String(w || '')
+    .toLowerCase()
+    .replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, '')
+    .replace(/['\u2019]s$/u, '');
+}
+// The words to hide, one entry on each line, each as a list of plain words,
+// so a name of two words is hidden only where both are said together.
+function hideList(text: string): string[][] {
+  return String(text || '')
+    .split(/\n/)
+    .map((l) => l.split(/\s+/).map(plainWord).filter(Boolean))
+    .filter((l) => l.length > 0);
+}
+// Which words of a line are hidden, by place in the line.
+function hiddenWords(words: string[], list: string[][]): boolean[] {
+  const out = words.map(() => false);
+  if (!list.length) return out;
+  const plain = words.map(plainWord);
+  for (const want of list)
+    for (let i = 0; i + want.length <= plain.length; i++) {
+      let all = true;
+      for (let j = 0; j < want.length; j++) if (plain[i + j] !== want[j]) all = false;
+      if (all) for (let j = 0; j < want.length; j++) out[i + j] = true;
+    }
+  return out;
+}
+
 // A name that is safe as a file name on every system.
 function fileName(text: string): string {
   return String(text || '').replace(/[^\p{L}\p{N} _-]+/gu, ' ').replace(/\s+/g, ' ').trim().slice(0, 60) || 'performance';
@@ -1692,9 +1723,37 @@ const DEFAULTS: any = {
   importParts: ['settings', 'prompt', 'cast', 'chats'],
   resetParts: ['settings', 'prompt', 'cast', 'chats', 'sounds', 'audio', 'key'],
   chatsOff: [],
-  videoPics: true,
+  studioSounds: true,
+  studioGap: 0,
+  studioAsHeard: true,
+  studioLoud: true,
+  audioSplit: 'one',
+  videoShape: 'wide',
+  videoFont: 'book',
+  videoSize: 100,
+  videoInk: '',
+  videoWords: 'light',
+  videoPlace: 'middle',
+  videoQuotes: true,
   videoNames: true,
+  videoPics: true,
+  videoPicShape: 'circle',
+  videoPicSize: 150,
+  videoNameColor: 'kind',
+  videoBack: 'dark',
+  videoBackColor: '',
   videoDim: 40,
+  videoBlur: 0,
+  videoMove: 'rise',
+  videoMoveSecs: 0.4,
+  videoTitleOn: true,
+  videoTitleText: '',
+  videoFadeOut: 1.5,
+  videoCaptions: true,
+  censorOn: false,
+  censorWords: '',
+  censorCover: 'bar',
+  censorBleep: true,
   cast: [],
 };
 
@@ -1711,12 +1770,13 @@ export function setup(ctx: Ctx, overrides?: any) {
   // Timers that outlive a single call, cleared in teardown.
   const timers = new Set<any>();
 
-  type TabId = 'stage' | 'cast' | 'director' | 'sounds' | 'settings';
+  type TabId = 'stage' | 'cast' | 'director' | 'sounds' | 'studio' | 'settings';
   const TABS: { id: TabId; label: string }[] = [
     { id: 'stage', label: 'Stage' },
     { id: 'cast', label: 'Cast' },
     { id: 'director', label: 'Director' },
     { id: 'sounds', label: 'Sounds' },
+    { id: 'studio', label: 'Studio' },
     { id: 'settings', label: 'Settings' },
   ];
   let tab: TabId = 'stage';
@@ -2738,7 +2798,7 @@ export function setup(ctx: Ctx, overrides?: any) {
   // The volume factor for part k. A voice louder than the quietest voice
   // heard so far in this message is turned down to match it. A voice with
   // no level yet plays as it is.
-  function levelFor(sh: Show, k: number): number {
+  function evenGain(sh: Show, k: number): number {
     if (!S.evenVoices) return 1;
     const key = sh.voiceKeys.get(k);
     const mine = key ? levels.get(key) : null;
@@ -2748,7 +2808,12 @@ export function setup(ctx: Ctx, overrides?: any) {
       const l = levels.get(other);
       if (l && l.length) quietest = Math.min(quietest, average(l));
     }
-    const gain = levelGain(average(mine), quietest);
+    return levelGain(average(mine), quietest);
+  }
+  function levelFor(sh: Show, k: number): number {
+    const key = sh.voiceKeys.get(k);
+    if (!key) return 1;
+    const gain = evenGain(sh, k);
     // Said only from 1 dB, since a smaller change cannot be heard and reads
     // as nothing done.
     const db = gain < 1 ? Math.round(-20 * Math.log10(gain)) : 0;
@@ -2800,6 +2865,7 @@ export function setup(ctx: Ctx, overrides?: any) {
   function keepSaid(text: string) {
     keepLine = text;
     if (stageRefs && tab === 'stage') setText(stageRefs.q('keepsaid'), text);
+    if (studioRefs && tab === 'studio') setText(studioRefs.said, text);
   }
   let keepLine = '';
 
@@ -2828,8 +2894,19 @@ export function setup(ctx: Ctx, overrides?: any) {
 
   // The file name: the chat's name and the day. With Show names off, the
   // name is left out, so a shared file never names the character.
+  // The day on the reader's own clock, not in UTC, so a file saved in the
+  // evening is not dated the next day.
+  function fileDay(ms: number): string {
+    const d = new Date(ms);
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  }
+  // A saved script's file name: who said it and the day, with no name
+  // while Show names is off.
+  function savedName(author: string, keptAt: number): string {
+    return 'auto-foley' + (S.videoNames !== false ? ' ' + fileName(author || 'script') : '') + (keptAt ? ' ' + fileDay(keptAt) : '') + '.wav';
+  }
   function showName(sh: Show): string {
-    const day = new Date(sh.startedAt).toISOString().slice(0, 10);
+    const day = fileDay(sh.startedAt);
     return S.videoNames !== false ? 'auto-foley ' + fileName(chatInfo.name || 'chat') + ' ' + day : 'auto-foley ' + day;
   }
 
@@ -2889,57 +2966,357 @@ export function setup(ctx: Ctx, overrides?: any) {
     return { channels, rate, starts, lens, used, skipped };
   }
 
+  // ---- the Studio: the sound ----
+  // Everything kept from a performance goes through one mix: the parts
+  // chosen, a pause between them, the volumes as heard, the bleeps, and the
+  // loudness. Download audio, a ZIP of the parts, the video and the preview
+  // all use it, so they always agree.
+  const MIX_RATE = 48000;
+  // Each clip heard, decoded once, for the show it belongs to.
+  const decodedFor = new WeakMap<Show, { n: number; p: Promise<{ pi: number; k: number; data: Float32Array[] }[]> }>();
+  function decodeShow(sh: Show): Promise<{ pi: number; k: number; data: Float32Array[] }[]> {
+    const had = decodedFor.get(sh);
+    if (had && had.n === sh.played.length) return had.p;
+    const p = (async () => {
+      const w: any = window as any;
+      const Off = w.OfflineAudioContext || w.webkitOfflineAudioContext;
+      if (!Off) return [];
+      const out: { pi: number; k: number; data: Float32Array[] }[] = [];
+      for (let pi = 0; pi < sh.played.length; pi++) {
+        try {
+          const raw = await sh.played[pi].blob.arrayBuffer();
+          const ctxA = new Off(1, 1, MIX_RATE);
+          const b: any = await new Promise((done, fail) => {
+            const r = ctxA.decodeAudioData(raw, done, fail);
+            if (r && typeof r.then === 'function') r.then(done, fail);
+          });
+          if (!b || !b.length) continue;
+          const data: Float32Array[] = [];
+          for (let c = 0; c < Math.min(2, b.numberOfChannels); c++) data.push(new Float32Array(b.getChannelData(c)));
+          out.push({ pi, k: sh.played[pi].k, data });
+        } catch (_) {}
+      }
+      return out;
+    })();
+    decodedFor.set(sh, { n: sh.played.length, p });
+    return p;
+  }
+
+  // The parts left out of what is kept, for the performance they belong to.
+  // Held for this page only, since they belong to one performance.
+  let leftOut = new Set<number>();
+  let leftOutFor: Show | null = null;
+  function partsLeftOut(sh: Show): Set<number> {
+    if (leftOutFor !== sh) {
+      leftOutFor = sh;
+      leftOut = new Set<number>();
+    }
+    return leftOut;
+  }
+
+  // The words to hide, while Hide words is on.
+  function hiddenList(): string[][] {
+    return S.censorOn ? hideList(S.censorWords) : [];
+  }
+
+  // The words of a voice part, and when each is said, in seconds from the
+  // start of the part. The times come from where the voice is in the clip,
+  // so they are close, not exact.
+  function wordsOf(sh: Show, k: number, len: number): { words: string[]; times: number[] } {
+    const it = sh.items[k];
+    if (!it || it.kind !== 'voice' || !it.line) return { words: [], times: [] };
+    const lp = lineParts(it.line);
+    const all = partTimes(lp.weights, sh.voiced.get(k) || [], len);
+    const words: string[] = [];
+    const times: number[] = [];
+    lp.parts.forEach((pt: Part, n: number) => {
+      if (pt.kind !== 'word') return;
+      words.push(pt.text);
+      times.push(all[n] || 0);
+    });
+    return { words, times };
+  }
+
+  interface MixPart {
+    pi: number;
+    k: number;
+    start: number;
+    len: number;
+  }
+  interface Mix {
+    channels: Float32Array[];
+    rate: number;
+    parts: MixPart[];
+    // The gain the whole mix was given to even out its loudness.
+    loud: number;
+  }
+
+  // A bleep: a 1 kHz tone, the sound used on television, at a level that is
+  // clear without being harsh. It starts and ends over 5 ms, so it does not
+  // click.
+  function bleep(d: Float32Array, from: number, to: number) {
+    const edge = Math.round(MIX_RATE * 0.005);
+    for (let i = Math.max(0, from); i < Math.min(d.length, to); i++) {
+      const f = Math.min(1, (i - from) / edge, (to - i) / edge);
+      d[i] = 0.3 * f * Math.sin((2 * Math.PI * 1000 * (i - from)) / MIX_RATE);
+    }
+  }
+
+  // The bleeps in one voice part, by sample: from a little before each hidden
+  // word starts to when the next word starts. The margin covers the word
+  // timing being close, not exact.
+  function bleepsIn(sh: Show, k: number, len: number): Array<[number, number]> {
+    if (!S.censorOn || !S.censorBleep) return [];
+    const { words, times } = wordsOf(sh, k, len);
+    const hide = hiddenWords(words, hiddenList());
+    const out: Array<[number, number]> = [];
+    hide.forEach((h, n) => {
+      if (!h) return;
+      const a = Math.max(0, times[n] - 0.08);
+      const next = n + 1 < times.length ? times[n + 1] : len;
+      const b = Math.min(len, Math.max(next + 0.04, a + 0.25), times[n] + 1.2);
+      out.push([Math.round(a * MIX_RATE), Math.round(b * MIX_RATE)]);
+    });
+    return out;
+  }
+
+  // One part's sound, ready to be joined: its volume as heard, its bleeps,
+  // and 3 ms fades at each end so two parts never meet with a click.
+  function partSound(sh: Show, c: { k: number; data: Float32Array[] }, ch: number): Float32Array[] {
+    const it = sh.items[c.k];
+    const len = c.data[0].length;
+    let gain = 1;
+    if (S.studioAsHeard !== false && it) {
+      if (it.kind === 'voice') gain = (Number(S.voiceVolume) || 0) * Math.min(1, Math.max(0, evenGain(sh, c.k)));
+      else gain = (Number(S.soundVolume) || 0) * (it.kind === 'applause' ? Number(S.applauseVolume) || 0 : 1);
+    }
+    const marks = it && it.kind === 'voice' ? bleepsIn(sh, c.k, len / MIX_RATE) : [];
+    const EDGE = Math.min(Math.round(MIX_RATE * 0.003), Math.floor(len / 2));
+    const out: Float32Array[] = [];
+    for (let n = 0; n < ch; n++) {
+      const d = new Float32Array(c.data[Math.min(n, c.data.length - 1)]);
+      if (gain !== 1) for (let i = 0; i < d.length; i++) d[i] *= gain;
+      for (const [a, b] of marks) bleep(d, a, b);
+      for (let i = 0; i < EDGE; i++) {
+        const f = i / EDGE;
+        d[i] *= f;
+        d[d.length - 1 - i] *= f;
+      }
+      out.push(d);
+    }
+    return out;
+  }
+
+  // The whole mix of a performance, or null when nothing in it can be read.
+  async function mixOf(sh: Show): Promise<Mix | null> {
+    const decoded = await decodeShow(sh);
+    const out = partsLeftOut(sh);
+    const use = decoded.filter((c) => {
+      if (out.has(c.pi)) return false;
+      const it = sh.items[c.k];
+      if (S.studioSounds === false && it && it.kind !== 'voice') return false;
+      return true;
+    });
+    if (!use.length) return null;
+    const ch = use.some((c) => c.data.length > 1) ? 2 : 1;
+    const gap = Math.round(Math.min(3, Math.max(0, Number(S.studioGap) || 0)) * MIX_RATE);
+    const total = use.reduce((n, c) => n + c.data[0].length, 0) + gap * (use.length - 1);
+    const channels = Array.from({ length: ch }, () => new Float32Array(total));
+    const parts: MixPart[] = [];
+    let at = 0;
+    for (const c of use) {
+      const sound = partSound(sh, c, ch);
+      for (let n = 0; n < ch; n++) channels[n].set(sound[n], at);
+      parts.push({ pi: c.pi, k: c.k, start: at / MIX_RATE, len: c.data[0].length / MIX_RATE });
+      at += c.data[0].length + gap;
+    }
+    // Even out the loudness: the loudest moment is brought to 1 dB under
+    // the most a file can hold, up or down.
+    let loud = 1;
+    if (S.studioLoud !== false) {
+      let peak = 0;
+      for (const d of channels) for (let i = 0; i < d.length; i++) peak = Math.max(peak, Math.abs(d[i]));
+      if (peak > 0.0001) {
+        loud = Math.min(8, 0.891 / peak);
+        for (const d of channels) for (let i = 0; i < d.length; i++) d[i] *= loud;
+      }
+    }
+    return { channels, rate: MIX_RATE, parts, loud };
+  }
+
+  // A ZIP file of the files given, stored as they are, which every system
+  // can open.
+  const CRC_TABLE = (() => {
+    const t = new Uint32Array(256);
+    for (let n = 0; n < 256; n++) {
+      let c = n;
+      for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+      t[n] = c >>> 0;
+    }
+    return t;
+  })();
+  function crc32(b: Uint8Array): number {
+    let c = 0xffffffff;
+    for (let i = 0; i < b.length; i++) c = CRC_TABLE[(c ^ b[i]) & 0xff] ^ (c >>> 8);
+    return (c ^ 0xffffffff) >>> 0;
+  }
+  async function zipBlob(files: { name: string; blob: Blob }[]): Promise<Blob> {
+    const enc = new TextEncoder();
+    const heads: Uint8Array[] = [];
+    const central: Uint8Array[] = [];
+    let offset = 0;
+    for (const f of files) {
+      const data = new Uint8Array(await f.blob.arrayBuffer());
+      const name = enc.encode(f.name);
+      const crc = crc32(data);
+      const h = new DataView(new ArrayBuffer(30));
+      h.setUint32(0, 0x04034b50, true);
+      h.setUint16(4, 20, true);
+      h.setUint16(6, 0x0800, true);
+      h.setUint32(14, crc, true);
+      h.setUint32(18, data.length, true);
+      h.setUint32(22, data.length, true);
+      h.setUint16(26, name.length, true);
+      heads.push(new Uint8Array(h.buffer), name, data);
+      const c = new DataView(new ArrayBuffer(46));
+      c.setUint32(0, 0x02014b50, true);
+      c.setUint16(4, 20, true);
+      c.setUint16(6, 20, true);
+      c.setUint16(8, 0x0800, true);
+      c.setUint32(16, crc, true);
+      c.setUint32(20, data.length, true);
+      c.setUint32(24, data.length, true);
+      c.setUint16(28, name.length, true);
+      c.setUint32(42, offset, true);
+      central.push(new Uint8Array(c.buffer), name);
+      offset += 30 + name.length + data.length;
+    }
+    const size = central.reduce((n, b) => n + b.length, 0);
+    const e = new DataView(new ArrayBuffer(22));
+    e.setUint32(0, 0x06054b50, true);
+    e.setUint16(8, files.length, true);
+    e.setUint16(10, files.length, true);
+    e.setUint32(12, size, true);
+    e.setUint32(16, offset, true);
+    return new Blob([...heads, ...central, new Uint8Array(e.buffer)] as any, { type: 'application/zip' });
+  }
+
+  // Who a part is, for its file name in a ZIP: the speaker with names
+  // shown, or the kind of part.
+  function partFileName(sh: Show, k: number, n: number): string {
+    const it = sh.items[k];
+    const no = String(n + 1).padStart(2, '0');
+    if (!it || it.kind !== 'voice') return no + ' sound.wav';
+    if (S.videoNames === false) return no + (it.line.kind === 'narration' ? ' narration' : ' line') + '.wav';
+    return no + ' ' + fileName(speakerName(it.line)) + '.wav';
+  }
+
   async function downloadPerformance() {
     const sh = keptShow();
     if (!sh) return keepSaid('Play a message first. What you hear can then be downloaded.');
     keepSaid('Joining the audio');
     try {
-      const j = await joinedAudio(sh);
-      if (!j) return keepSaid('This browser cannot join the audio into one file.');
-      const ok = saveFile(wavBlob(j.channels, j.rate), showName(sh) + '.wav');
-      keepSaid(!ok ? 'The browser would not save the file. Some private windows block downloads.' : j.skipped ? j.skipped + (j.skipped === 1 ? ' part' : ' parts') + ' could not be read by the browser, so the file does not have them.' : '');
+      const m = await mixOf(sh);
+      if (!m) return keepSaid(partsLeftOut(sh).size ? 'Every part is left out, so there is nothing to save.' : 'This browser cannot join the audio into one file.');
+      let blob: Blob;
+      let name: string;
+      if (S.audioSplit === 'parts') {
+        const files = m.parts.map((p, n) => {
+          const a = Math.round(p.start * m.rate);
+          const b = a + Math.round(p.len * m.rate);
+          return { name: partFileName(sh, p.k, n), blob: wavBlob(m.channels.map((d) => d.subarray(a, b)), m.rate) };
+        });
+        blob = await zipBlob(files);
+        name = showName(sh) + '.zip';
+      } else {
+        blob = wavBlob(m.channels, m.rate);
+        name = showName(sh) + '.wav';
+      }
+      const ok = saveFile(blob, name);
+      const skipped = sh.played.length - (await decodeShow(sh)).length;
+      keepSaid(!ok ? 'The browser would not save the file. Some private windows block downloads.' : skipped ? skipped + (skipped === 1 ? ' part' : ' parts') + ' could not be read by the browser, so the file does not have them.' : '');
       if (!ok) notify('warning', 'The audio could not be saved. Some private windows block downloads.');
     } catch (e: any) {
       keepSaid('The audio could not be joined: ' + String((e && e.message) || e).slice(0, 160));
     }
   }
 
+  // The part playing, as the voice service sent it. A part with a word to
+  // hide is saved bleeped instead, as a WAV file.
   async function downloadPart() {
     const sh = show;
     if (!sh) return keepSaid('Play a message first. The part playing can then be downloaded.');
     const k = Math.min(sh.index, sh.items.length - 1);
     const got = await clipFor(sh, k);
     if (!got.blob || typeof got.blob === 'string') return keepSaid('This part has no audio file to save. A sound linked from the web is played from its page.');
+    const it = sh.items[k];
+    const hides = S.censorOn && S.censorBleep && it && it.kind === 'voice' && hiddenWords(wordsOf(sh, k, 1).words, hiddenList()).some(Boolean);
+    if (hides) {
+      const decoded = (await decodeShow(sh)).find((c) => c.k === k);
+      if (!decoded) return keepSaid('This part could not be read by the browser, so it could not be bleeped. Nothing was saved.');
+      const ok = saveFile(wavBlob(partSound(sh, decoded, decoded.data.length), MIX_RATE), showName(sh) + ' part ' + (k + 1) + '.wav');
+      return keepSaid(ok ? '' : 'The browser would not save the file. Some private windows block downloads.');
+    }
     const type = String(got.blob.type || '');
     const ext = /wav/.test(type) ? 'wav' : /ogg|opus/.test(type) ? 'ogg' : /webm/.test(type) ? 'webm' : 'mp3';
     const ok = saveFile(got.blob, showName(sh) + ' part ' + (k + 1) + '.' + ext);
     keepSaid(ok ? '' : 'The browser would not save the file. Some private windows block downloads.');
   }
 
-  // ---- the video ----
-  // A video of the last performance, made from the audio already heard, so
-  // it costs nothing. It is recorded as it plays, silently, so it takes as
-  // long as the performance and a few seconds more.
-  //
-  // It is drawn like a story being read: a dark background or the reader's
-  // own picture, the chat's title at the start, then each line large in the
-  // middle, with the words lighting up as they are said. A speaker's picture
-  // and name sit above their line, each with a switch of its own, so a video
-  // can be shared without them. Sounds are captions in brackets.
-  const VIDEO_W = 1920;
-  const VIDEO_H = 1080;
-  // The title at the start, and the fade to black at the end, in seconds.
-  const VIDEO_INTRO = 2;
-  const VIDEO_OUTRO = 1.5;
-  const STORY_FONT = '"Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif';
+  // ---- the Studio: the picture ----
+  // A video of a performance, drawn like a story being read: a background,
+  // the title at the start, then each line in turn, with the words lighting
+  // up as they are said. Every choice is in the Studio tab.
+  type VideoShape = 'wide' | 'tall' | 'square';
+  const VIDEO_SHAPES: { id: VideoShape; label: string; w: number; h: number }[] = [
+    { id: 'wide', label: 'Wide, 16 by 9', w: 1920, h: 1080 },
+    { id: 'tall', label: 'Tall, 9 by 16, for phones', w: 1080, h: 1920 },
+    { id: 'square', label: 'Square', w: 1080, h: 1080 },
+  ];
+  function videoSize(): { w: number; h: number } {
+    const s = VIDEO_SHAPES.find((x) => x.id === S.videoShape) || VIDEO_SHAPES[0];
+    return { w: s.w, h: s.h };
+  }
+  const VIDEO_FONTS: { id: string; label: string; stack: string }[] = [
+    { id: 'book', label: 'Book', stack: '"Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif' },
+    { id: 'clean', label: 'Clean', stack: '"Segoe UI", Roboto, "Helvetica Neue", Arial, system-ui, sans-serif' },
+    { id: 'type', label: 'Typewriter', stack: '"Courier Prime", "Courier New", Courier, monospace' },
+    { id: 'round', label: 'Rounded', stack: '"Nunito", "Varela Round", "Arial Rounded MT Bold", "Trebuchet MS", system-ui, sans-serif' },
+    { id: 'theme', label: 'Your theme’s font', stack: '' },
+  ];
+  function videoFont(): string {
+    const f = VIDEO_FONTS.find((x) => x.id === S.videoFont) || VIDEO_FONTS[0];
+    if (f.stack) return f.stack;
+    try {
+      return getComputedStyle(root).fontFamily || 'sans-serif';
+    } catch (_) {
+      return 'sans-serif';
+    }
+  }
+  // How one line gives way to the next. None of them flashes: each fades,
+  // slides, wipes or focuses, over the time set.
+  const VIDEO_MOVES: { id: string; label: string }[] = [
+    { id: 'rise', label: 'Fade and rise' },
+    { id: 'fade', label: 'Fade out, then in' },
+    { id: 'dissolve', label: 'Dissolve' },
+    { id: 'black', label: 'Through black' },
+    { id: 'slide', label: 'Slide across' },
+    { id: 'wipe', label: 'Soft wipe' },
+    { id: 'focus', label: 'Soft focus' },
+    { id: 'zoom', label: 'Gentle zoom' },
+    { id: 'cut', label: 'Cut, with no movement' },
+  ];
   const STORY_INK = '#f4efe6';
-  // A part in the video: what it is, when it starts and how long it is, and
-  // when each of its words is said.
+  const hexOr = (v: any, d: string) => (/^#[0-9a-f]{6}$/i.test(String(v || '')) ? String(v) : d);
+
+  // The parts in a video: what each one is, when it starts, how long it is,
+  // and when each of its words is said.
   interface VideoPart {
     kind: 'line' | 'sound';
     narration: boolean;
     words: string[];
     times: number[];
+    hidden: boolean[];
     start: number;
     len: number;
     who: string;
@@ -2979,87 +3356,120 @@ export function setup(ctx: Ctx, overrides?: any) {
     });
   }
 
-  // The name in the video's title and file: the chat's, or none with names
-  // switched off, so a shared video never names the character.
+  // The title at the start: the reader's own, or the chat's name with names
+  // shown, or none.
   function videoTitle(): string {
+    const own = String(S.videoTitleText || '').trim();
+    if (S.videoTitleOn === false) return '';
+    if (own) return own;
     return S.videoNames !== false ? String(chatInfo.name || '').trim() : '';
   }
+  // How long the title holds the screen before the first line, and the fade
+  // from black when there is no title.
+  const titleSecs = (title: string) => (title ? 2.4 : 0.6);
 
-  // The parts of a performance, in the order heard.
-  function videoParts(sh: Show, joined: { starts: number[]; lens: number[]; used: number[] }): VideoPart[] {
-    return joined.used.map((pi, i) => {
-      const p = sh.played[pi];
+  function videoParts(sh: Show, m: Mix): VideoPart[] {
+    const list = hiddenList();
+    return m.parts.map((p) => {
       const it = sh.items[p.k];
       const line = it && it.kind === 'voice' ? it.line : null;
       if (!line) {
         const what = it && it.kind === 'applause' ? 'applause' : String((it && it.sound) || 'a sound');
-        return { kind: 'sound', narration: false, words: [], times: [], start: joined.starts[i], len: joined.lens[i], who: 'sound', name: '', picture: '', caption: what };
+        const words = what.split(/\s+/).filter(Boolean);
+        return { kind: 'sound', narration: false, words, times: [], hidden: hiddenWords(words, list), start: p.start, len: p.len, who: 'sound', name: '', picture: '', caption: what };
       }
-      const lp = lineParts(line);
-      const words: string[] = [];
-      const times: number[] = [];
-      const all = partTimes(lp.weights, sh.voiced.get(p.k) || [], joined.lens[i]);
-      lp.parts.forEach((pt: Part, k: number) => {
-        if (pt.kind !== 'word') return;
-        words.push(pt.text);
-        times.push(all[k] || 0);
-      });
-      const m = line.kind === 'narration' ? narratorMember() : memberFor(line.speaker);
+      const wt = wordsOf(sh, p.k, p.len);
+      const mem = line.kind === 'narration' ? narratorMember() : memberFor(line.speaker);
       return {
         kind: 'line',
         narration: line.kind === 'narration',
-        words,
-        times,
-        start: joined.starts[i],
-        len: joined.lens[i],
+        words: wt.words,
+        times: wt.times,
+        hidden: hiddenWords(wt.words, list),
+        start: p.start,
+        len: p.len,
         who: partWho(line),
         name: speakerName(line),
-        picture: m && m.picture ? String(m.picture) : '',
+        picture: mem && mem.picture ? String(mem.picture) : '',
         caption: '',
       };
     });
   }
 
-  // Everything that is drawn the same in every frame, made once: the
-  // background, and each speaker's picture.
-  async function videoStage(parts: VideoPart[]): Promise<{ back: any; pics: Map<string, HTMLImageElement> }> {
-    await loadVideoBg().catch(() => {});
-    const back = document.createElement('canvas');
-    back.width = VIDEO_W;
-    back.height = VIDEO_H;
+  // Everything drawn the same in every frame, made once: the background,
+  // each speaker's picture, and the layers transitions are drawn on.
+  interface VideoStage {
+    w: number;
+    h: number;
+    back: any;
+    pics: Map<string, HTMLImageElement>;
+    a: any;
+    b: any;
+    small: any;
+    font: string;
+  }
+  function canvasOf(w: number, h: number): any {
+    const c = document.createElement('canvas');
+    c.width = w;
+    c.height = h;
+    return c;
+  }
+  async function videoStage(parts: VideoPart[]): Promise<VideoStage> {
+    const { w: W, h: H } = videoSize();
+    if (S.videoBack === 'picture') await loadVideoBg().catch(() => {});
+    const back = canvasOf(W, H);
     const b = back.getContext('2d') as CanvasRenderingContext2D;
     const css = getComputedStyle(root);
     const accent = String(css.getPropertyValue('--lumiverse-primary') || '').trim() || '#9370db';
-    const wall = await loadImage(videoBg);
+    const wall = S.videoBack === 'picture' ? await loadImage(videoBg) : null;
     if (wall && wall.width && wall.height) {
-      // Cover the frame, cropped from the middle.
-      const s = Math.max(VIDEO_W / wall.width, VIDEO_H / wall.height);
-      const w = wall.width * s;
-      const h = wall.height * s;
-      b.drawImage(wall, (VIDEO_W - w) / 2, (VIDEO_H - h) / 2, w, h);
+      const s = Math.max(W / wall.width, H / wall.height);
+      const dw = wall.width * s;
+      const dh = wall.height * s;
+      const blur = Math.min(20, Math.max(0, Number(S.videoBlur) || 0));
+      if (blur && 'filter' in b) {
+        // Drawn a little larger, so the soft edge of the blur stays off
+        // the frame.
+        const m = blur * 3;
+        b.filter = 'blur(' + blur + 'px)';
+        b.drawImage(wall, (W - dw) / 2 - m, (H - dh) / 2 - m, dw + m * 2, dh + m * 2);
+        b.filter = 'none';
+      } else if (blur) {
+        // No blur filter on this browser: drawn small and stretched back,
+        // which softens it the same way.
+        const f = 1 / (1 + blur / 2);
+        const t = canvasOf(Math.max(1, Math.round(W * f)), Math.max(1, Math.round(H * f)));
+        const tg = t.getContext('2d');
+        tg.imageSmoothingQuality = 'high';
+        tg.drawImage(wall, ((W - dw) / 2) * f, ((H - dh) / 2) * f, dw * f, dh * f);
+        b.imageSmoothingQuality = 'high';
+        b.drawImage(t, 0, 0, W, H);
+      } else b.drawImage(wall, (W - dw) / 2, (H - dh) / 2, dw, dh);
       const dim = Math.min(80, Math.max(0, Number(S.videoDim) || 0)) / 100;
       b.fillStyle = 'rgba(0,0,0,' + dim + ')';
-      b.fillRect(0, 0, VIDEO_W, VIDEO_H);
+      b.fillRect(0, 0, W, H);
+    } else if (S.videoBack === 'color') {
+      b.fillStyle = hexOr(S.videoBackColor, '#141218');
+      b.fillRect(0, 0, W, H);
     } else {
-      // A dark room lit a little in the theme's accent, darker at the edges.
+      // A dark room lit a little in the theme's accent.
       b.fillStyle = '#0b0a0f';
-      b.fillRect(0, 0, VIDEO_W, VIDEO_H);
-      const glow = b.createRadialGradient(VIDEO_W / 2, VIDEO_H * 0.45, 0, VIDEO_W / 2, VIDEO_H * 0.45, VIDEO_W * 0.6);
-      b.save();
-      b.globalAlpha = 0.22;
+      b.fillRect(0, 0, W, H);
+      const glow = b.createRadialGradient(W / 2, H * 0.45, 0, W / 2, H * 0.45, Math.max(W, H) * 0.6);
       glow.addColorStop(0, accent);
       glow.addColorStop(1, 'rgba(0,0,0,0)');
+      b.save();
+      b.globalAlpha = 0.22;
       b.fillStyle = glow;
-      b.fillRect(0, 0, VIDEO_W, VIDEO_H);
+      b.fillRect(0, 0, W, H);
       b.restore();
     }
-    // Darker at the edges, so the words in the middle stand out on any
-    // picture.
-    const edge = b.createRadialGradient(VIDEO_W / 2, VIDEO_H / 2, VIDEO_H * 0.35, VIDEO_W / 2, VIDEO_H / 2, VIDEO_W * 0.65);
+    // Darker at the edges, so the words in the middle stand out.
+    const edge = b.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.35, W / 2, H / 2, Math.max(W, H) * 0.65);
     edge.addColorStop(0, 'rgba(0,0,0,0)');
-    edge.addColorStop(1, 'rgba(0,0,0,0.55)');
+    edge.addColorStop(1, 'rgba(0,0,0,0.5)');
     b.fillStyle = edge;
-    b.fillRect(0, 0, VIDEO_W, VIDEO_H);
+    b.fillRect(0, 0, W, H);
     const pics = new Map<string, HTMLImageElement>();
     if (S.videoPics !== false)
       for (const p of parts)
@@ -3067,67 +3477,7 @@ export function setup(ctx: Ctx, overrides?: any) {
           const im = await loadImage(p.picture);
           if (im) pics.set(p.picture, im);
         }
-    return { back, pics };
-  }
-
-  // Draws one frame. `t` counts from the start of the video, title included.
-  function videoFrame(g: CanvasRenderingContext2D, t: number, parts: VideoPart[], total: number, stage: { back: any; pics: Map<string, HTMLImageElement> }, title: string) {
-    const W = VIDEO_W;
-    const H = VIDEO_H;
-    g.save();
-    g.globalAlpha = 1;
-    g.shadowColor = 'transparent';
-    g.drawImage(stage.back, 0, 0);
-    g.textBaseline = 'alphabetic';
-    const showPics = S.videoPics !== false;
-    const showNames = S.videoNames !== false;
-    const ink = (a: number) => {
-      g.globalAlpha = a;
-      g.fillStyle = STORY_INK;
-    };
-    const shadow = () => {
-      g.shadowColor = 'rgba(0,0,0,0.65)';
-      g.shadowBlur = 18;
-      g.shadowOffsetY = 2;
-    };
-    const audioT = t - VIDEO_INTRO;
-    if (audioT < 0) {
-      // The title fades in, holds, and fades out before the first line.
-      if (title) {
-        const a = Math.max(0, Math.min(1, t / 0.5, (VIDEO_INTRO - 0.2 - t) / 0.5));
-        shadow();
-        ink(a);
-        g.textAlign = 'center';
-        g.font = '500 76px ' + STORY_FONT;
-        g.fillText(fitText(g, title, W - 320), W / 2, H / 2 - 4);
-        g.shadowColor = 'transparent';
-        g.globalAlpha = a * 0.55;
-        g.fillRect(W / 2 - 60, H / 2 + 34, 120, 2);
-      }
-    } else {
-      const now = Math.min(audioT, total);
-      let i = 0;
-      while (i + 1 < parts.length && now >= parts[i + 1].start) i++;
-      const local = now - parts[i].start;
-      // The last part fades out and moves up a little, then the new one fades
-      // in from a little below, over a third of a second in all. They are
-      // never drawn over each other.
-      const HALF = 0.16;
-      if (i > 0 && local < HALF) videoPart(g, parts[i - 1], now - parts[i - 1].start, 1 - local / HALF, -6 * (local / HALF), stage, showPics, showNames);
-      else if (i > 0 && local < HALF * 2) videoPart(g, parts[i], local, (local - HALF) / HALF, 6 * (1 - (local - HALF) / HALF), stage, showPics, showNames);
-      else videoPart(g, parts[i], local, 1, 0, stage, showPics, showNames);
-    }
-    // In from black at the start, and out to black at the end.
-    const fadeIn = Math.max(0, 1 - t / 0.6);
-    const fadeOut = Math.max(0, Math.min(1, (t - (VIDEO_INTRO + total)) / VIDEO_OUTRO));
-    const black = Math.max(fadeIn, fadeOut);
-    if (black > 0) {
-      g.shadowColor = 'transparent';
-      g.globalAlpha = black;
-      g.fillStyle = '#000';
-      g.fillRect(0, 0, W, H);
-    }
-    g.restore();
+    return { w: W, h: H, back, pics, a: canvasOf(W, H), b: canvasOf(W, H), small: canvasOf(Math.round(W / 4), Math.round(H / 4)), font: videoFont() };
   }
 
   // Text cut to a width, with an ellipsis.
@@ -3138,52 +3488,125 @@ export function setup(ctx: Ctx, overrides?: any) {
     return s.trimEnd() + '…';
   }
 
-  function videoPart(g: CanvasRenderingContext2D, p: VideoPart, local: number, alpha: number, dy: number, stage: { pics: Map<string, HTMLImageElement> }, showPics: boolean, showNames: boolean) {
-    const W = VIDEO_W;
-    const H = VIDEO_H;
+  // A word hidden by the censor: a black bar, or the word blurred or in
+  // pixels, as the reader picked. Each covers the whole word.
+  let coverCanvas: any = null;
+  function coverWord(g: CanvasRenderingContext2D, text: string, x: number, base: number, size: number, ink: string, alpha: number) {
+    const w = Math.max(size * 0.6, g.measureText(text).width);
+    const top = base - size * 0.82;
+    const hgt = size * 1.08;
+    const pad = size * 0.08;
     g.save();
-    g.textAlign = 'center';
+    g.globalAlpha = alpha;
+    g.shadowColor = 'transparent';
+    if (S.censorCover === 'blur' || S.censorCover === 'pixels') {
+      if (!coverCanvas) coverCanvas = document.createElement('canvas');
+      const pixels = S.censorCover === 'pixels';
+      const cw = Math.ceil(w + pad * 2);
+      const chh = Math.ceil(hgt + pad * 2);
+      coverCanvas.width = cw;
+      coverCanvas.height = chh;
+      const c = coverCanvas.getContext('2d');
+      c.font = g.font;
+      c.fillStyle = ink;
+      c.textBaseline = 'alphabetic';
+      c.fillText(text, pad, base - top + pad);
+      // Drawn small, then stretched: in blocks for pixels, smoothed for blur.
+      const f = pixels ? 1 / Math.max(4, size / 7) : 1 / Math.max(6, size / 5);
+      const sw = Math.max(1, Math.round(cw * f));
+      const sh2 = Math.max(1, Math.round(chh * f));
+      const tiny = document.createElement('canvas');
+      tiny.width = sw;
+      tiny.height = sh2;
+      const tg = tiny.getContext('2d') as CanvasRenderingContext2D;
+      tg.drawImage(coverCanvas, 0, 0, sw, sh2);
+      g.imageSmoothingEnabled = !pixels;
+      g.drawImage(tiny, x - pad, top - pad, cw, chh);
+      g.imageSmoothingEnabled = true;
+    } else {
+      g.fillStyle = '#000';
+      const r = size * 0.12;
+      g.beginPath();
+      if ((g as any).roundRect) (g as any).roundRect(x - pad, top, w + pad * 2, hgt, r);
+      else g.rect(x - pad, top, w + pad * 2, hgt);
+      g.fill();
+    }
+    g.restore();
+  }
+
+  // One part: who says it and the words, drawn on g with the alpha given.
+  // dx and dy move it, for a transition.
+  function drawPart(g: CanvasRenderingContext2D, st: VideoStage, p: VideoPart, local: number, alpha: number, dx: number, dy: number) {
+    const W = st.w;
+    const H = st.h;
+    const u = Math.min(W, H) / 1080;
+    const ink = hexOr(S.videoInk, STORY_INK);
+    const font = st.font;
+    g.save();
+    g.textBaseline = 'alphabetic';
     g.shadowColor = 'rgba(0,0,0,0.65)';
-    g.shadowBlur = 18;
-    g.shadowOffsetY = 2;
+    g.shadowBlur = 18 * u;
+    g.shadowOffsetY = 2 * u;
+    const MAX_W = Math.round((W > H ? 1500 : W - 160) * (W > H ? u : 1));
+    const scale = Math.min(160, Math.max(60, Number(S.videoSize) || 100)) / 100;
+    const lower = S.videoPlace === 'lower';
     if (p.kind === 'sound') {
-      g.globalAlpha = alpha * 0.8;
-      g.fillStyle = STORY_INK;
-      g.font = 'italic 400 44px ' + STORY_FONT;
-      g.fillText(fitText(g, '[' + p.caption + ']', W - 360), W / 2, H / 2 + dy);
+      if (S.videoCaptions === false) {
+        g.restore();
+        return;
+      }
+      const size = Math.round(44 * u * scale);
+      g.font = 'italic 400 ' + size + 'px ' + font;
+      const words = p.words.slice();
+      if (words.length) {
+        words[0] = '[' + words[0];
+        words[words.length - 1] += ']';
+      }
+      const space = g.measureText(' ').width;
+      const widths = words.map((wd) => g.measureText(wd).width);
+      let x = W / 2 - Math.min(MAX_W, widths.reduce((a, b) => a + b, 0) + space * (words.length - 1)) / 2 + dx;
+      const y = (lower ? H * 0.8 : H / 2) + dy;
+      words.forEach((wd, n) => {
+        if (p.hidden[n]) coverWord(g, wd, x, y, size, ink, alpha * 0.8);
+        else {
+          g.globalAlpha = alpha * 0.8;
+          g.fillStyle = ink;
+          g.fillText(wd, x, y);
+        }
+        x += widths[n] + space;
+      });
       g.restore();
       return;
     }
-    // Speech is put in quotation marks, as in a book. Narration is not.
     const words = p.words.slice();
-    if (!p.narration && words.length) {
+    if (!p.narration && S.videoQuotes !== false && words.length) {
       words[0] = '“' + words[0];
       words[words.length - 1] = words[words.length - 1] + '”';
     }
     // The largest size at which the line fits in seven rows. A longer line
     // is shown seven rows at a time, moving on as the words are said.
-    const MAX_W = 1500;
     const ROWS = 7;
-    let size = 56;
+    let size = Math.round(56 * u * scale);
     let rows: number[][] = [];
+    const space = () => g.measureText(' ').width;
     for (;;) {
-      g.font = '400 ' + size + 'px ' + STORY_FONT;
+      g.font = '400 ' + size + 'px ' + font;
       rows = [[]];
       let width = 0;
-      const space = g.measureText(' ').width;
+      const sp = space();
       words.forEach((wd, k) => {
         const ww = g.measureText(wd).width;
         const row = rows[rows.length - 1];
-        if (row.length && width + space + ww > MAX_W) {
+        if (row.length && width + sp + ww > MAX_W) {
           rows.push([k]);
           width = ww;
         } else {
           row.push(k);
-          width += (row.length > 1 ? space : 0) + ww;
+          width += (row.length > 1 ? sp : 0) + ww;
         }
       });
-      if (rows.length <= ROWS || size <= 42) break;
-      size -= 4;
+      if (rows.length <= ROWS || size <= 30 * u) break;
+      size -= Math.max(2, Math.round(4 * u));
     }
     const lineH = Math.round(size * 1.42);
     let said = -1;
@@ -3196,76 +3619,248 @@ export function setup(ctx: Ctx, overrides?: any) {
       firstRow = Math.min(rows.length - ROWS, Math.floor(at / ROWS) * ROWS);
     }
     const shown = rows.slice(firstRow, firstRow + ROWS);
-    // Who says it, above the words: their picture and their name, each only
-    // when its switch is on. Narration has neither.
-    const pic = showPics && !p.narration && p.picture ? stage.pics.get(p.picture) : undefined;
-    const name = showNames && !p.narration ? p.name : '';
-    const PIC = 150;
-    const head = (pic ? PIC + 28 : 0) + (name ? 52 : 0);
+    const pic = S.videoPics !== false && !p.narration && p.picture ? st.pics.get(p.picture) : undefined;
+    const name = S.videoNames !== false && !p.narration ? p.name : '';
+    const PIC = Math.round(Math.min(300, Math.max(60, Number(S.videoPicSize) || 150)) * u);
+    const nameSize = Math.round(28 * u * scale);
+    const head = (pic ? PIC + 28 * u : 0) + (name ? nameSize + 24 * u : 0);
     const block = head + shown.length * lineH;
-    let y = Math.max(90, Math.round(H * 0.52 - block / 2)) + dy;
-    g.globalAlpha = alpha;
-    const ring = kindHex(p.who);
+    const mid = lower ? H * 0.72 : H * 0.52;
+    let y = Math.max(90 * u, Math.min(H - 60 * u - block, Math.round(mid - block / 2))) + dy;
+    const cx = W / 2 + dx;
+    const ring = S.videoNameColor === 'words' ? ink : kindHex(p.who);
     if (pic) {
-      const cx = W / 2;
-      const cy = y + PIC / 2;
+      const top = y;
       g.save();
+      g.globalAlpha = alpha;
       g.beginPath();
-      g.arc(cx, cy, PIC / 2, 0, Math.PI * 2);
+      const round = S.videoPicShape === 'rounded';
+      const pathPic = () => {
+        g.beginPath();
+        if (round && (g as any).roundRect) (g as any).roundRect(cx - PIC / 2, top, PIC, PIC, PIC * 0.16);
+        else g.arc(cx, top + PIC / 2, PIC / 2, 0, Math.PI * 2);
+      };
+      pathPic();
+      g.fillStyle = '#000';
       g.fill();
       g.shadowColor = 'transparent';
       g.clip();
       const s = Math.max(PIC / pic.width, PIC / pic.height);
-      g.drawImage(pic, cx - (pic.width * s) / 2, cy - (pic.height * s) / 2, pic.width * s, pic.height * s);
+      g.drawImage(pic, cx - (pic.width * s) / 2, top + PIC / 2 - (pic.height * s) / 2, pic.width * s, pic.height * s);
       g.restore();
       g.save();
       g.shadowColor = 'transparent';
       g.globalAlpha = alpha * 0.9;
-      g.lineWidth = 3;
+      g.lineWidth = 3 * u;
       g.strokeStyle = ring;
-      g.beginPath();
-      g.arc(cx, cy, PIC / 2 + 1.5, 0, Math.PI * 2);
+      pathPic();
       g.stroke();
       g.restore();
-      y += PIC + 28;
+      y += PIC + 28 * u;
     }
     if (name) {
-      g.font = '600 28px ' + STORY_FONT;
+      g.font = '600 ' + nameSize + 'px ' + font;
       g.fillStyle = ring;
+      g.globalAlpha = alpha;
       const label = fitText(g, name.toUpperCase(), MAX_W);
-      // Letters spaced a little apart, drawn one by one so it works in every
-      // browser.
-      const gap = 4;
-      const widths = Array.from(label).map((ch) => g.measureText(ch).width);
-      let x = W / 2 - (widths.reduce((a, b) => a + b, 0) + gap * (widths.length - 1)) / 2;
-      g.textAlign = 'left';
-      Array.from(label).forEach((ch, k) => {
-        g.fillText(ch, x, y + 28);
-        x += widths[k] + gap;
-      });
-      g.textAlign = 'center';
-      y += 52;
+      const gap = 4 * u;
+      const chars = Array.from(label);
+      const widths = chars.map((ch) => g.measureText(ch).width);
+      const full = widths.reduce((a, b) => a + b, 0) + gap * (chars.length - 1);
+      let x = cx - full / 2;
+      const base = y + nameSize;
+      // A name with a hidden word in it is covered whole.
+      if (hiddenWords(label.split(/\s+/), hiddenList()).some(Boolean)) coverWord(g, label, x, base, nameSize, ring, alpha);
+      else
+        chars.forEach((ch, k) => {
+          g.fillText(ch, x, base);
+          x += widths[k] + gap;
+        });
+      y += nameSize + 24 * u;
     }
-    // The words: said ones in full, the rest dimmer. Each row is centered.
-    g.font = '400 ' + size + 'px ' + STORY_FONT;
-    const space = g.measureText(' ').width;
+    g.font = '400 ' + size + 'px ' + font;
+    const sp = space();
+    const mode = S.videoWords || 'light';
     shown.forEach((row, r) => {
       const ws = row.map((k) => g.measureText(words[k]).width);
-      let x = W / 2 - (ws.reduce((a, b) => a + b, 0) + space * (row.length - 1)) / 2;
-      g.textAlign = 'left';
+      let x = cx - (ws.reduce((a, b) => a + b, 0) + sp * (row.length - 1)) / 2;
+      const base = y + (r + 1) * lineH - Math.round(lineH * 0.3);
       row.forEach((k, n) => {
-        g.globalAlpha = alpha * (k <= said ? 1 : 0.45);
-        g.fillStyle = STORY_INK;
-        g.fillText(words[k], x, y + (r + 1) * lineH - Math.round(lineH * 0.3));
-        x += ws[n] + space;
+        const on = k <= said;
+        const a = alpha * (mode === 'all' || on ? 1 : mode === 'appear' ? 0 : 0.45);
+        if (a > 0) {
+          if (p.hidden[k]) coverWord(g, words[k], x, base, size, ink, a);
+          else {
+            g.globalAlpha = a;
+            g.fillStyle = ink;
+            g.fillText(words[k], x, base);
+          }
+        }
+        x += ws[n] + sp;
       });
     });
     g.restore();
   }
 
+  const ease = (k: number) => (k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2);
+
+  // One frame. t counts from the start of the video, title included.
+  function videoFrame(g: CanvasRenderingContext2D, t: number, parts: VideoPart[], total: number, st: VideoStage, title: string) {
+    const W = st.w;
+    const H = st.h;
+    const u = Math.min(W, H) / 1080;
+    const intro = titleSecs(title);
+    const fadeOut = Math.min(5, Math.max(0, Number(S.videoFadeOut)));
+    g.save();
+    g.globalAlpha = 1;
+    g.drawImage(st.back, 0, 0);
+    const audioT = t - intro;
+    if (audioT < 0) {
+      if (title) {
+        // The title fades in, holds, and fades out before the first line.
+        const a = Math.max(0, Math.min(1, t / 0.6, (intro - 0.2 - t) / 0.6));
+        const size = Math.round(76 * u);
+        g.font = '500 ' + size + 'px ' + st.font;
+        g.textBaseline = 'alphabetic';
+        g.shadowColor = 'rgba(0,0,0,0.65)';
+        g.shadowBlur = 18 * u;
+        const ink = hexOr(S.videoInk, STORY_INK);
+        const text = fitText(g, title, W - 240 * u);
+        const words = text.split(/\s+/);
+        const hide = hiddenWords(words, hiddenList());
+        const sp = g.measureText(' ').width;
+        const ws = words.map((wd) => g.measureText(wd).width);
+        let x = W / 2 - (ws.reduce((p, q) => p + q, 0) + sp * (words.length - 1)) / 2;
+        words.forEach((wd, n) => {
+          if (hide[n]) coverWord(g, wd, x, H / 2, size, ink, a);
+          else {
+            g.globalAlpha = a;
+            g.fillStyle = ink;
+            g.fillText(wd, x, H / 2);
+          }
+          x += ws[n] + sp;
+        });
+        g.shadowColor = 'transparent';
+        g.globalAlpha = a * 0.55;
+        g.fillStyle = ink;
+        g.fillRect(W / 2 - 60 * u, H / 2 + 34 * u, 120 * u, 2 * u);
+      }
+    } else if (parts.length) {
+      const now = Math.min(audioT, total);
+      let i = 0;
+      while (i + 1 < parts.length && now >= parts[i + 1].start) i++;
+      const p = parts[i];
+      const local = now - p.start;
+      const D = Math.min(2, Math.max(0.1, Number(S.videoMoveSecs) || 0.4));
+      const move = S.videoMove || 'rise';
+      if (i === 0 || local >= D || move === 'cut') drawPart(g, st, p, local, 1, 0, 0);
+      else videoMove(g, st, move, ease(local / D), parts[i - 1], now - parts[i - 1].start, p, local);
+    }
+    // In from black at the start, and out to black at the end.
+    const fadeIn = Math.max(0, 1 - t / 0.6);
+    const fadeEnd = fadeOut > 0 ? Math.max(0, Math.min(1, (t - (intro + total)) / fadeOut)) : 0;
+    const black = Math.max(fadeIn, fadeEnd);
+    if (black > 0) {
+      g.shadowColor = 'transparent';
+      g.globalAlpha = black;
+      g.fillStyle = '#000';
+      g.fillRect(0, 0, W, H);
+    }
+    g.restore();
+  }
+
+  // The last part giving way to the next. k runs from 0 to 1, eased.
+  function videoMove(g: CanvasRenderingContext2D, st: VideoStage, move: string, k: number, a: VideoPart, aT: number, b: VideoPart, bT: number) {
+    const W = st.w;
+    const H = st.h;
+    const u = Math.min(W, H) / 1080;
+    const layer = (c: any, p: VideoPart, t: number) => {
+      const lg = c.getContext('2d') as CanvasRenderingContext2D;
+      lg.clearRect(0, 0, W, H);
+      drawPart(lg, st, p, t, 1, 0, 0);
+      return c;
+    };
+    if (move === 'fade' || move === 'rise') {
+      const lift = move === 'rise' ? 8 * u : 0;
+      if (k < 0.5) drawPart(g, st, a, aT, 1 - k * 2, 0, -lift * k * 2);
+      else drawPart(g, st, b, bT, k * 2 - 1, 0, lift * (2 - k * 2));
+    } else if (move === 'dissolve') {
+      g.globalAlpha = 1 - k;
+      g.drawImage(layer(st.a, a, aT), 0, 0);
+      g.globalAlpha = k;
+      g.drawImage(layer(st.b, b, bT), 0, 0);
+      g.globalAlpha = 1;
+    } else if (move === 'black') {
+      if (k < 0.5) drawPart(g, st, a, aT, 1, 0, 0);
+      else drawPart(g, st, b, bT, 1, 0, 0);
+      g.globalAlpha = 1 - Math.abs(k * 2 - 1);
+      g.fillStyle = '#000';
+      g.fillRect(0, 0, W, H);
+      g.globalAlpha = 1;
+    } else if (move === 'slide') {
+      // A third of the frame, so the two lines pass each other rather than
+      // sit on top of each other.
+      const far = W * 0.34;
+      drawPart(g, st, a, aT, Math.max(0, 1 - k * 1.6), -far * k, 0);
+      drawPart(g, st, b, bT, Math.max(0, k * 1.6 - 0.6), far * (1 - k), 0);
+    } else if (move === 'wipe') {
+      // A soft edge moves across: the old part is taken away behind it and
+      // the new one shown in front of it.
+      const soft = W * 0.25;
+      const edge = -soft + (W + soft * 2) * k;
+      const mask = (c: any, keepLeft: boolean) => {
+        const lg = c.getContext('2d') as CanvasRenderingContext2D;
+        const grad = lg.createLinearGradient(edge - soft / 2, 0, edge + soft / 2, 0);
+        grad.addColorStop(0, keepLeft ? 'rgba(0,0,0,1)' : 'rgba(0,0,0,0)');
+        grad.addColorStop(1, keepLeft ? 'rgba(0,0,0,0)' : 'rgba(0,0,0,1)');
+        lg.globalCompositeOperation = 'destination-in';
+        lg.fillStyle = grad;
+        lg.fillRect(0, 0, W, H);
+        lg.globalCompositeOperation = 'source-over';
+        return c;
+      };
+      g.drawImage(mask(layer(st.a, a, aT), false), 0, 0);
+      g.drawImage(mask(layer(st.b, b, bT), true), 0, 0);
+    } else if (move === 'focus') {
+      // The old part goes soft as it fades, and the new one comes into
+      // focus: each drawn small and stretched back, less and less so.
+      const soft = (c: any, amount: number, alpha: number) => {
+        if (amount < 0.02) {
+          g.globalAlpha = alpha;
+          g.drawImage(c, 0, 0);
+          return;
+        }
+        const f = 1 - amount * 0.9;
+        const sw = Math.max(1, Math.round((W / 4) * f));
+        const sh2 = Math.max(1, Math.round((H / 4) * f));
+        const sg = st.small.getContext('2d') as CanvasRenderingContext2D;
+        sg.clearRect(0, 0, st.small.width, st.small.height);
+        sg.imageSmoothingQuality = 'high';
+        sg.drawImage(c, 0, 0, sw, sh2);
+        g.globalAlpha = alpha;
+        g.imageSmoothingQuality = 'high';
+        g.drawImage(st.small, 0, 0, sw, sh2, 0, 0, W, H);
+      };
+      soft(layer(st.a, a, aT), k, 1 - k);
+      soft(layer(st.b, b, bT), 1 - k, k);
+      g.globalAlpha = 1;
+    } else if (move === 'zoom') {
+      const at = (c: any, s: number, alpha: number) => {
+        g.globalAlpha = alpha;
+        g.drawImage(c, (W - W * s) / 2, (H - H * s) / 2, W * s, H * s);
+      };
+      at(layer(st.a, a, aT), 1 + 0.04 * k, 1 - k);
+      at(layer(st.b, b, bT), 0.96 + 0.04 * k, k);
+      g.globalAlpha = 1;
+    } else drawPart(g, st, b, bT, 1, 0, 0);
+  }
+
+  // Makes the video, recorded as it plays, silently. It takes as long as the
+  // performance, with the title and the fade at the end.
   async function makeVideo() {
     const sh = keptShow();
     if (!sh) return keepSaid('Play a message first. A video can then be made of it.');
+    stopPreview();
     const w: any = window as any;
     const ACtx = w.AudioContext || w.webkitAudioContext;
     const canvas = document.createElement('canvas') as any;
@@ -3282,22 +3877,22 @@ export function setup(ctx: Ctx, overrides?: any) {
     const type = Rec && typeof Rec.isTypeSupported === 'function' ? types.find((t) => Rec.isTypeSupported(t)) : '';
     if (!ACtx || !Rec || !type || typeof canvas.captureStream !== 'function') return keepSaid('This browser cannot make a video.');
     keepSaid('Getting the audio ready');
-    let j: Awaited<ReturnType<typeof joinedAudio>> = null;
+    let m: Mix | null = null;
     try {
-      j = await joinedAudio(sh);
+      m = await mixOf(sh);
     } catch (_) {}
-    if (!j) return keepSaid('This browser cannot read the audio for a video.');
-    const joined = j;
-    canvas.width = VIDEO_W;
-    canvas.height = VIDEO_H;
-    const g = canvas.getContext('2d') as CanvasRenderingContext2D;
-    const parts = videoParts(sh, joined);
+    if (!m) return keepSaid(partsLeftOut(sh).size ? 'Every part is left out, so there is nothing to make a video of.' : 'This browser cannot read the audio for a video.');
+    const mix = m;
+    const parts = videoParts(sh, mix);
     const title = videoTitle();
     keepSaid('Getting the pictures ready');
-    const stage = await videoStage(parts);
+    const st = await videoStage(parts);
+    canvas.width = st.w;
+    canvas.height = st.h;
+    const g = canvas.getContext('2d') as CanvasRenderingContext2D;
     const actx = new ACtx();
-    const buf = actx.createBuffer(joined.channels.length, joined.channels[0].length, joined.rate);
-    joined.channels.forEach((d, c) => buf.getChannelData(c).set(d));
+    const buf = actx.createBuffer(mix.channels.length, mix.channels[0].length, mix.rate);
+    mix.channels.forEach((d, c) => buf.getChannelData(c).set(d));
     const src = actx.createBufferSource();
     src.buffer = buf;
     const dest = actx.createMediaStreamDestination();
@@ -3314,7 +3909,8 @@ export function setup(ctx: Ctx, overrides?: any) {
     }
     rec.ondataavailable = (e: any) => e.data && e.data.size && chunks.push(e.data);
     const total = buf.duration;
-    const length = VIDEO_INTRO + total + VIDEO_OUTRO;
+    const intro = titleSecs(title);
+    const length = intro + total + Math.min(5, Math.max(0, Number(S.videoFadeOut)));
     let ended = false;
     let raf = 0;
     const t0 = actx.currentTime + 0.1;
@@ -3347,12 +3943,14 @@ export function setup(ctx: Ctx, overrides?: any) {
         if (!keep) {
           keepSaid('The video was stopped. Nothing was saved.');
           paintStage();
+          paintStudio();
           return;
         }
         const blob = new Blob(chunks, { type: type.split(';')[0] });
         const ok = saveFile(blob, showName(sh) + (/mp4/.test(type) ? '.mp4' : '.webm'));
         keepSaid(ok ? 'The video is saved.' : 'The browser would not save the video. Some private windows block downloads.');
         paintStage();
+        paintStudio();
       };
       try { rec.stop(); } catch (_) {}
     };
@@ -3360,19 +3958,20 @@ export function setup(ctx: Ctx, overrides?: any) {
     const tick = () => {
       if (ended) return;
       const t = Math.max(0, actx.currentTime - t0);
-      videoFrame(g, Math.min(t, length), parts, total, stage, title);
+      videoFrame(g, Math.min(t, length), parts, total, st, title);
       keepSaid('Making the video: ' + mmss(Math.min(t, length)) + ' of ' + mmss(length) + '. It pauses while you are on another tab or app.');
       if (t >= length + 0.2) return finish(true);
       raf = document.visibilityState === 'hidden' ? 0 : requestAnimationFrame(tick);
     };
-    videoFrame(g, 0, parts, total, stage, title);
+    videoFrame(g, 0, parts, total, st, title);
     try {
       await actx.resume();
     } catch (_) {}
     rec.start(1000);
-    src.start(t0 + VIDEO_INTRO);
+    src.start(t0 + intro);
     tick();
     paintStage();
+    paintStudio();
   }
   disposers.push(() => {
     if (videoRun) videoRun.cancel();
@@ -4287,7 +4886,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       say('Joining the saved audio');
       const j = await joinedSaved(e.key);
       if (!j.wav) return say(j.why || '');
-      const ok = saveFile(j.wav, 'auto-foley ' + fileName(e.author || 'script') + (e.keptAt ? ' ' + new Date(e.keptAt).toISOString().slice(0, 10) : '') + '.wav');
+      const ok = saveFile(j.wav, savedName(e.author, e.keptAt));
       say(!ok ? 'The browser would not save the file. Some private windows block downloads.' : j.missing ? j.missing + (j.missing === 1 ? ' line has' : ' lines have') + ' no saved audio, so the file does not have ' + (j.missing === 1 ? 'it.' : 'them.') : '');
     });
     // Delete asks once more on the same button before it deletes.
@@ -5362,7 +5961,7 @@ export function setup(ctx: Ctx, overrides?: any) {
   // on a phone often has no way to type a code. The swatch opens the editor
   // under the row: a box for a code such as #ff0040, and sliders for hue,
   // saturation and lightness. Use the theme's color clears it.
-  function colorRow(key: string, label: string, help: string, themeVar: string, fallback: string, backLabel = 'Use the theme\u2019s color'): HTMLElement {
+  function colorRow(key: string, label: string, help: string, themeVar: string, fallback: string, backLabel = 'Use the theme\u2019s color', onChange?: () => void): HTMLElement {
     const wrap = el('<div class="af-col"></div>');
     wrap.setAttribute('data-af-row', key);
     const swatch = el('<button type="button" class="af-colorswatch" aria-expanded="false" title="Change the color"></button>') as HTMLButtonElement;
@@ -5372,6 +5971,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       bad.textContent = '';
       paint();
       paintColors();
+      if (onChange) onChange();
     });
     back.setAttribute('data-af-colorback', key);
     const tools = el('<div class="af-row"></div>');
@@ -5451,6 +6051,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       paint(fromSliders);
       paintColors();
       if (save) set({});
+      if (onChange) onChange();
     }
     // While typing, only a whole six-digit code is shown. Partway through
     // one, three digits are a short code for another color.
@@ -5765,6 +6366,8 @@ export function setup(ctx: Ctx, overrides?: any) {
     if (!held) page.style.minHeight = page.offsetHeight + 'px';
     page.innerHTML = '';
     stageRefs = null;
+    studioRefs = null;
+    stopPreview();
     for (const w of permissionWarnings()) page.appendChild(notice('bad', w));
     for (const n of changeNotices()) page.appendChild(n);
     try {
@@ -5772,6 +6375,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       else if (tab === 'cast') renderCast();
       else if (tab === 'director') renderDirector();
       else if (tab === 'sounds') renderSounds();
+      else if (tab === 'studio') renderStudio();
       else renderSettings();
     } catch (e: any) {
       page.appendChild(notice('bad', 'This tab could not be drawn: ' + String((e && e.message) || e)));
@@ -6969,135 +7573,6 @@ export function setup(ctx: Ctx, overrides?: any) {
     extras.clear();
   });
 
-  // Videos and downloads: what a video shows, the picture behind it, and a
-  // preview of one frame drawn with these choices.
-  function videoCard(): HTMLElement {
-    const c = card('Videos and downloads', 'What a video made with Make a video shows. Turn off names and pictures to share a video without them.');
-    const preview = document.createElement('canvas');
-    preview.width = VIDEO_W;
-    preview.height = VIDEO_H;
-    preview.className = 'af-videopreview';
-    preview.setAttribute('role', 'img');
-    preview.setAttribute('aria-label', 'A preview of one frame of a video');
-    preview.setAttribute('data-af-videopreview', '');
-    let drawing = 0;
-    const paintPreview = async () => {
-      const ask = ++drawing;
-      // A made-up line, said by someone in the cast with a picture where
-      // there is one, so the picture and name switches can be seen working.
-      const cast: Member[] = (S.cast || []).filter((m: Member) => m.kind !== 'narrator');
-      const who = cast.find((m) => !!m.picture) || cast[0] || null;
-      const words = 'We leave before the bells ring, so pack only what you can carry.'.split(' ');
-      const part: VideoPart = {
-        kind: 'line',
-        narration: false,
-        words,
-        times: words.map((_, k) => k * 0.3),
-        start: 0,
-        len: words.length * 0.3,
-        who: who && /^(character|persona|npc)$/.test(who.kind) ? who.kind : 'character',
-        name: who ? shownName(who) : 'Odile Venn',
-        picture: who && who.picture ? String(who.picture) : '',
-        caption: '',
-      };
-      const stage = await videoStage([part]);
-      if (ask !== drawing) return;
-      const g = preview.getContext('2d');
-      if (g) videoFrame(g, VIDEO_INTRO + 1.5, [part], part.len, stage, '');
-    };
-    c.appendChild(preview);
-    c.appendChild(
-      toggle('Show names', 'On by default. Off: no names in the video, in its title, or in the name of any file saved.', 'videoNames', () => paintPreview()),
-    );
-    c.appendChild(
-      toggle('Show pictures', 'On by default. Each speaker’s picture from the Cast tab is shown above their line.', 'videoPics', () => paintPreview()),
-    );
-    // The picture behind the video, with how dark it is made under it.
-    const bgBox = el('<div class="af-col" data-af-row="videoBg"></div>');
-    const said = el('<p class="af-status"></p>');
-    const btnRow = el('<div class="af-row"></div>');
-    const dimBox = el('<div class="af-sub"><div class="af-under"></div></div>');
-    const dim = slider('Dim the picture', Number(S.videoDim) || 0, 0, 80, 5, (v) => v + '%', (v) => {
-      set({ videoDim: v });
-      paintPreview();
-    }, '40% by default. Darker makes the words easier to read on a bright picture.');
-    (dimBox.firstElementChild as HTMLElement).appendChild(dim);
-    const keep = async (picture: string) => {
-      said.textContent = picture ? 'Saving the picture' : '';
-      said.dataset.kind = '';
-      let r: any = null;
-      try {
-        r = await rpc({ type: 'video_bg_put', picture }, 60000);
-      } catch (_) {}
-      if (!r || r.ok === false) {
-        said.textContent = (r && r.error) || 'The picture could not be saved: the backend did not answer.';
-        said.dataset.kind = 'bad';
-        return;
-      }
-      videoBg = r.picture || '';
-      videoBgAsked = Promise.resolve();
-      said.textContent = '';
-      paintBg();
-      paintPreview();
-    };
-    const choose = button('Choose a background picture', async () => {
-      let files: any[] = [];
-      try {
-        files = await ctx.uploads.pickFile({ accept: ['image/*', '.png', '.jpg', '.jpeg', '.webp'], multiple: false, maxSizeBytes: 20 * 1024 * 1024 });
-      } catch (e: any) {
-        said.textContent = 'The file picker could not open: ' + String((e && e.message) || e).slice(0, 200);
-        said.dataset.kind = 'bad';
-        return;
-      }
-      const f = files && files[0];
-      if (!f) return;
-      const url = URL.createObjectURL(new Blob([f.bytes as any], { type: f.mimeType || 'image/png' }));
-      const im = await loadImage(url);
-      URL.revokeObjectURL(url);
-      if (!im || !im.width) {
-        said.textContent = 'That file is not a picture Auto Foley can read. Use PNG, JPEG or WebP.';
-        said.dataset.kind = 'bad';
-        return;
-      }
-      // Cut to the video's shape from the middle, at the video's size, so
-      // it is kept at full quality and never larger than it needs to be.
-      const cv = document.createElement('canvas');
-      cv.width = VIDEO_W;
-      cv.height = VIDEO_H;
-      const g = cv.getContext('2d');
-      if (!g) return;
-      const sc = Math.max(VIDEO_W / im.width, VIDEO_H / im.height);
-      g.drawImage(im, (VIDEO_W - im.width * sc) / 2, (VIDEO_H - im.height * sc) / 2, im.width * sc, im.height * sc);
-      let data = cv.toDataURL('image/jpeg', 0.92);
-      if (data.length > 2900000) data = cv.toDataURL('image/jpeg', 0.8);
-      await keep(data);
-    });
-    choose.setAttribute('data-af-videobg', 'choose');
-    const drop = button('Take it out', () => keep(''));
-    drop.setAttribute('data-af-videobg', 'drop');
-    btnRow.appendChild(choose);
-    btnRow.appendChild(drop);
-    bgBox.appendChild(labelRow('Background picture', 'None by default, which is a dark background. The picture is cut to the video’s shape from the middle.'));
-    bgBox.appendChild(btnRow);
-    bgBox.appendChild(dimBox);
-    bgBox.appendChild(said);
-    const paintBg = () => {
-      drop.disabled = !videoBg;
-      reveal(dimBox, !!videoBg);
-    };
-    dimBox.hidden = true;
-    c.appendChild(bgBox);
-    c.appendChild(hint('Downloaded audio is a 48 kHz WAV file. For the best sound, pick a higher quality output format on your TTS connection in Lumiverse.'));
-    loadVideoBg().then(() => {
-      if (!c.isConnected) return;
-      paintBg();
-      paintPreview();
-    });
-    paintBg();
-    paintPreview();
-    return c;
-  }
-
   function lookCard(): HTMLElement {
     const c = card('Look', 'How the panel looks. Your theme colors everything.');
     // A color for each kind of part, behind a fold, since most people keep
@@ -7209,16 +7684,15 @@ export function setup(ctx: Ctx, overrides?: any) {
     );
     now.appendChild(againRow);
     now.appendChild(retryRow);
-    // Keeping what was heard: the whole performance as one file, the part
-    // playing as it came from the voice service, and a video of the script
-    // page.
+    // Keeping what was heard: the whole performance as one file, and the
+    // part playing. The Studio tab has every choice, and makes videos.
     const keepRow = el('<div class="af-row" data-af="keeprow"></div>');
     const dlAll = button('Download audio', () => downloadPerformance(), '', ICON_DOWNLOAD);
     dlAll.setAttribute('data-af', 'dlall');
     const dlPart = button('Download this part', () => downloadPart(), '', ICON_DOWNLOAD);
     dlPart.setAttribute('data-af', 'dlpart');
-    const video = button('Make a video', () => (videoRun ? videoRun.cancel() : makeVideo()), '', ICON_VIDEO);
-    video.setAttribute('data-af', 'video');
+    const video = button('Video and more', () => goTo('studio'), '', ICON_VIDEO);
+    video.setAttribute('data-af', 'studio');
     keepRow.appendChild(dlAll);
     keepRow.appendChild(dlPart);
     keepRow.appendChild(video);
@@ -7488,6 +7962,7 @@ export function setup(ctx: Ctx, overrides?: any) {
   function paintStage() {
     // The floating player follows the show too, with the panel closed.
     paintFloat();
+    paintStudio();
     if (stageRefs && tab === 'stage') paintAir(page);
     if (!stageRefs || tab !== 'stage') return;
     const q = stageRefs.q;
@@ -7495,11 +7970,6 @@ export function setup(ctx: Ctx, overrides?: any) {
       const kept = !!keptShow();
       (q('dlall') as HTMLButtonElement).disabled = !kept || !!videoRun;
       (q('dlpart') as HTMLButtonElement).disabled = !show;
-      const vb = q('video') as HTMLButtonElement;
-      vb.disabled = !kept && !videoRun;
-      const vWords = videoRun ? 'Stop the video' : 'Make a video';
-      const vText = vb.querySelector('span:last-child') || vb;
-      if (vText.textContent !== vWords) vText.textContent = vWords;
       setText(q('keepsaid'), keepLine);
     }
     const playBtn = q('play') as HTMLButtonElement;
@@ -9678,6 +10148,575 @@ export function setup(ctx: Ctx, overrides?: any) {
     return r;
   }
 
+  // ---------- Studio ----------
+  // Keeping a performance: which parts go in, the audio, a video with every
+  // choice of how it looks, and words to hide. A preview draws the video
+  // with the choices made, and can be played.
+  let studioRefs: { canvas: HTMLCanvasElement; scrub: HTMLInputElement; scrubOut: HTMLElement; play: HTMLButtonElement; make: HTMLButtonElement; dlall: HTMLButtonElement; dlpart: HTMLButtonElement; said: HTMLElement; scrubRow: HTMLElement } | null = null;
+  // What the preview draws: the last performance, or a made-up line when
+  // there is none.
+  let studioView: { sh: Show | null; mix: Mix | null; parts: VideoPart[]; st: VideoStage | null; title: string; total: number; length: number; at: number } = { sh: null, mix: null, parts: [], st: null, title: '', total: 0, length: 0, at: 0 };
+  let studioAsk = 0;
+  let previewRun: { stop: () => void } | null = null;
+
+  function stopPreview() {
+    const r = previewRun;
+    previewRun = null;
+    if (r) r.stop();
+  }
+  disposers.push(() => stopPreview());
+
+  // A made-up line, said by someone in the cast with a picture where there is
+  // one, so the picture and name choices can be seen before anything plays.
+  function samplePart(): VideoPart {
+    const cast: Member[] = (S.cast || []).filter((m: Member) => m.kind !== 'narrator');
+    const who = cast.find((m) => !!m.picture) || cast[0] || null;
+    const words = 'We leave before the bells ring, so pack only what you can carry.'.split(' ');
+    return {
+      kind: 'line',
+      narration: false,
+      words,
+      times: words.map((_, k) => k * 0.3),
+      hidden: hiddenWords(words, hiddenList()),
+      start: 0,
+      len: words.length * 0.3,
+      who: who && /^(character|persona|npc)$/.test(who.kind) ? who.kind : 'character',
+      name: who ? shownName(who) : 'Odile Venn',
+      picture: who && who.picture ? String(who.picture) : '',
+      caption: '',
+    };
+  }
+
+  // Builds what the preview draws. `sound` is true when a choice changed the
+  // audio, such as a part left out, so the mix is made again too.
+  async function studioBuild(sound: boolean) {
+    const ask = ++studioAsk;
+    stopPreview();
+    const sh = keptShow();
+    let mix = studioView.sh === sh && !sound ? studioView.mix : null;
+    if (sh && !mix) {
+      try {
+        mix = await mixOf(sh);
+      } catch (_) {
+        mix = null;
+      }
+    }
+    if (ask !== studioAsk) return;
+    const parts = sh && mix ? videoParts(sh, mix) : [samplePart()];
+    const title = sh && mix ? videoTitle() : '';
+    const total = sh && mix ? mix.channels[0].length / mix.rate : parts[0].len;
+    const st = await videoStage(parts);
+    if (ask !== studioAsk) return;
+    const intro = sh && mix ? titleSecs(title) : 0;
+    const length = intro + total + (sh && mix ? Math.min(5, Math.max(0, Number(S.videoFadeOut))) : 0);
+    const at = sh && mix ? Math.min(studioView.at || intro + 0.8, length) : 1.5;
+    studioView = { sh: sh && mix ? sh : null, mix, parts, st, title, total, length, at };
+    paintPreview();
+    paintStudio();
+  }
+
+  function paintPreview() {
+    const r = studioRefs;
+    const v = studioView;
+    if (!r || !v.st) return;
+    if (r.canvas.width !== v.st.w || r.canvas.height !== v.st.h) {
+      r.canvas.width = v.st.w;
+      r.canvas.height = v.st.h;
+      r.canvas.style.aspectRatio = v.st.w + ' / ' + v.st.h;
+    }
+    const g = r.canvas.getContext('2d');
+    if (g) videoFrame(g, v.at, v.parts, v.total, v.st, v.title);
+  }
+
+  // The buttons and lines of the Studio tab, kept in step with what there is.
+  // The performance the Studio was last built for, so a new one played
+  // while the tab is open is picked up once, not on every paint.
+  let studioFor: Show | null | undefined;
+  function paintStudio() {
+    const r = studioRefs;
+    if (!r || tab !== 'studio') return;
+    const now = keptShow();
+    if (now !== studioFor && !videoRun) {
+      studioFor = now;
+      // Drawn again, since its list of parts belongs to that performance.
+      renderTab();
+      return;
+    }
+    const kept = !!now;
+    const v = studioView;
+    r.dlall.disabled = !kept || !!videoRun;
+    r.dlpart.disabled = !show;
+    r.make.disabled = (!kept && !videoRun) || !!previewRun;
+    const mWords = videoRun ? 'Stop the video' : 'Make a video';
+    const mText = r.make.querySelector('span:last-child') || r.make;
+    if (mText.textContent !== mWords) mText.textContent = mWords;
+    r.play.disabled = !v.sh || !!videoRun;
+    const pWords = previewRun ? 'Stop the preview' : 'Play the preview';
+    const pText = r.play.querySelector('span:last-child') || r.play;
+    if (pText.textContent !== pWords) pText.textContent = pWords;
+    r.scrubRow.hidden = !v.sh;
+    if (v.sh) {
+      r.scrub.max = String(Math.max(0.1, v.length));
+      if (document.activeElement !== r.scrub) r.scrub.value = String(v.at);
+      r.scrub.style.setProperty('--af-fill-to', (v.length ? (v.at / v.length) * 100 : 0) + '%');
+      setText(r.scrubOut, mmss(v.at) + ' of ' + mmss(v.length));
+    }
+    setText(r.said, keepLine);
+  }
+
+  // Plays the preview from where the bar is, with its sound.
+  function playPreview() {
+    const v = studioView;
+    if (!v.sh || !v.mix || !v.st) return;
+    const w: any = window as any;
+    const ACtx = w.AudioContext || w.webkitAudioContext;
+    if (!ACtx) return keepSaid('This browser cannot play the preview.');
+    const actx = new ACtx();
+    const buf = actx.createBuffer(v.mix.channels.length, v.mix.channels[0].length, v.mix.rate);
+    v.mix.channels.forEach((d, c) => buf.getChannelData(c).set(d));
+    const src = actx.createBufferSource();
+    src.buffer = buf;
+    src.connect(actx.destination);
+    const intro = titleSecs(v.title);
+    const from = v.at >= v.length - 0.05 ? 0 : v.at;
+    const t0 = actx.currentTime + 0.05 - from;
+    const audioFrom = Math.max(0, from - intro);
+    src.start(Math.max(actx.currentTime + 0.05, t0 + intro), audioFrom);
+    let raf = 0;
+    let done = false;
+    const end = () => {
+      if (done) return;
+      done = true;
+      if (raf) cancelAnimationFrame(raf);
+      try { src.stop(); } catch (_) {}
+      try { actx.close(); } catch (_) {}
+      if (previewRun === run) previewRun = null;
+      paintStudio();
+    };
+    const run = { stop: end };
+    previewRun = run;
+    const tick = () => {
+      if (done) return;
+      const t = actx.currentTime - t0;
+      studioView.at = Math.min(t, v.length);
+      paintPreview();
+      paintStudio();
+      if (t >= v.length) return end();
+      raf = requestAnimationFrame(tick);
+    };
+    try {
+      actx.resume();
+    } catch (_) {}
+    tick();
+    paintStudio();
+  }
+
+  function renderStudio() {
+    const sh = keptShow();
+    studioFor = sh;
+    // ---- the performance ----
+    const pc = card('The performance', sh ? 'The last message played. Choose what goes into the audio and the video.' : 'Play a message first. Its audio and a video of it can then be kept here.');
+    pc.setAttribute('data-af-card', 'studio-show');
+    if (sh) {
+      pc.appendChild(
+        fold('Which parts go in', (body) => {
+          const out = partsLeftOut(sh);
+          const boxes: HTMLInputElement[] = [];
+          const bar = bulkBar(
+            () => sh.played.length - out.size,
+            sh.played.length,
+            (on) => {
+              const moving = boxes.filter((b) => b.checked !== on);
+              if (on) out.clear();
+              else sh.played.forEach((_, pi) => out.add(pi));
+              studioBuild(true);
+              return moving;
+            },
+          );
+          body.appendChild(bar.el);
+          sh.played.forEach((p, pi) => {
+            const it = sh.items[p.k];
+            const what = !it ? 'A part' : it.kind === 'voice' ? speakerName(it.line) + ': ' + String(it.line.text || '').replace(/\[[^\]]*\]/g, '').trim() : it.kind === 'applause' ? 'The audience' : 'Sound: ' + String(it.sound || '');
+            const box = el('<input type="checkbox" class="af-box" role="switch">') as HTMLInputElement;
+            box.checked = !out.has(pi);
+            box.setAttribute('aria-label', 'Part ' + (pi + 1));
+            box.addEventListener('change', () => {
+              if (box.checked) out.delete(pi);
+              else out.add(pi);
+              bar.paint();
+              studioBuild(true);
+            });
+            boxes.push(box);
+            const row = labelRow((pi + 1) + '. ' + (what.length > 70 ? what.slice(0, 68).trimEnd() + '…' : what), '', undefined, box);
+            row.setAttribute('data-af-studiopart', String(pi));
+            body.appendChild(row);
+          });
+          body.appendChild(hint('This is for this performance only. Playing another message starts with every part in.'));
+        }),
+      );
+    }
+    pc.appendChild(toggle('Sound effects', 'On by default. Off: only the voices are kept.', 'studioSounds', () => studioBuild(true)));
+    pc.appendChild(
+      numberRow('Pause between parts, in seconds', Number(S.studioGap) || 0, 0, 3, 0.1, (v) => {
+        set({ studioGap: v });
+        studioBuild(true);
+      }, '0 by default. A short pause, such as 0.3, gives the lines room, as in an audiobook.'),
+    );
+    pc.appendChild(toggle('As you heard it', 'On by default. Uses your Voices and Sounds volumes and Even voice levels. Off: each part as the voice service sent it.', 'studioAsHeard', () => studioBuild(true)));
+    pc.appendChild(toggle('Even out the loudness', 'On by default. The loudest moment is set just under the most a file can hold, so the file is neither too quiet nor clipped.', 'studioLoud', () => studioBuild(true)));
+    page.appendChild(pc);
+
+    // ---- audio ----
+    const ac = card('Audio', 'A WAV file keeps the sound exactly as it was. Any audio program can save it as MP3.');
+    ac.setAttribute('data-af-card', 'studio-audio');
+    ac.appendChild(
+      segmented('Save as', [
+        { id: 'one', label: 'One file' },
+        { id: 'parts', label: 'A file for each part' },
+      ], S.audioSplit === 'parts' ? 'parts' : 'one', (v) => set({ audioSplit: v }), 'One file by default. A file for each part comes in a ZIP, numbered in order, for editing in another program.'),
+    );
+    const aRow = el('<div class="af-row"></div>');
+    const dlall = button('Download audio', () => downloadPerformance(), '', ICON_DOWNLOAD);
+    dlall.setAttribute('data-af-studio', 'dlall');
+    const dlpart = button('Download this part', () => downloadPart(), '', ICON_DOWNLOAD);
+    dlpart.setAttribute('data-af-studio', 'dlpart');
+    aRow.appendChild(dlall);
+    aRow.appendChild(dlpart);
+    ac.appendChild(aRow);
+    page.appendChild(ac);
+
+    // ---- video ----
+    const vc = card('Video', 'The preview shows one frame with your choices. Drag the bar to look at any moment, or play it.');
+    vc.setAttribute('data-af-card', 'studio-video');
+    const canvas = document.createElement('canvas');
+    canvas.className = 'af-videopreview';
+    canvas.setAttribute('role', 'img');
+    canvas.setAttribute('aria-label', 'A preview of the video');
+    canvas.setAttribute('data-af-videopreview', '');
+    vc.appendChild(canvas);
+    // Where in the video the preview is. Its length changes with the
+    // choices made, so it is built here rather than with slider().
+    const scrubRow = el('<div class="af-col" data-af-scrub data-af-byeye></div>');
+    const scrubId = rid('rg');
+    const scrubOut = document.createElement('output');
+    const scrubHead = labelRow('Where', '', scrubId, scrubOut);
+    scrubHead.classList.add('af-slider-head');
+    scrubRow.appendChild(scrubHead);
+    const scrub = el('<input type="range" id="' + scrubId + '" min="0" max="1" step="0.05" value="0">') as HTMLInputElement;
+    scrub.addEventListener('input', () => {
+      stopPreview();
+      studioView.at = Number(scrub.value);
+      paintPreview();
+      paintStudio();
+    });
+    scrubRow.appendChild(scrub);
+    vc.appendChild(scrubRow);
+    const vRow = el('<div class="af-row"></div>');
+    const play = button('Play the preview', () => (previewRun ? stopPreview() : playPreview()), '', ICON_PLAY);
+    play.setAttribute('data-af-studio', 'play');
+    const make = button('Make a video', () => (videoRun ? videoRun.cancel() : makeVideo()), 'af-primary', ICON_VIDEO);
+    make.setAttribute('data-af-studio', 'video');
+    vRow.appendChild(play);
+    vRow.appendChild(make);
+    vc.appendChild(vRow);
+    const said = el('<p class="af-note" data-af-studio="said" role="status"></p>');
+    vc.appendChild(said);
+    const look = () => studioBuild(false);
+
+    vc.appendChild(
+      fold('Shape and words', (b) => {
+        b.appendChild(select('Shape', VIDEO_SHAPES.map((x) => ({ id: x.id, label: x.label })), S.videoShape || 'wide', (v) => {
+          set({ videoShape: v });
+          look();
+        }, 'Wide by default, 1920 by 1080. Tall is 1080 by 1920, for phone videos such as Reels and Shorts.'));
+        b.appendChild(select('Font', VIDEO_FONTS.map((x) => ({ id: x.id, label: x.label })), S.videoFont || 'book', (v) => {
+          set({ videoFont: v });
+          look();
+        }, 'Book by default. A font your device does not have is drawn in one that is close.'));
+        b.appendChild(numberRow('Size, in percent', Number(S.videoSize) || 100, 60, 160, 5, (v) => {
+          set({ videoSize: v });
+          look();
+        }, '100 by default.'));
+        b.appendChild(colorRow('videoInk', 'Color of the words', 'A warm white by default.', '--af-none', STORY_INK, 'Use the built-in color', look));
+        b.appendChild(select('How the words show', [
+          { id: 'light', label: 'Light up as they are said' },
+          { id: 'appear', label: 'Appear as they are said' },
+          { id: 'all', label: 'All at once' },
+        ], S.videoWords || 'light', (v) => {
+          set({ videoWords: v });
+          look();
+        }, 'Light up by default: words not said yet are dimmer.'));
+        b.appendChild(segmented('Where the words sit', [
+          { id: 'middle', label: 'Middle' },
+          { id: 'lower', label: 'Lower third' },
+        ], S.videoPlace === 'lower' ? 'lower' : 'middle', (v) => {
+          set({ videoPlace: v });
+          look();
+        }, 'Middle by default. Lower third leaves the picture behind them clear.'));
+        b.appendChild(toggle('Quotation marks around speech', 'On by default, as in a book. Narration never has them.', 'videoQuotes', look));
+      }),
+    );
+    vc.appendChild(
+      fold('Speakers', (b) => {
+        b.appendChild(toggle('Show names', 'On by default. Off: no names in the video, in its title, or in the name of any file saved, audio included.', 'videoNames', look));
+        b.appendChild(
+          toggle('Show pictures', 'On by default. Each speaker’s picture from the Cast tab is shown above their line. Narration has none.', 'videoPics', look, () => [
+            segmented('Shape of the pictures', [
+              { id: 'circle', label: 'Circle' },
+              { id: 'rounded', label: 'Rounded square' },
+            ], S.videoPicShape === 'rounded' ? 'rounded' : 'circle', (v) => {
+              set({ videoPicShape: v });
+              look();
+            }),
+            numberRow('Size of the pictures', Number(S.videoPicSize) || 150, 60, 300, 10, (v) => {
+              set({ videoPicSize: v });
+              look();
+            }, '150 by default, in pixels of a 1080-pixel frame.'),
+          ]),
+        );
+        b.appendChild(segmented('Color of the names', [
+          { id: 'kind', label: 'Each kind’s color' },
+          { id: 'words', label: 'The words’ color' },
+        ], S.videoNameColor === 'words' ? 'words' : 'kind', (v) => {
+          set({ videoNameColor: v });
+          look();
+        }, 'Each kind’s color by default, the colors set under Colors for each kind of part.'));
+      }),
+    );
+    vc.appendChild(
+      fold('Background', (b) => {
+        const colorBox = el('<div class="af-sub"><div class="af-under"></div></div>');
+        (colorBox.firstElementChild as HTMLElement).appendChild(colorRow('videoBackColor', 'Background color', 'A very dark gray by default.', '--af-none', '#141218', 'Use the built-in color', look));
+        const picBox = el('<div class="af-sub"><div class="af-under"></div></div>');
+        const picIn = picBox.firstElementChild as HTMLElement;
+        const status = el('<p class="af-status"></p>');
+        const picRow = el('<div class="af-row"></div>');
+        const keep = async (picture: string) => {
+          status.textContent = picture ? 'Saving the picture' : '';
+          status.dataset.kind = '';
+          let r: any = null;
+          try {
+            r = await rpc({ type: 'video_bg_put', picture }, 60000);
+          } catch (_) {}
+          if (!r || r.ok === false) {
+            status.textContent = (r && r.error) || 'The picture could not be saved: the backend did not answer.';
+            status.dataset.kind = 'bad';
+            return;
+          }
+          videoBg = r.picture || '';
+          videoBgAsked = Promise.resolve();
+          status.textContent = videoBg ? '' : 'No picture is chosen, so the background is dark.';
+          drop.disabled = !videoBg;
+          look();
+        };
+        const choose = button('Choose a picture', async () => {
+          let files: any[] = [];
+          try {
+            files = await ctx.uploads.pickFile({ accept: ['image/*', '.png', '.jpg', '.jpeg', '.webp'], multiple: false, maxSizeBytes: 20 * 1024 * 1024 });
+          } catch (e: any) {
+            status.textContent = 'The file picker could not open: ' + String((e && e.message) || e).slice(0, 200);
+            status.dataset.kind = 'bad';
+            return;
+          }
+          const f = files && files[0];
+          if (!f) return;
+          const url = URL.createObjectURL(new Blob([f.bytes as any], { type: f.mimeType || 'image/png' }));
+          const im = await loadImage(url);
+          URL.revokeObjectURL(url);
+          if (!im || !im.width) {
+            status.textContent = 'That file is not a picture Auto Foley can read. Use PNG, JPEG or WebP.';
+            status.dataset.kind = 'bad';
+            return;
+          }
+          // Kept at most 1920 pixels on its long side, so it is sharp in any
+          // shape of video and never larger than it needs to be.
+          const s = Math.min(1, 1920 / Math.max(im.width, im.height));
+          const cv = canvasOf(Math.round(im.width * s), Math.round(im.height * s));
+          const g = cv.getContext('2d');
+          if (!g) return;
+          g.imageSmoothingQuality = 'high';
+          g.drawImage(im, 0, 0, cv.width, cv.height);
+          let data = cv.toDataURL('image/jpeg', 0.92);
+          if (data.length > 2900000) data = cv.toDataURL('image/jpeg', 0.8);
+          await keep(data);
+        });
+        choose.setAttribute('data-af-videobg', 'choose');
+        const drop = button('Take it out', () => keep(''));
+        drop.setAttribute('data-af-videobg', 'drop');
+        drop.disabled = true;
+        picRow.appendChild(choose);
+        picRow.appendChild(drop);
+        picIn.appendChild(picRow);
+        picIn.appendChild(status);
+        // Sliders, since how dark and how soft a picture looks is set by
+        // eye, watching the preview.
+        const dim = slider('Dim the picture', Number(S.videoDim) || 0, 0, 80, 5, (v) => v + '%', (v) => {
+          set({ videoDim: v });
+          look();
+        }, '40% by default. Darker makes the words easier to read on a bright picture.');
+        dim.setAttribute('data-af-byeye', '');
+        picIn.appendChild(dim);
+        const blur = slider('Blur the picture', Number(S.videoBlur) || 0, 0, 20, 1, (v) => (v ? v + ' px' : 'Off'), (v) => {
+          set({ videoBlur: v });
+          look();
+        }, 'Off by default. A little blur keeps a busy picture behind the words.');
+        blur.setAttribute('data-af-byeye', '');
+        picIn.appendChild(blur);
+        const sel = select('Background', [
+          { id: 'dark', label: 'Dark' },
+          { id: 'color', label: 'A color of your own' },
+          { id: 'picture', label: 'A picture of your own' },
+        ], S.videoBack || 'dark', (v) => {
+          set({ videoBack: v });
+          showUnder(colorBox, v === 'color');
+          showUnder(picBox, v === 'picture');
+          look();
+        }, 'Dark by default, lit a little in your theme’s accent.');
+        sel.setAttribute('data-af-row', 'videoBack');
+        b.appendChild(sel);
+        colorBox.hidden = S.videoBack !== 'color';
+        picBox.hidden = S.videoBack !== 'picture';
+        picBox.setAttribute('data-af-row', 'videoBg');
+        b.appendChild(colorBox);
+        b.appendChild(picBox);
+        loadVideoBg().then(() => {
+          drop.disabled = !videoBg;
+        });
+      }),
+    );
+    vc.appendChild(
+      fold('Moving between lines', (b) => {
+        const move = select('Transition', VIDEO_MOVES, S.videoMove || 'rise', (v) => {
+          set({ videoMove: v });
+          look();
+        }, 'Fade and rise by default. None of them flashes.');
+        move.setAttribute('data-af-row', 'videoMove');
+        b.appendChild(move);
+        b.appendChild(numberRow('How long it takes, in seconds', Number(S.videoMoveSecs) || 0.4, 0.1, 2, 0.1, (v) => {
+          set({ videoMoveSecs: v });
+          look();
+        }, '0.4 by default.'));
+      }),
+    );
+    vc.appendChild(
+      fold('Title and ending', (b) => {
+        const box = el('<input type="text" class="af-field" maxlength="120" spellcheck="true" autocomplete="off">') as HTMLInputElement;
+        box.id = rid('vt');
+        box.value = String(S.videoTitleText || '');
+        box.placeholder = String(chatInfo.name || 'The chat’s name');
+        box.setAttribute('data-af-videotitle', '');
+        box.addEventListener('change', () => {
+          set({ videoTitleText: box.value.trim() });
+          look();
+        });
+        const titleRow = el('<div class="af-col"></div>');
+        titleRow.appendChild(labelRow('Title', 'Empty uses the chat’s name, while Show names is on.', box.id));
+        titleRow.appendChild(box);
+        b.appendChild(toggle('Title at the start', 'On by default. The title shows for two seconds before the first line.', 'videoTitleOn', look, () => [titleRow]));
+        b.appendChild(numberRow('Fade to black at the end, in seconds', Number(S.videoFadeOut), 0, 5, 0.5, (v) => {
+          set({ videoFadeOut: v });
+          look();
+        }, '1.5 by default. 0 ends at once.'));
+      }),
+    );
+    vc.appendChild(
+      fold('Sounds', (b) => {
+        b.appendChild(toggle('Show sounds as captions', 'On by default. A sound shows as a caption in square brackets, such as [thunder]. Off: the background only.', 'videoCaptions', look));
+      }),
+    );
+    const lookRow = el('<div class="af-row"></div>');
+    const lookBack = button('Put the look back', () => {
+      const keys = Object.keys(DEFAULTS).filter((k) => /^video/.test(k) && k !== 'videoNames' && k !== 'videoPics');
+      if (keys.every((k) => JSON.stringify(S[k]) === JSON.stringify(DEFAULTS[k]))) {
+        keepSaid('The look is already the built-in one. Nothing changed.');
+        paintStudio();
+        return;
+      }
+      const patch: any = {};
+      for (const k of keys) patch[k] = JSON.parse(JSON.stringify(DEFAULTS[k]));
+      set(patch);
+      keepSaid('');
+      renderTab();
+      studioBuild(false);
+    });
+    lookBack.setAttribute('data-af-studio', 'lookback');
+    lookRow.appendChild(lookBack);
+    vc.appendChild(lookRow);
+    vc.appendChild(hint('Put the look back puts back the shape, words, background, transition and ending. Show names and Show pictures stay as they are.'));
+    page.appendChild(vc);
+
+    // ---- censor ----
+    const cc = card('Hide and bleep words', 'Covers words on screen and bleeps them in the audio, such as a name you do not want to share.');
+    cc.setAttribute('data-af-card', 'studio-censor');
+    const words = el('<textarea class="af-field" rows="4" spellcheck="false" placeholder="One word or name on each line"></textarea>') as HTMLTextAreaElement;
+    words.id = rid('cw');
+    words.value = String(S.censorWords || '');
+    words.setAttribute('data-af-censorwords', '');
+    words.addEventListener('change', () => {
+      set({ censorWords: words.value });
+      studioBuild(true);
+    });
+    const wordsRow = el('<div class="af-col"></div>');
+    wordsRow.appendChild(labelRow('Words to hide', 'One on each line. A word is hidden wherever it is said, with or without ’s.', words.id));
+    wordsRow.appendChild(words);
+    const addNames = button('Add the cast’s names', () => {
+      const have = new Set(words.value.split(/\n/).map((x) => x.trim().toLowerCase()).filter(Boolean));
+      const add: string[] = [];
+      for (const m of (S.cast || []) as Member[]) {
+        if (m.kind === 'narrator') continue;
+        for (const n of [m.name, m.display, ...(m.aliases || [])]) {
+          const t = String(n || '').trim();
+          if (t && !have.has(t.toLowerCase())) {
+            have.add(t.toLowerCase());
+            add.push(t);
+          }
+        }
+      }
+      if (!add.length) {
+        keepSaid('Every name in the cast is already in the list.');
+        paintStudio();
+        return;
+      }
+      words.value = (words.value.trim() ? words.value.trim() + '\n' : '') + add.join('\n');
+      set({ censorWords: words.value });
+      studioBuild(true);
+    });
+    addNames.setAttribute('data-af-censornames', '');
+    const namesRow = el('<div class="af-row"></div>');
+    namesRow.appendChild(addNames);
+    cc.appendChild(
+      toggle('Hide words', 'Off by default. On: the words below are covered in the video and bleeped in the audio.', 'censorOn', () => studioBuild(true), () => [
+        wordsRow,
+        namesRow,
+        segmented('Cover them with', [
+          { id: 'bar', label: 'A black bar' },
+          { id: 'blur', label: 'Blur' },
+          { id: 'pixels', label: 'Pixels' },
+        ], S.censorCover === 'blur' || S.censorCover === 'pixels' ? S.censorCover : 'bar', (v) => {
+          set({ censorCover: v });
+          look();
+        }),
+        toggle('Bleep them in the audio', 'On by default. A tone covers each hidden word, in the video and in downloaded audio.', 'censorBleep', () => studioBuild(true)),
+        hint('When each word is said is worked out from where the voice is, so it is close, not exact. The bleep starts a little early and ends a little late to cover the whole word.'),
+      ]),
+    );
+    page.appendChild(cc);
+
+    studioRefs = {
+      canvas,
+      scrub,
+      scrubOut,
+      play,
+      make,
+      dlall,
+      dlpart,
+      said,
+      scrubRow,
+    };
+    paintStudio();
+    studioBuild(false);
+  }
+
   // ---------- Settings ----------
 
   function setChatOff(id: string, off: boolean) {
@@ -9936,7 +10975,6 @@ export function setup(ctx: Ctx, overrides?: any) {
     page.appendChild(p);
     page.appendChild(audienceCard());
     page.appendChild(lookCard());
-    page.appendChild(videoCard());
 
     const r = card('Reading messages', 'Thinking a model writes in a message, such as a <think> block, is never read aloud. Neither is anything in square brackets, HTML or code.');
     r.appendChild(
@@ -10973,7 +12011,7 @@ export function setup(ctx: Ctx, overrides?: any) {
   };
 }
 
-export const __testing = { geminiStyle, sortCast, CAST_SORTS, keyCombo, PAUSE_KEY_DEFAULT, wavBlob, noConnectionWhy, perSentence, clipLevel, levelGain, voiceGender, describeWords, markText, movedFor, movedRowMark, MOVED_DEFAULTS, looksLikeDate, voicedFrames, wordWeight, partTimes, engineOf, noTagsWhy, openRouterVoices, colorCode, hexHsl, hslHex, computedHex, fitTag, tagSound, textFor, styleFor, stripTags, stabilityFor, ENGINES };
+export const __testing = { plainWord, hideList, hiddenWords, geminiStyle, sortCast, CAST_SORTS, keyCombo, PAUSE_KEY_DEFAULT, wavBlob, noConnectionWhy, perSentence, clipLevel, levelGain, voiceGender, describeWords, markText, movedFor, movedRowMark, MOVED_DEFAULTS, looksLikeDate, voicedFrames, wordWeight, partTimes, engineOf, noTagsWhy, openRouterVoices, colorCode, hexHsl, hslHex, computedHex, fitTag, tagSound, textFor, styleFor, stripTags, stabilityFor, ENGINES };
 
 // The built-in cheer: "Cheering and clapping crowd 1" by freesound_community,
 // a free sound from Pixabay (pixabay.com/sound-effects/people-cheering-and-clapping-crowd-1-5995/),

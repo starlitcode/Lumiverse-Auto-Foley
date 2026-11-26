@@ -32,7 +32,7 @@ All of this is kept by Lumiverse, under your account, with `spindle.userStorage`
 
 - Your settings and your cast, with any pictures you picked for it, made small on your device first.
 - The ids of the chats you switched Auto Foley off in. A temporary chat is never kept.
-- The background picture for videos, if you choose one, at 1920 by 1080.
+- The background picture for videos in the Studio tab, if you choose one, at most 1920 pixels on its long side.
 - Your sound library: sounds found on Freesound, with their credit, sounds made by ElevenLabs, your uploads, and your links.
 - With **Keep made audio** on, which it is by default: each spoken line, up to the size you pick, and the last 300 scripts, with their text. **Clear kept audio** deletes them, and **Do not keep it** stops it.
 

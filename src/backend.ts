@@ -146,12 +146,44 @@ interface Settings {
   applauseVolume: number;
   // Entries in the Extras menu of the message box.
   extrasMenu: boolean;
-  // What a video shows: each speaker's picture, and names, which also go in
-  // the title and in the name of every file saved. How dark the background
-  // picture is made, in per cent.
-  videoPics: boolean;
+  // The Studio tab. What goes into kept audio and video: sound effects, a
+  // pause between parts in seconds, the volumes as heard, and evened-out
+  // loudness. Audio is saved as one file or a ZIP of parts.
+  studioSounds: boolean;
+  studioGap: number;
+  studioAsHeard: boolean;
+  studioLoud: boolean;
+  audioSplit: 'one' | 'parts';
+  // How a video looks. Names also go in the title and in the name of every
+  // file saved. Sizes are in percent or in pixels of a 1080-pixel frame, and
+  // times in seconds. Colors are #rrggbb, empty for the built-in one.
+  videoShape: 'wide' | 'tall' | 'square';
+  videoFont: string;
+  videoSize: number;
+  videoInk: string;
+  videoWords: 'light' | 'appear' | 'all';
+  videoPlace: 'middle' | 'lower';
+  videoQuotes: boolean;
   videoNames: boolean;
+  videoPics: boolean;
+  videoPicShape: 'circle' | 'rounded';
+  videoPicSize: number;
+  videoNameColor: 'kind' | 'words';
+  videoBack: 'dark' | 'color' | 'picture';
+  videoBackColor: string;
   videoDim: number;
+  videoBlur: number;
+  videoMove: string;
+  videoMoveSecs: number;
+  videoTitleOn: boolean;
+  videoTitleText: string;
+  videoFadeOut: number;
+  videoCaptions: boolean;
+  // Words hidden in kept video and audio: covered on screen, and bleeped.
+  censorOn: boolean;
+  censorWords: string;
+  censorCover: 'bar' | 'blur' | 'pixels';
+  censorBleep: boolean;
   // The word being spoken is lit in the message in the chat.
   chatHighlight: boolean;
   // The color of the lit word, as #rrggbb, and how strong it is, from 10 to
@@ -316,9 +348,37 @@ const DEFAULT_SETTINGS: Settings = {
   applauseSeconds: 5,
   applauseVolume: 0.6,
   extrasMenu: false,
-  videoPics: true,
+  studioSounds: true,
+  studioGap: 0,
+  studioAsHeard: true,
+  studioLoud: true,
+  audioSplit: 'one',
+  videoShape: 'wide',
+  videoFont: 'book',
+  videoSize: 100,
+  videoInk: '',
+  videoWords: 'light',
+  videoPlace: 'middle',
+  videoQuotes: true,
   videoNames: true,
+  videoPics: true,
+  videoPicShape: 'circle',
+  videoPicSize: 150,
+  videoNameColor: 'kind',
+  videoBack: 'dark',
+  videoBackColor: '',
   videoDim: 40,
+  videoBlur: 0,
+  videoMove: 'rise',
+  videoMoveSecs: 0.4,
+  videoTitleOn: true,
+  videoTitleText: '',
+  videoFadeOut: 1.5,
+  videoCaptions: true,
+  censorOn: false,
+  censorWords: '',
+  censorCover: 'bar',
+  censorBleep: true,
   chatHighlight: true,
   wordColor: '',
   colorNarrator: '',
@@ -719,9 +779,37 @@ function cleanSettings(raw: any): Settings {
     applauseSeconds: num(r.applauseSeconds, 1, 15, d.applauseSeconds),
     applauseVolume: num(r.applauseVolume, 0, 1, d.applauseVolume),
     extrasMenu: bool(r.extrasMenu, d.extrasMenu),
-    videoPics: bool(r.videoPics, d.videoPics),
+    studioSounds: bool(r.studioSounds, d.studioSounds),
+    studioGap: Math.round(num(r.studioGap, 0, 3, d.studioGap) * 10) / 10,
+    studioAsHeard: bool(r.studioAsHeard, d.studioAsHeard),
+    studioLoud: bool(r.studioLoud, d.studioLoud),
+    audioSplit: pick(r.audioSplit, ['one', 'parts'] as const, d.audioSplit),
+    videoShape: pick(r.videoShape, ['wide', 'tall', 'square'] as const, d.videoShape),
+    videoFont: pick(r.videoFont, ['book', 'clean', 'type', 'round', 'theme'] as const, 'book'),
+    videoSize: Math.round(num(r.videoSize, 60, 160, d.videoSize)),
+    videoInk: hexColor(r.videoInk),
+    videoWords: pick(r.videoWords, ['light', 'appear', 'all'] as const, d.videoWords),
+    videoPlace: pick(r.videoPlace, ['middle', 'lower'] as const, d.videoPlace),
+    videoQuotes: bool(r.videoQuotes, d.videoQuotes),
     videoNames: bool(r.videoNames, d.videoNames),
+    videoPics: bool(r.videoPics, d.videoPics),
+    videoPicShape: pick(r.videoPicShape, ['circle', 'rounded'] as const, d.videoPicShape),
+    videoPicSize: Math.round(num(r.videoPicSize, 60, 300, d.videoPicSize)),
+    videoNameColor: pick(r.videoNameColor, ['kind', 'words'] as const, d.videoNameColor),
+    videoBack: pick(r.videoBack, ['dark', 'color', 'picture'] as const, d.videoBack),
+    videoBackColor: hexColor(r.videoBackColor),
     videoDim: Math.round(num(r.videoDim, 0, 80, d.videoDim)),
+    videoBlur: Math.round(num(r.videoBlur, 0, 20, d.videoBlur)),
+    videoMove: pick(r.videoMove, ['rise', 'fade', 'dissolve', 'black', 'slide', 'wipe', 'focus', 'zoom', 'cut'] as const, 'rise'),
+    videoMoveSecs: Math.round(num(r.videoMoveSecs, 0.1, 2, d.videoMoveSecs) * 10) / 10,
+    videoTitleOn: bool(r.videoTitleOn, d.videoTitleOn),
+    videoTitleText: str(r.videoTitleText, 120).trim(),
+    videoFadeOut: Math.round(num(r.videoFadeOut, 0, 5, d.videoFadeOut) * 10) / 10,
+    videoCaptions: bool(r.videoCaptions, d.videoCaptions),
+    censorOn: bool(r.censorOn, d.censorOn),
+    censorWords: str(r.censorWords, 4000),
+    censorCover: pick(r.censorCover, ['bar', 'blur', 'pixels'] as const, d.censorCover),
+    censorBleep: bool(r.censorBleep, d.censorBleep),
     chatHighlight: bool(r.chatHighlight, d.chatHighlight),
     wordColor: hexColor(r.wordColor),
     colorNarrator: hexColor(r.colorNarrator),

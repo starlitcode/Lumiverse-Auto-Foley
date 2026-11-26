@@ -475,3 +475,25 @@ describe("what Gemini is told about how a line is said", () => {
     expect(geminiStyle("  ", "  ")).toBe("");
   });
 });
+
+describe("Hide words", () => {
+  const { hideList, hiddenWords, plainWord } = __testing as any;
+  test("a word is matched with its marks and a final 's taken off", () => {
+    expect(plainWord("Ilse's,")).toBe("ilse");
+    expect(plainWord("“Ilse’s")).toBe("ilse");
+    expect(plainWord("lamp.")).toBe("lamp");
+  });
+  test("the example in docs/studio.md", () => {
+    const list = hideList("Ilse\nCorvin Ashby");
+    const line = "Pass me the lamp, Ilse. Ilse's hands are steadier than mine.".split(" ");
+    expect(hiddenWords(line, list)).toEqual([false, false, false, false, true, true, false, false, false, false, false]);
+  });
+  test("a name of two words is hidden only where both are said together", () => {
+    const list = hideList("Corvin Ashby");
+    expect(hiddenWords("Ask Corvin about it.".split(" "), list)).toEqual([false, false, false, false]);
+    expect(hiddenWords("Corvin Ashby waved.".split(" "), list)).toEqual([true, true, false]);
+  });
+  test("an empty list hides nothing", () => {
+    expect(hiddenWords(["Ilse"], hideList("\n  \n"))).toEqual([false]);
+  });
+});

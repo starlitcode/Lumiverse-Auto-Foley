@@ -83,7 +83,7 @@ const SIZES = [
   { name: "laptop", width: 1280, height: 800, touch: false },
 ];
 
-const TABS = ["stage", "cast", "director", "sounds", "settings"];
+const TABS = ["stage", "cast", "director", "sounds", "studio", "settings"];
 
 // The stub host. It answers the panel's backend messages and Lumiverse's own
 // routes with fixed data, and plays audio with a fake that ends after 40 ms.
@@ -2210,7 +2210,7 @@ if (section("number boxes")) {
     const ranges = [];
     for (const tab of TABS) {
       await showTab(page, tab);
-      const got = await page.evaluate(() => Array.from(document.querySelectorAll('.af input[type="range"]')).filter((r) => !r.classList.contains("af-colorrange") && !r.closest(".af-mixer")).map((r) => (r.closest(".af-col") || r.parentElement).textContent.trim().slice(0, 40)));
+      const got = await page.evaluate(() => Array.from(document.querySelectorAll('.af input[type="range"]')).filter((r) => !r.classList.contains("af-colorrange") && !r.closest(".af-mixer") && !r.closest("[data-af-byeye]")).map((r) => (r.closest(".af-col") || r.parentElement).textContent.trim().slice(0, 40)));
       for (const g of got) ranges.push(tab + ": " + g);
     }
     check(ranges.length === 0, where + ": no slider is left outside the color editor and the Mixer (" + ranges.join(" | ") + ")");
@@ -3192,77 +3192,6 @@ if (section("this chat")) {
   }
 }
 
-if (section("video look")) {
-  console.log("Videos: names, pictures and a background picture, with a preview");
-  // A face for one of the cast, drawn in the page, so Show pictures has one
-  // to show.
-  const face = () => {
-    const c = document.createElement("canvas");
-    c.width = 64;
-    c.height = 64;
-    const g = c.getContext("2d");
-    g.fillStyle = "#30c060";
-    g.fillRect(0, 0, 64, 64);
-    window.__settings.cast[1].picture = c.toDataURL("image/png");
-  };
-  for (const size of SIZES) {
-    const { context, page, errors } = await open(THEMES[0], size, 1, face);
-    const where = size.name;
-    await page.click('.af-tab[data-tab="settings"]');
-    await page.waitForTimeout(500);
-    const prev = page.locator("[data-af-videopreview]");
-    check((await prev.count()) === 1, where + ": Settings has a preview of a video frame");
-    // A fingerprint of a part of the preview, so a change to it can be seen.
-    const print = (x, y, w, h) =>
-      page.evaluate(([x, y, w, h]) => {
-        const d = document.querySelector("[data-af-videopreview]").getContext("2d").getImageData(x, y, w, h).data;
-        let sum = 0;
-        let lit = 0;
-        let red = 0;
-        for (let i = 0; i < d.length; i += 4) {
-          sum = (sum + d[i] * 3 + d[i + 1] * 5 + d[i + 2] * 7) % 1000000007;
-          if (d[i] + d[i + 1] + d[i + 2] > 300) lit++;
-          if (d[i] > d[i + 2] + 40) red++;
-        }
-        return { sum, lit, red };
-      }, [x, y, w, h]);
-    const head = () => print(560, 180, 800, 330);
-    const withAll = await head();
-    check(withAll.lit > 200, where + ": the speaker's picture and name are drawn above the line (" + withAll.lit + " light pixels)");
-    if (shots) await prev.screenshot({ path: shots + "/video-preview-" + where + ".png" });
-    await page.locator('[data-af-row="videoNames"] .af-box').click();
-    await page.waitForTimeout(400);
-    const noNames = await head();
-    check(noNames.sum !== withAll.sum, where + ": Show names off takes the name out of the frame");
-    check(await page.evaluate(() => window.__settings.videoNames === false), where + ": and is saved");
-    await page.locator('[data-af-row="videoPics"] .af-box').click();
-    await page.waitForTimeout(400);
-    const bare = await head();
-    check(bare.lit < 50 && bare.sum !== noNames.sum, where + ": Show pictures off takes the picture out too (" + bare.lit + " light pixels left)");
-    if (shots) await prev.screenshot({ path: shots + "/video-preview-bare-" + where + ".png" });
-    // A background picture: the stub's picture is red on the left.
-    const corner = () => print(40, 400, 200, 200);
-    const dark = await corner();
-    check(!(await page.locator('[data-af-row="videoBg"] .af-sub').isVisible()), where + ": with no picture, Dim the picture is hidden");
-    await page.locator('[data-af-videobg="choose"]').click();
-    await page.waitForTimeout(900);
-    const bg = await corner();
-    check(bg.red > 30000 && dark.red < 1000, where + ": a chosen picture fills the background (" + dark.red + " then " + bg.red + " red pixels)");
-    check(await page.evaluate(() => /^data:image\/jpeg;base64,/.test(window.__videoBg || "")), where + ": the picture is saved to the account as a JPEG");
-    check(await page.evaluate(() => { const i = new Image(); return new Promise((r) => { i.onload = () => r(i.width === 1920 && i.height === 1080); i.onerror = () => r(false); i.src = window.__videoBg; }); }), where + ": at the video's full size, 1920 by 1080");
-    check(await page.locator('[data-af-row="videoBg"] .af-sub').isVisible(), where + ": Dim the picture shows under it");
-    if (shots) await prev.screenshot({ path: shots + "/video-preview-picture-" + where + ".png" });
-    const m = await page.evaluate(MEASURE, size.touch);
-    check(!m.overflow.length && !m.small.length, where + ": the card fits. " + m.overflow.concat(m.small).slice(0, 2).join("; "));
-    await page.locator('[data-af-videobg="drop"]').click();
-    await page.waitForTimeout(700);
-    const back = await corner();
-    check(back.red < 1000 && (await page.evaluate(() => window.__videoBg === "")), where + ": Take it out puts the dark background back");
-    check(!errors.length, where + ": no errors. " + errors.slice(0, 2).join("; "));
-    await context.close();
-  }
-}
-
 if (section("pictures")) {
   console.log("A picture for a person, or the first letter of the name");
   for (const size of SIZES) {
@@ -3566,8 +3495,8 @@ if (section("downloads")) {
     await page.evaluate(() => { window.__wav = [0.1, 0.5]; window.__clipMs = 1500; });
     await page.click('.af-tab[data-tab="stage"]');
     await page.waitForTimeout(300);
-    const state = () => page.evaluate(() => ["dlall", "dlpart", "video"].map((k) => document.querySelector('[data-af="' + k + '"]').disabled));
-    check((await state()).join() === "true,true,true", where + ": with nothing played, the three are off (" + (await state()).join() + ")");
+    const state = () => page.evaluate(() => ["dlall", "dlpart"].map((k) => document.querySelector('[data-af="' + k + '"]').disabled));
+    check((await state()).join() === "true,true", where + ": with nothing played, both downloads are off (" + (await state()).join() + ")");
     await page.click('#mount [data-af-slot="message"]');
     await page.waitForTimeout(900);
     const part = page.waitForEvent("download", { timeout: 8000 }).catch(() => null);
@@ -3583,20 +3512,23 @@ if (section("downloads")) {
     let size2 = 0;
     if (p2) { const fs = await import("node:fs"); size2 = fs.statSync(await p2.path()).size; }
     check(!!p2 && /\.wav$/.test(p2.suggestedFilename()) && size2 > 44 + 8000, where + ": Download audio saves the whole performance as one WAV (" + (p2 && p2.suggestedFilename()) + ", " + size2 + " bytes)");
-    const vid = page.waitForEvent("download", { timeout: 30000 }).catch(() => null);
-    await page.click('[data-af="video"]');
-    await page.waitForTimeout(400);
-    const making = await page.evaluate(() => ({ said: document.querySelector('[data-af="keepsaid"]').textContent, label: document.querySelector('[data-af="video"]').textContent }));
+    await page.click('[data-af="studio"]');
+    await page.waitForTimeout(500);
+    check(await page.evaluate(() => document.querySelector('.af-tab[data-tab="studio"]').getAttribute("aria-selected") === "true"), where + ": Video and more opens the Studio tab");
+    const vid = page.waitForEvent("download", { timeout: 60000 }).catch(() => null);
+    await page.click('[data-af-studio="video"]');
+    await page.waitForTimeout(600);
+    const making = await page.evaluate(() => ({ said: document.querySelector('[data-af-studio="said"]').textContent, label: document.querySelector('[data-af-studio="video"]').textContent }));
     check(/Making the video/.test(making.said) && /Stop the video/.test(making.label), where + ": while it is made, the count shows and the button stops it (" + making.said + ")");
     // Away from the tab, it pauses, and it goes on when the tab is back.
     const paused = await page.evaluate(async () => {
       let state = "hidden";
       Object.defineProperty(document, "visibilityState", { configurable: true, get: () => state });
       document.dispatchEvent(new Event("visibilitychange"));
-      const a = document.querySelector('[data-af="keepsaid"]').textContent;
+      const a = document.querySelector('[data-af-studio="said"]').textContent;
       // The count is in whole seconds, so it is read well over a second apart.
       await new Promise((r) => setTimeout(r, 1600));
-      const b = document.querySelector('[data-af="keepsaid"]').textContent;
+      const b = document.querySelector('[data-af-studio="said"]').textContent;
       state = "visible";
       document.dispatchEvent(new Event("visibilitychange"));
       return a === b;
@@ -3611,6 +3543,237 @@ if (section("downloads")) {
     check(!errors.length, where + ": no console errors. " + errors.slice(0, 2).join("; "));
     await context.close();
   }
+}
+
+if (section("studio")) {
+  console.log("The Studio tab keeps the audio and makes the video, with every choice");
+  const fs = await import("node:fs");
+  // A WAV file's rate, bits, channels and length in seconds, and its samples
+  // as numbers from -1 to 1, the first channel only.
+  const readWav = (path) => {
+    const b = fs.readFileSync(path);
+    const rate = b.readUInt32LE(24);
+    const ch = b.readUInt16LE(22);
+    const bits = b.readUInt16LE(34);
+    const bytes = b.readUInt32LE(40);
+    const n = bytes / (ch * (bits / 8));
+    const samples = new Float32Array(n);
+    for (let i = 0; i < n; i++) {
+      const o = 44 + i * ch * (bits / 8);
+      let v = bits === 24 ? b[o] | (b[o + 1] << 8) | (b[o + 2] << 16) : b.readInt16LE(o);
+      if (bits === 24 && v & 0x800000) v -= 0x1000000;
+      samples[i] = v / (bits === 24 ? 0x800000 : 0x8000);
+    }
+    return { rate, ch, bits, secs: n / rate, samples };
+  };
+  const grab = async (page, sel) => {
+    const dl = page.waitForEvent("download", { timeout: 20000 }).catch(() => null);
+    await page.click(sel);
+    const d = await dl;
+    return d ? { name: d.suggestedFilename(), path: await d.path() } : null;
+  };
+  for (const size of SIZES) {
+    const where = size.name;
+    const { context, page, errors } = await open(THEMES[0], size);
+    await page.evaluate(() => { window.__wav = [0.1, 0.5]; window.__clipMs = 300; });
+    await page.click('.af-tab[data-tab="stage"]');
+    await page.waitForTimeout(300);
+    await page.click('#mount [data-af-slot="message"]');
+    await page.waitForFunction(() => document.querySelector('[data-af="dlall"]') && !document.querySelector('[data-af="dlall"]').disabled, null, { timeout: 20000 });
+    await page.waitForFunction(() => document.querySelector('[data-af="dlpart"]').disabled, null, { timeout: 20000 });
+    await page.click('.af-tab[data-tab="studio"]');
+    await page.waitForTimeout(900);
+    const cards = await page.evaluate(() => ["studio-show", "studio-audio", "studio-video", "studio-censor"].map((k) => !!document.querySelector('[data-af-card="' + k + '"]')));
+    check(cards.every(Boolean), where + ": the Studio has the performance, audio, video and hide words cards");
+
+    // The audio: 48 kHz, 24-bit, every part in.
+    const one = await grab(page, '[data-af-studio="dlall"]');
+    const w1 = one ? readWav(one.path) : null;
+    check(!!w1 && w1.rate === 48000 && w1.bits === 24 && w1.secs > 1, where + ": Download audio is a 48 kHz, 24-bit WAV (" + (w1 && [w1.rate, w1.bits, w1.secs.toFixed(2)].join(", ")) + ")");
+    const parts = await page.evaluate(() => {
+      const f = [...document.querySelectorAll(".af-fold")].find((b) => /Which parts go in/.test(b.textContent));
+      f.click();
+      return new Promise((r) => setTimeout(() => r(document.querySelectorAll("[data-af-studiopart]").length), 400));
+    });
+    check(parts >= 2, where + ": Which parts go in lists every part heard (" + parts + ")");
+    // Even loudness brings the loudest moment to just under full.
+    const peak = w1 ? w1.samples.reduce((m, x) => Math.max(m, Math.abs(x)), 0) : 0;
+    check(peak > 0.85 && peak < 0.9, where + ": the loudness is evened out to just under full (" + peak.toFixed(3) + ")");
+
+    // A pause between parts makes the file longer by that much each time.
+    await page.evaluate(() => {
+      const box = [...document.querySelectorAll('[data-af-card="studio-show"] input[type="number"]')][0];
+      box.value = "0.5";
+      box.dispatchEvent(new Event("input", { bubbles: true }));
+      box.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    await page.waitForTimeout(500);
+    const gapped = await grab(page, '[data-af-studio="dlall"]');
+    const w2 = gapped ? readWav(gapped.path) : null;
+    // A part the browser cannot read, such as the stub's sound, is not
+    // joined, so the gaps are counted from the length added.
+    const added = w2 ? (w2.secs - w1.secs) / 0.5 : 0;
+    check(!!w2 && added >= 1 && Math.abs(added - Math.round(added)) < 0.04, where + ": a pause of 0.5 s adds 0.5 s between each part (" + (w2 && (w2.secs - w1.secs).toFixed(2)) + " s more)");
+    await page.evaluate(() => {
+      const box = [...document.querySelectorAll('[data-af-card="studio-show"] input[type="number"]')][0];
+      box.value = "0";
+      box.dispatchEvent(new Event("input", { bubbles: true }));
+      box.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+
+    // A part left out is not in the file.
+    await page.locator('[data-af-studiopart="0"] .af-box').click();
+    await page.waitForTimeout(400);
+    const less = await grab(page, '[data-af-studio="dlall"]');
+    const w3 = less ? readWav(less.path) : null;
+    check(!!w3 && w3.secs < w1.secs - 0.3, where + ": a part switched off is left out (" + (w3 && w3.secs.toFixed(2)) + " s, was " + w1.secs.toFixed(2) + ")");
+    check(await page.evaluate(() => /of \d+ chosen/.test(document.querySelector("[data-af-bulk] .af-note").textContent)), where + ": the parts have All and None, with a count");
+    await page.locator('[data-af-pick="all"]').click();
+    await page.waitForTimeout(500);
+
+    // A file for each part, in a ZIP.
+    await page.locator('[data-af-card="studio-audio"] .af-segbtn[data-v="parts"]').click();
+    await page.waitForTimeout(300);
+    const zip = await grab(page, '[data-af-studio="dlall"]');
+    const zb = zip ? fs.readFileSync(zip.path) : null;
+    const entries = zb ? zb.readUInt16LE(zb.length - 22 + 10) : 0;
+    check(!!zip && /\.zip$/.test(zip.name) && zb.readUInt32LE(0) === 0x04034b50 && entries >= 2 && entries <= parts, where + ": A file for each part saves a ZIP with one WAV for each part (" + (zip && zip.name) + ", " + entries + " files)");
+    await page.locator('[data-af-card="studio-audio"] .af-segbtn[data-v="one"]').click();
+
+    // Hiding a word: bleeped in the audio. "late" is said in the second line.
+    await page.locator('[data-af-row="censorOn"] .af-box').first().click();
+    await page.waitForTimeout(300);
+    await page.fill("[data-af-censorwords]", "late");
+    await page.locator("[data-af-censorwords]").dispatchEvent("change");
+    await page.waitForTimeout(500);
+    const bleeped = await grab(page, '[data-af-studio="dlall"]');
+    const w4 = bleeped ? readWav(bleeped.path) : null;
+    let differ = 0;
+    if (w4 && w1) for (let i = 0; i < Math.min(w4.samples.length, w1.samples.length); i++) if (Math.abs(w4.samples[i] - w1.samples[i]) > 0.05) differ++;
+    check(differ > 4800, where + ": a hidden word is bleeped in the downloaded audio (" + differ + " samples changed)");
+    // A 1 kHz tone crosses zero 2000 times a second.
+    let zc = 0;
+    let at = -1;
+    if (w4 && w1) {
+      for (let i = 0; i < w4.samples.length; i++) if (Math.abs(w4.samples[i] - w1.samples[i]) > 0.05) { at = i; break; }
+      for (let i = at + 480; i < at + 480 + 4800 && i + 1 < w4.samples.length; i++) if ((w4.samples[i] >= 0) !== (w4.samples[i + 1] >= 0)) zc++;
+    }
+    check(zc > 180 && zc < 220, where + ": the bleep is a 1 kHz tone, which crosses zero 200 times in 0.1 s (" + zc + ")");
+    await page.locator('[data-af-row="censorOn"] .af-box').first().click();
+    await page.waitForTimeout(300);
+
+    // The preview: its bar and its play button.
+    check(await page.locator("[data-af-scrub]").isVisible(), where + ": the preview has a bar to move through the video");
+    await page.click('[data-af-studio="play"]');
+    await page.waitForTimeout(500);
+    const playing = await page.evaluate(() => document.querySelector('[data-af-studio="play"]').textContent);
+    const moved = await page.evaluate(() => Number(document.querySelector("[data-af-scrub] input").value));
+    check(/Stop the preview/.test(playing) && moved > 0, where + ": Play the preview plays it, and the bar moves (" + moved + ")");
+    await page.click('[data-af-studio="play"]');
+    await page.waitForTimeout(200);
+    check(/Play the preview/.test(await page.evaluate(() => document.querySelector('[data-af-studio="play"]').textContent)), where + ": pressed again, it stops");
+
+    // Every fold opened, nothing runs off the side.
+    await page.evaluate(() => document.querySelectorAll('.af-page .af-fold[aria-expanded="false"]').forEach((b) => b.click()));
+    await page.waitForTimeout(500);
+    const m = await page.evaluate(MEASURE, size.touch);
+    check(!m.overflow.length && !m.small.length, where + ": every part of the Studio fits. " + m.overflow.concat(m.small).slice(0, 3).join("; "));
+    if (shots) await page.locator('[data-af-card="studio-video"]').screenshot({ path: shots + "/studio-video-" + where + ".png" });
+
+    // The shape changes the preview.
+    const shape = async (v) => {
+      await page.selectOption('[data-af-card="studio-video"] select >> nth=0', v);
+      await page.waitForTimeout(500);
+      return page.evaluate(() => { const c = document.querySelector("[data-af-videopreview]"); return c.width + "x" + c.height; });
+    };
+    check((await shape("tall")) === "1080x1920" && (await shape("square")) === "1080x1080" && (await shape("wide")) === "1920x1080", where + ": Tall, Square and Wide give a frame of that shape");
+    check(!errors.length, where + ": no errors. " + errors.slice(0, 2).join("; "));
+    await context.close();
+  }
+}
+
+if (section("transitions")) {
+  console.log("Every transition moves from one line to the next, and none is a cut but Cut");
+  const { context, page, errors } = await open(THEMES[0], SIZES[1]);
+  await page.evaluate(() => { window.__wav = [0.1, 0.5]; window.__clipMs = 300; });
+  await page.click('.af-tab[data-tab="stage"]');
+  await page.waitForTimeout(300);
+  await page.click('#mount [data-af-slot="message"]');
+  await page.waitForFunction(() => document.querySelector('[data-af="dlall"]') && !document.querySelector('[data-af="dlall"]').disabled, null, { timeout: 20000 });
+  await page.waitForFunction(() => document.querySelector('[data-af="dlpart"]').disabled, null, { timeout: 20000 });
+  await page.click('.af-tab[data-tab="studio"]');
+  await page.waitForTimeout(900);
+  await page.locator(".af-fold", { hasText: "Moving between lines" }).click();
+  await page.waitForTimeout(300);
+  // Fingerprints of every frame of the preview, 50 ms apart.
+  const frames = () =>
+    page.evaluate(async () => {
+      const bar = document.querySelector("[data-af-scrub] input");
+      const c = document.querySelector("[data-af-videopreview]");
+      const out = [];
+      for (let t = 0; t <= Number(bar.max); t += 0.05) {
+        bar.value = String(t);
+        bar.dispatchEvent(new Event("input", { bubbles: true }));
+        const d = c.getContext("2d").getImageData(0, 0, c.width, c.height).data;
+        let sum = 0;
+        for (let i = 0; i < d.length; i += 64) sum = (sum + d[i] * 3 + d[i + 1] * 5 + d[i + 2] * 7) % 1000000007;
+        out.push(sum);
+      }
+      return out;
+    });
+  const pick = async (v) => {
+    await page.selectOption('[data-af-row="videoMove"] select', v);
+    await page.waitForTimeout(500);
+  };
+  await pick("cut");
+  const cut = await frames();
+  const ids = ["rise", "fade", "dissolve", "black", "slide", "wipe", "focus", "zoom"];
+  for (const id of ids) {
+    await pick(id);
+    const f = await frames();
+    const diff = f.filter((x, i) => x !== cut[i]).length;
+    check(diff >= 2, id + ": the frames between two lines differ from a cut (" + diff + " frames)");
+    if (shots && id === "wipe") await page.locator("[data-af-videopreview]").screenshot({ path: shots + "/transition-wipe.png" });
+  }
+  check(!errors.length, "no errors. " + errors.slice(0, 2).join("; "));
+  await context.close();
+}
+
+if (section("hide words")) {
+  console.log("Hidden words are covered in the video with a bar, blur or pixels");
+  const { context, page, errors } = await open(THEMES[0], SIZES[1]);
+  await page.click('.af-tab[data-tab="studio"]');
+  await page.waitForTimeout(800);
+  const print = () =>
+    page.evaluate(() => {
+      const c = document.querySelector("[data-af-videopreview]");
+      const d = c.getContext("2d").getImageData(0, 0, c.width, c.height).data;
+      let sum = 0;
+      for (let i = 0; i < d.length; i += 16) sum = (sum + d[i] * 3 + d[i + 1] * 5 + d[i + 2] * 7) % 1000000007;
+      return sum;
+    });
+  const plain = await print();
+  await page.locator('[data-af-row="censorOn"] .af-box').first().click();
+  await page.waitForTimeout(300);
+  await page.fill("[data-af-censorwords]", "bells");
+  await page.locator("[data-af-censorwords]").dispatchEvent("change");
+  await page.waitForTimeout(500);
+  const seen = {};
+  for (const v of ["bar", "blur", "pixels"]) {
+    await page.locator('[data-af-card="studio-censor"] .af-segbtn[data-v="' + v + '"]').click();
+    await page.waitForTimeout(400);
+    seen[v] = await print();
+    if (shots) await page.locator("[data-af-videopreview]").screenshot({ path: shots + "/hide-" + v + ".png" });
+  }
+  check(seen.bar !== plain && seen.blur !== plain && seen.pixels !== plain, "each cover changes the frame");
+  check(seen.bar !== seen.blur && seen.blur !== seen.pixels, "and each cover looks different");
+  await page.click("[data-af-censornames]");
+  await page.waitForTimeout(300);
+  const names = await page.inputValue("[data-af-censorwords]");
+  check(/Ysolde/.test(names) && /Ferryman/.test(names) && !/Narrator/.test(names), "Add the cast's names adds each name, and not the narrator");
+  check(await page.evaluate(() => /Ysolde/.test(window.__settings.censorWords)), "and the list is saved");
+  check(!errors.length, "no errors. " + errors.slice(0, 2).join("; "));
+  await context.close();
 }
 
 if (section("start here")) {

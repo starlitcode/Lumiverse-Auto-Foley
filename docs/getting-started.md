@@ -254,45 +254,12 @@ The colors are saved with your settings, under your account.
 
 ## Downloads and videos
 
-Three buttons under **Now playing**, on the Stage tab, keep what you heard. None of them spends anything.
+Two buttons under **Now playing**, on the Stage tab, keep what you heard:
 
-- **Download audio** saves the last performance as one WAV file: every line and sound you heard, in order. Parts you skipped are not in it.
-- **Download this part** saves the part playing now, exactly as the voice service sent it.
-- **Make a video** saves a video of the last performance, with the words lighting up as they are said.
+- **Download audio** saves the last performance as one WAV file.
+- **Download this part** saves the part playing now.
 
-### The audio
-
-- **Download audio** is a 48 kHz, 24-bit WAV file. WAV keeps the sound exactly as the browser read it. An MP3 would be squeezed a second time and lose some quality.
-- Each line fades in and out over 3 thousandths of a second, too short to hear, so two lines never meet with a click.
-- The sound can only be as good as what the voice service sends. Each TTS connection in Lumiverse has an **output format**. Pick a higher one there for better sound, such as MP3 at 192 kbps or PCM at 44.1 kHz on ElevenLabs, or WAV on Fish Audio. Some formats need a paid plan with the service.
-- A line kept in **Keep made audio** is played as it was first made. Press **Clear kept audio** to make lines again in a new format.
-
-### The video
-
-1. Press **Make a video** after a message has played.
-2. The video is made from the audio you heard, as it plays, so it takes as long as the performance and a few seconds more. You do not hear it while it is made.
-3. The line under the buttons counts the time. If you go to another tab or app, the video pauses, and it goes on when you come back.
-4. The video is saved when it ends. **Stop the video** stops it and saves nothing.
-
-What it shows:
-
-- The chat's title for the first two seconds. It fades to black at the end.
-- Each line large in the middle of the screen. Words not said yet are dimmer.
-- Speech in quotation marks, with the speaker's picture and name above it. Narration has no picture or name.
-- A sound as a caption in square brackets, such as [thunder].
-
-It is 1920 by 1080. A browser that can make MP4, such as a recent Chrome or Safari, saves MP4, which phones and sharing sites play. Any other browser saves WebM. A browser that cannot make videos says so, and nothing is saved.
-
-### Videos and downloads, in the Settings tab
-
-This card sets what a video shows. A preview at the top draws one frame with your choices.
-
-- **Show names**: on by default. Off, no names are in the video, in its title, or in the name of any file saved, audio included.
-- **Show pictures**: on by default. Off, no pictures from the Cast tab are in the video.
-- **Background picture**: none by default, which is a dark background. **Choose a background picture** puts one of yours behind the words, cut to the video's shape from the middle. It is kept on your account at the video's full size. **Take it out** removes it.
-- **Dim the picture**, under it: 40% by default. Darker makes the words easier to read on a bright picture.
-
-Names are still said aloud when a line says them. **Show names** only changes what is written on the screen and in file names.
+**Video and more** opens the **Studio** tab. It makes videos, and has every choice for the audio and the video. See [The Studio](studio.md).
 
 ## What it costs
 

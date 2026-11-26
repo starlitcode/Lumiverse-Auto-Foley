@@ -1,0 +1,163 @@
+# The Studio
+
+## In short
+
+- The **Studio** tab keeps the last message you played, as audio or as a video.
+- You choose which parts go in, a pause between them, and how loud they are.
+- **Audio** saves one WAV file, or a ZIP with a WAV for each part.
+- **Video** makes a video that looks like a story being read. You pick its shape, font, colors, background, transition between lines, title and ending.
+- **Hide and bleep words** covers words on screen and bleeps them in the audio, such as a name you do not want to share.
+- A preview shows the video with your choices. Drag its bar to any moment, or play it.
+- Nothing is sent anywhere. Everything is made on your device from the audio you already heard, so it costs nothing.
+
+## Steps
+
+1. Play a message, on the Stage tab or with the button on a message.
+2. Open the **Studio** tab. **Video and more**, under **Now playing** on the Stage tab, goes there too.
+3. Under **The performance**, open **Which parts go in** and switch off any part you do not want.
+4. For audio, pick **One file** or **A file for each part** under **Audio**, then press **Download audio**.
+5. For a video, set the look in the folds under **Video**. Watch the preview change.
+6. Press **Make a video**. It is saved when it ends.
+
+## What it sends
+
+Nothing. The audio, the ZIP and the video are made in your browser, from the audio already heard.
+
+One thing is kept on your account: the background picture for videos, if you choose one. It is kept at most 1920 pixels on its long side. See [Privacy](privacy.md).
+
+## An example
+
+Corvin Ashby keeps a lighthouse in a made-up story. A message has three parts:
+
+1. Narration: "The storm hit the glass all night."
+2. A sound: thunder.
+3. Corvin says: "Pass me the lamp, Ilse. Ilse's hands are steadier than mine."
+
+The reader wants to share a video, without the name Ilse.
+
+1. They open the Studio tab.
+2. Under **Hide and bleep words**, they switch on **Hide words** and type `Ilse` in **Words to hide**.
+3. Under **Video**, in **Shape and words**, they pick **Tall, 9 by 16, for phones**.
+4. They press **Make a video**.
+
+The video:
+
+- Opens with the chat's name for two seconds, then shows the narration.
+- Shows `[thunder]` as a caption while the thunder plays.
+- Shows Corvin's name above his line, which is in quotation marks. If he has a picture in the Cast tab, it shows above his name.
+- Covers "Ilse." and "Ilse's" with a black bar. The final 's and the full stop are matched too.
+- Bleeps both words in the sound.
+- Fades to black at the end.
+
+The file is saved as an MP4 or a WebM, named with the chat's name and the day.
+
+## The performance
+
+These choices change both the audio and the video.
+
+- **Which parts go in**: a switch for each part heard, with **All** and **None**. It is for this performance only. Playing another message starts with every part in.
+- **Sound effects**: on by default. Off, only the voices are kept.
+- **Pause between parts, in seconds**: 0 by default. A short pause, such as 0.3, gives the lines room, as in an audiobook.
+- **As you heard it**: on by default. It uses your **Voices** and **Sounds** volumes and **Even voice levels**. Off, each part is as the voice service sent it.
+- **Even out the loudness**: on by default. The loudest moment is set just under the most a file can hold, so the file is neither too quiet nor clipped.
+
+## Audio
+
+- **Download audio** saves the whole performance.
+- **Save as**: **One file** by default. **A file for each part** saves a ZIP, with the parts numbered in order and named by who says them. With **Show names** off, they are named "line", "narration" or "sound".
+- **Download this part** saves the part playing now, exactly as the voice service sent it. A part with a hidden word in it is saved bleeped, as a WAV.
+
+The audio is a 48 kHz, 24-bit WAV file. WAV keeps the sound exactly as it was. Each part fades in and out over 3 thousandths of a second, too short to hear, so two parts never meet with a click.
+
+### Getting an MP3
+
+Any audio converter can save the WAV as an MP3. The free [audio converter from Wave](https://wave.co/tools/audio-converter) works in the browser. Its page says the file is not uploaded.
+
+### Better sound from the start
+
+The sound can only be as good as what the voice service sends.
+
+- Each TTS connection in Lumiverse has an **output format**. Pick a higher one there, such as MP3 at 192 kbps or PCM at 44.1 kHz on ElevenLabs, or WAV on Fish Audio. Some formats need a paid plan with the service.
+- A line kept in **Keep made audio** is played as it was first made. Press **Clear kept audio** to make lines again in a new format.
+
+## Video
+
+The preview at the top draws the video with your choices. **Where** moves through it. **Play the preview** plays it with its sound, from where the bar is.
+
+**Make a video** records it as it plays, silently, so it takes as long as the performance and a few seconds more.
+
+- The line under the buttons counts the time.
+- On another tab or app, the video pauses, and it goes on when you come back.
+- **Stop the video** stops it and saves nothing.
+
+A browser that can make MP4, such as a recent Chrome or Safari, saves MP4, which phones and sharing sites play. Any other browser saves WebM. The video is made at a high quality.
+
+### Shape and words
+
+- **Shape**: **Wide, 16 by 9** by default, 1920 by 1080. **Tall** is 1080 by 1920, for phone videos such as Reels and Shorts. **Square** is 1080 by 1080.
+- **Font**: **Book** by default. Also **Clean**, **Typewriter**, **Rounded** and **Your theme's font**. A font your device does not have is drawn in one that is close.
+- **Size, in percent**: 100 by default, from 60 to 160.
+- **Color of the words**: a warm white by default.
+- **How the words show**: **Light up as they are said** by default, with words not said yet dimmer. **Appear as they are said** shows each word only once it is said. **All at once** shows the whole line.
+- **Where the words sit**: **Middle** by default, or **Lower third**, which leaves the picture behind them clear.
+- **Quotation marks around speech**: on by default. Narration never has them.
+
+When each word is said is worked out from where the voice is in the clip, so it is close, not exact.
+
+### Speakers
+
+- **Show names**: on by default. Off, no names are in the video, in its title, or in the name of any file saved, audio included. Names are still said aloud. To take a name out of the sound too, use **Hide and bleep words**.
+- **Show pictures**: on by default. Each speaker's picture from the Cast tab is shown above their line. Narration has none. Under it are **Shape of the pictures**, a circle or a rounded square, and **Size of the pictures**.
+- **Color of the names**: **Each kind's color** by default, the colors set under **Colors for each kind of part** in the Settings tab. **The words' color** uses one color for every name.
+
+### Background
+
+- **Dark** by default, lit a little in your theme's accent.
+- **A color of your own**, picked under it.
+- **A picture of your own**. **Choose a picture** keeps it on your account. It is cut to the video's shape from the middle. **Dim the picture**, 40% by default, makes the words easier to read. **Blur the picture**, off by default, keeps a busy picture behind the words.
+
+### Moving between lines
+
+**Transition** sets how one line gives way to the next. None of them flashes.
+
+| Transition | What it does |
+| --- | --- |
+| **Fade and rise** | The default. The line fades out and moves up a little, then the next fades in from a little below. |
+| **Fade out, then in** | The same, without the movement. |
+| **Dissolve** | The two lines fade into each other. |
+| **Through black** | The whole frame fades to black and back. |
+| **Slide across** | The line slides out to the left as the next slides in from the right. |
+| **Soft wipe** | A soft edge moves across, taking the line away and showing the next. |
+| **Soft focus** | The line goes soft as it fades, and the next comes into focus. |
+| **Gentle zoom** | The two lines fade into each other, with a small zoom. |
+| **Cut, with no movement** | The next line shows at once. |
+
+**How long it takes, in seconds**: 0.4 by default, from 0.1 to 2.
+
+### Title and ending
+
+- **Title at the start**: on by default. The title shows for two seconds before the first line.
+- **Title**, under it: empty uses the chat's name, while **Show names** is on. A title you type is always shown.
+- **Fade to black at the end, in seconds**: 1.5 by default. 0 ends at once.
+
+### Sounds
+
+- **Show sounds as captions**: on by default. A sound shows as a caption in square brackets, such as [thunder]. Off, the background shows alone while it plays.
+
+### Put the look back
+
+**Put the look back** puts back every choice under **Video**: the shape, words, pictures, background, transition and ending. **Show names** and **Show pictures** stay as they are. If nothing would change, it says so.
+
+## Hide and bleep words
+
+- **Hide words**: off by default.
+- **Words to hide**: one on each line. A word is hidden wherever it is said, with or without a final 's, and whatever marks are around it. An entry of two words, such as a full name, is hidden only where both are said together.
+- **Add the cast's names** adds every name, display name and other name in the cast, except the narrator.
+- **Cover them with**: **A black bar** by default, **Blur** or **Pixels**. It covers the words in the lines, the captions, the title and the names.
+- **Bleep them in the audio**: on by default. A 1 kHz tone covers each hidden word, in the video and in downloaded audio.
+
+The time of each word is worked out from where the voice is, so it is close, not exact. The bleep starts a little early and ends a little late, so it covers the whole word. It can catch the edge of the next word.
+
+---
+
+[Back to the README](../README.md)
