@@ -11623,7 +11623,14 @@ export function setup(ctx: Ctx, overrides?: any) {
       // the layer too.
       if (theater && theater.asked && !document.fullscreenElement) closeTheater();
     };
-    const onResize = () => fitTheater();
+    // Fitted once a frame at most while the window changes size.
+    let fitAsked = 0;
+    const onResize = () => {
+      if (!fitAsked) fitAsked = requestAnimationFrame(() => {
+        fitAsked = 0;
+        fitTheater();
+      });
+    };
     (root.querySelector('[data-th="close"]') as HTMLElement).addEventListener('click', () => closeTheater());
     document.addEventListener('keydown', onKey, true);
     document.addEventListener('fullscreenchange', onFull);
@@ -11637,39 +11644,54 @@ export function setup(ctx: Ctx, overrides?: any) {
         window.removeEventListener('resize', onResize);
       },
     };
-    fitTheater();
     paintStudio();
-    requestAnimationFrame(() => root.setAttribute('data-af-open', ''));
+    // The browser's switch to full screen changes the size of the screen,
+    // so the layer stays hidden until it is done. The video is then fitted
+    // once, and fades in at its final size, with nothing moving under it.
+    const t = theater;
+    let shown = false;
+    const show = () => {
+      if (shown || theater !== t) return;
+      shown = true;
+      fitTheater();
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        if (theater === t) root.setAttribute('data-af-open', '');
+      }));
+    };
     try {
       const go: any = (root as any).requestFullscreen;
       if (typeof go === 'function') {
         const p = go.call(root);
-        theater.asked = true;
-        if (p && typeof p.then === 'function')
-          p.then(
-            () => fitTheater(),
-            () => {
-              if (theater) theater.asked = false;
-            },
-          );
-      }
+        t.asked = true;
+        if (p && typeof p.then === 'function') {
+          p.then(show, () => {
+            t.asked = false;
+            show();
+          });
+          // A browser that never answers still shows the layer.
+          setTimeout(show, 700);
+        } else show();
+      } else show();
     } catch (_) {
-      if (theater) theater.asked = false;
+      t.asked = false;
+      show();
     }
     try {
       play.focus({ preventScroll: true });
     } catch (_) {}
   }
 
+  // The layer fades out first, while the screen keeps its size, and leaves
+  // the browser's full screen after, so the two never move at once.
   function closeTheater() {
     const t = theater;
     if (!t) return;
     theater = null;
     t.leave();
-    try {
-      if (document.fullscreenElement && typeof document.exitFullscreen === 'function') document.exitFullscreen().catch(() => {});
-    } catch (_) {}
     const back = () => {
+      try {
+        if (document.fullscreenElement && typeof document.exitFullscreen === 'function') document.exitFullscreen().catch(() => {});
+      } catch (_) {}
       t.canvas.style.width = '';
       t.canvas.style.height = '';
       if (t.slot.parentNode) {
@@ -11679,6 +11701,8 @@ export function setup(ctx: Ctx, overrides?: any) {
       t.root.remove();
       paintStudio();
     };
+    // Left by the browser's own key, full screen is already gone, so only
+    // the fade is left to do.
     if (calm()) return back();
     t.root.removeAttribute('data-af-open');
     setTimeout(back, 230);

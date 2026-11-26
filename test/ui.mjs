@@ -3691,6 +3691,41 @@ if (section("full screen")) {
       const back = await page.evaluate(() => ({ gone: !document.querySelector("[data-af-theater]"), home: !!document.querySelector('[data-af-card="studio-video"] canvas[data-af-videopreview]'), drawer: !!document.querySelector('.af-tab[data-tab="studio"]') }));
       check(back.gone && back.home && back.drawer, size.name + ", " + shape + ": Escape closes it, the preview is back in the Studio, and the drawer stays open");
     }
+    // Smooth: a browser's switch to full screen changes the size of the
+    // screen. The video must fade in once that is done, at its final size,
+    // and on close fade out before full screen ends.
+    const motion = await page.evaluate(async () => {
+      let inFull = null;
+      Object.defineProperty(document, "fullscreenElement", { configurable: true, get: () => inFull });
+      const exitAt = [];
+      document.exitFullscreen = () => { const r = document.querySelector("[data-af-theater]"); exitAt.push(r ? Number(getComputedStyle(r).opacity) : -1); inFull = null; return Promise.resolve(); };
+      Element.prototype.requestFullscreen = function () {
+        const el = this;
+        return new Promise((done) => {
+          // The screen changes size halfway through the switch.
+          setTimeout(() => { el.style.paddingTop = "140px"; window.dispatchEvent(new Event("resize")); }, 150);
+          setTimeout(() => { inFull = el; done(); }, 300);
+        });
+      };
+      const frames = [];
+      document.querySelector('[data-af-studio="full"]').click();
+      const t0 = performance.now();
+      while (performance.now() - t0 < 900) {
+        await new Promise((r) => requestAnimationFrame(r));
+        const r = document.querySelector("[data-af-theater]");
+        const c = r && r.querySelector("canvas");
+        frames.push([r ? Number(getComputedStyle(r).opacity) : -1, c ? Math.round(c.getBoundingClientRect().width) : 0]);
+      }
+      document.querySelector('[data-af-theater] [data-th="close"]').click();
+      await new Promise((r) => setTimeout(r, 400));
+      return { frames, exitAt };
+    });
+    const seen = motion.frames.filter((f) => f[0] > 0.01);
+    const widths = new Set(seen.map((f) => f[1]));
+    const mids = motion.frames.filter((f) => f[0] > 0.05 && f[0] < 0.95).length;
+    check(seen.length > 0 && widths.size === 1, size.name + ": the video fades in at its final size, and does not jump while it shows (" + [...widths].join(", ") + ")");
+    check(mids >= 3, size.name + ": it fades in over several frames (" + mids + ")");
+    check(motion.exitAt.length === 1 && motion.exitAt[0] < 0.05, size.name + ": on close, it fades out before full screen ends (" + motion.exitAt.join(", ") + ")");
     // The Audio card links the converter, which opens in a new tab.
     const conv = await page.evaluate(() => { const a = document.querySelector("a[data-af-converter]"); return a ? { href: a.href, target: a.target, rel: a.rel, text: a.textContent } : null; });
     check(!!conv && conv.href === "https://wave.co/tools/audio-converter" && conv.target === "_blank" && /noopener/.test(conv.rel), size.name + ": the Audio card links the audio converter in a new tab (" + JSON.stringify(conv) + ")");
