@@ -613,7 +613,7 @@ const LOOK_KEYS = [
     'videoNameColor', 'videoNameFont', 'videoNameSize', 'videoPicRing', 'videoPicRingWidth', 'videoPicMove', 'videoTwo', 'videoMoodPics',
     'videoWordFill', 'videoWordStops', 'videoWordDir', 'videoNameFill', 'videoNameStops', 'videoNameDir', 'videoCapFill', 'videoCapStops', 'videoCapDir',
     'videoWordShadow', 'videoWordShadowInk', 'videoWordShadowDark', 'videoWordShadowSoft', 'videoWordShadowFar',
-    'videoNameShadow', 'videoNameShadowInk', 'videoNameShadowDark', 'videoNameShadowSoft', 'videoNameShadowFar', 'videoBacks', 'videoBackPick', 'videoEdges', 'videoEdgeColor', 'videoMove', 'videoMoveSecs',
+    'videoNameShadow', 'videoNameShadowInk', 'videoNameShadowDark', 'videoNameShadowSoft', 'videoNameShadowFar', 'videoEdges', 'videoEdgeColor', 'videoMove', 'videoMoveSecs',
     'videoTitleOn', 'videoFadeOut', 'videoCaptions',
 ];
 // At most 20 looks, each cleaned the same way the settings are.
@@ -630,6 +630,12 @@ function cleanLooks(v) {
         const look = {};
         for (const k of LOOK_KEYS)
             look[k] = clean[k];
+        // A look holds one background, the one in use when it was saved. One
+        // saved before then has it in four settings of its own, which become
+        // that one background.
+        const raw = l.look.videoBack1 && typeof l.look.videoBack1 === 'object' ? { videoBacks: [l.look.videoBack1], videoBackPick: l.look.videoBack1.id } : l.look;
+        const backs = cleanBacks(raw);
+        look.videoBack1 = backs.videoBacks.find((b) => b.id === backs.videoBackPick) || backs.videoBacks[0];
         out.push({ id, name, look });
     }
     return out;
@@ -3585,26 +3591,63 @@ async function readVideoBg(id, userId) {
     const old = await readJson(VIDEO_BG_FILE, userId);
     return cleanVideoBg(old && old.picture);
 }
-// Every picture kept for a background: the ids in the settings, and the
-// old single file.
+// The ids of every background with a picture kept, in a file of its own,
+// so a picture is found and taken out even after its background left the
+// list. Storage cannot list its files.
+const BG_INDEX_FILE = 'video-backgrounds/index.json';
+async function bgIndex(userId) {
+    const v = await readJson(BG_INDEX_FILE, userId);
+    return Array.isArray(v) ? v.map((x) => backId(x)).filter((x, i, all) => all.indexOf(x) === i) : [];
+}
+async function keepBgIndex(ids, userId) {
+    return writeJson(BG_INDEX_FILE, ids, userId);
+}
+// Every id that may have a picture: the index, the ids in the settings, and
+// main, which may still read the old single file.
+async function bgIds(s, userId) {
+    const ids = (await bgIndex(userId)).concat(s.videoBacks.map((b) => b.id), ['main']);
+    return ids.filter((x, i) => ids.indexOf(x) === i);
+}
+// Takes out one background's picture, its file and its place in the index.
+async function dropVideoBg(id, userId) {
+    let ok = true;
+    try {
+        await spindle.userStorage.delete(bgFile(id), userId);
+    }
+    catch (_) {
+        // A file that was never written is not an error.
+        const v = await readJson(bgFile(id), userId);
+        if (v && v.picture)
+            ok = false;
+    }
+    if (id === 'main') {
+        const old = await readJson(VIDEO_BG_FILE, userId);
+        if (old && old.picture)
+            ok = (await writeJson(VIDEO_BG_FILE, { picture: '' }, userId)) && ok;
+    }
+    const index = await bgIndex(userId);
+    if (index.indexOf(id) >= 0)
+        ok = (await keepBgIndex(index.filter((x) => x !== id), userId)) && ok;
+    return ok;
+}
 async function anyVideoBg(s, userId) {
-    for (const b of s.videoBacks)
-        if (await readVideoBg(b.id, userId))
+    for (const id of await bgIds(s, userId))
+        if (await readVideoBg(id, userId))
             return true;
-    const old = await readJson(VIDEO_BG_FILE, userId);
-    return !!(old && old.picture);
+    return false;
 }
 async function dropVideoBgs(s, userId) {
     let ok = true;
-    for (const b of s.videoBacks) {
-        const v = await readJson(bgFile(b.id), userId);
-        if (v && v.picture)
-            ok = (await writeJson(bgFile(b.id), { picture: '' }, userId)) && ok;
-    }
-    const old = await readJson(VIDEO_BG_FILE, userId);
-    if (old && old.picture)
-        ok = (await writeJson(VIDEO_BG_FILE, { picture: '' }, userId)) && ok;
+    for (const id of await bgIds(s, userId))
+        ok = (await dropVideoBg(id, userId)) && ok;
     return ok;
+}
+// After the list is saved: the pictures of backgrounds no longer in it.
+async function dropLeftBgs(s, userId) {
+    const keep = s.videoBacks.map((b) => b.id);
+    for (const id of await bgIndex(userId))
+        if (keep.indexOf(id) < 0)
+            await dropVideoBg(id, userId);
 }
 // Fonts of the reader's own, for videos. The list is a file of its own, and
 // each font is a file named by its id. A font travels through the extension
@@ -4473,6 +4516,8 @@ async function onPanel(p, userId) {
                 const clean = cleanSettings(p.settings);
                 const ok = await saveSettings(userId, clean);
                 answer({ type: 'saved', ok, settings: clean });
+                if (ok)
+                    await dropLeftBgs(clean, userId);
                 if (!ok)
                     notify('warning', 'Your Auto Foley settings could not be saved. They will be lost when the page reloads.', userId);
                 return;
@@ -4701,13 +4746,18 @@ async function onPanel(p, userId) {
                 const picture = cleanVideoBg(p.picture);
                 if (p.picture && !picture)
                     return answer({ type: 'video_bg', id, ok: false, picture: '', error: 'That picture is too large to keep. Pick a smaller one.' });
-                const ok = await writeJson(bgFile(id), { picture }, userId);
+                const ok = picture ? await writeJson(bgFile(id), { picture }, userId) : await dropVideoBg(id, userId);
                 // The old single file goes once main has a file of its own, so it is
                 // never read again.
-                if (ok && id === 'main') {
+                if (ok && picture && id === 'main') {
                     const old = await readJson(VIDEO_BG_FILE, userId);
                     if (old && old.picture)
                         await writeJson(VIDEO_BG_FILE, { picture: '' }, userId);
+                }
+                if (ok && picture) {
+                    const index = await bgIndex(userId);
+                    if (index.indexOf(id) < 0)
+                        await keepBgIndex(index.concat([id]), userId);
                 }
                 return answer({ type: 'video_bg', id, ok, picture: ok ? picture : '', error: ok ? '' : 'The picture could not be saved to your account.' });
             }

@@ -26,7 +26,7 @@
 
 Nothing. The audio, the ZIP and the video are made in your browser, from the audio already heard.
 
-One thing is kept on your account: the background picture for videos, if you choose one. It is kept at most 1920 pixels on its long side. See [Privacy](privacy.md).
+Some things are kept on your account in files of their own: a picture for each background that has one, at most 1920 pixels on its long side, your own fonts, and the pictures for moods. See [Privacy](privacy.md).
 
 ## An example
 
@@ -178,7 +178,7 @@ When each word is said is worked out from where the voice is in the clip, so it 
 
 The words, the names, the sound captions, **A color of your own** and each shape in a design have a **Fill**:
 
-- **One color**, the default. Nothing changes from before.
+- **One color**, the default: the color row above, with no gradient.
 - **Linear gradient**, which runs in a **Direction**: top to bottom, left to right, or either diagonal.
 - **Radial gradient**, which runs from the middle out to the corners.
 
@@ -198,8 +198,8 @@ A fill is part of your settings, a saved look, and each background in the list.
 
 | Transition | What it does |
 | --- | --- |
-| **Fade and rise** | The default. The line fades out and moves up a little, then the next fades in from a little below. |
-| **Fade out, then in** | The same, without the movement. |
+| **Fade and rise** | The default. The line fades out as it moves up a little, while the next fades in from a little below, at the same time. |
+| **Fade out, then in** | The line fades out, then the next fades in, with no movement. The two overlap a little, so no frame is empty. |
 | **Dissolve** | The two lines fade into each other. |
 | **Through black** | The whole frame fades to black and back. |
 | **Slide across** | The line slides out to the left as the next slides in from the right. |
@@ -209,6 +209,8 @@ A fill is part of your settings, a saved look, and each background in the list.
 | **Cut, with no movement** | The next line shows at once. |
 
 **How long it takes, in seconds**: 0.4 by default, from 0.1 to 2.
+
+The pictures move on their own during a transition. A person on screen in both lines moves from their old place to their new one, such as from the middle to the left when a second person comes in. A person who arrives fades in, and one who leaves fades out. The words and names use the transition picked. With **Cut, with no movement**, the pictures change at once. With **Through black**, they go through black with the rest.
 
 ### Title and ending
 
@@ -236,20 +238,22 @@ A note is a few words for whoever watches, in a dark box at the top or the botto
 
 **Saved looks** keeps the look of a video under a name, to use again.
 
-- **Save this look**: type a name, then press it. The look holds the shape, words, captions, pictures, background, edges, transition and ending.
+- **Save this look**: type a name, then press it. The look holds the shape, words, captions, pictures, edges, transition and ending, and one background: the one in use, with its design and settings.
 - **Use** puts a saved look back. If it is already the look in use, it says so.
+- The look's background goes into your list of backgrounds, in place of the one with the same id, or added if there is none, and is used for every scene nothing else is for. Every other background, with its design and **Use it for**, stays.
+- A look saved with Auto Foley 1.9.0 or older has its one background, which becomes that one entry.
 - Type over a look's name to rename it. **Delete** asks first.
 - Notes, the title you typed, **Show names** and **Show pictures** are not part of a look, so using one never changes them.
-- A look with **A picture of your own** uses the background picture you have now. Only one background picture is kept.
+- A look with **A picture of your own** uses the picture that background has now. A look keeps the background's settings, not its picture.
 - Up to 20 looks, saved to your account.
 
 ### Put the look back
 
-**Put the look back** asks first, then puts back every choice under **Video**: the shape, words, captions, pictures, background, edges, transition and ending. Saved looks, notes, **Show names** and **Show pictures** stay as they are. If nothing would change, it says so and asks nothing.
+**Put the look back** asks first, then puts back every choice under **Video**: the shape, words, captions, pictures, edges, transition and ending. The built-in background, Dark, goes into your list in place of the one with its id, and is used for every scene nothing else is for. Your other backgrounds stay. Saved looks, notes, **Show names** and **Show pictures** stay as they are. If nothing would change, it says so and asks nothing.
 
 ### Start again
 
-Every choice in the Studio is a setting, kept on your account. **Start again** in the Settings tab, with **Settings** ticked, puts them all back: the look, the notes, the words to hide and the background picture. A setup file carries them too, except the background picture.
+Every choice in the Studio is a setting, kept on your account. **Start again** in the Settings tab, with **Settings** ticked, puts them all back: the look, the notes, the words to hide, the background pictures and your own fonts. A setup file carries the settings too, but not the background pictures, your fonts or the pictures for moods.
 
 ## Your own fonts
 
@@ -390,7 +394,7 @@ Your backgrounds are kept as a list, each with an id, a name and its own setting
 - **A picture for each mood**: a person can have a picture for each mood, on the Cast tab. The list of moods is yours to change. A line is shown with the picture for its mood.
 - Both are in **Speakers**, under **Show pictures**, and on by default.
 - Neither asks a model anything, so neither costs anything.
-- With no mood pictures, and one person speaking at a time, the video looks the same as before.
+- With no mood pictures, and one person speaking at a time, there is one picture: the main picture of the person speaking.
 
 ### Steps
 
@@ -408,7 +412,7 @@ Nothing. The mood is worked out on your device, from the line. The pictures are 
 Brisa and Tollan are made-up characters, in one scene. Both have a picture, and Tollan has an **Angry** picture.
 
 1. Brisa speaks. One picture shows: Brisa's.
-2. Tollan answers: "[angrily] Give the map back." Both pictures now show, side by side, fading in. Tollan's is at full strength, and it is his **Angry** picture, since the tag says angrily. Brisa's is a little dimmer.
+2. Tollan answers: "[angrily] Give the map back." Both pictures now show, side by side: Brisa's moves from the middle to the left, and Tollan's fades in on the right. Tollan's is at full strength, and it is his **Angry** picture, since the tag says angrily. Brisa's is a little dimmer.
 3. A line of narration. Both stay, a little dimmer.
 4. Brisa speaks again. Her picture is at full strength, and Tollan's is dimmer.
 5. Marek speaks, a third person. It goes back to one picture: Marek's.
@@ -419,7 +423,7 @@ Brisa and Tollan are made-up characters, in one scene. Both have a picture, and 
 - The first of the two to speak is on the left.
 - Names show under each picture, cut short with an ellipsis if there is no room.
 - When there is no room for two pictures side by side, such as a tall video with large pictures, one picture shows.
-- The change between one picture and two fades over a moment and moves 4 pixels. With Reduce motion on, it changes at once on screen.
+- Between one picture and two, a person on screen in both lines moves to their new place over the transition, and only the one who arrives or leaves fades. See [Moving between lines](#moving-between-lines).
 - A line's mood comes from its voice tags and its note on how it is said, matched against the words of each mood. With none, it is the scene's mood. With no mood either, the main picture is used.
 
 ## Hide and bleep words

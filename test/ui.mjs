@@ -179,7 +179,7 @@ function answer(msg) {
     case 'video_bg_put': window.__videoBgs = Object.assign(window.__videoBgs || {}, { [msg.id || 'main']: msg.picture || '' }); if ((msg.id || 'main') === 'main') window.__videoBg = msg.picture || ''; return reply({ type: 'video_bg', id: msg.id || 'main', ok: true, picture: msg.picture || '' });
     // Mood pictures, by person and feeling.
     case 'mood_pic_get': return reply({ type: 'mood_pic', member: msg.member, feeling: msg.feeling, picture: (window.__moodPics || {})[msg.member + ':' + msg.feeling] || '' });
-    case 'mood_pic_put': window.__moodPics = Object.assign(window.__moodPics || {}, { [msg.member + ':' + msg.feeling]: msg.picture || '' }); return reply({ type: 'mood_pic', ok: true, member: msg.member, feeling: msg.feeling, picture: msg.picture || '' });
+    case 'mood_pic_put': if (window.__moodPutFail && !msg.picture) return reply({ type: 'mood_pic', ok: false, error: 'The account did not answer.' }); window.__moodPics = Object.assign(window.__moodPics || {}, { [msg.member + ':' + msg.feeling]: msg.picture || '' }); return reply({ type: 'mood_pic', ok: true, member: msg.member, feeling: msg.feeling, picture: msg.picture || '' });
     // Fonts of your own: a list, and each font's bytes by id.
     case 'font_list': return reply({ type: 'fonts', ok: true, list: window.__fonts || [] });
     case 'font_upload': {
@@ -191,7 +191,7 @@ function answer(msg) {
       window.__fontData[id] = msg.base64;
       return reply({ type: 'font_saved', ok: true, font, list: window.__fonts });
     }
-    case 'font_get': return (window.__fontData || {})[msg.id] ? reply({ type: 'font_data', ok: true, id: msg.id, base64: window.__fontData[msg.id] }) : reply({ type: 'font_data', ok: false, id: msg.id, error: 'That font is no longer kept.' });
+    case 'font_get': window.__fontGets = (window.__fontGets || 0) + 1; return (window.__fontData || {})[msg.id] ? reply({ type: 'font_data', ok: true, id: msg.id, base64: window.__fontData[msg.id] }) : reply({ type: 'font_data', ok: false, id: msg.id, error: 'That font is no longer kept.' });
     case 'font_delete': window.__fonts = (window.__fonts || []).filter((f) => f.id !== msg.id); return reply({ type: 'fonts', ok: true, list: window.__fonts });
     case 'kept_script': return reply({ type: 'kept_script', script: (window.__keptList || []).some((e) => e.key === msg.key) ? SCRIPT : null });
     case 'sound_play': if (String(msg.id).indexOf('mu-') === 0 && window.__musicB64) return reply({ type: 'sound', base64: window.__musicB64, mime: 'audio/wav' }); return;
@@ -4277,6 +4277,224 @@ if (section("ring width")) {
     await page.locator('[data-af-row="videoPicRing"] input[type=checkbox]').first().click();
     await page.waitForTimeout(600);
     check(await page.evaluate(() => document.querySelector('[data-af-row="videoPicRingWidth"]').closest(".af-sub").hidden), size.name + ": the thickness is hidden while the ring is off");
+    check(!errors.length, size.name + ": no page errors. " + errors.slice(0, 2).join(" | "));
+    await context.close();
+  }
+}
+
+if (section("review fixes")) {
+  console.log("Looks keep the other backgrounds, fonts are let go, failed deletes are said, and a reply settles before it is directed");
+  // A look holds one background. Using it, or a look from 1.9.0, puts that
+  // one in the list, and the others stay.
+  for (const size of SIZES) {
+    const { context, page, errors } = await open(THEMES[0], size, 1, () => {
+      const one = (id, name, kind, color) => ({ id, name, kind, color, fill: "solid", stops: ["#2a1f3d"], dir: "down", dim: 40, blur: 0, shapes: [], use: "match", moods: [], places: [] });
+      window.__settings.videoBacks = [one("main", "Main", "dark", ""), one("b2", "Dock", "color", "#2040c0"), one("b3", "Hall", "design", "#101010")];
+      window.__settings.videoBacks[2].shapes = [{ id: "s1", kind: "rect", x: 0.5, y: 0.5, w: 300, h: 200, rot: 0, fill: "", grad: "none", stops: ["#141218"], dir: "down", clear: 0, text: "" }];
+      window.__settings.videoBackPick = "main";
+      window.__settings.videoLooks = [
+        { id: "old", name: "From before", look: { videoShape: "wide", videoBack: "color", videoBackColor: "#603020" } },
+        { id: "new", name: "Night", look: { videoShape: "wide", videoBack1: one("b9", "Night", "color", "#101830") } },
+      ];
+    });
+    await page.click('.af-tab[data-tab="studio"]');
+    await page.waitForTimeout(1200);
+    await page.locator(".af-fold", { hasText: "Saved looks" }).first().click();
+    await page.waitForTimeout(400);
+    await page.locator("[data-af-look]").nth(0).locator("[data-af-lookuse]").click();
+    await page.waitForTimeout(600);
+    const a = await page.evaluate(() => ({ ids: window.__settings.videoBacks.map((b) => b.id), main: window.__settings.videoBacks.find((b) => b.id === "main"), hall: window.__settings.videoBacks.find((b) => b.id === "b3"), pick: window.__settings.videoBackPick }));
+    check(JSON.stringify(a.ids) === '["main","b2","b3"]' && a.main.kind === "color" && a.main.color === "#603020" && a.hall.shapes.length === 1 && a.pick === "main", size.name + ": a look from before puts its one background in place of main, and the other two stay (" + JSON.stringify(a.ids) + ")");
+    await page.locator(".af-fold", { hasText: "Saved looks" }).first().click();
+    await page.waitForTimeout(300);
+    if (!(await page.locator("[data-af-look]").count())) await page.locator(".af-fold", { hasText: "Saved looks" }).first().click();
+    await page.waitForTimeout(300);
+    await page.locator("[data-af-look]").nth(1).locator("[data-af-lookuse]").click();
+    await page.waitForTimeout(600);
+    const b = await page.evaluate(() => ({ ids: window.__settings.videoBacks.map((b) => b.id), pick: window.__settings.videoBackPick }));
+    check(JSON.stringify(b.ids) === '["main","b2","b3","b9"]' && b.pick === "b9", size.name + ": a look whose background is not in the list adds it and uses it, and keeps the rest (" + JSON.stringify(b) + ")");
+    await page.click('[data-af-studio="lookback"]');
+    await page.waitForTimeout(600);
+    const c = await page.evaluate(() => ({ ids: window.__settings.videoBacks.map((b) => b.id), main: window.__settings.videoBacks.find((b) => b.id === "main").kind, pick: window.__settings.videoBackPick }));
+    check(JSON.stringify(c.ids) === '["main","b2","b3","b9"]' && c.main === "dark" && c.pick === "main", size.name + ": Put the look back puts the built-in background in place of main and keeps the others (" + JSON.stringify(c) + ")");
+    check(!errors.length, size.name + ": no page errors. " + errors.slice(0, 2).join(" | "));
+    await context.close();
+  }
+  // A font taken out is let go by the page, and a font that cannot be read
+  // is fetched once, however often the preview is drawn again.
+  {
+    const FONT = "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf";
+    const b64 = existsSync(FONT) ? readFileSync(FONT).toString("base64") : "";
+    const { context, page, errors } = await open(THEMES[0], SIZES[1]);
+    await page.evaluate((b64) => { window.__fontFile = { name: "Plain.ttf", base64: b64 }; }, b64);
+    await page.click('.af-tab[data-tab="studio"]');
+    await page.waitForTimeout(1200);
+    await page.locator(".af-fold", { hasText: "Shape and words" }).first().click();
+    await page.waitForTimeout(400);
+    await page.click('[data-af-font-add="videoFont"]');
+    await page.waitForTimeout(1500);
+    const loaded = await page.evaluate(() => Array.from(document.fonts).some((f) => /af-font-/.test(f.family)));
+    await page.click('[data-af-font-drop="videoFont"]');
+    await page.waitForTimeout(900);
+    const after = await page.evaluate(() => Array.from(document.fonts).some((f) => /af-font-/.test(f.family)));
+    check(loaded && !after, "a font taken out is taken off the page too (" + loaded + ", " + after + ")");
+    check(!errors.length, "fonts: no page errors. " + errors.slice(0, 2).join(" | "));
+    await context.close();
+  }
+  // A font whose file cannot be read, picked when the page opens: the
+  // preview is drawn again several times, and the font is fetched once.
+  {
+    const { context, page, errors } = await open(THEMES[0], SIZES[1], 1, () => {
+      window.__settings.videoFont = "own:fbad";
+      window.__fonts = [{ id: "fbad", name: "Broken", bytes: 12 }];
+      window.__fontData = { fbad: "AAAAAAAAAAAAAAAA" };
+      window.__fontGets = 0;
+    });
+    await page.click('.af-tab[data-tab="studio"]');
+    await page.waitForTimeout(1500);
+    await page.locator(".af-fold", { hasText: "Shape and words" }).first().click();
+    await page.waitForTimeout(300);
+    const quotes = page.locator('[data-af-row="videoQuotes"] input[type=checkbox]');
+    for (let n = 0; n < 4; n++) {
+      await quotes.click();
+      await page.waitForTimeout(700);
+    }
+    const gets = await page.evaluate(() => window.__fontGets || 0);
+    check(gets === 1, "a font that cannot be read is fetched once, not on every rebuild (" + gets + " fetches)");
+    check(!errors.length, "broken font: no page errors. " + errors.slice(0, 2).join(" | "));
+    await context.close();
+  }
+  // A mood picture that cannot be taken out of the account is said.
+  {
+    const { context, page, errors } = await open(THEMES[0], SIZES[0], 1, () => {
+      window.__settings.moodList = [{ id: "happy", name: "Happy", words: ["happy"] }, { id: "mx1", name: "Smug", words: ["smugly"] }];
+      const m = (window.__settings.cast || []).find((x) => x.name === "Ferryman");
+      if (m) m.moodPics = ["mx1"];
+      window.__moodPutFail = true;
+    });
+    await showTab(page, "cast");
+    await page.locator(".af-fold", { hasText: "Moods for pictures" }).first().click();
+    await page.waitForTimeout(400);
+    await page.locator('[data-af-mood="mx1"] [data-af-mood-act="delete"]').click();
+    await page.waitForTimeout(800);
+    const said = await page.evaluate(() => (document.querySelector("[data-af-moodsaid]") || {}).textContent || "");
+    check(/could not be taken out/.test(said), "a mood picture that cannot be taken out of the account is said (" + said + ")");
+    check(!errors.length, "mood delete: no page errors. " + errors.slice(0, 2).join(" | "));
+    await context.close();
+  }
+  // With no wait set, a new reply changed just after it ends is directed
+  // once, after the changes stop.
+  {
+    const { context, page, errors } = await open(THEMES[0], SIZES[1], 1, () => { window.__settings.autoplay = false; window.__settings.prepareAhead = true; window.__settings.autoplayDelay = 0; });
+    await page.waitForTimeout(400);
+    const out = await page.evaluate(async () => {
+      const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+      const directs = () => window.__sent.filter((m) => m.type === "direct").length;
+      const was = directs();
+      window.__emit("GENERATION_ENDED", { chatId: "chat1", messageId: "m1" });
+      await wait(600);
+      window.__emit("MESSAGE_EDITED", { chatId: "chat1", message: { id: "m1", content: "A reply with one word swapped." } });
+      await wait(700);
+      const early = directs() - was;
+      window.__emit("MESSAGE_EDITED", { chatId: "chat1", message: { id: "m1", content: "A reply with two words swapped." } });
+      await wait(1000);
+      const mid = directs() - was;
+      await wait(1500);
+      return { early, mid, late: directs() - was };
+    });
+    check(out.early === 0 && out.mid === 0 && out.late === 1, "a reply changed just after it ends is directed once, after the changes stop (" + JSON.stringify(out) + ")");
+    check(!errors.length, "settle: no page errors. " + errors.slice(0, 2).join(" | "));
+    await context.close();
+  }
+}
+
+if (section("example faces")) {
+  console.log("The example's pictures stand apart from their rings, and move smoothly from one to two");
+  for (const size of SIZES) {
+    // A black background, so a dimmed picture is never mistaken for the
+    // theme's glow behind it.
+    const { context, page, errors } = await open(THEMES[0], size, 1, () => {
+      Object.assign(window.__settings, { videoMove: "rise", videoMoveSecs: 0.8, videoEdges: 0 });
+      window.__settings.videoBacks = [{ id: "main", name: "Main", kind: "color", color: "#000000", fill: "solid", stops: ["#2a1f3d"], dir: "down", dim: 40, blur: 0, shapes: [], use: "match", moods: [], places: [] }];
+      window.__settings.videoBackPick = "main";
+    });
+    await page.click('.af-tab[data-tab="studio"]');
+    await page.waitForTimeout(1500);
+    // Juniper is violet: the ring is the full color, and the picture a
+    // darker tint. Ansel is pink. Each frame is read along the row through
+    // the middle of the pictures.
+    const read = (t) => page.evaluate(async (t) => {
+      const r = document.querySelector("[data-af-scrub] input");
+      r.value = String(t);
+      r.dispatchEvent(new Event("input", { bubbles: true }));
+      await new Promise((x) => requestAnimationFrame(() => requestAnimationFrame(x)));
+      const c = document.querySelector("[data-af-videopreview]");
+      const W = c.width, H = c.height;
+      const d = c.getContext("2d").getImageData(0, 0, W, H).data;
+      // Juniper's picture is a darker violet and Ansel's a darker pink.
+      // Their rings and names are the full colors, which are brighter.
+      const mx = (i) => Math.max(d[i], d[i + 1], d[i + 2]);
+      const jun = (i) => mx(i) > 25 && mx(i) < 150 && d[i + 2] > d[i] + 8 && d[i + 2] > d[i + 1] + 14;
+      const ans = (i) => mx(i) > 25 && mx(i) < 200 && d[i] > d[i + 1] + 14 && d[i] > d[i + 2] && d[i + 2] > d[i + 1];
+      const ringish = (i) => Math.abs(d[i] - 0xa7) < 30 && Math.abs(d[i + 1] - 0x8b) < 30 && Math.abs(d[i + 2] - 0xfa) < 30;
+      let best = -1, bestN = 0;
+      for (let y = 0; y < H; y += 3) {
+        let n = 0;
+        for (let x = 0; x < W; x += 2) { const i = (y * W + x) * 4; if (jun(i) || ans(i)) n++; }
+        if (n > bestN) { bestN = n; best = y; }
+      }
+      // Runs of picture along that row, with the gaps left by an initial
+      // joined, since a picture is about 150 pixels across.
+      const runs = [];
+      let ring = 0, inside = 0, from = -1, last = -1;
+      if (best >= 0 && bestN > 20) for (let x = 0; x < W; x++) {
+        const i = (best * W + x) * 4;
+        if (ringish(i)) ring++;
+        else if (jun(i)) inside++;
+        if (jun(i) || ans(i)) {
+          if (from < 0 || x - last > 50) {
+            if (from >= 0 && last - from > 20) runs.push((from + last) / 2);
+            from = x;
+          }
+          last = x;
+        }
+      }
+      if (from >= 0 && last - from > 20) runs.push((from + last) / 2);
+      return { W, runs, ring, inside };
+    }, t);
+    // The rings, around Juniper's picture alone, at a moment she speaks.
+    const alone = await read(8.6);
+    check(alone.ring >= 2 && alone.inside > alone.ring * 2, size.name + ": the example's ring is a band of the kind's full color, apart from the darker picture inside it (" + alone.ring + " ring, " + alone.inside + " inside)");
+    // Ansel's line starts at 10 seconds. Every frame of the change has at
+    // most two pictures, and Juniper's moves left through places between.
+    const frames = [];
+    for (let t = 9.95; t <= 10.85; t += 0.05) frames.push(await read(t));
+    const most = Math.max(...frames.map((f) => f.runs.length));
+    const lefts = frames.map((f) => (f.runs.length ? f.runs[0] / f.W : 0)).filter(Boolean);
+    // From the middle, 0.5, to the left of the pair, about 0.44, through
+    // the places between.
+    const between = lefts.filter((x) => x > 0.445 && x < 0.495).length;
+    check(most <= 2, size.name + ": no frame of the change from one to two shows three pictures (" + most + " at most)");
+    check(between >= 3 && lefts[0] > 0.49 && lefts[lefts.length - 1] < 0.45, size.name + ": Juniper's picture moves through places between the middle and the left (" + lefts.map((x) => x.toFixed(2)).join(" ") + ")");
+    // Fade and rise from the sound caption to Juniper's line: no frame with
+    // nearly nothing on it.
+    const light = [];
+    for (let t = 7.3; t <= 8.3; t += 0.05) {
+      light.push(await page.evaluate(async (t) => {
+        const r = document.querySelector("[data-af-scrub] input");
+        r.value = String(t);
+        r.dispatchEvent(new Event("input", { bubbles: true }));
+        await new Promise((x) => requestAnimationFrame(() => requestAnimationFrame(x)));
+        const c = document.querySelector("[data-af-videopreview]");
+        const d = c.getContext("2d").getImageData(0, 0, c.width, c.height).data;
+        let n = 0;
+        for (let i = 0; i < d.length; i += 4 * 3) if (d[i] + d[i + 1] + d[i + 2] > 300) n++;
+        return n;
+      }, t));
+    }
+    // No frame in the change is much darker than the frames either side.
+    const ends = Math.min(light[0], light[light.length - 1]);
+    check(Math.min(...light) >= ends * 0.8, size.name + ": Fade and rise from one part to the next has no dark frame between them (" + Math.min(...light) + ", the ends " + light[0] + " and " + light[light.length - 1] + ")");
     check(!errors.length, size.name + ": no page errors. " + errors.slice(0, 2).join(" | "));
     await context.close();
   }

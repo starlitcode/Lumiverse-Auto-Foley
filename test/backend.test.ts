@@ -2210,3 +2210,49 @@ describe("gradients", () => {
     expect([b.fill, b.stops, b.dir]).toEqual(["linear", ["#2a1f3d"], "diag"]);
   });
 });
+
+describe("background pictures left behind", () => {
+  const pic = "data:image/jpeg;base64,AAAA";
+  const two = { videoBacks: [{ id: "main", kind: "dark" }, { id: "b2", kind: "picture" }], videoBackPick: "main" };
+  test("a picture whose background left the list is taken out when the settings are saved", async () => {
+    const h = host();
+    await h.ask({ type: "save", settings: two }, "u1");
+    await h.ask({ type: "video_bg_put", id: "b2", picture: pic }, "u1");
+    expect((await h.ask({ type: "video_bg_get", id: "b2" }, "u1")).find((m: any) => m.type === "video_bg").picture).toBe(pic);
+    await h.ask({ type: "save", settings: { videoBacks: [{ id: "main", kind: "dark" }], videoBackPick: "main" } }, "u1");
+    expect((await h.ask({ type: "video_bg_get", id: "b2" }, "u1")).find((m: any) => m.type === "video_bg").picture).toBe("");
+    expect(h.files.has("u1/video-backgrounds/b2.json")).toBe(false);
+  });
+
+  test("Start again takes out every picture kept, also of a background no longer in the list", async () => {
+    const h = host();
+    await h.ask({ type: "video_bg_put", id: "gone1", picture: pic }, "u1");
+    await h.ask({ type: "video_bg_put", id: "main", picture: pic }, "u1");
+    await h.ask({ type: "reset", parts: ["settings"] }, "u1");
+    expect(h.files.has("u1/video-backgrounds/gone1.json")).toBe(false);
+    expect((await h.ask({ type: "video_bg_get", id: "main" }, "u1")).find((m: any) => m.type === "video_bg").picture).toBe("");
+  });
+
+  test("a picture taken out takes its file with it", async () => {
+    const h = host();
+    await h.ask({ type: "video_bg_put", id: "b2", picture: pic }, "u1");
+    await h.ask({ type: "video_bg_put", id: "b2", picture: "" }, "u1");
+    expect(h.files.has("u1/video-backgrounds/b2.json")).toBe(false);
+  });
+});
+
+describe("looks keep one background", () => {
+  test("a look from before keeps its one background as one entry", () => {
+    const h = host();
+    const s = h.box.cleanSettings({ videoLooks: [{ id: "a", name: "Old", look: { videoBack: "color", videoBackColor: "#603020" } }] });
+    const b = s.videoLooks[0].look.videoBack1;
+    expect([b.id, b.kind, b.color]).toEqual(["main", "color", "#603020"]);
+    expect("videoBacks" in s.videoLooks[0].look).toBe(false);
+  });
+  test("a look saved with one background keeps it, cleaned", () => {
+    const h = host();
+    const s = h.box.cleanSettings({ videoLooks: [{ id: "a", name: "Night", look: { videoBack1: { id: "b9", name: "Night", kind: "design", color: "#101830", shapes: [{ id: "s1", kind: "ellipse" }] } } }] });
+    const b = s.videoLooks[0].look.videoBack1;
+    expect([b.id, b.kind, b.shapes.length]).toEqual(["b9", "design", 1]);
+  });
+});

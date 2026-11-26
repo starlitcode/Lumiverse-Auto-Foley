@@ -121,6 +121,8 @@ On the **Settings** tab:
 - **Autoplay new replies** performs each reply when it finishes.
 - **Wait before autoplay**, under it, waits a few seconds first. This gives another extension time to change the reply, such as Auto Refine.
 - **Prepare replies ahead** directs each reply in the background, with Autoplay off. Play then starts at once.
+- With **Wait before autoplay** at 0, the default, Autoplay and **Prepare replies ahead** wait until a new reply has gone 1.5 seconds with no change, and at most 10 seconds, before the Director is asked. A Play you press starts at once.
+- With Auto Refine on, its word swaps change a reply just after it ends. Auto Foley waits for those, so the Director is asked once, for the words that stay. A full refine takes longer than that wait. When it changes a reply that was already directed, the reply is directed again, which is a second Director call. Set **Wait before autoplay** longer than your refines take to avoid it.
 - **Read your own messages** performs your messages too, with Autoplay on.
 
 While a message gets ready, the status says **Getting the script**. It changes to **The Director is writing the script** only when the Director is asked. A message played from its kept script never asks the Director, so it never says that.

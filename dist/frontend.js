@@ -3602,17 +3602,34 @@ export function setup(ctx, overrides) {
     function loadOwnFonts() {
         if (!ownFontsAsked)
             ownFontsAsked = rpc({ type: 'font_list' }, 15000).then((r) => {
-                ownFonts = r && Array.isArray(r.list) ? r.list : [];
+                const next = r && Array.isArray(r.list) ? r.list : [];
+                if (JSON.stringify(next) !== JSON.stringify(ownFonts))
+                    fontFailed.clear();
+                ownFonts = next;
             }, () => {
                 ownFontsAsked = null;
             });
         return ownFontsAsked;
     }
-    // The family name of each font loaded, by its id.
+    // The family name of each font loaded, by its id, and the font itself,
+    // so it can be taken off the page again.
     const fontFaces = new Map();
+    const fontObjs = new Map();
     const fontLoading = new Map();
-    // Fonts that could not load, so the Log says so once, not on every frame.
+    // Fonts that could not load. Each is not fetched again until the list of
+    // fonts changes, since it can be 3 MB, and the Log says why once.
     const fontFailed = new Set();
+    function forgetFont(id) {
+        const face = fontObjs.get(id);
+        try {
+            if (face)
+                document.fonts.delete(face);
+        }
+        catch (_) { }
+        fontObjs.delete(id);
+        fontFaces.delete(id);
+        fontLoading.delete(id);
+    }
     function ensureFont(choice) {
         const own = /^own:(.+)$/.exec(String(choice || ''));
         if (!own)
@@ -3620,6 +3637,8 @@ export function setup(ctx, overrides) {
         const id = own[1];
         if (fontFaces.has(id))
             return Promise.resolve(true);
+        if (fontFailed.has(id))
+            return Promise.resolve(false);
         const had = fontLoading.get(id);
         if (had)
             return had;
@@ -3654,6 +3673,7 @@ export function setup(ctx, overrides) {
                 await face.load();
                 document.fonts.add(face);
                 fontFaces.set(id, fam);
+                fontObjs.set(id, face);
                 fontFailed.delete(id);
                 return true;
             }
@@ -3665,13 +3685,8 @@ export function setup(ctx, overrides) {
         return go;
     }
     disposers.push(() => {
-        try {
-            for (const fam of fontFaces.values())
-                for (const f of Array.from(document.fonts))
-                    if (f.family === fam || f.family === '"' + fam + '"')
-                        document.fonts.delete(f);
-        }
-        catch (_) { }
+        for (const id of Array.from(fontObjs.keys()))
+            forgetFont(id);
         fontFaces.clear();
         fontLoading.clear();
     });
@@ -4120,8 +4135,6 @@ export function setup(ctx, overrides) {
     function pairUp(st, parts) {
         let recent = [];
         let scene = -1;
-        let before = null;
-        let beforeScene = -1;
         for (const p of parts) {
             let si = 0;
             while (si + 1 < st.scenes.length && p.start >= st.scenes[si + 1].t)
@@ -4142,12 +4155,6 @@ export function setup(ctx, overrides) {
             }
             const both = S.videoTwo !== false && S.videoPics !== false && recent.length === 2 && recent.every((f) => !!f.picture && st.pics.has(f.picture));
             p.pair = both && (p.kind === 'line') ? { a: recent[0], b: recent[1], speaking: p.narration ? -1 : recent.findIndex((f) => f.name === p.name) } : null;
-            const head = p.kind !== 'line' ? null : p.pair ? { kind: 'pair', ...p.pair } : { kind: 'one', face: { name: p.name, who: p.who, picture: p.narration ? '' : p.picture } };
-            p.swapFrom = head && before && beforeScene === si && before.kind !== head.kind ? before : null;
-            if (head) {
-                before = head;
-                beforeScene = si;
-            }
         }
     }
     // Text cut to a width, with an ellipsis.
@@ -4254,7 +4261,52 @@ export function setup(ctx, overrides) {
     }
     // A text fill from the settings: the first color, then the stops.
     const textFill = (g, which, first, x0, y0, x1, y1) => fillOf(g, String(S['video' + which + 'Fill'] || 'solid'), [first].concat(Array.isArray(S['video' + which + 'Stops']) ? S['video' + which + 'Stops'] : []), String(S['video' + which + 'Dir'] || 'down'), x0, y0, x1, y1);
-    function drawPart(g, st, p, local, alpha, dx, dy) {
+    // One picture, in its circle or rounded square, with its ring, at x (its
+    // middle) and top. It keeps the soft dark shadow it always had.
+    function drawPicture(g, st, f, x, top, a) {
+        const pic = S.videoPics !== false && f.picture ? st.pics.get(f.picture) : undefined;
+        if (!pic || a <= 0)
+            return;
+        const u = Math.min(st.w, st.h) / 1080;
+        const PIC = Math.round(Math.min(300, Math.max(60, Number(S.videoPicSize) || 150)) * u);
+        const ink = hexOr(S.videoInk, STORY_INK);
+        const ring = S.videoNameColor === 'words' ? ink : kindHex(f.who);
+        const round = S.videoPicShape === 'rounded';
+        const pathPic = () => {
+            g.beginPath();
+            if (round && g.roundRect)
+                g.roundRect(x - PIC / 2, top, PIC, PIC, PIC * 0.16);
+            else
+                g.arc(x, top + PIC / 2, PIC / 2, 0, Math.PI * 2);
+        };
+        g.save();
+        g.globalAlpha = a;
+        g.shadowColor = 'rgba(0,0,0,0.65)';
+        g.shadowBlur = 18 * u;
+        g.shadowOffsetX = 0;
+        g.shadowOffsetY = 2 * u;
+        pathPic();
+        g.fillStyle = '#000';
+        g.fill();
+        g.shadowColor = 'transparent';
+        g.clip();
+        const sc = Math.max(PIC / pic.width, PIC / pic.height);
+        g.drawImage(pic, x - (pic.width * sc) / 2, top + PIC / 2 - (pic.height * sc) / 2, pic.width * sc, pic.height * sc);
+        g.restore();
+        if (S.videoPicRing !== false) {
+            g.save();
+            g.shadowColor = 'transparent';
+            g.globalAlpha = a * 0.9;
+            g.lineWidth = Math.min(20, Math.max(1, numOr(S.videoPicRingWidth, 3))) * u;
+            g.strokeStyle = ring;
+            pathPic();
+            g.stroke();
+            g.restore();
+        }
+    }
+    // what: all draws everything, text leaves out the pictures, and faces
+    // draws nothing and answers where the pictures go.
+    function drawPart(g, st, p, local, alpha, dx, dy, what = 'all') {
         const W = st.w;
         const H = st.h;
         const u = Math.min(W, H) / 1080;
@@ -4269,7 +4321,7 @@ export function setup(ctx, overrides) {
         if (p.kind === 'sound') {
             if (S.videoCaptions === false) {
                 g.restore();
-                return;
+                return [];
             }
             const size = Math.round(44 * u * scale);
             g.font = 'italic 400 ' + size + 'px ' + font;
@@ -4299,7 +4351,7 @@ export function setup(ctx, overrides) {
                 x += widths[n] + space;
             });
             g.restore();
-            return;
+            return [];
         }
         const words = p.words.slice();
         if (!p.narration && S.videoQuotes !== false && words.length) {
@@ -4365,65 +4417,50 @@ export function setup(ctx, overrides) {
         const mid = lower ? H * 0.72 : H * 0.52;
         let y = Math.max(90 * u, Math.min(H - 60 * u - block, Math.round(mid - block / 2))) + dy;
         const cx = W / 2 + dx;
-        // One face: its picture, and its name under it.
-        const drawFace = (f, x, top, a, maxName, named) => {
-            const ring = S.videoNameColor === 'words' ? ink : kindHex(f.who);
-            const pic = S.videoPics !== false && f.picture ? st.pics.get(f.picture) : undefined;
-            let at = top;
-            if (pic) {
-                g.save();
-                g.globalAlpha = a;
-                // The picture keeps the soft dark shadow it always had.
-                g.shadowColor = 'rgba(0,0,0,0.65)';
-                g.shadowBlur = 18 * u;
-                g.shadowOffsetX = 0;
-                g.shadowOffsetY = 2 * u;
-                const round = S.videoPicShape === 'rounded';
-                const pathPic = () => {
-                    g.beginPath();
-                    if (round && g.roundRect)
-                        g.roundRect(x - PIC / 2, top, PIC, PIC, PIC * 0.16);
-                    else
-                        g.arc(x, top + PIC / 2, PIC / 2, 0, Math.PI * 2);
-                };
-                pathPic();
-                g.fillStyle = '#000';
-                g.fill();
-                g.shadowColor = 'transparent';
-                g.clip();
-                const sc = Math.max(PIC / pic.width, PIC / pic.height);
-                g.drawImage(pic, x - (pic.width * sc) / 2, top + PIC / 2 - (pic.height * sc) / 2, pic.width * sc, pic.height * sc);
-                g.restore();
-                if (S.videoPicRing !== false) {
-                    g.save();
-                    g.shadowColor = 'transparent';
-                    g.globalAlpha = a * 0.9;
-                    g.lineWidth = Math.min(20, Math.max(1, numOr(S.videoPicRingWidth, 3))) * u;
-                    g.strokeStyle = ring;
-                    pathPic();
-                    g.stroke();
-                    g.restore();
-                }
-                at += PIC + 28 * u;
-            }
-            if (named && f.name) {
+        // Each face above the words, with its place and strength. In a pair,
+        // the one speaking is at full strength, the other a little dimmer, and
+        // both are a little dimmer during narration between their lines.
+        const places = [];
+        if (now.kind === 'pair') {
+            const off = PIC / 2 + PAIR_GAP / 2;
+            const dimOf = (n) => (now.speaking === n ? 1 : now.speaking < 0 ? 0.8 : 0.55);
+            places.push({ face: now.a, x: cx - off, top: y, a: alpha * dimOf(0) });
+            places.push({ face: now.b, x: cx + off, top: y, a: alpha * dimOf(1) });
+        }
+        else if (S.videoPics !== false && now.face.picture && st.pics.has(now.face.picture))
+            places.push({ face: now.face, x: cx, top: y, a: alpha });
+        if (what === 'faces') {
+            g.restore();
+            return places;
+        }
+        // The pictures, unless a transition draws them on their own.
+        if (what === 'all')
+            for (const f of places)
+                drawPicture(g, st, f.face, f.x, f.top, f.a);
+        // The names, under the pictures, or alone with none.
+        if (names) {
+            const maxName = now.kind === 'pair' ? PIC + PAIR_GAP - 12 * u : MAX_W;
+            const shownNames = now.kind === 'pair' ? places : !p.narration && now.face.name ? [{ face: now.face, x: cx, top: y, a: alpha }] : [];
+            const picH = now.kind === 'pair' || places.length ? PIC + 28 * u : 0;
+            for (const f of shownNames) {
+                const ring = S.videoNameColor === 'words' ? ink : kindHex(f.face.who);
                 g.save();
                 setShadow(g, 'Name', u);
                 g.font = '600 ' + nameSize + 'px ' + (st.nameFont || font);
                 g.fillStyle = ring;
-                g.globalAlpha = a;
-                const label = fitText(g, f.name.toUpperCase(), maxName);
+                g.globalAlpha = f.a;
+                const label = fitText(g, f.face.name.toUpperCase(), maxName);
                 const gap = 4 * u;
                 const chars = Array.from(label);
                 const widths = chars.map((ch) => g.measureText(ch).width);
                 const full = widths.reduce((q, w) => q + w, 0) + gap * (chars.length - 1);
-                let nx = x - full / 2;
-                const base = at + nameSize;
+                let nx = f.x - full / 2;
+                const base = f.top + picH + nameSize;
                 g.fillStyle = textFill(g, 'Name', ring, nx, base - nameSize, nx + full, base + nameSize * 0.25);
                 // A name with a hidden word in it is covered whole.
                 // Checked on the whole name, since a long one is cut short to fit.
-                if (hiddenWords(f.name.split(/\s+/), hiddenList()).some(Boolean))
-                    coverWord(g, label, nx, base, nameSize, ring, a);
+                if (hiddenWords(f.face.name.split(/\s+/), hiddenList()).some(Boolean))
+                    coverWord(g, label, nx, base, nameSize, ring, f.a);
                 else
                     chars.forEach((ch, n) => {
                         g.fillText(ch, nx, base);
@@ -4431,32 +4468,7 @@ export function setup(ctx, overrides) {
                     });
                 g.restore();
             }
-        };
-        // The faces above the words. In a pair, the one speaking is at full
-        // strength, the other a little dimmer, and both are a little dimmer
-        // during narration between their lines.
-        const drawHead = (h, top, a) => {
-            if (h.kind === 'pair') {
-                const off = PIC / 2 + PAIR_GAP / 2;
-                const maxName = PIC + PAIR_GAP - 12 * u;
-                const dimOf = (n) => (h.speaking === n ? 1 : h.speaking < 0 ? 0.8 : 0.55);
-                drawFace(h.a, cx - off, top, a * dimOf(0), maxName, names);
-                drawFace(h.b, cx + off, top, a * dimOf(1), maxName, names);
-            }
-            else
-                drawFace(h.face, cx, top, a, MAX_W, names && !p.narration);
-        };
-        // Going from one person to two, or back, in a scene: the old faces fade
-        // out and the new fade in, each moving 4 pixels, over a moment.
-        const SWAP_S = 0.45;
-        const from = p.swapFrom ? headOf(p.swapFrom) : null;
-        if (from && from.kind !== now.kind && local < SWAP_S && !st.still) {
-            const k = ease(Math.max(0, local) / SWAP_S);
-            drawHead(from, y + 4 * u * k, alpha * (1 - k));
-            drawHead(now, y - 4 * u * (1 - k), alpha * k);
         }
-        else
-            drawHead(now, y, alpha);
         y += head;
         g.font = '400 ' + size + 'px ' + font;
         const sp = space();
@@ -4490,6 +4502,7 @@ export function setup(ctx, overrides) {
             });
         });
         g.restore();
+        return [];
     }
     const ease = (k) => (k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2);
     // Fade in and Blur in: how long a word takes to come in once it is said,
@@ -4690,8 +4703,19 @@ export function setup(ctx, overrides) {
             const move = S.videoMove || 'rise';
             if (i === 0 || local >= D || move === 'cut')
                 drawPart(g, st, p, local, 1, 0, 0);
-            else
-                videoMove(g, st, move, ease(local / D), parts[i - 1], now - parts[i - 1].start, p, local);
+            else {
+                // The words and names move as the transition says. Each picture
+                // moves on its own, from where it was to where it goes, so a person
+                // on screen in both parts slides across rather than fading out in
+                // one place and in at another.
+                const k = ease(local / D);
+                const a = parts[i - 1];
+                const aT = now - a.start;
+                videoMove(g, st, move, k, a, aT, p, local);
+                // Through black takes the pictures through black too.
+                const lit = move === 'black' ? Math.abs(k * 2 - 1) : 1;
+                facesBetween(g, st, drawPart(g, st, a, aT, lit, 0, 0, 'faces'), drawPart(g, st, p, local, lit, 0, 0, 'faces'), k);
+            }
         }
         drawNotes(g, st, t, intro, total, fadeOut);
         // In from black at the start, and out to black at the end.
@@ -4760,7 +4784,40 @@ export function setup(ctx, overrides) {
         g.globalAlpha = was;
         g.drawImage(st.edges, 0, 0);
     }
-    // The last part giving way to the next. k runs from 0 to 1, eased.
+    // The pictures during a transition. One in both parts moves from its old
+    // place to its new one, and its strength changes with it. One that
+    // leaves fades out where it was, and one that arrives fades in where it
+    // goes, each moving 4 pixels.
+    function facesBetween(g, st, from, to, k) {
+        const u = Math.min(st.w, st.h) / 1080;
+        const used = new Set();
+        for (const b of to) {
+            const at = from.findIndex((a, n) => !used.has(n) && a.face.name === b.face.name);
+            if (at < 0) {
+                drawPicture(g, st, b.face, b.x, b.top - 4 * u * (1 - k), b.a * k);
+                continue;
+            }
+            used.add(at);
+            const a = from[at];
+            const x = a.x + (b.x - a.x) * k;
+            const top = a.top + (b.top - a.top) * k;
+            const strength = a.a + (b.a - a.a) * k;
+            // A new picture of the same person, such as one for a mood, fades
+            // over the old one as it moves.
+            if (a.face.picture !== b.face.picture) {
+                drawPicture(g, st, a.face, x, top, strength * (1 - k));
+                drawPicture(g, st, b.face, x, top, strength * k);
+            }
+            else
+                drawPicture(g, st, b.face, x, top, strength);
+        }
+        from.forEach((a, n) => {
+            if (!used.has(n))
+                drawPicture(g, st, a.face, a.x, a.top + 4 * u * k, a.a * (1 - k));
+        });
+    }
+    // The last part giving way to the next, with no pictures: those are
+    // moved by facesBetween. k runs from 0 to 1, eased.
     function videoMove(g, st, move, k, a, aT, b, bT) {
         const W = st.w;
         const H = st.h;
@@ -4768,15 +4825,21 @@ export function setup(ctx, overrides) {
         const layer = (c, p, t) => {
             const lg = c.getContext('2d');
             lg.clearRect(0, 0, W, H);
-            drawPart(lg, st, p, t, 1, 0, 0);
+            drawPart(lg, st, p, t, 1, 0, 0, 'text');
             return c;
         };
-        if (move === 'fade' || move === 'rise') {
-            const lift = move === 'rise' ? 8 * u : 0;
-            if (k < 0.5)
-                drawPart(g, st, a, aT, 1 - k * 2, 0, -lift * k * 2);
-            else
-                drawPart(g, st, b, bT, k * 2 - 1, 0, lift * (2 - k * 2));
+        if (move === 'rise') {
+            // The old part fades as it rises, and the new one rises in over it,
+            // at once, so there is never a moment with nothing on screen.
+            const lift = 8 * u;
+            drawPart(g, st, a, aT, 1 - k, 0, -lift * k, 'text');
+            drawPart(g, st, b, bT, k, 0, lift * (1 - k), 'text');
+        }
+        else if (move === 'fade') {
+            // Out, then in, with the two halves overlapping a little, so no frame
+            // is left empty.
+            drawPart(g, st, a, aT, Math.max(0, 1 - k / 0.55), 0, 0, 'text');
+            drawPart(g, st, b, bT, Math.max(0, (k - 0.45) / 0.55), 0, 0, 'text');
         }
         else if (move === 'dissolve') {
             g.globalAlpha = 1 - k;
@@ -4787,9 +4850,9 @@ export function setup(ctx, overrides) {
         }
         else if (move === 'black') {
             if (k < 0.5)
-                drawPart(g, st, a, aT, 1, 0, 0);
+                drawPart(g, st, a, aT, 1, 0, 0, 'text');
             else
-                drawPart(g, st, b, bT, 1, 0, 0);
+                drawPart(g, st, b, bT, 1, 0, 0, 'text');
             g.globalAlpha = 1 - Math.abs(k * 2 - 1);
             g.fillStyle = '#000';
             g.fillRect(0, 0, W, H);
@@ -4799,8 +4862,8 @@ export function setup(ctx, overrides) {
             // A third of the frame, so the two lines pass each other rather than
             // sit on top of each other.
             const far = W * 0.34;
-            drawPart(g, st, a, aT, Math.max(0, 1 - k * 1.6), -far * k, 0);
-            drawPart(g, st, b, bT, Math.max(0, k * 1.6 - 0.6), far * (1 - k), 0);
+            drawPart(g, st, a, aT, Math.max(0, 1 - k * 1.6), -far * k, 0, 'text');
+            drawPart(g, st, b, bT, Math.max(0, k * 1.6 - 0.6), far * (1 - k), 0, 'text');
         }
         else if (move === 'wipe') {
             // A soft edge moves across: the old part is taken away behind it and
@@ -4855,7 +4918,7 @@ export function setup(ctx, overrides) {
             g.globalAlpha = 1;
         }
         else
-            drawPart(g, st, b, bT, 1, 0, 0);
+            drawPart(g, st, b, bT, 1, 0, 0, 'text');
     }
     // Makes the video, recorded as it plays, silently. It takes as long as the
     // performance, with the title and the fade at the end.
@@ -7074,6 +7137,33 @@ export function setup(ctx, overrides) {
     // ---------------------------------------------------------------------------
     // New replies
     // ---------------------------------------------------------------------------
+    // When each message was last edited. Another extension can change a
+    // reply just after it ends, such as Auto Refine swapping a word. With no
+    // wait set, a new reply waits until it has gone EDIT_QUIET_MS with no
+    // edit, and at most EDIT_WAIT_MAX_MS, before it is directed, so the
+    // Director is asked once, for the words that stay. A Play the reader
+    // presses starts at once.
+    const lastEditAt = new Map();
+    const EDIT_QUIET_MS = 1500;
+    const EDIT_WAIT_MAX_MS = 10000;
+    function whenQuiet(id, go) {
+        const from = Date.now();
+        const check = () => {
+            const t = setTimeout(() => {
+                timers.delete(t);
+                if (!alive)
+                    return;
+                const last = lastEditAt.get(id) || 0;
+                const quietFor = Date.now() - Math.max(from, last);
+                if (quietFor >= EDIT_QUIET_MS || Date.now() - from >= EDIT_WAIT_MAX_MS)
+                    go();
+                else
+                    check();
+            }, Math.max(50, EDIT_QUIET_MS - (Date.now() - Math.max(from, lastEditAt.get(id) || 0))));
+            timers.add(t);
+        };
+        check();
+    }
     try {
         disposers.push(ctx.events.on('GENERATION_ENDED', (p) => {
             if (!alive || !p || p.error || !onIn(p.chatId))
@@ -7087,8 +7177,14 @@ export function setup(ctx, overrides) {
                 return;
             if (S.autoplay) {
                 const wait = Math.max(0, Math.min(30, Number(S.autoplayDelay) || 0)) * 1000;
-                if (!wait)
-                    perform(messageId);
+                if (!wait) {
+                    phase = 'Waiting a moment, in case the new reply is still being changed';
+                    paintStage();
+                    whenQuiet(messageId, () => {
+                        if (alive && !show && !busyMessage)
+                            perform(messageId);
+                    });
+                }
                 else {
                     phase = 'Waiting ' + S.autoplayDelay + ' s before playing the new reply';
                     paintStage();
@@ -7101,7 +7197,10 @@ export function setup(ctx, overrides) {
                 }
             }
             else if (S.prepareAhead)
-                prepare(messageId);
+                whenQuiet(messageId, () => {
+                    if (alive && S.prepareAhead)
+                        prepare(messageId);
+                });
         }));
     }
     catch (_) { }
@@ -7114,6 +7213,8 @@ export function setup(ctx, overrides) {
                 return;
             const m = p && p.message;
             const id = m && m.id ? String(m.id) : '';
+            if (id)
+                lastEditAt.set(id, Date.now());
             if (!id || !directedText.has(id))
                 return;
             if (String(m.content || '') === directedText.get(id))
@@ -11652,24 +11753,33 @@ export function setup(ctx, overrides) {
     function moodsNow() {
         return Array.isArray(S.moodList) && S.moodList.length ? S.moodList : BUILT_IN_MOODS;
     }
+    // Takes the pictures of these moods off one person, and out of the
+    // account. Answers whether every file was taken out.
+    async function dropPersonMoods(m, ids) {
+        const gone = (m.moodPics || []).filter((x) => ids.indexOf(x) >= 0);
+        m.moodPics = (m.moodPics || []).filter((x) => ids.indexOf(x) < 0);
+        let ok = true;
+        for (const id of gone) {
+            moodPics.delete(String(m.id) + ':' + id);
+            let r = null;
+            try {
+                r = await rpc({ type: 'mood_pic_put', member: String(m.id), feeling: id, picture: '' }, 15000);
+            }
+            catch (_) { }
+            if (!r || !r.ok)
+                ok = false;
+        }
+        return ok;
+    }
     // Takes out every picture of these moods, from every person and from the
     // account, so a mood that goes leaves nothing behind.
-    function dropMoodPictures(ids) {
-        let changed = false;
-        for (const m of (S.cast || [])) {
-            const had = m.moodPics || [];
-            const gone = had.filter((x) => ids.indexOf(x) >= 0);
-            if (!gone.length)
-                continue;
-            m.moodPics = had.filter((x) => ids.indexOf(x) < 0);
-            changed = true;
-            for (const id of gone) {
-                moodPics.delete(String(m.id) + ':' + id);
-                rpc({ type: 'mood_pic_put', member: String(m.id), feeling: id, picture: '' }, 15000).catch(() => { });
-            }
-        }
-        return changed;
+    async function dropMoodPictures(ids) {
+        let ok = true;
+        for (const m of (S.cast || []))
+            ok = (await dropPersonMoods(m, ids)) && ok;
+        return ok;
     }
+    const MOOD_DROP_FAILED = 'Some of the pictures for it could not be taken out of your account. Choose them again and take them out, or try again later.';
     const picturesOf = (id) => (S.cast || []).filter((m) => (m.moodPics || []).indexOf(id) >= 0).length;
     // One list of moods for the whole cast, on the Cast tab, since the moods
     // belong to the people and their pictures, not to one video.
@@ -11750,11 +11860,13 @@ export function setup(ctx, overrides) {
                             return;
                         const all = own().filter((x) => x.id !== mood.id);
                         S.moodList = all;
-                        dropMoodPictures([mood.id]);
+                        const done = await dropMoodPictures([mood.id]);
                         set({ moodList: all.slice(), cast: S.cast });
                         for (const f of moodFolds)
                             f();
                         draw();
+                        if (!done)
+                            setText(body.querySelector('[data-af-moodsaid]'), 'The mood was deleted. ' + MOOD_DROP_FAILED);
                     });
                     del.setAttribute('data-af-mood-act', 'delete');
                     // One mood is always left, since an empty list is the built-in one.
@@ -11793,12 +11905,14 @@ export function setup(ctx, overrides) {
                     const also = pics ? ' Pictures for moods that are not built in are taken out.' : '';
                     if (!(await askSure('Back to the built-in moods', 'Put the built-in moods and their words back?' + also + ' There is no undo.', 'Put them back', true)))
                         return;
-                    dropMoodPictures(gone);
+                    const done = await dropMoodPictures(gone);
                     S.moodList = [];
                     set({ moodList: [], cast: S.cast });
                     for (const f of moodFolds)
                         f();
                     draw();
+                    if (!done)
+                        setText(body.querySelector('[data-af-moodsaid]'), 'The built-in moods are back. ' + MOOD_DROP_FAILED);
                 });
                 back.setAttribute('data-af-mood-back', '');
                 tools.appendChild(add);
@@ -12367,11 +12481,12 @@ export function setup(ctx, overrides) {
                 S.cast = S.cast.filter((x) => x.id !== m.id);
                 openPeople.delete(m.id);
                 save();
-                // Their mood pictures are files of their own, so they go too.
-                for (const f of m.moodPics || []) {
-                    moodPics.delete(String(m.id) + ':' + f);
-                    rpc({ type: 'mood_pic_put', member: String(m.id), feeling: f, picture: '' }, 15000).catch(() => { });
-                }
+                // Their mood pictures are files of their own, so they go too. The
+                // card is gone, so a file that stays is said in a notification.
+                void dropPersonMoods(m, (m.moodPics || []).slice()).then((done) => {
+                    if (!done)
+                        notify('warning', m.name + ' was taken out of the cast, but some of their mood pictures could not be taken out of your account.');
+                });
                 renderTab();
             }, 'af-danger'));
         }
@@ -13015,9 +13130,10 @@ export function setup(ctx, overrides) {
     // played. Two made-up people take turns, so Two speakers on screen shows,
     // one line has a voice tag, so a mood picture can show, and a sound
     // caption, narration and two scenes come in between. The people's
-    // pictures are drawn here: a circle in their kind's color with an
-    // initial, and a lighter one for a mood, so the example never borrows a
-    // picture from the cast.
+    // pictures are drawn here, so the example never borrows a picture from
+    // the cast: a clearly darker tint of their kind's color with a light
+    // initial, so the ring, in the full kind's color, stands out around it,
+    // and a less dark tint for a mood.
     const EXAMPLE_PEOPLE = { a: { name: 'Juniper', kind: 'character' }, b: { name: 'Ansel', kind: 'npc' } };
     const examplePics = new Map();
     function examplePicture(kind, initial, light) {
@@ -13031,11 +13147,9 @@ export function setup(ctx, overrides) {
             const g = c.getContext('2d');
             g.fillStyle = kindHex(kind);
             g.fillRect(0, 0, 160, 160);
-            if (light) {
-                g.fillStyle = 'rgba(255,255,255,0.35)';
-                g.fillRect(0, 0, 160, 160);
-            }
-            g.fillStyle = 'rgba(255,255,255,0.92)';
+            g.fillStyle = light ? 'rgba(0,0,0,0.32)' : 'rgba(0,0,0,0.58)';
+            g.fillRect(0, 0, 160, 160);
+            g.fillStyle = STORY_INK;
             g.font = '700 76px system-ui, sans-serif';
             g.textAlign = 'center';
             g.textBaseline = 'middle';
@@ -13307,6 +13421,8 @@ export function setup(ctx, overrides) {
             nb.id = fresh();
             nb.name = (bk.name + ' copy').slice(0, 40);
             list.splice(list.indexOf(bk) + 1, 0, nb);
+            // Saved first, so the copy is in the list when its picture is kept.
+            set({ videoBacks: list.slice() });
             // A picture is a file of its own, so the copy gets a file of its own.
             if (bk.kind === 'picture') {
                 await loadVideoBg(bk.id).catch(() => { });
@@ -13344,14 +13460,17 @@ export function setup(ctx, overrides) {
                 patch.videoBackPick = list[0].id;
             backEditId = '';
             set(patch);
-            if (bk.kind === 'picture') {
-                try {
-                    await rpc({ type: 'video_bg_put', id: bk.id, picture: '' }, 15000);
-                }
-                catch (_) { }
-                videoBgs.delete(bk.id);
+            // Its picture file goes with it, whatever kind it was last set to.
+            let r = null;
+            try {
+                r = await rpc({ type: 'video_bg_put', id: bk.id, picture: '' }, 15000);
             }
+            catch (_) { }
+            videoBgs.delete(bk.id);
+            videoBgAsked.delete(bk.id);
             after();
+            if (!r || r.ok === false)
+                notify('warning', 'The background was deleted, but its picture could not be taken out of your account. It is taken out the next time your settings are saved.');
         });
         del.setAttribute('data-af-back-act', 'delete');
         del.disabled = list.length < 2;
@@ -13632,6 +13751,7 @@ export function setup(ctx, overrides) {
             }
             ownFonts = Array.isArray(r.list) ? r.list : ownFonts;
             ownFontsAsked = Promise.resolve();
+            fontFailed.clear();
             const id = r.font && r.font.id;
             if (id && !(await ensureFont('own:' + id))) {
                 setSaid('The font was saved, but this browser could not read it. The Log says why.', true);
@@ -13664,7 +13784,8 @@ export function setup(ctx, overrides) {
                 return;
             }
             ownFonts = Array.isArray(r.list) ? r.list : [];
-            fontFaces.delete(id);
+            forgetFont(id);
+            fontFailed.clear();
             const patch = {};
             if (String(S.videoFont) === 'own:' + id)
                 patch.videoFont = 'book';
@@ -14382,16 +14503,48 @@ export function setup(ctx, overrides) {
         'videoNameColor', 'videoNameFont', 'videoNameSize', 'videoPicRing', 'videoPicRingWidth', 'videoPicMove', 'videoTwo', 'videoMoodPics',
         'videoWordFill', 'videoWordStops', 'videoWordDir', 'videoNameFill', 'videoNameStops', 'videoNameDir', 'videoCapFill', 'videoCapStops', 'videoCapDir',
         'videoWordShadow', 'videoWordShadowInk', 'videoWordShadowDark', 'videoWordShadowSoft', 'videoWordShadowFar',
-        'videoNameShadow', 'videoNameShadowInk', 'videoNameShadowDark', 'videoNameShadowSoft', 'videoNameShadowFar', 'videoBacks', 'videoBackPick', 'videoEdges', 'videoEdgeColor', 'videoMove', 'videoMoveSecs',
+        'videoNameShadow', 'videoNameShadowInk', 'videoNameShadowDark', 'videoNameShadowSoft', 'videoNameShadowFar', 'videoEdges', 'videoEdgeColor', 'videoMove', 'videoMoveSecs',
         'videoTitleOn', 'videoFadeOut', 'videoCaptions',
     ];
     const LOOKS_MAX = 20;
+    // A look holds one background: the one in use, with its design and
+    // settings. The rest of the list is not part of a look.
     function lookNow() {
         const out = {};
         for (const k of LOOK_KEYS)
             out[k] = JSON.parse(JSON.stringify(S[k] === undefined ? DEFAULTS[k] : S[k]));
+        out.videoBack1 = JSON.parse(JSON.stringify(backDefault()));
         return out;
     }
+    // A look's background. A look saved before looks held one reads its
+    // background from its four settings of their own.
+    function backOfLook(look) {
+        if (look.videoBack1 && typeof look.videoBack1 === 'object')
+            return look.videoBack1;
+        if (look.videoBack === undefined)
+            return null;
+        return {
+            id: 'main', name: 'Main', kind: ['dark', 'color', 'picture', 'design'].indexOf(look.videoBack) >= 0 ? look.videoBack : 'dark',
+            color: hexOr(look.videoBackColor, ''), fill: 'solid', stops: ['#2a1f3d'], dir: 'down', dim: numOr(look.videoDim, 40), blur: numOr(look.videoBlur, 0),
+            shapes: [], use: 'match', moods: [], places: [],
+        };
+    }
+    // The background list with this one in it, in place of the one with the
+    // same id or added at the end, and picked for every scene nothing else is
+    // for. Every other background stays.
+    function withBack(entry) {
+        const copy = JSON.parse(JSON.stringify(entry));
+        const list = backList().slice();
+        const at = list.findIndex((b) => b.id === copy.id);
+        if (at >= 0)
+            list[at] = copy;
+        else if (list.length < 12)
+            list.push(copy);
+        else
+            list[list.findIndex((b) => b.id === backDefault().id)] = copy;
+        return { videoBacks: list, videoBackPick: copy.id };
+    }
+    const sameBack = (a) => !a || JSON.stringify(backDefault()) === JSON.stringify(a);
     // Each saved look: its name, which can be typed over, Use and Delete. Save
     // this look, under them, keeps the look now under a new name.
     function drawLooks(box) {
@@ -14412,7 +14565,8 @@ export function setup(ctx, overrides) {
                 set({ videoLooks: looks.map((x) => (x.id === l.id ? { ...x, name: v } : x)) });
             });
             const use = button('Use', () => {
-                const same = LOOK_KEYS.every((k) => JSON.stringify(S[k]) === JSON.stringify(l.look[k]));
+                const back = backOfLook(l.look);
+                const same = LOOK_KEYS.every((k) => !(k in l.look) || JSON.stringify(S[k]) === JSON.stringify(l.look[k])) && sameBack(back);
                 if (same) {
                     setText(said, 'This look is already the one in use. Nothing changed.');
                     return;
@@ -14421,6 +14575,8 @@ export function setup(ctx, overrides) {
                 for (const k of LOOK_KEYS)
                     if (k in l.look)
                         patch[k] = JSON.parse(JSON.stringify(l.look[k]));
+                if (back)
+                    Object.assign(patch, withBack(back));
                 set(patch);
                 renderTab();
             }, 'af-primary');
@@ -15107,7 +15263,8 @@ export function setup(ctx, overrides) {
         const lookRow = el('<div class="af-row"></div>');
         const lookBack = button('Put the look back', async () => {
             const keys = LOOK_KEYS;
-            if (keys.every((k) => JSON.stringify(S[k]) === JSON.stringify(DEFAULTS[k]))) {
+            const builtIn = DEFAULTS.videoBacks[0];
+            if (keys.every((k) => JSON.stringify(S[k]) === JSON.stringify(DEFAULTS[k])) && sameBack(builtIn)) {
                 keepSaid('The look is already the built-in one. Nothing changed.');
                 paintStudio();
                 return;
@@ -15119,6 +15276,9 @@ export function setup(ctx, overrides) {
             const patch = {};
             for (const k of keys)
                 patch[k] = JSON.parse(JSON.stringify(DEFAULTS[k]));
+            // The built-in background goes in place of the one with its id, and
+            // every other background stays.
+            Object.assign(patch, withBack(builtIn));
             set(patch);
             keepSaid('');
             renderTab();
@@ -15466,7 +15626,7 @@ export function setup(ctx, overrides) {
                 { id: '5', label: '5 seconds' },
                 { id: '10', label: '10 seconds' },
                 { id: '20', label: '20 seconds' },
-            ], String(S.autoplayDelay || 0), (v) => set({ autoplayDelay: Number(v) }), 'Play at once by default. Gives another extension time to change a reply first. A reply changed while it plays starts again with the new text either way.'),
+            ], String(S.autoplayDelay || 0), (v) => set({ autoplayDelay: Number(v) }), 'At once by default, once the reply has gone 1.5 seconds with no change. A longer wait gives another extension more time.'),
             toggle('Read your own messages', 'Off by default. Your own messages are performed too, in your persona’s voice. The button on a message always works.', 'readOwnMessages'),
         ].concat(bothAutoplayWarning())));
         p.appendChild(toggle('Prepare replies ahead', 'Off by default. With Autoplay off, each new reply is directed in the background, so pressing Play starts at once. It costs a Director call for every reply, played or not.', 'prepareAhead', (on) => {
