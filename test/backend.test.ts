@@ -2263,7 +2263,7 @@ describe("watermarks and the line under the title", () => {
     const many = Array.from({ length: 8 }, (_, i) => ({ id: "w" + i, text: "x".repeat(90), pic: "yes", place: "left", size: 9999, strength: -4, when: "later", from: -3, secs: 0, backs: ["main", "b!2"] }));
     const s = h.box.cleanSettings({ videoMarks: many, videoByline: "  by Wren Calloway  ", videoBylineInk: "gold" });
     expect(s.videoMarks.length).toBe(5);
-    expect(s.videoMarks[0]).toEqual({ id: "w0", text: "x".repeat(60), pic: false, place: "br", size: 400, strength: 0, when: "all", from: 0, secs: 0.5, backs: ["main", "b2"] });
+    expect(s.videoMarks[0]).toEqual({ id: "w0", text: "x".repeat(60), pic: false, place: "br", size: 400, strength: 0, when: "all", from: 0, secs: 0.5, backs: ["main", "b2"], font: "", ink: "", fill: "solid", stops: ["#f2b880"], dir: "right", shadow: true, shadowInk: "", shadowDark: 60, shadowSoft: 10, shadowFar: 0 });
     expect([s.videoByline, s.videoBylineInk]).toEqual(["by Wren Calloway", ""]);
   });
 

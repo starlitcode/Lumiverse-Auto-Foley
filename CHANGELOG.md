@@ -34,7 +34,7 @@ _2026-11-26_
 - **A shadow behind the player**, under **A floating player** in the Settings tab. On by default, your theme's own shadow, with a color, darkness and softness of your own.
 - **An example clip** in the Studio's preview. With no performance, the preview shows a short silent clip with two made-up people, a sound caption, two scenes and a title, so each part of the look can be seen and changed before playing anything. With a performance, **Show in the preview** picks it or the example. The example is never saved. See [The example clip](docs/studio.md#the-example-clip).
 - **Gradients** in the Studio, for the words, the names, the sound captions, **A color of your own** and each shape in a design. **Fill** picks one color, a linear gradient in one of four directions, or a radial gradient from the middle out, through two to six colors. On text, a gradient runs across each whole line or name. See [Gradients](docs/studio.md#gradients).
-- **A line under the title** and **Watermarks** in the Studio, to mark a video as yours. The line, such as "by" and your name, is drawn under the title. Up to five watermarks, each text, a picture or both, sit in a corner or the middle, clear of the words, for the whole video, the start, the end, from a time, or during scenes on some backgrounds, with a size and strength of their own. See [Marking a video as yours](docs/studio.md#marking-a-video-as-yours).
+- **A line under the title** and **Watermarks** in the Studio, to mark a video as yours. The line, such as "by" and your name, is drawn under the title. Up to five watermarks, each text, a picture or both, sit in a corner or the middle, clear of the words, for the whole video, the start, the end, from a time, or during scenes on some backgrounds, with a size and strength of their own. The line and each watermark's text have their own font, color, fill and shadow. See [Marking a video as yours](docs/studio.md#marking-a-video-as-yours).
 - **A shadow behind the player under each message**, as **A shadow behind it** under **A player under each message**. On by default, your theme's own small shadow, with a color, darkness and softness of your own.
 
 ### Changed
@@ -49,6 +49,7 @@ _2026-11-26_
 
 ### Fixed
 
+- **A slider's colored part did not meet its knob.** Near either end, the colored part of a slider stopped a little before or after the knob. It now ends at the middle of the knob at every position and every UI Scale.
 - **Fade and rise left a moment with nothing on screen.** The line faded out fully before the next began to fade in, so between two lines the words were gone for a moment. The two now fade at the same time.
 - **Prepare replies ahead kept directing after it was turned off.** The reply being prepared was still directed, which costs a Director call, and the player kept saying Directing it ahead. Turning it off now stops it, and the player says Prepare replies ahead is off. Pressing the button now says whether it is on or off, since a phone shows no hover text.
 - **Scrolling the floating player moved it instead.** With Who is voiced open on a small screen, a swipe in the player dragged the whole player. A swipe below its top row now scrolls it, and the top row still moves it.

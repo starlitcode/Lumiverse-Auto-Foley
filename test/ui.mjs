@@ -4609,6 +4609,42 @@ if (section("watermarks")) {
     }
     return { all, corner, under };
   }, [t, color]);
+  // A text watermark with a two-color gradient from left to right: red at
+  // the start of its text and blue at the end.
+  {
+    const { context, page, errors } = await open(THEMES[0], SIZES[1] || SIZES[0], 1, () => {
+      Object.assign(window.__settings, {
+        videoEdges: 0,
+        videoMarks: [{ id: "wgrad", text: "WRENWRENWREN", pic: false, place: "bl", size: 120, strength: 100, when: "all", from: 0, secs: 4, backs: [], font: "", ink: "#ff2020", fill: "linear", stops: ["#2020ff"], dir: "right", shadow: false, shadowInk: "", shadowDark: 60, shadowSoft: 10, shadowFar: 0 }],
+      });
+    });
+    await page.click('.af-tab[data-tab="studio"]');
+    await page.waitForTimeout(1500);
+    const both = await page.evaluate(async () => {
+      const r = document.querySelector("[data-af-scrub] input");
+      r.value = "1.2";
+      r.dispatchEvent(new Event("input", { bubbles: true }));
+      await new Promise((x) => requestAnimationFrame(() => requestAnimationFrame(x)));
+      const c = document.querySelector("[data-af-videopreview]");
+      const W = c.width, H = c.height;
+      const y0 = Math.round(H * 0.75);
+      const d = c.getContext("2d").getImageData(0, y0, Math.round(W * 0.5), H - y0).data;
+      const w = Math.round(W * 0.5);
+      const hits = [];
+      for (let i = 0; i < d.length; i += 4) {
+        const [rr, gg, bb] = [d[i], d[i + 1], d[i + 2]];
+        if (Math.max(rr, bb) > 150 && gg < 90) hits.push({ x: (i / 4) % w, red: rr > bb });
+      }
+      if (!hits.length) return null;
+      const xs = hits.map((h) => h.x);
+      const lo = Math.min(...xs), hi = Math.max(...xs);
+      const share = (from, to, red) => { const part = hits.filter((h) => h.x >= lo + (hi - lo) * from && h.x <= lo + (hi - lo) * to); return part.filter((h) => h.red === red).length / Math.max(1, part.length); };
+      return { n: hits.length, leftRed: share(0, 0.2, true), rightBlue: share(0.8, 1, false) };
+    });
+    check(!!both && both.leftRed > 0.8 && both.rightBlue > 0.8, "a watermark with a two-color gradient draws the first color at the start of its text and the second at the end (" + JSON.stringify(both) + ")");
+    check(!errors.length, "gradient watermark: no page errors. " + errors.slice(0, 2).join(" | "));
+    await context.close();
+  }
   for (const size of SIZES) {
     const { context, page, errors } = await open(THEMES[0], size, 1, () => {
       const c = document.createElement("canvas");
@@ -4677,6 +4713,66 @@ if (section("watermarks")) {
     check((await page.evaluate(() => ({ a: window.__asked, n: window.__settings.videoMarks.length }))).a === 1 && (await page.evaluate(() => window.__settings.videoMarks.length)) === 1, size.name + ": deleting a watermark asks first");
     check(!errors.length, size.name + ": no page errors. " + errors.slice(0, 2).join(" | "));
     await context.close();
+  }
+}
+
+if (section("seek bar")) {
+  console.log("The full-screen seek bar fills to its knob, and its track shows on black");
+  for (const size of SIZES) {
+    for (const zoom of [1, 1.25, 0.85]) {
+      const { context, page, errors } = await open(THEMES[0], size, zoom);
+      await page.click('.af-tab[data-tab="studio"]');
+      await page.waitForTimeout(1500);
+      await page.click('[data-af-studio="full"]');
+      await page.waitForTimeout(700);
+      const say = size.name + (zoom === 1 ? "" : ", zoom " + zoom);
+      for (const at of [0.1, 0.5, 0.9]) {
+        // The preview set to this share of the way, then the bar read from
+        // a screenshot: the accent up to the knob, no dark gap before it,
+        // and a track after it that differs from the bar.
+        await page.evaluate((at) => {
+          const r = document.querySelector('[data-th="scrub"]');
+          r.value = String(Number(r.max) * at);
+          r.dispatchEvent(new Event("input", { bubbles: true }));
+        }, at);
+        await page.waitForTimeout(300);
+        const bar = page.locator('[data-th="scrub"]');
+        const box = await bar.boundingBox();
+        const png = await bar.screenshot();
+        const out = await page.evaluate(async ([b64, at]) => {
+          const im = new Image();
+          im.src = "data:image/png;base64," + b64;
+          await im.decode();
+          const c = document.createElement("canvas");
+          c.width = im.width;
+          c.height = im.height;
+          const g = c.getContext("2d");
+          g.drawImage(im, 0, 0);
+          const y = Math.round(im.height / 2);
+          const row = g.getImageData(0, y, im.width, 1).data;
+          const px = (x) => [row[x * 4], row[x * 4 + 1], row[x * 4 + 2]];
+          const lum = (p) => p[0] + p[1] + p[2];
+          // The knob, the brightest run near where it should be.
+          const knobAt = Math.round(8 + (im.width - 16) * at);
+          // From the left to just before the knob: no pixel as dark as the
+          // bar's background.
+          let gap = 0;
+          for (let x = 4; x < knobAt - 9; x++) if (lum(px(x)) < 120) gap++;
+          // After the knob: the track, apart from the bar's color, read
+          // from the top of the box, above the 4-pixel track.
+          const topRow = g.getImageData(0, 1, im.width, 1).data;
+          const bg = [topRow[(im.width - 6) * 4], topRow[(im.width - 6) * 4 + 1], topRow[(im.width - 6) * 4 + 2]];
+          let track = 0, n = 0;
+          for (let x = knobAt + 12; x < im.width - 4; x++) { n++; if (Math.abs(lum(px(x)) - lum(bg)) > 60) track++; }
+          return { gap, track, n, w: im.width };
+        }, [png.toString("base64"), at]);
+        check(out.gap === 0, say + ", at " + Math.round(at * 100) + "%: the fill reaches the knob with no dark gap (" + out.gap + " dark pixels)");
+        if (at < 0.9) check(out.track > out.n * 0.8, say + ", at " + Math.round(at * 100) + "%: the track after the knob shows on the bar (" + out.track + " of " + out.n + ")");
+        void box;
+      }
+      check(!errors.length, say + ": no page errors. " + errors.slice(0, 2).join(" | "));
+      await context.close();
+    }
   }
 }
 

@@ -1220,6 +1220,10 @@ const PANEL_CSS = `
 .af-fullview .af-videopreview { border: 0; border-radius: 0; max-width: 100%; max-height: 100%; }
 .af-fullview .af-th-bar { flex: none; display: flex; align-items: center; gap: 10px; padding: 10px 14px calc(10px + env(safe-area-inset-bottom, 0px)); background: rgba(12,11,16,.92); }
 .af-fullview .af-th-bar input[type="range"] { flex: 1 1 auto; min-width: 0; }
+/* On the dark bar, the part of the track not yet played is a light gray
+   that shows on black in every theme. These outrank the sliders' own rule. */
+.af.af-fullview .af-th-bar input[type="range"]::-webkit-slider-runnable-track { background: linear-gradient(90deg, var(--af-accent) 0 var(--af-fill-to, 0%), rgba(255,255,255,.32) var(--af-fill-to, 0%) 100%); }
+.af.af-fullview .af-th-bar input[type="range"]::-moz-range-track { background: rgba(255,255,255,.32); }
 .af-fullview .af-th-time { flex: none; font-variant-numeric: tabular-nums; font-size: 13px; color: #d9d4ca; }
 .af-fullview .af-th-btn { flex: none; display: grid; place-items: center; width: 40px; height: 40px; border: 1px solid rgba(255,255,255,.22); border-radius: 999px; background: rgba(255,255,255,.08); color: #f4f1ea; cursor: pointer; }
 .af-fullview .af-th-btn svg { width: 18px; height: 18px; }
@@ -1879,6 +1883,15 @@ const DEFAULTS: any = {
   moodList: [],
   videoByline: '',
   videoBylineInk: '',
+  videoBylineFont: '',
+  videoBylineFill: 'solid',
+  videoBylineStops: ['#f2b880'],
+  videoBylineDir: 'right',
+  videoBylineShadow: true,
+  videoBylineShadowInk: '',
+  videoBylineShadowDark: 65,
+  videoBylineShadowSoft: 18,
+  videoBylineShadowFar: 0,
   videoMarks: [],
   videoWordFill: 'solid',
   videoWordStops: ['#f2b880'],
@@ -3983,6 +3996,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     small: any;
     font: string;
     nameFont: string;
+    bylineFont: string;
   }
   function canvasOf(w: number, h: number): any {
     const c = document.createElement('canvas');
@@ -4163,9 +4177,10 @@ export function setup(ctx: Ctx, overrides?: any) {
   async function videoStage(parts: VideoPart[], sh: Show | null = null, only = '', fixed: { t: number; id: string }[] | null = null): Promise<VideoStage> {
     const { w: W, h: H } = videoSize();
     // Only a font of your own is waited on. The built-in ones need nothing.
-    if (/^own:/.test(String(S.videoFont)) || /^own:/.test(nameFontChoice())) {
+    const fontsUsed = [String(S.videoFont), nameFontChoice(), String(S.videoBylineFont || '')].concat(marksNow().map((m) => String(m.font || '')));
+    if (fontsUsed.some((f) => /^own:/.test(f))) {
       await loadOwnFonts().catch(() => {});
-      await Promise.all([ensureFont(S.videoFont), ensureFont(nameFontChoice())]);
+      await Promise.all(fontsUsed.map((f) => ensureFont(f)));
     }
     // The scenes, with the time each starts: the start of its first part
     // in the video. A scene with no part in the video is left out.
@@ -4198,6 +4213,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       w: W, h: H, back: layers.get(times[0].id), walls, layers, scenes: times, moves: new Map(), edges, from: 0, to: 0, still: calm(),
       pics: new Map(), a: canvasOf(W, H), b: canvasOf(W, H),
       small: canvasOf(Math.round(W / 4), Math.round(H / 4)), font: videoFont(), nameFont: fontStack(nameFontChoice()),
+      bylineFont: fontStack(String(S.videoBylineFont || S.videoFont || 'book')),
     };
     for (const bk of backs) paintBack(st, bk, layers.get(bk.id));
     // A picture for the feeling of each line, for a person who has one.
@@ -4308,17 +4324,23 @@ export function setup(ctx: Ctx, overrides?: any) {
   // The shadow behind the words, sound captions included, or behind the
   // names. Each has its own switch, color, darkness, softness and distance,
   // in pixels of a 1080-pixel frame. Off draws no shadow.
-  function setShadow(g: CanvasRenderingContext2D, which: 'Word' | 'Name', u: number) {
-    if (S['video' + which + 'Shadow'] === false) {
+  function setShadow(g: CanvasRenderingContext2D, which: 'Word' | 'Name' | 'Byline', u: number) {
+    const k = 'video' + which + 'Shadow';
+    setShadowOf(g, { on: S[k], ink: S[k + 'Ink'], dark: S[k + 'Dark'], soft: S[k + 'Soft'], far: S[k + 'Far'] }, u);
+  }
+  // A shadow from its values: off draws none. The defaults are the soft
+  // dark shadow the words always had.
+  function setShadowOf(g: CanvasRenderingContext2D, v: { on: any; ink: any; dark: any; soft: any; far: any }, u: number) {
+    if (v.on === false) {
       g.shadowColor = 'transparent';
       return;
     }
-    const n = parseInt(hexOr(S['video' + which + 'ShadowInk'], '#000000').slice(1), 16);
-    const dark = Math.min(100, Math.max(0, numOr(S['video' + which + 'ShadowDark'], 65))) / 100;
+    const n = parseInt(hexOr(v.ink, '#000000').slice(1), 16);
+    const dark = Math.min(100, Math.max(0, numOr(v.dark, 65))) / 100;
     g.shadowColor = 'rgba(' + ((n >> 16) & 255) + ',' + ((n >> 8) & 255) + ',' + (n & 255) + ',' + dark + ')';
-    g.shadowBlur = Math.min(40, Math.max(0, numOr(S['video' + which + 'ShadowSoft'], 18))) * u;
+    g.shadowBlur = Math.min(40, Math.max(0, numOr(v.soft, 18))) * u;
     g.shadowOffsetX = 0;
-    g.shadowOffsetY = Math.min(20, Math.max(0, numOr(S['video' + which + 'ShadowFar'], 2))) * u;
+    g.shadowOffsetY = Math.min(20, Math.max(0, numOr(v.far, 2))) * u;
   }
 
   // A fill over a box: one color, or a linear or radial gradient through
@@ -4340,7 +4362,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     return grad;
   }
   // A text fill from the settings: the first color, then the stops.
-  const textFill = (g: CanvasRenderingContext2D, which: 'Word' | 'Name' | 'Cap', first: string, x0: number, y0: number, x1: number, y1: number) =>
+  const textFill = (g: CanvasRenderingContext2D, which: 'Word' | 'Name' | 'Cap' | 'Byline', first: string, x0: number, y0: number, x1: number, y1: number) =>
     fillOf(g, String(S['video' + which + 'Fill'] || 'solid'), [first].concat(Array.isArray(S['video' + which + 'Stops']) ? S['video' + which + 'Stops'] : []), String(S['video' + which + 'Dir'] || 'down'), x0, y0, x1, y1);
 
   // One picture, in its circle or rounded square, with its ring, at x (its
@@ -4771,13 +4793,15 @@ export function setup(ctx: Ctx, overrides?: any) {
         const by = String(S.videoByline || '').trim();
         if (by) {
           const bySize = Math.round(34 * u);
-          g.font = '400 ' + bySize + 'px ' + st.font;
-          g.shadowColor = 'rgba(0,0,0,0.65)';
-          g.shadowBlur = 18 * u;
+          g.font = '400 ' + bySize + 'px ' + (st.bylineFont || st.font);
+          setShadow(g, 'Byline', u);
           g.globalAlpha = a;
-          g.fillStyle = hexOr(S.videoBylineInk, ink);
+          const line = fitText(g, by, W - 240 * u);
+          const bw = g.measureText(line).width;
+          const base = H / 2 + 34 * u + 24 * u + bySize;
+          g.fillStyle = textFill(g, 'Byline', hexOr(S.videoBylineInk, ink), W / 2 - bw / 2, base - bySize, W / 2 + bw / 2, base + bySize * 0.25);
           g.textAlign = 'center';
-          g.fillText(fitText(g, by, W - 240 * u), W / 2, H / 2 + 34 * u + 24 * u + bySize);
+          g.fillText(line, W / 2, base);
           g.textAlign = 'left';
         }
       }
@@ -4824,7 +4848,10 @@ export function setup(ctx: Ctx, overrides?: any) {
   // Up to five, each text, a picture, or both, in a corner, at the top or
   // bottom in the middle, or in the middle. A picture is kept on the
   // account in a file of its own, by the watermark's id.
-  interface VideoMark { id: string; text: string; pic: boolean; place: string; size: number; strength: number; when: 'all' | 'start' | 'end' | 'from' | 'backs'; from: number; secs: number; backs: string[] }
+  // font is empty for the words' font. ink is the text's color, empty for
+  // white, and fill, stops and dir a gradient over the text, as for the
+  // words. shadow and the four after it are the text's shadow.
+  interface VideoMark { id: string; text: string; pic: boolean; place: string; size: number; strength: number; when: 'all' | 'start' | 'end' | 'from' | 'backs'; from: number; secs: number; backs: string[]; font: string; ink: string; fill: string; stops: string[]; dir: string; shadow: boolean; shadowInk: string; shadowDark: number; shadowSoft: number; shadowFar: number }
   const MARKS_MAX = 5;
   const MARK_PLACES = [
     { id: 'tl', label: 'Top left' },
@@ -4886,7 +4913,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       if (!pic && !text) continue;
       g.save();
       g.globalAlpha = a;
-      g.font = '600 ' + Math.round(size * 0.6) + 'px ' + st.font;
+      g.font = '600 ' + Math.round(size * 0.6) + 'px ' + (m.font ? fontStack(m.font) : st.font);
       g.textBaseline = 'middle';
       const pw = pic && pic.height ? (pic.width / pic.height) * size : 0;
       const gap = pic && text ? size * 0.25 : 0;
@@ -4897,12 +4924,12 @@ export function setup(ctx: Ctx, overrides?: any) {
       const top = m.place === 'tl' || m.place === 'tr' || m.place === 'tc';
       const x = left ? padX : right ? W - padX - w : (W - w) / 2;
       const y = m.place === 'mid' ? (H - size) / 2 : top ? padY : H - padY - size;
-      g.shadowColor = 'rgba(0,0,0,0.6)';
-      g.shadowBlur = 10 * u;
+      setShadowOf(g, { on: m.shadow, ink: m.shadowInk, dark: numOr(m.shadowDark, 60), soft: numOr(m.shadowSoft, 10), far: numOr(m.shadowFar, 0) }, u);
       if (pic) g.drawImage(pic, x, y, pw, size);
       if (text) {
-        g.fillStyle = '#ffffff';
-        g.fillText(fitText(g, text, W * 0.4), x + pw + gap, y + size / 2);
+        const tx = x + pw + gap;
+        g.fillStyle = fillOf(g, m.fill || 'solid', [hexOr(m.ink, '#ffffff')].concat(m.stops || []), m.dir || 'right', tx, y, tx + tw, y + size);
+        g.fillText(fitText(g, text, W * 0.4), tx, y + size / 2);
       }
       g.restore();
     }
@@ -7887,6 +7914,16 @@ export function setup(ctx: Ctx, overrides?: any) {
     return f;
   }
 
+  // Where a slider's fill ends: at the middle of its knob. A range input
+  // puts the knob's middle half a knob in from each end, so the fill is
+  // set the same way, in CSS pixels, which UI Scale zooms with the knob.
+  // f runs from 0 to 1. RANGE_KNOB is the knob's width in the styles.
+  const RANGE_KNOB = 16;
+  function fillTo(r: HTMLElement, f: number) {
+    const k = Math.min(1, Math.max(0, Number.isFinite(f) ? f : 0));
+    r.style.setProperty('--af-fill-to', 'calc(' + RANGE_KNOB / 2 + 'px + (100% - ' + RANGE_KNOB + 'px) * ' + k.toFixed(4) + ')');
+  }
+
   function slider(label: string, value: number, min: number, max: number, step: number, show: (v: number) => string, onChange: (v: number) => void, help?: string): HTMLElement {
     const id = rid('rg');
     const f = el('<div class="af-col"></div>');
@@ -7899,7 +7936,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     const paint = () => {
       const v = Number(r.value);
       out.textContent = show(v);
-      r.style.setProperty('--af-fill-to', ((v - min) / (max - min)) * 100 + '%');
+      fillTo(r, (v - min) / (max - min));
     };
     paint();
     r.addEventListener('input', () => {
@@ -9500,7 +9537,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     seek.disabled = !has;
     const at = has ? Math.min(1, Math.max(0, tNow / dur)) : 0;
     if (document.activeElement !== seek) seek.value = String(Math.round(at * 1000));
-    seek.style.setProperty('--af-fill-to', (at * 100).toFixed(1) + '%');
+    fillTo(seek, at);
     setText(q('at'), has ? mmss(tNow) : '0:00');
     setText(q('len'), has ? mmss(dur) : '0:00');
     const prep = q('prep');
@@ -9537,7 +9574,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     if (mrow.hidden === !!S.musicOn) mrow.hidden = !S.musicOn;
     for (const [k, b] of [['vol', 'vv'], ['svol', 'sv'], ['mvol', 'mv']]) {
       const r = q(k) as HTMLInputElement;
-      r.style.setProperty('--af-fill-to', r.value + '%');
+      fillTo(r, Number(r.value) / 100);
       setText(q(b), r.value + '%');
     }
     c.querySelectorAll('[data-sw]').forEach((b) => {
@@ -13326,7 +13363,7 @@ export function setup(ctx: Ctx, overrides?: any) {
   }
   // A fill kept in three settings, such as videoWordFill, videoWordStops
   // and videoWordDir.
-  const settingFill = (which: 'Word' | 'Name' | 'Cap'): FillBind => ({
+  const settingFill = (which: 'Word' | 'Name' | 'Cap' | 'Byline'): FillBind => ({
     kind: () => String(S['video' + which + 'Fill'] || 'solid'),
     setKind: (v) => set({ ['video' + which + 'Fill']: v }),
     stops: () => (Array.isArray(S['video' + which + 'Stops']) ? S['video' + which + 'Stops'] : []),
@@ -13340,7 +13377,7 @@ export function setup(ctx: Ctx, overrides?: any) {
 
   // A shadow's switch, with its color and the three sliders under it, set
   // by eye on the preview.
-  function shadowRows(which: 'Word' | 'Name', label: string, onChange: () => void): HTMLElement {
+  function shadowRows(which: 'Word' | 'Name' | 'Byline', label: string, onChange: () => void): HTMLElement {
     const k = 'video' + which + 'Shadow';
     const bye = (row: HTMLElement) => {
       row.setAttribute('data-af-byeye', '');
@@ -13382,11 +13419,15 @@ export function setup(ctx: Ctx, overrides?: any) {
   // way to add one and to take the picked one out. sameOk adds The same as
   // the words, for the names.
   const fontPickers = new Set<() => void>();
-  function fontPicker(key: 'videoFont' | 'videoNameFont', label: string, help: string, sameOk: boolean, onChange: () => void): HTMLElement {
+  // bind, when given, reads and writes the choice somewhere other than the
+  // setting named key, such as a watermark. key then only names the row.
+  function fontPicker(key: string, label: string, help: string, sameOk: boolean, onChange: () => void, bind?: { get: () => string; set: (v: string) => void }): HTMLElement {
+    const read = () => (bind ? bind.get() : S[key]);
+    const write = (v: string) => (bind ? bind.set(v) : set({ [key]: v }));
     const wrap = el('<div class="af-col"></div>');
     wrap.setAttribute('data-af-row', key);
     const sel = select(label, [], '', (v) => {
-      set({ [key]: v });
+      write(v);
       paintTools();
       onChange();
     }, help);
@@ -13430,14 +13471,14 @@ export function setup(ctx: Ctx, overrides?: any) {
         refill();
         return;
       }
-      if (id) set({ [key]: 'own:' + id });
+      if (id) write('own:' + id);
       for (const f2 of fontPickers) f2();
       setSaid('Added ' + ((r.font && r.font.name) || 'the font') + '. The words above are drawn in it.', false);
       onChange();
     });
     upload.setAttribute('data-af-font-add', key);
     const drop = button('Take this font out', async () => {
-      const own = /^own:(.+)$/.exec(String(S[key] || ''));
+      const own = /^own:(.+)$/.exec(String(read() || ''));
       if (!own) return;
       const id = own[1];
       const name = (ownFonts.find((x) => x.id === id) || { name: 'this font' }).name;
@@ -13456,6 +13497,10 @@ export function setup(ctx: Ctx, overrides?: any) {
       const patch: any = {};
       if (String(S.videoFont) === 'own:' + id) patch.videoFont = 'book';
       if (String(S.videoNameFont) === 'own:' + id) patch.videoNameFont = '';
+      if (String(S.videoBylineFont) === 'own:' + id) patch.videoBylineFont = '';
+      // A watermark in it goes back to the words' font.
+      const marks = marksNow();
+      if (marks.some((m) => m.font === 'own:' + id)) patch.videoMarks = marks.map((m) => (m.font === 'own:' + id ? { ...m, font: '' } : m));
       set(patch);
       setSaid('', false);
       for (const f2 of fontPickers) f2();
@@ -13476,15 +13521,15 @@ export function setup(ctx: Ctx, overrides?: any) {
       said.dataset.kind = bad ? 'bad' : '';
     }
     function paintTools() {
-      const own = /^own:(.+)$/.exec(String(S[key] || ''));
+      const own = /^own:(.+)$/.exec(String(read() || ''));
       drop.hidden = !own;
       sample.hidden = !own;
       if (!own) return;
       const id = own[1];
-      sample.style.fontFamily = fontStack(String(S[key]));
-      void ensureFont(String(S[key])).then((ok) => {
-        if (!wrap.isConnected || String(S[key]) !== 'own:' + id) return;
-        sample.style.fontFamily = fontStack(String(S[key]));
+      sample.style.fontFamily = fontStack(String(read()));
+      void ensureFont(String(read())).then((ok) => {
+        if (!wrap.isConnected || String(read()) !== 'own:' + id) return;
+        sample.style.fontFamily = fontStack(String(read()));
         if (!ok) setSaid('This font could not be read, so videos are drawn in Book. The Log says why.', true);
       });
     }
@@ -13497,7 +13542,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       if (sameOk) opts.push({ id: '', label: 'The same as the words' });
       for (const x of VIDEO_FONTS) opts.push({ id: x.id, label: x.label });
       for (const f of ownFonts) opts.push({ id: 'own:' + f.id, label: f.name, group: 'Your fonts' });
-      const now = String(S[key] == null ? (sameOk ? '' : 'book') : S[key]);
+      const now = String(read() == null ? (sameOk ? '' : 'book') : read());
       box.innerHTML = optionsHtml(opts, opts.some((o) => o.id === now) ? now : sameOk ? '' : 'book');
       paintTools();
     }
@@ -13981,7 +14026,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     if (shown) {
       r.scrub.max = String(Math.max(0.1, v.length));
       if (document.activeElement !== r.scrub) r.scrub.value = String(v.at);
-      r.scrub.style.setProperty('--af-fill-to', (v.length ? (v.at / v.length) * 100 : 0) + '%');
+      fillTo(r.scrub, v.length ? v.at / v.length : 0);
       setText(r.scrubOut, mmss(v.at) + ' of ' + mmss(v.length));
     }
     setText(r.said, keepLine);
@@ -13997,6 +14042,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       t.play.disabled = goOnNow2 ? false : !(v.sh || v.example) || !!videoRun || videoPreparing;
       t.scrub.max = String(Math.max(0.1, v.length));
       if (document.activeElement !== t.scrub) t.scrub.value = String(v.at);
+      fillTo(t.scrub, v.length ? v.at / v.length : 0);
       setText(t.time, mmss(v.at) + ' of ' + mmss(v.length));
     }
   }
@@ -14102,7 +14148,8 @@ export function setup(ctx: Ctx, overrides?: any) {
   const LOOK_KEYS = [
     'videoShape', 'videoFont', 'videoSize', 'videoInk', 'videoCaptionInk', 'videoWords', 'videoPlace', 'videoQuotes', 'videoPicShape', 'videoPicSize',
     'videoNameColor', 'videoNameFont', 'videoNameSize', 'videoPicRing', 'videoPicRingWidth', 'videoPicMove', 'videoTwo', 'videoMoodPics',
-    'videoByline', 'videoBylineInk', 'videoMarks',
+    'videoByline', 'videoBylineInk', 'videoBylineFont', 'videoBylineFill', 'videoBylineStops', 'videoBylineDir',
+    'videoBylineShadow', 'videoBylineShadowInk', 'videoBylineShadowDark', 'videoBylineShadowSoft', 'videoBylineShadowFar', 'videoMarks',
     'videoWordFill', 'videoWordStops', 'videoWordDir', 'videoNameFill', 'videoNameStops', 'videoNameDir', 'videoCapFill', 'videoCapStops', 'videoCapDir',
     'videoWordShadow', 'videoWordShadowInk', 'videoWordShadowDark', 'videoWordShadowSoft', 'videoWordShadowFar',
     'videoNameShadow', 'videoNameShadowInk', 'videoNameShadowDark', 'videoNameShadowSoft', 'videoNameShadowFar', 'videoEdges', 'videoEdgeColor', 'videoMove', 'videoMoveSecs',
@@ -14166,6 +14213,66 @@ export function setup(ctx: Ctx, overrides?: any) {
         save();
       });
       card.appendChild(text);
+      card.appendChild(fontPicker('markFont' + m.id, 'Font of the text', 'The words’ font by default.', true, () => save(), {
+        get: () => String(m.font || ''),
+        set: (v) => {
+          m.font = v;
+          set({ videoMarks: list.slice() });
+        },
+      }));
+      card.appendChild(colorRow('markInk' + m.id, 'Color of the text', 'White by default.', '--af-none', '#ffffff', 'Use white', () => save(), {
+        get: () => String(m.ink || ''),
+        put: (hex, keep) => {
+          m.ink = hex;
+          if (keep) set({ videoMarks: list.slice() });
+        },
+      }));
+      card.appendChild(gradientRows('markFill' + m.id, 'Fill of the text', 'One color by default. A gradient runs across the text.', {
+        kind: () => String(m.fill || 'solid'),
+        setKind: (v) => {
+          m.fill = v;
+          set({ videoMarks: list.slice() });
+        },
+        stops: () => m.stops || [],
+        setStops: (l, keep) => {
+          m.stops = l.slice();
+          if (keep) set({ videoMarks: list.slice() });
+        },
+        dir: () => String(m.dir || 'right'),
+        setDir: (v) => {
+          m.dir = v;
+          set({ videoMarks: list.slice() });
+        },
+      }, () => look()));
+      // Its shadow: a switch, and its color and three sliders under it.
+      const shadowSub = el('<div class="af-sub"><div class="af-under"></div></div>');
+      const shadowIn = shadowSub.firstElementChild as HTMLElement;
+      shadowIn.appendChild(colorRow('markShadowInk' + m.id, 'Color of the shadow', 'Black by default.', '--af-none', '#000000', 'Use the built-in color', () => save(), {
+        get: () => String(m.shadowInk || ''),
+        put: (hex, keep) => {
+          m.shadowInk = hex;
+          if (keep) set({ videoMarks: list.slice() });
+        },
+      }));
+      for (const [key, label, max, dflt, show] of [
+        ['shadowDark', 'How dark', 100, 60, (v: number) => (v ? v + '%' : 'None')],
+        ['shadowSoft', 'How soft', 40, 10, (v: number) => (v ? v + ' px' : 'Sharp')],
+        ['shadowFar', 'How far below', 20, 0, (v: number) => (v ? v + ' px' : 'Right behind')],
+      ] as Array<[keyof VideoMark, string, number, number, (v: number) => string]>) {
+        const r = slider(label, numOr(m[key], dflt), 0, max, max > 40 ? 5 : 1, show, (v) => {
+          (m as any)[key] = v;
+          save();
+        });
+        r.setAttribute('data-af-byeye', '');
+        shadowIn.appendChild(r);
+      }
+      card.appendChild(personSwitch('A shadow behind the text', 'On by default, soft and dark.', m.shadow !== false, (on) => {
+        m.shadow = on;
+        showUnder(shadowSub, on);
+        save();
+      }));
+      shadowSub.hidden = m.shadow === false;
+      card.appendChild(shadowSub);
       const picSaid = el('<p class="af-status" role="status"></p>');
       const picRow = el('<div class="af-row"></div>');
       const keepPic = async (picture: string) => {
@@ -14309,7 +14416,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       let id = '';
       do id = 'w' + Math.random().toString(36).slice(2, 9);
       while (list.some((x) => x.id === id));
-      list.push({ id, text: '', pic: false, place: 'br', size: 64, strength: 50, when: 'all', from: 0, secs: 4, backs: [] });
+      list.push({ id, text: '', pic: false, place: 'br', size: 64, strength: 50, when: 'all', from: 0, secs: 4, backs: [], font: '', ink: '', fill: 'solid', stops: ['#f2b880'], dir: 'right', shadow: true, shadowInk: '', shadowDark: 60, shadowSoft: 10, shadowFar: 0 });
       S.videoMarks = list;
       save(true);
     });
@@ -15040,7 +15147,10 @@ export function setup(ctx: Ctx, overrides?: any) {
         byRow.appendChild(labelRow('A line under the title', 'Empty by default. Shown smaller under the title, such as by and your name. With no title, it is not shown.', byBox.id));
         byRow.appendChild(byBox);
         const byInk = colorRow('videoBylineInk', 'Color of the line', 'The title’s color by default.', '--af-none', hexOr(S.videoInk, STORY_INK), 'Use the title’s color', look);
-        b.appendChild(toggle('Title at the start', 'On by default. The title shows for two seconds before the first line.', 'videoTitleOn', look, () => [titleRow, byRow, byInk]));
+        const byFont = fontPicker('videoBylineFont', 'Font of the line', 'The words’ font by default.', true, look);
+        const byFill = gradientRows('videoBylineFill', 'Fill of the line', 'One color by default. A gradient runs across the line.', settingFill('Byline'), look);
+        const byShadow = shadowRows('Byline', 'A shadow behind the line', look);
+        b.appendChild(toggle('Title at the start', 'On by default. The title shows for two seconds before the first line.', 'videoTitleOn', look, () => [titleRow, byRow, byFont, byInk, byFill, byShadow]));
         b.appendChild(numberRow('Fade to black at the end, in seconds', numOr(S.videoFadeOut, 1.5), 0, 5, 0.5, (v) => {
           set({ videoFadeOut: v });
           look();

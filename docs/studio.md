@@ -176,7 +176,7 @@ When each word is said is worked out from where the voice is in the clip, so it 
 
 ### Gradients
 
-The words, the names, the sound captions, **A color of your own** and each shape in a design have a **Fill**:
+The words, the names, the sound captions, the line under the title, the text of each watermark, **A color of your own** and each shape in a design have a **Fill**:
 
 - **One color**, the default: the color row above, with no gradient.
 - **Linear gradient**, which runs in a **Direction**: top to bottom, left to right, or either diagonal.
@@ -465,8 +465,9 @@ In the video, her logo and name sit in the bottom right corner the whole time, h
 ### Details
 
 - The line under the title is drawn only with a title. With **Title at the start** off, it is not shown.
-- It uses the title's font and shadow, and the title's color unless you pick one.
+- It has its own **Font of the line** (the words' font by default, your own fonts too), **Color of the line** (the title's color by default), **Fill of the line** (see [Gradients](#gradients)) and **A shadow behind the line**, which starts as the title's shadow.
 - **How big** is the height of the watermark, from 12 to 400 pixels of a 1080-pixel frame. Its text is about two thirds of that.
+- Its text has its own **Font of the text** (the words' font by default, your own fonts too), **Color of the text** (white by default), **Fill of the text** (see [Gradients](#gradients)) and **A shadow behind the text**, on by default, with its color, darkness, softness and distance.
 - **How strong** is 50% by default. 0% shows nothing, and 100% is solid.
 - **At the start** and **At the end** are the first and last 4 seconds, the same as notes.
 - **Only during scenes on these backgrounds** shows with two or more backgrounds. It picks backgrounds, not scenes, since every performance has scenes of its own.

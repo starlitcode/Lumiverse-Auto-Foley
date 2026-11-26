@@ -103,6 +103,18 @@ interface VideoMark {
   from: number;
   secs: number;
   backs: string[];
+  // The text's font (empty is the words'), color (empty is white), fill and
+  // shadow.
+  font: string;
+  ink: string;
+  fill: 'solid' | 'linear' | 'radial';
+  stops: string[];
+  dir: string;
+  shadow: boolean;
+  shadowInk: string;
+  shadowDark: number;
+  shadowSoft: number;
+  shadowFar: number;
 }
 // One background. A picture is kept in a file of its own, by the
 // background's id. dim and blur are for a picture, color for a color, and
@@ -269,6 +281,16 @@ interface Settings {
   // The line under the title, and its color. Empty color is the title's.
   videoByline: string;
   videoBylineInk: string;
+  // Its font (empty is the words'), fill, and shadow, as for the words.
+  videoBylineFont: string;
+  videoBylineFill: 'solid' | 'linear' | 'radial';
+  videoBylineStops: string[];
+  videoBylineDir: string;
+  videoBylineShadow: boolean;
+  videoBylineShadowInk: string;
+  videoBylineShadowDark: number;
+  videoBylineShadowSoft: number;
+  videoBylineShadowFar: number;
   // Up to 5 watermarks: text, a picture kept in a file of its own by the
   // watermark's id, or both; where, how big in pixels of a 1080-pixel
   // frame, how strong in percent, and when.
@@ -546,6 +568,15 @@ const DEFAULT_SETTINGS: Settings = {
   moodList: [],
   videoByline: '',
   videoBylineInk: '',
+  videoBylineFont: '',
+  videoBylineFill: 'solid',
+  videoBylineStops: ['#f2b880'],
+  videoBylineDir: 'right',
+  videoBylineShadow: true,
+  videoBylineShadowInk: '',
+  videoBylineShadowDark: 65,
+  videoBylineShadowSoft: 18,
+  videoBylineShadowFar: 0,
   videoMarks: [],
   videoWordFill: 'solid',
   videoWordStops: ['#f2b880'],
@@ -703,6 +734,16 @@ function cleanMarks(v: any): VideoMark[] {
       from: Math.round(num(m.from, 0, 3600, 0) * 10) / 10,
       secs: Math.round(num(m.secs, 0.5, 3600, 4) * 10) / 10,
       backs: (Array.isArray(m.backs) ? m.backs : []).map((x: any) => str(x, 24).replace(/[^a-z0-9]/gi, '')).filter(Boolean).slice(0, 12),
+      font: m.font === '' || m.font == null ? '' : fontChoice(m.font, ''),
+      ink: hexColor(m.ink),
+      fill: pick(m.fill, ['solid', 'linear', 'radial'] as const, 'solid'),
+      stops: cleanStops(m.stops, '#f2b880'),
+      dir: pick(m.dir, GRAD_DIRS, 'right'),
+      shadow: bool(m.shadow, true),
+      shadowInk: hexColor(m.shadowInk),
+      shadowDark: Math.round(num(m.shadowDark, 0, 100, 60)),
+      shadowSoft: Math.round(num(m.shadowSoft, 0, 40, 10)),
+      shadowFar: Math.round(num(m.shadowFar, 0, 20, 0)),
     });
   }
   return out;
@@ -1059,7 +1100,8 @@ function cleanSavedFolders(v: any): Settings['savedFolders'] {
 const LOOK_KEYS = [
   'videoShape', 'videoFont', 'videoSize', 'videoInk', 'videoCaptionInk', 'videoWords', 'videoPlace', 'videoQuotes', 'videoPicShape', 'videoPicSize',
   'videoNameColor', 'videoNameFont', 'videoNameSize', 'videoPicRing', 'videoPicRingWidth', 'videoPicMove', 'videoTwo', 'videoMoodPics',
-  'videoByline', 'videoBylineInk', 'videoMarks',
+  'videoByline', 'videoBylineInk', 'videoBylineFont', 'videoBylineFill', 'videoBylineStops', 'videoBylineDir',
+  'videoBylineShadow', 'videoBylineShadowInk', 'videoBylineShadowDark', 'videoBylineShadowSoft', 'videoBylineShadowFar', 'videoMarks',
   'videoWordFill', 'videoWordStops', 'videoWordDir', 'videoNameFill', 'videoNameStops', 'videoNameDir', 'videoCapFill', 'videoCapStops', 'videoCapDir',
   'videoWordShadow', 'videoWordShadowInk', 'videoWordShadowDark', 'videoWordShadowSoft', 'videoWordShadowFar',
   'videoNameShadow', 'videoNameShadowInk', 'videoNameShadowDark', 'videoNameShadowSoft', 'videoNameShadowFar', 'videoEdges', 'videoEdgeColor', 'videoMove', 'videoMoveSecs',
@@ -1226,6 +1268,15 @@ function cleanSettings(raw: any): Settings {
     moodList: cleanMoods(r.moodList),
     videoByline: str(r.videoByline, 80).replace(/[\u0000-\u001f]/g, ' ').trim(),
     videoBylineInk: hexColor(r.videoBylineInk),
+    videoBylineFont: r.videoBylineFont === '' ? '' : fontChoice(r.videoBylineFont, ''),
+    videoBylineFill: pick(r.videoBylineFill, ['solid', 'linear', 'radial'] as const, 'solid'),
+    videoBylineStops: cleanStops(r.videoBylineStops, '#f2b880'),
+    videoBylineDir: pick(r.videoBylineDir, GRAD_DIRS, 'right'),
+    videoBylineShadow: bool(r.videoBylineShadow, d.videoBylineShadow),
+    videoBylineShadowInk: hexColor(r.videoBylineShadowInk),
+    videoBylineShadowDark: Math.round(num(r.videoBylineShadowDark, 0, 100, d.videoBylineShadowDark)),
+    videoBylineShadowSoft: Math.round(num(r.videoBylineShadowSoft, 0, 40, d.videoBylineShadowSoft)),
+    videoBylineShadowFar: Math.round(num(r.videoBylineShadowFar, 0, 20, d.videoBylineShadowFar)),
     videoMarks: cleanMarks(r.videoMarks),
     videoWordFill: pick(r.videoWordFill, ['solid', 'linear', 'radial'] as const, 'solid'),
     videoWordStops: cleanStops(r.videoWordStops, '#f2b880'),
