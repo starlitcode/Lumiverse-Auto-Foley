@@ -882,7 +882,7 @@ function creditHtml(c) {
 // says whether the account has no TTS connection at all, or has some on a
 // service Auto Foley cannot use, and names them.
 function noConnectionWhy(seen) {
-    const where = 'Add one for ElevenLabs, Fish Audio, Gemini, or a Chatterbox-Turbo server in Lumiverse: open Connections, then the TTS tab. A key added under the LLM tab is not a TTS connection.';
+    const where = 'Add one for ElevenLabs, Fish Audio, Gemini, Cartesia, OpenRouter, an OpenVox server running OmniVoice or Chatterbox Turbo, or a Chatterbox-Turbo server in Lumiverse: open Connections, then the TTS tab. A key added under the LLM tab is not a TTS connection.';
     if (!seen.length)
         return 'Lumiverse found no TTS connection on your account. ' + where;
     const names = seen.slice(0, 4).map((c) => c.name + ' (' + (c.provider || 'unknown service') + ')').join(', ') + (seen.length > 4 ? ', and ' + (seen.length - 4) + ' more' : '');
@@ -1590,6 +1590,9 @@ const MOVED_DEFAULTS = [
     { key: 'extrasMenu', was: true, label: 'In the Extras menu', why: 'it is now off by default.' },
     // 1.10.0 turned it off, the same as in the sister extension that refines
     // replies. Each note makes the Director's next ask longer, which costs more.
+    // 1.10.0 left non-commercial sounds out by default, since a video made in
+    // the Studio may be posted where money is made.
+    { key: 'freesoundLicense', was: 'any', label: 'Freesound licenses', why: 'it is now CC0 and CC BY by default, so new sounds and music allow any use, such as a video on a channel that earns money. Sounds already in your library stay.' },
     { key: 'askNote', was: true, label: 'Send a note when it asks again', why: 'it is now off by default, since each note makes the next ask longer and costs more.' },
 ];
 // What a reader is marked with once told about a row: the setting and a mark
@@ -1638,7 +1641,7 @@ const DEFAULTS = {
     musicVolume: 0.35,
     musicDip: true,
     musicFrom: 'both',
-    freesoundLicense: 'any',
+    freesoundLicense: 'free',
     soundSeconds: 0,
     autoplayDelay: 0,
     extraThinkTags: [],
@@ -2615,7 +2618,7 @@ export function setup(ctx, overrides) {
         if (sig) {
             try {
                 // Kept short: a backend that does not answer must not hold up the line.
-                const r = await rpc({ type: 'clip_get', sig }, 5000);
+                const r = await rpc({ type: 'clip_get', sig }, 15000);
                 if (r && r.found && r.base64) {
                     keptUsed++;
                     return { blob: base64ToBlob(r.base64, r.mime || 'audio/mpeg'), saved: true };
@@ -11712,7 +11715,7 @@ export function setup(ctx, overrides) {
                 { id: 'any', label: 'All three' },
                 { id: 'free', label: 'CC0 and CC BY, for any use' },
                 { id: 'cc0', label: 'CC0 only, no credit needed' },
-            ], S.freesoundLicense || 'any', (v) => set({ freesoundLicense: v }), 'All three by default. CC BY-NC is for non-commercial use only. Every license but CC0 asks for credit, which the library shows.'),
+            ], S.freesoundLicense || 'free', (v) => set({ freesoundLicense: v }), 'CC0 and CC BY by default, which allow any use. CC BY-NC is for non-commercial use only. Every license but CC0 asks for credit, which the library shows.'),
             select('ElevenLabs sound length', [
                 { id: '0', label: 'Let ElevenLabs choose' },
                 { id: '1', label: '1 second' },

@@ -42,7 +42,7 @@ const DEFAULT_SETTINGS = {
     decisionSure: 50,
     makeSounds: true,
     soundFrom: 'both',
-    freesoundLicense: 'any',
+    freesoundLicense: 'free',
     musicOn: false,
     musicVolume: 0.35,
     musicDip: true,
@@ -89,6 +89,7 @@ const DEFAULT_SETTINGS = {
     applauseVolume: 0.6,
     extrasMenu: false,
     studioSounds: true,
+    studioMusic: true,
     studioGap: 0,
     studioAsHeard: true,
     studioLoud: true,
@@ -599,6 +600,7 @@ function cleanSettings(raw) {
         applauseVolume: num(r.applauseVolume, 0, 1, d.applauseVolume),
         extrasMenu: bool(r.extrasMenu, d.extrasMenu),
         studioSounds: bool(r.studioSounds, d.studioSounds),
+        studioMusic: bool(r.studioMusic, d.studioMusic),
         studioGap: Math.round(num(r.studioGap, 0, 3, d.studioGap) * 10) / 10,
         studioAsHeard: bool(r.studioAsHeard, d.studioAsHeard),
         studioLoud: bool(r.studioLoud, d.studioLoud),
@@ -3128,14 +3130,35 @@ async function direct(userId, p) {
     }
     // An engine that cannot make a sound inside a line has its sounds played
     // as separate effects instead.
-    const soundStyle = engine.inVoiceSounds ? s.soundStyle : 'effects';
+    let soundStyle = engine.inVoiceSounds ? s.soundStyle : 'effects';
+    // A sound effect needs somewhere to come from: a sound in the library, or
+    // a key for Freesound or ElevenLabs while getting new sounds is on. With
+    // none, the Director is not asked for effects, so no tokens go on sounds
+    // that cannot play. Sounds inside the line need no source.
+    let soundsOn = s.soundsOn;
+    if (soundsOn && soundStyle !== 'voice') {
+        let source = false;
+        try {
+            source = (await loadSounds(userId)).some((e) => !e.mood) || (s.makeSounds && (!!(await getKey(userId, FS_KEY_NAME)) || !!(await getKey(userId))));
+        }
+        catch (_) {
+            source = true;
+        }
+        if (!source) {
+            if (soundStyle === 'both')
+                soundStyle = 'voice';
+            else
+                soundsOn = false;
+            script.log.push('No sound effects were asked for: your sound library is empty and no Freesound or ElevenLabs key is saved. Add one in the Sounds tab.');
+        }
+    }
     const tagsOn = s.tagsOn && engine.tags !== 'none';
     const rules = {
         tagsOn: tagsOn,
         breathsOn: s.breathsOn,
         max: MAX_TAGS[s.strength],
-        soundTags: s.soundsOn && soundStyle !== 'effects',
-        sounds: s.soundsOn,
+        soundTags: soundsOn && soundStyle !== 'effects',
+        sounds: soundsOn,
         effects: soundStyle !== 'voice',
         narrationRead: s.narration === 'read',
         findSpeakers: s.findSpeakers,
@@ -3210,10 +3233,10 @@ async function direct(userId, p) {
             voice_tags: tagsOn,
             line_style: engine.style && s.tagsOn,
             breaths_and_laughs: s.breathsOn,
-            sounds: s.soundsOn,
+            sounds: soundsOn,
             sound_style: soundStyle,
             narration_is_read: s.narration === 'read',
-            intimate: s.soundsOn && s.intimateOn,
+            intimate: soundsOn && s.intimateOn,
             find_speakers: s.findSpeakers,
             big_moments: s.bigMoments,
             music: s.musicOn,
@@ -4556,7 +4579,11 @@ async function onPanel(p, userId) {
                         req.connection_id = s.directorConnection;
                     if (userId)
                         req.userId = userId;
-                    const res = await spindle.generate.quiet(req);
+                    // The same wait as the Director gets, so a check never hangs.
+                    let secs = s.timeoutSecs || 120;
+                    if (s.waitFit)
+                        secs = fitWait(secs, (await connInfo(userId, s.directorConnection)).url, 'none').secs;
+                    const res = await withTimeout(req, secs);
                     const got = res && typeof res.content === 'string' ? res.content.trim() : '';
                     answer({ type: 'check', part: 'director', ok: !!got, text: got ? 'The Director answered.' : 'The Director sent back nothing.' });
                 }

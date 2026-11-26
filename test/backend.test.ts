@@ -648,6 +648,8 @@ describe("directing for each voice engine", () => {
 
   test("Gemini gets its tag list and line notes, and keeps only its own tags", async () => {
     const h = host({ answers: [answer] });
+    // A key, so there is somewhere for sound effects to come from.
+    await h.ask({ type: "key_save", which: "freesound", key: "fs_key_123" });
     const out = await h.ask(Object.assign({ engine: GEMINI }, msg));
     const rules = sent(h).rules;
     expect(rules.engine).toBe("Gemini 3.8 TTS");
@@ -842,8 +844,19 @@ describe("Freesound", () => {
     return { status: 404, body: "" };
   };
 
+  test("by default a non-commercial sound is passed over for one that allows any use", async () => {
+    const h = host({ cors: fsCors });
+    await h.ask({ type: "key_save", which: "freesound", key: "fs_key_123" });
+    const got = (await h.ask({ type: "sound", description: "an old door creaking open" })).find((m) => m.type === "sound");
+    expect(got.credit.by).toBe("tinbox");
+    expect(h.box.cleanSettings({}).freesoundLicense).toBe("free");
+    expect(h.box.cleanSettings({}).studioMusic).toBe(true);
+    expect(h.box.cleanSettings({ studioMusic: false }).studioMusic).toBe(false);
+  });
+
   test("a sound is found, kept with its credit, and the key goes only to freesound.org", async () => {
     const h = host({ cors: fsCors });
+    await h.ask({ type: "save", settings: { freesoundLicense: "any" } });
     await h.ask({ type: "key_save", which: "freesound", key: "fs_key_123" });
     const got = (await h.ask({ type: "sound", description: "an old door creaking open" })).find((m) => m.type === "sound");
     expect(got.base64).toBeTruthy();
@@ -870,6 +883,7 @@ describe("Freesound", () => {
 
   test("Find another picks the next sound and keeps the same library entry", async () => {
     const h = host({ cors: fsCors });
+    await h.ask({ type: "save", settings: { freesoundLicense: "any" } });
     await h.ask({ type: "key_save", which: "freesound", key: "fs_key_123" });
     await h.ask({ type: "sound", description: "an old door creaking open" });
     const id = (await h.ask({ type: "load" })).find((m) => m.type === "state").sounds[0].id;
@@ -1069,6 +1083,7 @@ describe("sounds that make sense where they are", () => {
   test("a sound the text shows is kept, and one it does not is left out, with a Log line", async () => {
     const h = host({ answers: [answer] });
     await h.ask({ type: "save", settings: { soundStyle: "effects" } });
+    await h.ask({ type: "key_save", which: "freesound", key: "fs_key_123" });
     const script = (await h.ask(msg)).find((m) => m.type === "script").script;
     expect(script.lines[0].after).toBe("a heavy wooden door slamming shut");
     expect(script.lines[2].after).toBe("");
@@ -1078,8 +1093,19 @@ describe("sounds that make sense where they are", () => {
   test("with the check off, every sound is kept", async () => {
     const h = host({ answers: [answer] });
     await h.ask({ type: "save", settings: { soundStyle: "effects", soundCheck: false } });
+    await h.ask({ type: "key_save", which: "freesound", key: "fs_key_123" });
     const script = (await h.ask(msg)).find((m) => m.type === "script").script;
     expect(script.lines[2].after).toBe("thunder rolling over the hills");
+  });
+
+  test("with no sound library and no key, the Director is not asked for sound effects, and the Log says why", async () => {
+    const h = host({ answers: [answer] });
+    await h.ask({ type: "save", settings: { soundStyle: "effects" } });
+    const script = (await h.ask(msg)).find((m) => m.type === "script").script;
+    const rules = JSON.parse(h.calls.generate[0].messages[h.calls.generate[0].messages.length - 1].content).rules;
+    expect(rules.sounds).toBe(false);
+    expect(script.lines.every((l: any) => !l.after && !l.before)).toBe(true);
+    expect(script.log.join(" ")).toContain("No sound effects were asked for: your sound library is empty and no Freesound or ElevenLabs key is saved.");
   });
 });
 

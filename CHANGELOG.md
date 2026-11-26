@@ -25,10 +25,15 @@ _2026-11-26_
 ### Changed
 
 - **Send a note when it asks again is off by default**, the same as in Auto Refine. A note makes the Director's next ask longer, which costs more. If you were on the old default, a notice says so, and you can take the new one or keep yours.
+- **Freesound licenses is CC0 and CC BY by default.** It was all three, which takes in CC BY-NC, a license for non-commercial use only. A video made in the Studio may be posted where money is made. If you were on the old default, a notice says so. Sounds already in your library stay.
+- **No sound effects are asked for when they cannot play.** With your sound library empty and no Freesound or ElevenLabs key saved, the Director is not asked for them, so no tokens go on them. The Log says so.
 - **The Director's built-in prompt has a part on music.** It says how to pick a mood and when to change it, and it is only used while Scene music is on. If you have your own prompt, a notice says the built-in one changed. Suggested by a Discord user.
 
 ### Fixed
 
+- **A saved line could be paid for twice.** Reading a line from **Keep made audio** gave up after 5 seconds, then the line was made again. On a slow server, the read now gets 15 seconds, the same as other reads.
+- **The message for no usable TTS connection left out services.** It now names Cartesia, OpenRouter and OpenVox too.
+- **Check for the Director could wait forever** on a connection that never answered. It now gives up after the same wait as the Director.
 - **A note said Speech detection is only Lumiverse's.** Under **How Auto Foley works with Lumiverse’s own voice settings**, in the Settings tab, it said Auto Foley uses the Cast tab and the Mixer instead. It now says Auto Foley has the same choices under **Reading messages**.
 
 ---
