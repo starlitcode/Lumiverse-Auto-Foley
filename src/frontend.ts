@@ -8045,7 +8045,9 @@ export function setup(ctx: Ctx, overrides?: any) {
   // spent on it, and the status line says the switch is off.
   function stopAhead() {
     aheadRun++;
-    if (aheadBusy && !show && busyMessage === aheadId) stopDirecting();
+    // busyMessage is set only by a press of Play. While it names another
+    // message, that one is being directed for the reader, so nothing stops.
+    if (aheadBusy && !show && (!busyMessage || busyMessage === aheadId)) stopDirecting();
     aheadBusy = false;
     if (!show) {
       phase = 'Prepare replies ahead is off.';
