@@ -19,7 +19,7 @@
 ## What happens when you press the button
 
 1. Auto Foley reads the message from Lumiverse.
-2. It splits the message into lines. Text in quotes is speech. The rest is narration. See [How speech is marked](#how-speech-is-marked).
+2. It splits the message into lines. By default, text in quotes is speech, and the rest is narration. See [Quoted, asterisked and undecorated text](#quoted-asterisked-and-undecorated-text).
 3. If the Decision model is on, it picks who says each quoted line.
 4. The Director marks each line with voice tags and sounds.
 5. Auto Foley checks that no words changed. A line with changed words is read as written.
@@ -57,13 +57,9 @@ Thinking a model writes in the message is never read aloud. The same nine format
 - **HTML, code blocks and comments.** Only the words inside HTML are read. Its code is not, such as the colors and gradients of colored text, however long. A `<style>` block is never read, even one that is not closed.
 - **Text in double parentheses**, such as `((brb))`.
 
-### Narration, speech and actions
+### Narration
 
-Under **Reading messages** in the Settings tab:
-
-- **Narration**: **Read aloud**, the default, **Sounds only**, or **Skip**.
-- **Speech**: **Read aloud**, the default, or **Skip**. Skip plays only the narration and the sounds.
-- **Text between asterisks**, such as `*she shrugs*`: **Read as narration**, the default, or **Skip**.
+**Narration**, under **Reading messages** in the Settings tab, says how text read as narration is played: **Read aloud**, the default, **Sounds only**, or **Skip**. Which text is narration is set under [Quoted, asterisked and undecorated text](#quoted-asterisked-and-undecorated-text).
 
 ### Trackers and status blocks
 
@@ -83,17 +79,33 @@ Under **Reading messages** in the Settings tab:
 - A pattern can be written as `/pattern/flags`. A pattern that could stall Auto Foley, or that matches nothing, is not used, and the box says why.
 - **Use defaults** puts the built-in patterns back. It asks first.
 
-## How speech is marked
+## Quoted, asterisked and undecorated text
 
-**How speech is marked**, in the Settings tab, says which text is said out loud.
+Auto Foley sorts the text of a message into three kinds. Each kind has a choice under **Reading messages** in the Settings tab. They are the same choices as **Speech detection** in Lumiverse's own Voice settings, but Auto Foley keeps its own, so the two can differ.
 
-| Choice | Speech |
+| Setting | Which text | Choices |
+| --- | --- | --- |
+| **Asterisked text** | Text such as `*she shrugs*` | **Skip**, **Read as narration** (the default), or **Read as thoughts (character voice)** |
+| **Quoted text** | Text in quote marks, or after a dash at the start of a line | **Read as speech** (the default), **Read as narration**, or **Skip** |
+| **Undecorated text** | Text with no marks around it | **Read as narration** (the default), **Read as speech**, or **Skip** |
+
+- **Read as speech** and **Read as thoughts** use the speaker's own voice. The Director picks who the speaker is.
+- **Read as narration** uses the Narrator's voice, and **Narration** says how it is played.
+- **Skip** leaves the text out. The Director does not see it either.
+- Asterisks inside quote marks only stress a word, as in `"I *mean* it."`. They stay part of what is said.
+- Text between asterisks read as narration joins the narration beside it, so `She waited. *checks the latch* Nothing moved.` is one line.
+- For a story written as `*waves* Hello there.`, set **Undecorated text** to **Read as speech**.
+
+### How speech is marked
+
+**How speech is marked** says which marks count as quote marks.
+
+| Choice | Quote marks |
 | --- | --- |
 | **Quote marks (Auto)**, the default | `"double"`, `“curly”`, `«guillemets»`, `„low quotes“`, `「corner brackets」`, and a line that starts with a dash |
 | **Quote marks, single quotes too** | All of the above, and `'single quotes'`. An apostrophe, as in `don't`, does not count. |
-| **Plain text is speech, \*asterisks\* are actions** | Everything outside asterisks. For stories written as `*waves* Hello there.` |
 
-A line that starts with a dash is speech up to the next dash, and the narration after that dash runs to the next one or to the end of the line.
+A line that starts with a dash is quoted text up to the next dash, and the undecorated text after that dash runs to the next one or to the end of the line.
 
 ## Playing on its own
 

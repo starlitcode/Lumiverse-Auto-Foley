@@ -13,7 +13,7 @@
 
 type Ctx = any;
 
-const VERSION = '1.8.2';
+const VERSION = '1.9.0';
 // The marks Lumiverse puts on another extension's part of the page. Nothing
 // inside one is read, written or pressed.
 const OTHER_UI = '[data-spindle-extension-root],[data-spindle-ext],[data-spindle-modal]';
@@ -1713,7 +1713,8 @@ const DEFAULTS: any = {
   skipPatterns: '',
   speechMarks: 'auto',
   asterisks: 'narration',
-  speechRead: 'read',
+  quotedText: 'speech',
+  plainText: 'narration',
   keepAudio: 100,
   applauseSound: '',
   applauseSeconds: 5,
@@ -2519,7 +2520,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       const isNarr = line.kind === 'narration';
       const who = isNarr ? narratorMember() : memberFor(line.speaker);
       const mutedPerson = who && who.muted;
-      const spoken = !(isNarr && S.narration !== 'read') && !(!isNarr && S.speechRead === 'skip') && !mutedPerson;
+      const spoken = !(isNarr && S.narration !== 'read') && !mutedPerson;
       if (spoken) items.push({ kind: 'voice', line, at: line.i });
       if (line.after && S.soundsOn) items.push({ kind: 'sound', line, sound: line.after, at: line.i });
       if (spoken && !isNarr && cheersFor(who, !!script.isUser)) {
@@ -5593,19 +5594,9 @@ export function setup(ctx: Ctx, overrides?: any) {
       move.setAttribute('data-af-savedmove', '');
       moreIn.appendChild(move);
     }
-    // Delete asks once more on the same button before it deletes.
-    let armed = 0 as any;
+    // Delete asks first, in the same confirmation as the rest of the panel.
     const del = button('Delete', async () => {
-      if (!armed) {
-        del.textContent = 'Tap again to delete';
-        armed = setTimeout(() => {
-          armed = 0;
-          del.textContent = 'Delete';
-        }, 4000);
-        return;
-      }
-      clearTimeout(armed);
-      armed = 0;
+      if (!(await askSure('Delete this saved script', 'Its saved audio is deleted too. There is no undo.', 'Delete', true))) return;
       if (savedPlaying === e.key) stopSavedPlay();
       let sigs: string[] = [];
       try {
@@ -9746,6 +9737,27 @@ export function setup(ctx: Ctx, overrides?: any) {
     return sec;
   }
 
+  // A person moved to another group fades out where they were, and fades and
+  // slides in where they are now, still open, with the panel scrolled to
+  // them. With reduce motion, they are simply in their new place.
+  function movePerson(id: string) {
+    const find = () => page.querySelector('.af-person[data-person="' + CSS.escape(id) + '"]') as HTMLElement | null;
+    const land = () => {
+      renderTab();
+      const c = find();
+      if (!c) return;
+      try {
+        c.scrollIntoView({ block: 'nearest' });
+      } catch (_) {}
+      if (!calm() && typeof c.animate === 'function') c.animate([{ opacity: 0, transform: 'translateY(4px)' }, { opacity: 1, transform: 'none' }], { duration: 220, easing: 'ease-out' });
+    };
+    const was = find();
+    if (!was || calm() || typeof was.animate !== 'function') return land();
+    const out = was.animate([{ opacity: 1, transform: 'none' }, { opacity: 0, transform: 'translateY(-4px)' }], { duration: 150, easing: 'ease-in', fill: 'forwards' });
+    out.onfinish = land;
+    out.oncancel = land;
+  }
+
   function personCard(m: Member): HTMLElement {
     const open = openPeople.has(m.id);
     const badge = ADDED_LABEL[m.addedBy] ? '<span class="af-badge af-badge-ai">' + esc(ADDED_LABEL[m.addedBy]) + '</span>' : '<span class="af-badge">' + esc(KIND_LABEL[m.kind] || m.kind) + '</span>';
@@ -10232,8 +10244,11 @@ export function setup(ctx: Ctx, overrides?: any) {
       inner.appendChild(
         select('Group', [{ id: '', label: 'No group' }].concat(groups().map((f) => ({ id: f.id, label: f.name }))), m.group || '', (v) => {
           m.group = v;
+          // The group they go into opens, so their card stays in sight.
+          const into = groups().find((f) => f.id === v);
+          if (into) into.open = true;
           save();
-          renderTab();
+          movePerson(m.id);
         }, 'Which group they are in on this tab. It changes nothing about how they sound.'),
       );
     }
@@ -12248,27 +12263,37 @@ export function setup(ctx: Ctx, overrides?: any) {
       select('How speech is marked', [
         { id: 'auto', label: 'Quote marks (Auto)' },
         { id: 'single', label: 'Quote marks, single quotes too' },
-        { id: 'plain', label: 'Plain text is speech, *asterisks* are actions' },
-      ], S.speechMarks || 'auto', (v) => set({ speechMarks: v }), 'Auto reads "double", “curly”, «guillemet», „low” and 「corner」 quotes, and a line that starts with a dash. Pick the plain style for stories written as *she waves* Hello.'),
+      ], S.speechMarks === 'single' ? 'single' : 'auto', (v) => set({ speechMarks: v }), 'Which marks count as quote marks. Auto reads "double", “curly”, «guillemet», „low” and 「corner」 quotes, and a line that starts with a dash.'),
+    );
+    // The same three kinds of text, with the same choices, as Lumiverse's
+    // own Speech detection, set here for Auto Foley alone.
+    r.appendChild(
+      select('Asterisked text', [
+        { id: 'skip', label: 'Skip' },
+        { id: 'narration', label: 'Read as narration' },
+        { id: 'thought', label: 'Read as thoughts (character voice)' },
+      ], S.asterisks || 'narration', (v) => set({ asterisks: v }), 'Text such as *she shrugs*. Read as narration is the default. Thoughts are read in the speaker’s own voice.'),
+    );
+    r.appendChild(
+      select('Quoted text', [
+        { id: 'speech', label: 'Read as speech' },
+        { id: 'narration', label: 'Read as narration' },
+        { id: 'skip', label: 'Skip' },
+      ], S.quotedText || 'speech', (v) => set({ quotedText: v }), 'Text in quote marks. Read as speech is the default, in the speaker’s voice.'),
+    );
+    r.appendChild(
+      select('Undecorated text', [
+        { id: 'narration', label: 'Read as narration' },
+        { id: 'speech', label: 'Read as speech' },
+        { id: 'skip', label: 'Skip' },
+      ], S.plainText || 'narration', (v) => set({ plainText: v }), 'Text with no marks around it. Read as narration is the default. Read as speech suits stories written as *she waves* Hello.'),
     );
     r.appendChild(
       segmented('Narration', [
         { id: 'read', label: 'Read aloud' },
         { id: 'sounds', label: 'Sounds only' },
         { id: 'skip', label: 'Skip' },
-      ], S.narration, (v) => set({ narration: v }), 'What happens to text outside quotes. Read aloud uses the Narrator’s voice, and is the default. Sounds only plays the sounds of what happens with no narrator. Skip leaves narration out.'),
-    );
-    r.appendChild(
-      segmented('Speech', [
-        { id: 'read', label: 'Read aloud' },
-        { id: 'skip', label: 'Skip' },
-      ], S.speechRead || 'read', (v) => set({ speechRead: v }), 'What happens to text in quotes. Read aloud is the default. Skip plays only the narration and the sounds.'),
-    );
-    r.appendChild(
-      segmented('Text between asterisks', [
-        { id: 'narration', label: 'Read as narration' },
-        { id: 'skip', label: 'Skip' },
-      ], S.asterisks || 'narration', (v) => set({ asterisks: v }), 'Text such as *she shrugs*. Read as narration is the default. Skip leaves it out, in every style of speech marks.'),
+      ], S.narration, (v) => set({ narration: v }), 'How text read as narration is played. Read aloud uses the Narrator’s voice, and is the default. Sounds only plays the sounds of what happens with no narrator. Skip leaves narration out.'),
     );
     r.appendChild(
       toggle('Leave out trackers and status blocks', 'On by default. Tables, status lines such as Time: 9:40 PM, lines that start with an emoji, folded blocks, and bars are not read. The patterns are below.', 'skipOn', undefined, () => {

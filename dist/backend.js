@@ -11,7 +11,7 @@
 // One backend process can serve every account on a server, so everything that
 // belongs to a person is kept per user id, in spindle.userStorage, and every
 // reply goes back addressed to that user.
-const VERSION = '1.8.2';
+const VERSION = '1.9.0';
 const DEFAULT_SETTINGS = {
     enabled: true,
     ttsConnection: '',
@@ -61,7 +61,8 @@ const DEFAULT_SETTINGS = {
     skipPatterns: '',
     speechMarks: 'auto',
     asterisks: 'narration',
-    speechRead: 'read',
+    quotedText: 'speech',
+    plainText: 'narration',
     thinkingMode: 'off',
     thinkingEffort: 'low',
     samplers: {},
@@ -557,9 +558,12 @@ function cleanSettings(raw) {
         soundCheck: bool(r.soundCheck, d.soundCheck),
         skipOn: bool(r.skipOn, d.skipOn),
         skipPatterns: str(r.skipPatterns, 8000),
-        speechMarks: pick(r.speechMarks, ['auto', 'single', 'plain'], 'auto'),
-        asterisks: pick(r.asterisks, ['narration', 'skip'], 'narration'),
-        speechRead: pick(r.speechRead, ['read', 'skip'], 'read'),
+        speechMarks: pick(r.speechMarks, ['auto', 'single'], 'auto'),
+        asterisks: pick(r.asterisks, ['narration', 'thought', 'skip'], 'narration'),
+        // speechRead and speechMarks "plain" are the old names of these choices,
+        // read once to move a saved choice to Quoted text and Undecorated text.
+        quotedText: pick(r.quotedText !== undefined ? r.quotedText : r.speechRead === 'skip' ? 'skip' : undefined, ['speech', 'narration', 'skip'], 'speech'),
+        plainText: pick(r.plainText !== undefined ? r.plainText : r.speechMarks === 'plain' ? 'speech' : undefined, ['narration', 'speech', 'skip'], 'narration'),
         keepAudio: KEEP_AUDIO_CHOICES.indexOf(Number(r.keepAudio)) >= 0 ? Number(r.keepAudio) : d.keepAudio,
         thinkingMode: pick(r.thinkingMode, ['off', 'inherit', 'custom'], 'off'),
         thinkingEffort: pick(r.thinkingEffort, EFFORTS, 'low'),
@@ -1035,47 +1039,34 @@ const SINGLE_OPENERS = { "'": "'", '‘': '’' };
 //   (dash) Come here, (dash) she said.
 const DASHES = '\u2014\u2015';
 const LETTER = /[\p{L}\p{N}]/u;
-// Splits a message into lines in the order they are read. Text in speech
-// marks is speech. Everything else is narration, including *asterisk
-// actions*. A paragraph break ends a narration line. With marks "plain",
-// text outside *asterisks* is speech, for a story written that way.
+// The marks that stand for *asterisks* while a message is split. They are
+// characters no story uses, so they cannot be taken for anything else.
+const STAR_OPEN = '\uE000';
+const STAR_CLOSE = '\uE001';
+// Splits a message into lines in the order they are read. The text is first
+// sorted into three kinds: text in quote marks (or after a dash at the start
+// of a line), text between *asterisks*, and undecorated text. Each kind is
+// then read as speech, narration or thoughts, or left out, as the settings
+// say. Thoughts are read in the speaker's own voice, so they are speech
+// lines. A paragraph break ends a narration line. Asterisks inside quote
+// marks only stress a word, so they stay part of what is said.
 function splitSegments(raw, extra, bound) {
     const o = Array.isArray(extra) || extra === undefined ? { extra: extra, bound } : extra;
     let t = cleanForVoice(raw, o.extra, o.bound, o.skips);
-    // Text between asterisks, such as *she shrugs*, left out when asked. A
-    // span stays on one line, so a stray asterisk cannot take a whole reply.
-    if (o.asterisks === 'skip')
-        t = t.replace(/\*[^*\n]{1,600}\*/g, ' ');
-    const marks = o.marks || 'auto';
-    const parts = [];
+    // A span stays on one line, so a stray asterisk cannot take a whole reply.
+    t = t.replace(/\*([^*\n]{1,600})\*/g, STAR_OPEN + '$1' + STAR_CLOSE);
+    const marks = o.marks === 'single' ? 'single' : 'auto';
+    const found = [];
     let buf = '';
     let para = 0;
     const flush = (kind) => {
-        const text = buf.replace(/\*/g, ' ').replace(/[ \t]+/g, ' ').trim();
+        const text = buf.replace(/[*\uE000\uE001]/g, ' ').replace(/[ \t]+/g, ' ').trim();
         buf = '';
         if (text && /[\p{L}\p{N}]/u.test(text))
-            parts.push({ kind, text, para });
+            found.push({ kind, text, para });
     };
-    if (marks === 'plain') {
-        // *Actions* are narration. Everything else is said out loud.
+    {
         let inStar = false;
-        for (let k = 0; k < t.length; k++) {
-            const ch = t[k];
-            if (ch === '*') {
-                flush(inStar ? 'narration' : 'speech');
-                inStar = !inStar;
-                continue;
-            }
-            if (ch === '\n' && t[k + 1] === '\n') {
-                flush(inStar ? 'narration' : 'speech');
-                para++;
-                continue;
-            }
-            buf += ch === '\n' ? ' ' : ch;
-        }
-        flush(inStar ? 'narration' : 'speech');
-    }
-    else {
         const openers = marks === 'single' ? Object.assign({}, OPENERS, SINGLE_OPENERS) : OPENERS;
         let closers = '';
         let dashLine = false;
@@ -1084,9 +1075,28 @@ function splitSegments(raw, extra, bound) {
             const prev = k > 0 ? t[k - 1] : '';
             const next = k + 1 < t.length ? t[k + 1] : '';
             const lineStart = k === 0 || prev === '\n';
+            // Asterisks outside quote marks start and end their own kind of text.
+            // Inside quote marks or a dash line they are left in what is said.
+            if (ch === STAR_OPEN || ch === STAR_CLOSE) {
+                if (closers || dashLine)
+                    continue;
+                if (ch === STAR_OPEN && !inStar) {
+                    flush('plain');
+                    inStar = true;
+                }
+                else if (ch === STAR_CLOSE && inStar) {
+                    flush('asterisked');
+                    inStar = false;
+                }
+                continue;
+            }
+            if (inStar) {
+                buf += ch;
+                continue;
+            }
             if (!closers && !dashLine) {
                 if (lineStart && DASHES.indexOf(ch) >= 0) {
-                    flush('narration');
+                    flush('plain');
                     dashLine = true;
                     continue;
                 }
@@ -1102,7 +1112,7 @@ function splitSegments(raw, extra, bound) {
                         buf += ch;
                         continue;
                     }
-                    flush('narration');
+                    flush('plain');
                     closers = openers[ch];
                     continue;
                 }
@@ -1113,7 +1123,7 @@ function splitSegments(raw, extra, bound) {
                         buf += ch;
                         continue;
                     }
-                    flush('speech');
+                    flush('quoted');
                     closers = '';
                     continue;
                 }
@@ -1122,32 +1132,53 @@ function splitSegments(raw, extra, bound) {
                 // A dash with a space before it ends what is said, and the narration
                 // after it runs to the next dash or the end of the line.
                 if (DASHES.indexOf(ch) >= 0 && /\s/.test(prev)) {
-                    flush('speech');
+                    flush('quoted');
                     dashLine = false;
                     let end = k + 1;
                     while (end < t.length && t[end] !== '\n' && DASHES.indexOf(t[end]) < 0)
                         end++;
                     buf = t.slice(k + 1, end);
-                    flush('narration');
+                    flush('plain');
                     if (end < t.length && DASHES.indexOf(t[end]) >= 0)
                         dashLine = true;
                     k = end;
                     continue;
                 }
                 if (ch === '\n') {
-                    flush('speech');
+                    flush('quoted');
                     dashLine = false;
                     continue;
                 }
             }
             if (!closers && !dashLine && ch === '\n' && next === '\n') {
-                flush('narration');
+                flush('plain');
                 para++;
                 continue;
             }
             buf += ch === '\n' ? ' ' : ch;
         }
-        flush(closers || dashLine ? 'speech' : 'narration');
+        flush(closers || dashLine ? 'quoted' : 'plain');
+    }
+    // Each kind of text, read as the settings say. The old marks 'plain'
+    // means Undecorated text is speech.
+    const doWith = {
+        quoted: o.quoted || 'speech',
+        plain: o.plain || (o.marks === 'plain' ? 'speech' : 'narration'),
+        asterisked: o.asterisks || 'narration',
+    };
+    const parts = [];
+    for (const x of found) {
+        const how = doWith[x.kind];
+        if (how === 'skip')
+            continue;
+        const kind = how === 'narration' ? 'narration' : 'speech';
+        const last = parts[parts.length - 1];
+        // Narration next to narration in the same paragraph is one line, so
+        // *she shrugs* read as narration joins the sentence beside it.
+        if (kind === 'narration' && last && last.kind === 'narration' && last.para === x.para)
+            last.text += ' ' + x.text;
+        else
+            parts.push({ kind, text: x.text, para: x.para });
     }
     const segs = [];
     for (const p of parts) {
@@ -2938,7 +2969,7 @@ async function direct(userId, p) {
     }
     await readKeptScripts(uid, s);
     const skip = s.skipOn ? skipsFor(s.skipPatterns) : { list: [], bad: [] };
-    const segs = splitSegments(text, { extra: s.extraThinkTags, bound: await boundPairs(userId), skips: skip.list, marks: s.speechMarks, asterisks: s.asterisks });
+    const segs = splitSegments(text, { extra: s.extraThinkTags, bound: await boundPairs(userId), skips: skip.list, marks: s.speechMarks, asterisks: s.asterisks, quoted: s.quotedText, plain: s.plainText });
     if (!p.fresh) {
         const kept = keptScript(uid, key, messageId, segs.map((g) => g.text).join('\n'), engine.id);
         if (kept) {

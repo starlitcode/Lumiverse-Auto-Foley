@@ -235,7 +235,7 @@ window.__ctx = {
       const r = document.getElementById('drawer');
       return { root: r, setBadge() {}, activate() {}, destroy() { window.__tabDestroyed = true; }, onActivate() { return () => {}; } };
     },
-    showConfirm: async () => { window.__asked = (window.__asked || 0) + 1; return { confirmed: true }; },
+    showConfirm: async (o) => { window.__asked = (window.__asked || 0) + 1; window.__askedTitle = o && o.title; return { confirmed: !window.__confirmNo }; },
     showContextMenu: async (o) => { window.__menu = o; return { selectedKey: null }; },
     createFloatWidget: (o) => {
       // As Lumiverse draws it: a sized, placed surface, with the root the
@@ -1658,13 +1658,16 @@ if (section("saved audio")) {
     check(!mg.overflow.length && !mg.small.length, size.name + ": the gallery fits. " + mg.overflow.concat(mg.small).slice(0, 2).join("; "));
     if (shots) await page.locator("[data-af-saved]").screenshot({ path: shots + "/gallery-" + size.name + ".png" });
     if (!(await row.locator(".af-btn", { hasText: "Delete" }).isVisible())) { await row.locator("[data-af-savedmore-btn]").click(); await page.waitForTimeout(450); }
+    // Delete asks in a confirmation. Answered no, nothing is deleted.
+    await page.evaluate(() => { window.__confirmNo = true; window.__asked = 0; });
     await row.locator(".af-btn", { hasText: "Delete" }).click();
-    await page.waitForTimeout(150);
-    check((await row.count()) === 1 && ((await row.textContent()) || "").includes("Tap again to delete"), size.name + ": Delete asks once more first");
-    await row.locator(".af-btn", { hasText: "Tap again to delete" }).click();
+    await page.waitForTimeout(400);
+    check((await page.evaluate(() => window.__asked)) === 1 && (await page.evaluate(() => window.__askedTitle)) === "Delete this saved script" && (await row.count()) === 1 && !(await page.evaluate(() => (window.__dropped || []).length)), size.name + ": Delete asks first in a confirmation, and No keeps it");
+    await page.evaluate(() => { window.__confirmNo = false; });
+    await row.locator(".af-btn", { hasText: "Delete" }).click();
     await page.waitForTimeout(600);
     const dropped = await page.evaluate(() => window.__dropped || []);
-    check((await page.locator("[data-af-saved-row]").count()) === 0 && dropped.length === 1 && dropped[0].sigs.length > 0, size.name + ": the second tap deletes it, with its saved audio");
+    check((await page.locator("[data-af-saved-row]").count()) === 0 && dropped.length === 1 && dropped[0].sigs.length > 0, size.name + ": Yes deletes it, with its saved audio");
     check(!errors.length, size.name + ": no console errors. " + errors.slice(0, 2).join("; "));
     await context.close();
   }
@@ -3461,6 +3464,84 @@ if (section("new person")) {
     await name.fill("Wrenna Quill");
     await page.waitForTimeout(200);
     check(((await card.locator(".af-person-name b").textContent()) || "") === "Wrenna Quill", size.name + ": typing a name changes the header as it is typed");
+    check(!errors.length, size.name + ": no page errors. " + errors.slice(0, 2).join(" | "));
+    await context.close();
+  }
+}
+
+if (section("group move")) {
+  console.log("A new person put in a folded group stays open and in sight, and moves with a fade");
+  for (const size of SIZES) {
+    const { context, page, errors } = await open(THEMES[0], size);
+    await page.evaluate(() => {
+      window.__teardown();
+      document.getElementById("drawer").innerHTML = "";
+      window.__settings = Object.assign({}, window.__settings, { groups: [{ id: "g1", name: "Lighthouse crew", open: false }] });
+      window.__teardown = window.__setup(window.__ctx, { fetch: window.__fetch, Audio: window.__Audio });
+    });
+    await page.waitForTimeout(300);
+    await page.click('.af-tab[data-tab="cast"]');
+    await page.waitForTimeout(300);
+    await page.getByRole("button", { name: "Add someone" }).click();
+    await page.waitForTimeout(500);
+    const card = page.locator('.af-person[data-open="true"]').last();
+    const id = await card.getAttribute("data-person");
+    const pick = card.locator("select").filter({ has: page.locator('option[value="g1"]') }).first();
+    // Read the card's look every frame while it moves.
+    await page.evaluate((id) => {
+      window.__fade = [];
+      const t0 = performance.now();
+      const look = () => {
+        const c = document.querySelector('.af-person[data-person="' + id + '"]');
+        window.__fade.push(c ? Number(getComputedStyle(c).opacity) : -1);
+        if (performance.now() - t0 < 700) requestAnimationFrame(look);
+      };
+      requestAnimationFrame(look);
+    }, id);
+    await pick.selectOption("g1");
+    await page.waitForTimeout(800);
+    const got = await page.evaluate((id) => {
+      const c = document.querySelector('.af-person[data-person="' + id + '"]');
+      const sec = c && c.closest(".af-group");
+      const r = c ? c.getBoundingClientRect() : null;
+      const hidden = !c || !!c.closest("[hidden]");
+      return { inGroup: !!sec && sec.getAttribute("data-group") === "g1", groupOpen: sec && sec.getAttribute("data-open"), open: c && c.getAttribute("data-open"), hidden, seen: !!r && r.height > 0, saved: window.__settings.groups[0].open, fade: window.__fade };
+    }, id);
+    const mids = got.fade.filter((o) => o > 0.05 && o < 0.95).length;
+    check(got.inGroup && got.groupOpen === "true" && got.saved === true, size.name + ": the group they go into opens");
+    check(got.open === "true" && !got.hidden && got.seen, size.name + ": their card stays open and in sight");
+    check(mids >= 3, size.name + ": the card fades out and in over several frames (" + mids + " frames between)");
+    check(!errors.length, size.name + ": no page errors. " + errors.slice(0, 2).join(" | "));
+    await context.close();
+  }
+}
+
+if (section("speech detection")) {
+  console.log("Reading messages has Asterisked text, Quoted text and Undecorated text, with Lumiverse's choices");
+  for (const size of SIZES) {
+    const { context, page, errors } = await open(THEMES[0], size);
+    await page.click('.af-tab[data-tab="settings"]');
+    await page.waitForTimeout(400);
+    const rows = await page.evaluate(() => {
+      const out = {};
+      for (const name of ["Asterisked text", "Quoted text", "Undecorated text", "How speech is marked"]) {
+        const lab = Array.from(document.querySelectorAll(".af-page label, .af-page .af-label")).find((l) => l.textContent.trim().startsWith(name));
+        const row = lab && lab.closest(".af-col, .af-field-row, .af-row, div");
+        const sel = row && (row.querySelector("select") || (lab.htmlFor && document.getElementById(lab.htmlFor)));
+        out[name] = sel ? Array.from(sel.options).map((o) => o.textContent) : null;
+      }
+      return out;
+    });
+    check(JSON.stringify(rows["Asterisked text"]) === JSON.stringify(["Skip", "Read as narration", "Read as thoughts (character voice)"]), size.name + ": Asterisked text has Skip, narration and thoughts (" + JSON.stringify(rows["Asterisked text"]) + ")");
+    check(JSON.stringify(rows["Quoted text"]) === JSON.stringify(["Read as speech", "Read as narration", "Skip"]), size.name + ": Quoted text has speech, narration and Skip");
+    check(JSON.stringify(rows["Undecorated text"]) === JSON.stringify(["Read as narration", "Read as speech", "Skip"]), size.name + ": Undecorated text has narration, speech and Skip");
+    check(!!rows["How speech is marked"] && rows["How speech is marked"].length === 2, size.name + ": How speech is marked keeps only which quote marks count");
+    const sel = page.locator("select").filter({ has: page.locator('option[value="thought"]') }).first();
+    await sel.selectOption("thought");
+    await page.waitForTimeout(400);
+    check((await page.evaluate(() => window.__settings.asterisks)) === "thought", size.name + ": picking thoughts is saved");
+    const m = await page.evaluate(MEASURE, size.touch);
+    check(!m.overflow.length && !m.small.length, size.name + ": the Settings tab fits. " + m.overflow.concat(m.small).slice(0, 2).join("; "));
     check(!errors.length, size.name + ": no page errors. " + errors.slice(0, 2).join(" | "));
     await context.close();
   }

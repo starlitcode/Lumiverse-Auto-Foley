@@ -251,6 +251,26 @@ describe("writing styles and text not meant to be heard", () => {
     expect(split('*leans on the rail* "Not tonight."')).toEqual(["n:leans on the rail", "s:Not tonight."]);
   });
 
+  test("Asterisked text can be read as thoughts, in the speaker's voice", () => {
+    expect(split('*He would not lie to her.* "Fine."', { asterisks: "thought" })).toEqual(["s:He would not lie to her.", "s:Fine."]);
+    // Asterisks inside quote marks only stress a word.
+    expect(split('"I *really* mean it," Tova said.', { asterisks: "thought" })).toEqual(["s:I really mean it,", "n:Tova said."]);
+  });
+
+  test("Quoted text can be read as narration, or skipped", () => {
+    expect(split('Tova nodded. "Fine." She left.', { quoted: "narration" })).toEqual(["n:Tova nodded. Fine. She left."]);
+    expect(split('Tova nodded. "Fine." She left.', { quoted: "skip" })).toEqual(["n:Tova nodded. She left."]);
+  });
+
+  test("Undecorated text can be read as speech, or skipped", () => {
+    expect(split("*waves from the gate* Hello there.", { plain: "speech" })).toEqual(["n:waves from the gate", "s:Hello there."]);
+    expect(split('Tova nodded. "Fine."', { plain: "skip" })).toEqual(["s:Fine."]);
+  });
+
+  test("text between asterisks read as narration joins the narration beside it", () => {
+    expect(split("Tova waited. *checks the latch* Nothing moved.")).toEqual(["n:Tova waited. checks the latch Nothing moved."]);
+  });
+
   test("trackers, status lines and bars are left out", () => {
     const text = 'Brin set the lamp down. "Night shift again."\n\nTime: 11:20 PM\n| Mood | tired |\n📍 The east dock\nStamina ▓▓▓░░\n【Day 4】\n<details><summary>Notes</summary>Owes a favor.</details>';
     expect(split(text, { skips: skips() })).toEqual(["n:Brin set the lamp down.", "s:Night shift again."]);
@@ -334,6 +354,17 @@ describe("keys to pause and play are saved", () => {
 
 describe("how the cast is sorted is saved", () => {
   const h = host();
+  test("the old Speech and plain-text choices move to Quoted text and Undecorated text", () => {
+    const d = h.box.cleanSettings({});
+    expect([d.asterisks, d.quotedText, d.plainText, d.speechMarks]).toEqual(["narration", "speech", "narration", "auto"]);
+    expect(h.box.cleanSettings({ speechRead: "skip" }).quotedText).toBe("skip");
+    const plain = h.box.cleanSettings({ speechMarks: "plain" });
+    expect([plain.plainText, plain.speechMarks]).toEqual(["speech", "auto"]);
+    expect(h.box.cleanSettings({ speechRead: "skip", quotedText: "narration" }).quotedText).toBe("narration");
+    expect(h.box.cleanSettings({ asterisks: "thought" }).asterisks).toBe("thought");
+    expect("speechRead" in h.box.cleanSettings({ speechRead: "skip" })).toBe(false);
+  });
+
   test("by kind by default, and only the known ways are kept", () => {
     expect(h.box.cleanSettings({}).castSort).toBe("kind");
     for (const how of ["az", "za", "voice", "own"]) expect(h.box.cleanSettings({ castSort: how }).castSort).toBe(how);

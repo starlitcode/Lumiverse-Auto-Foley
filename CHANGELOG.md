@@ -6,6 +6,29 @@ Versions follow [Semantic Versioning](https://semver.org). A new major version m
 
 ---
 
+## 1.9.0
+
+_2026-11-26_
+
+### Added
+
+- **Asterisked text, Quoted text and Undecorated text**, under **Reading messages** in the Settings tab. They have the same choices as **Speech detection** in Lumiverse's own Voice settings, set for Auto Foley alone. See [Quoted, asterisked and undecorated text](docs/getting-started.md#quoted-asterisked-and-undecorated-text).
+  - **Asterisked text** can be **Read as thoughts (character voice)**, in the speaker's own voice.
+  - **Quoted text** can be **Read as narration**, in the Narrator's voice.
+  - **Undecorated text** can be **Read as speech**, or skipped.
+
+### Changed
+
+- **Speech and Text between asterisks are now Quoted text and Asterisked text.** **Plain text is speech, \*asterisks\* are actions**, under **How speech is marked**, is now **Undecorated text** set to **Read as speech**. Your choices carry over. **How speech is marked** now only says which quote marks count.
+- **Quoted text set to Skip leaves it out before the Director reads the message.** Before, the Director still directed it, and it was only not played.
+- **Delete on a saved script asks in a confirmation**, the same as the rest of the panel, instead of asking for a second tap.
+
+### Fixed
+
+- **A person put in a folded group seemed to close.** Picking a group for someone on the Cast tab moved their card into that group at once, and a folded group hid it. The group now opens, and the card fades out and back in at its new place, still open, with the panel scrolled to it.
+
+---
+
 ## 1.8.2
 
 _2026-11-26_
