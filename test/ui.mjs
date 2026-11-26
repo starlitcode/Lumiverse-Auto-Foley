@@ -688,6 +688,15 @@ if (section("video edges")) {
   const full = await corner();
   check(none > half && half > full, "the corners are darkest at 100, lighter at 50, and lightest when off (" + [full, half, none].join(", ") + ")");
   check(await page.evaluate(() => window.__settings.videoEdges === 100), "and the choice is saved");
+  // A color of their own: the corner takes it on.
+  await page.locator('[data-af-colorswatch="videoEdgeColor"]').click();
+  await page.waitForTimeout(300);
+  await page.fill('[data-af-colorcode="videoEdgeColor"]', "#c02040");
+  await page.locator('[data-af-colorcode="videoEdgeColor"]').dispatchEvent("change");
+  await page.waitForTimeout(600);
+  const tint = await page.evaluate(() => { const d = document.querySelector("[data-af-videopreview]").getContext("2d").getImageData(20, 20, 1, 1).data; return [d[0], d[1], d[2]]; });
+  check(tint[0] > tint[1] + 40 && tint[0] > tint[2] + 20, "Color of the edges colors the edges (" + tint.join(",") + ")");
+  check(await page.evaluate(() => window.__settings.videoEdgeColor === "#c02040"), "and is saved");
   check(!errors.length, "no errors. " + errors.slice(0, 2).join("; "));
   await context.close();
 }

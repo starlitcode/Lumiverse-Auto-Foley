@@ -137,6 +137,8 @@ When each word is said is worked out from where the voice is in the clip, so it 
 
 **Darken the edges**, under any background, makes the edges of the frame darker than the middle. It is 50% by default. **Off** leaves the edges as bright as the middle.
 
+**Color of the edges**, under it, is black by default. Another color makes the edges glow in that color, as strongly as **Darken the edges** says.
+
 ### Moving between lines
 
 **Transition** sets how one line gives way to the next. None of them flashes.

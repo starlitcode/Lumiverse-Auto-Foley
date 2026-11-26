@@ -1675,6 +1675,7 @@ const DEFAULTS = {
     videoDim: 40,
     videoBlur: 0,
     videoEdges: 50,
+    videoEdgeColor: '',
     videoMove: 'rise',
     videoMoveSecs: 0.4,
     videoTitleOn: true,
@@ -3450,11 +3451,14 @@ export function setup(ctx, overrides) {
         }
         // Darker at the edges, as much as Darken the edges asks, so the words in
         // the middle stand out. 0 leaves the edges as they are.
+        // The edges are black unless Color of the edges picks another color.
         const edges = Math.min(100, Math.max(0, Number(S.videoEdges))) / 100;
         if (edges > 0) {
+            const n = parseInt(hexOr(S.videoEdgeColor, '#000000').slice(1), 16);
+            const rgb = ((n >> 16) & 255) + ',' + ((n >> 8) & 255) + ',' + (n & 255);
             const edge = b.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.35, W / 2, H / 2, Math.max(W, H) * 0.65);
-            edge.addColorStop(0, 'rgba(0,0,0,0)');
-            edge.addColorStop(1, 'rgba(0,0,0,' + edges + ')');
+            edge.addColorStop(0, 'rgba(' + rgb + ',0)');
+            edge.addColorStop(1, 'rgba(' + rgb + ',' + edges + ')');
             b.fillStyle = edge;
             b.fillRect(0, 0, W, H);
         }
@@ -11323,6 +11327,7 @@ export function setup(ctx, overrides) {
             edges.setAttribute('data-af-byeye', '');
             edges.setAttribute('data-af-row', 'videoEdges');
             b.appendChild(edges);
+            b.appendChild(colorRow('videoEdgeColor', 'Color of the edges', 'Black by default. A color makes the edges glow in it.', '--af-none', '#000000', 'Use the built-in color', look));
             loadVideoBg().then(() => {
                 drop.disabled = !videoBg;
             });
