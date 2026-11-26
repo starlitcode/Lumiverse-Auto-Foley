@@ -178,7 +178,7 @@ interface Settings {
   videoInk: string;
   // The color of sound captions in a video. Empty uses the words' color.
   videoCaptionInk: string;
-  videoWords: 'light' | 'appear' | 'all';
+  videoWords: 'light' | 'appear' | 'fade' | 'blur' | 'all';
   videoPlace: 'middle' | 'lower';
   videoQuotes: boolean;
   videoNames: boolean;
@@ -905,7 +905,7 @@ function cleanSettings(raw: any): Settings {
     videoSize: Math.round(num(r.videoSize, 60, 160, d.videoSize)),
     videoInk: hexColor(r.videoInk),
     videoCaptionInk: hexColor(r.videoCaptionInk),
-    videoWords: pick(r.videoWords, ['light', 'appear', 'all'] as const, d.videoWords),
+    videoWords: pick(r.videoWords, ['light', 'appear', 'fade', 'blur', 'all'] as const, d.videoWords),
     videoPlace: pick(r.videoPlace, ['middle', 'lower'] as const, d.videoPlace),
     videoQuotes: bool(r.videoQuotes, d.videoQuotes),
     videoNames: bool(r.videoNames, d.videoNames),

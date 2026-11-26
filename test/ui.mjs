@@ -3748,6 +3748,73 @@ if (section("full screen")) {
   }
 }
 
+if (section("word effects")) {
+  console.log("Words in a video can fade in or blur in as they are said");
+  for (const size of SIZES) {
+    const { context, page, errors } = await open(THEMES[0], size);
+    await page.evaluate(async () => {
+      window.__wav = [0.1, 0.3];
+      window.__clipMs = 200;
+    });
+    await page.click('#mount [data-af-slot="message"]');
+    await page.waitForFunction(() => document.querySelector('#mount [data-af-slot="message"]').getAttribute("aria-busy") === null && (window.__synth || []).length > 0, null, { timeout: 15000 });
+    await page.waitForTimeout(2500);
+    await page.click('.af-tab[data-tab="studio"]');
+    await page.waitForTimeout(1500);
+    await page.locator(".af-fold", { hasText: "Shape and words" }).first().click();
+    await page.waitForTimeout(400);
+    const words = page.locator('[data-af-row] select').filter({ has: page.locator('option[value="blur"]') }).first();
+    // The ink in each frame of the preview, every twentieth of a second: the
+    // sum of how much brighter than the frame's darkest pixel each pixel is.
+    const inks = (mode) => page.evaluate(async (mode) => {
+      const r = document.querySelector("[data-af-scrub] input");
+      const c = document.querySelector("[data-af-videopreview]");
+      const g = c.getContext("2d");
+      const out = [];
+      for (let t = 0; t <= Number(r.max); t += 0.05) {
+        r.value = String(t);
+        r.dispatchEvent(new Event("input", { bubbles: true }));
+        await new Promise((x) => requestAnimationFrame(x));
+        const d = g.getImageData(0, 0, c.width, c.height).data;
+        let sum = 0;
+        let soft = 0;
+        for (let i = 0; i < d.length; i += 4 * 3) {
+          const v = d[i] + d[i + 1] + d[i + 2];
+          if (v > 300) sum += v;
+          if (v > 120 && v <= 300) soft++;
+        }
+        out.push({ t, sum, soft });
+      }
+      return { mode, out };
+    }, mode);
+    const run = {};
+    for (const mode of ["appear", "fade", "blur"]) {
+      await words.selectOption(mode);
+      await page.waitForTimeout(500);
+      run[mode] = (await inks(mode)).out;
+    }
+    const n = Math.min(run.appear.length, run.fade.length, run.blur.length);
+    let fadeLess = 0;
+    let fadeMore = 0;
+    let blurSofter = 0;
+    for (let i = 0; i < n; i++) {
+      const a = run.appear[i].sum;
+      if (run.fade[i].sum < a * 0.97) fadeLess++;
+      if (run.fade[i].sum > a * 1.03 + 1000) fadeMore++;
+      if (run.blur[i].soft > run.fade[i].soft * 1.15 + 20) blurSofter++;
+    }
+    const last = n - 1;
+    check(fadeLess >= 2 && fadeMore === 0, size.name + ": Fade in draws a word dimmer than Appear just after it is said, and never brighter (" + fadeLess + " dimmer frames, " + fadeMore + " brighter)");
+    check(blurSofter >= 2, size.name + ": Blur in draws a word just said soft at its edges (" + blurSofter + " frames)");
+    check(Math.abs(run.fade[last].sum - run.appear[last].sum) <= run.appear[last].sum * 0.02, size.name + ": once every word is said, Fade in looks the same as Appear");
+    check(await page.evaluate(() => window.__settings.videoWords === "blur"), size.name + ": the choice is saved");
+    const m = await page.evaluate(MEASURE, size.touch);
+    check(!m.overflow.length && !m.small.length, size.name + ": the Studio fits. " + m.overflow.concat(m.small).slice(0, 2).join("; "));
+    check(!errors.length, size.name + ": no page errors. " + errors.slice(0, 2).join(" | "));
+    await context.close();
+  }
+}
+
 if (section("caption color")) {
   console.log("Sound captions in a video can have a color of their own");
   for (const size of SIZES) {

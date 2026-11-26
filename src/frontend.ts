@@ -3928,9 +3928,14 @@ export function setup(ctx: Ctx, overrides?: any) {
       const base = y + (r + 1) * lineH - Math.round(lineH * 0.3);
       row.forEach((k, n) => {
         const on = k <= said;
-        const a = alpha * (mode === 'all' || on ? 1 : mode === 'appear' ? 0 : 0.45);
+        // How far a word is into its fade, from 0 when it is said to 1 a
+        // moment later. Only Fade in and Blur in use it.
+        const into = on ? Math.min(1, Math.max(0, (local - (p.times[k] || 0)) / WORD_IN_S)) : 0;
+        const soft = mode === 'fade' || mode === 'blur';
+        const a = alpha * (mode === 'all' ? 1 : soft ? ease(into) : on ? 1 : mode === 'appear' ? 0 : 0.45);
         if (a > 0) {
           if (p.hidden[k]) coverWord(g, words[k], x, base, size, ink, a);
+          else if (mode === 'blur' && into < 1) blurWord(g, words[k], x, base, ink, a, (1 - ease(into)) * WORD_BLUR * u);
           else {
             g.globalAlpha = a;
             g.fillStyle = ink;
@@ -3944,6 +3949,50 @@ export function setup(ctx: Ctx, overrides?: any) {
   }
 
   const ease = (k: number) => (k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2);
+
+  // Fade in and Blur in: how long a word takes to come in once it is said,
+  // and how blurred it starts, in pixels at 1080 high.
+  const WORD_IN_S = 0.35;
+  const WORD_BLUR = 14;
+  // Whether this browser blurs what is drawn on a canvas. One that does not
+  // keeps the setting as written and draws nothing different, so it is
+  // tested by writing it and reading it back.
+  let canvasBlur: boolean | null = null;
+  function blursCanvas(g: CanvasRenderingContext2D): boolean {
+    if (canvasBlur !== null) return canvasBlur;
+    try {
+      const was = (g as any).filter;
+      (g as any).filter = 'blur(2px)';
+      canvasBlur = (g as any).filter === 'blur(2px)';
+      (g as any).filter = was === undefined ? 'none' : was;
+    } catch (_) {
+      canvasBlur = false;
+    }
+    return canvasBlur;
+  }
+  // A word drawn blurred by r pixels. Without a canvas blur, it is drawn
+  // several times, spread around its place at a low opacity, which looks
+  // much the same.
+  function blurWord(g: CanvasRenderingContext2D, word: string, x: number, base: number, ink: string, a: number, r: number) {
+    g.save();
+    g.fillStyle = ink;
+    if (r < 0.5) {
+      g.globalAlpha = a;
+      g.fillText(word, x, base);
+    } else if (blursCanvas(g)) {
+      (g as any).filter = 'blur(' + r.toFixed(1) + 'px)';
+      g.globalAlpha = a;
+      g.fillText(word, x, base);
+    } else {
+      const STEPS = 8;
+      g.globalAlpha = (a * 1.6) / STEPS;
+      for (let i = 0; i < STEPS; i++) {
+        const t = (i / STEPS) * Math.PI * 2;
+        g.fillText(word, x + Math.cos(t) * r * 0.6, base + Math.sin(t) * r * 0.6);
+      }
+    }
+    g.restore();
+  }
 
   // ---- notes over the video ----
   // A note is a few words for whoever watches, in a box at the top or the
@@ -12259,6 +12308,8 @@ export function setup(ctx: Ctx, overrides?: any) {
         b.appendChild(select('How the words show', [
           { id: 'light', label: 'Light up as they are said' },
           { id: 'appear', label: 'Appear as they are said' },
+          { id: 'fade', label: 'Fade in as they are said' },
+          { id: 'blur', label: 'Blur in as they are said' },
           { id: 'all', label: 'All at once' },
         ], S.videoWords || 'light', (v) => {
           set({ videoWords: v });

@@ -122,7 +122,7 @@ A browser that can make MP4, such as a recent Chrome or Safari, saves MP4, which
 - **Font**: **Book** by default. Also **Clean**, **Typewriter**, **Rounded** and **Your theme's font**. A font your device does not have is drawn in one that is close.
 - **Size, in percent**: 100 by default, from 60 to 160.
 - **Color of the words**: a warm white by default.
-- **How the words show**: **Light up as they are said** by default, with words not said yet dimmer. **Appear as they are said** shows each word only once it is said. **All at once** shows the whole line.
+- **How the words show**: **Light up as they are said** by default, with words not said yet dimmer. **Appear as they are said** shows each word only once it is said. **Fade in as they are said** fades each word in as it is said. **Blur in as they are said** fades each word in from a blur. **All at once** shows the whole line.
 - **Where the words sit**: **Middle** by default, or **Lower third**, which leaves the picture behind them clear.
 - **Quotation marks around speech**: on by default. Narration never has them.
 

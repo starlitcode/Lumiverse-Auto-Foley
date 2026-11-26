@@ -610,7 +610,7 @@ function cleanSettings(raw) {
         videoSize: Math.round(num(r.videoSize, 60, 160, d.videoSize)),
         videoInk: hexColor(r.videoInk),
         videoCaptionInk: hexColor(r.videoCaptionInk),
-        videoWords: pick(r.videoWords, ['light', 'appear', 'all'], d.videoWords),
+        videoWords: pick(r.videoWords, ['light', 'appear', 'fade', 'blur', 'all'], d.videoWords),
         videoPlace: pick(r.videoPlace, ['middle', 'lower'], d.videoPlace),
         videoQuotes: bool(r.videoQuotes, d.videoQuotes),
         videoNames: bool(r.videoNames, d.videoNames),
