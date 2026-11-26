@@ -87,7 +87,10 @@ interface VideoShapeDef {
 }
 // One background. A picture is kept in a file of its own, by the
 // background's id. dim and blur are for a picture, color for a color, and
-// shapes for a design.
+// shapes for a design. use says which scenes it is for: match is scenes with
+// one of its moods or place words, and hand is only scenes it is picked for
+// by hand. The background picked in the settings is used for every scene
+// nothing else is for, whatever its use says.
 interface VideoBack {
   id: string;
   name: string;
@@ -96,6 +99,9 @@ interface VideoBack {
   dim: number;
   blur: number;
   shapes: VideoShapeDef[];
+  use: 'match' | 'hand';
+  moods: string[];
+  places: string[];
 }
 
 interface Settings {
@@ -456,7 +462,7 @@ const DEFAULT_SETTINGS: Settings = {
   videoNameFont: '',
   videoNameSize: 100,
   videoPicRing: true,
-  videoBacks: [{ id: 'main', name: 'Main', kind: 'dark', color: '', dim: 40, blur: 0, shapes: [] }],
+  videoBacks: [{ id: 'main', name: 'Main', kind: 'dark', color: '', dim: 40, blur: 0, shapes: [], use: 'match', moods: [], places: [] }],
   videoBackPick: 'main',
   videoEdges: 50,
   videoEdgeColor: '',
@@ -596,7 +602,7 @@ function cleanShape(v: any): VideoShapeDef | null {
 function cleanBacks(r: any): { videoBacks: VideoBack[]; videoBackPick: string } {
   let raw: any[] = Array.isArray(r.videoBacks) ? r.videoBacks : [];
   if (!raw.length)
-    raw = [{ id: 'main', name: 'Main', kind: r.videoBack, color: r.videoBackColor, dim: r.videoDim, blur: r.videoBlur, shapes: [] }];
+    raw = [{ id: 'main', name: 'Main', kind: r.videoBack, color: r.videoBackColor, dim: r.videoDim, blur: r.videoBlur, shapes: [], use: 'match', moods: [], places: [] }];
   const list: VideoBack[] = [];
   for (const b of raw.slice(0, BACKS_MAX)) {
     if (!b || typeof b !== 'object') continue;
@@ -615,9 +621,15 @@ function cleanBacks(r: any): { videoBacks: VideoBack[]; videoBackPick: string } 
       dim: Math.round(num(b.dim, 0, 80, 40)),
       blur: Math.round(num(b.blur, 0, 20, 0)),
       shapes,
+      use: b.use === 'hand' ? 'hand' : 'match',
+      moods: Array.isArray(b.moods) ? MUSIC_MOODS.filter((m) => b.moods.indexOf(m) >= 0) : [],
+      places: (Array.isArray(b.places) ? b.places : [])
+        .map((w: any) => str(w, 40).replace(/[\u0000-\u001f]/g, ' ').trim().toLowerCase())
+        .filter((w: string, i: number, all: string[]) => w && all.indexOf(w) === i)
+        .slice(0, 20),
     });
   }
-  if (!list.length) list.push({ id: 'main', name: 'Main', kind: 'dark', color: '', dim: 40, blur: 0, shapes: [] });
+  if (!list.length) list.push({ id: 'main', name: 'Main', kind: 'dark', color: '', dim: 40, blur: 0, shapes: [], use: 'match', moods: [], places: [] });
   const want = String(r.videoBackPick == null ? '' : r.videoBackPick);
   return { videoBacks: list, videoBackPick: list.some((x) => x.id === want) ? want : list[0].id };
 }
@@ -2096,6 +2108,10 @@ Set "sung": true on a line someone actually sings, like song lyrics or a lullaby
 When "music" is true in the rules, music plays quietly under the scene, and you pick its mood from "moods". Give the first line a "mood" that fits how the scene feels when it opens. After that, set "mood" only on a line where the feeling really turns and stays turned, like a joke that sours into a threat or a chase that finally ends. Everywhere else leave it as "", and the music carries on. Music that flips every other line is worse than music that holds, so let the small wobbles go.
 </music>
 
+<scenes>
+When "scenes" is true in the rules, the video can change what's behind the words when the scene changes. Put a few plain words naming the place in "scene" on the first line, like "night market" or "hospital waiting room", using the text's own words when it gives them. Do it again on a line where the story really moves on: it goes somewhere new, or it jumps ahead in time. A mood that turns hard and stays turned counts too. Give that same line a "mood" from "moods" for how the new scene feels. Everywhere else, "scene" stays "". Most messages are one scene, and that's fine.
+</scenes>
+
 <new_speakers>
 When "find_speakers" is true and someone speaks who isn't in the cast, use the name the text gives them, or a short plain one if it gives none, like "Bartender". List them in "new_speakers" with "gender" (female, male, nonbinary or unknown), "role" (main or minor) and "about": a few words on how they sound, like "gravelly older man" or "bright, quick young woman". Use nonbinary only when the text says it, like "they" for one person or the word itself, and unknown when you can't tell. A main role is someone the story follows, and a minor one is a bartender or a passerby. Anyone in a sex scene is an adult.
 </new_speakers>
@@ -2110,10 +2126,10 @@ Every line comes back, in order, with the same "i" it came with.
 "text" is the whole line: every word of it, exactly as written, with your tags added. Never just the tags.
 "speaker" is a name from the cast, a name from "new_speakers", or "Narrator".
 Leave "before" and "after" as "" when there's no sound, and "big" as false unless it's a real peak and "big_moments" is on.
-Leave "style" as "" and "sung" as false unless the line needs them, and "mood" as "" unless "music" is on and the mood starts or turns there.
+Leave "style" as "" and "sung" as false unless the line needs them, and "mood" as "" unless "music" or "scenes" is on and the mood starts or turns there. Leave "scene" as "" unless "scenes" is on and a scene starts there.
 Leave "new_speakers" as [] when nobody new speaks.
 
-{"lines":[{"i":0,"speaker":"Narrator","text":"...","style":"","before":"","after":"","big":false,"sung":false,"mood":""}],"new_speakers":[]}
+{"lines":[{"i":0,"speaker":"Narrator","text":"...","style":"","before":"","after":"","big":false,"sung":false,"mood":"","scene":""}],"new_speakers":[]}
 </your_answer>`;
 
 interface DirectedLine {
@@ -2139,6 +2155,8 @@ interface DirectedLine {
   sung: boolean;
   // The mood of the scene's music from this line on, when it changes here.
   mood?: string;
+  // A few words naming the place, on the line a scene starts.
+  scene?: string;
 }
 
 interface Script {
@@ -2222,7 +2240,7 @@ function applyDirection(
   cast: CastMember[],
   author: string,
   fixed: Record<number, string>,
-  rules: TagRules & { sounds: boolean; effects: boolean; narrationRead: boolean; findSpeakers: boolean; bigMoments: boolean; lineStyle?: boolean; music?: boolean },
+  rules: TagRules & { sounds: boolean; effects: boolean; narrationRead: boolean; findSpeakers: boolean; bigMoments: boolean; lineStyle?: boolean; music?: boolean; scenes?: boolean },
 ): { lines: DirectedLine[]; newSpeakers: { name: string; gender: string; about: string; role: string }[]; log: string[] } {
   const log: string[] = [];
   const byIndex: Record<number, any> = {};
@@ -2296,9 +2314,13 @@ function applyDirection(
     line.big = rules.bigMoments && d.big === true;
     if (d.sung === true) line.sung = true;
     if (rules.lineStyle) line.style = cleanStyle(d.style);
-    if (rules.music) {
+    if (rules.music || rules.scenes) {
       const mood = String(d.mood || '').trim().toLowerCase();
       if (MUSIC_MOODS.indexOf(mood) >= 0) line.mood = mood;
+    }
+    if (rules.scenes) {
+      const place = str(d.scene, 80).replace(/[\u0000-\u001f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 60);
+      if (place) line.scene = place;
     }
     return line;
   });
@@ -3074,6 +3096,26 @@ interface KeptEntry {
   script: Script;
   name?: string;
   folder?: string;
+  // Scene changes made by hand in the Studio, by the "i" of a scene's first
+  // line: a scene started or joined to the one before, and a background
+  // picked for it.
+  scenes?: SceneHand;
+}
+interface SceneHand {
+  cuts: Record<string, 'start' | 'join'>;
+  backs: Record<string, string>;
+}
+function cleanSceneHand(v: any): SceneHand | undefined {
+  if (!v || typeof v !== 'object') return undefined;
+  const cuts: Record<string, 'start' | 'join'> = {};
+  const backs: Record<string, string> = {};
+  for (const k of Object.keys(v.cuts || {}).slice(0, 400))
+    if (/^\d{1,4}$/.test(k) && (v.cuts[k] === 'start' || v.cuts[k] === 'join')) cuts[k] = v.cuts[k];
+  for (const k of Object.keys(v.backs || {}).slice(0, 400)) {
+    const id = str(v.backs[k], 24).replace(/[^a-z0-9]/gi, '');
+    if (/^\d{1,4}$/.test(k) && id) backs[k] = id;
+  }
+  return Object.keys(cuts).length || Object.keys(backs).length ? { cuts, backs } : undefined;
 }
 const scripts: Record<string, KeptEntry[]> = {};
 
@@ -3095,6 +3137,7 @@ function keepScript(userId: string, script: Script) {
   const entry: KeptEntry = { key: script.key, script };
   if (was && was.name) entry.name = was.name;
   if (was && was.folder) entry.folder = was.folder;
+  if (was && was.scenes) entry.scenes = was.scenes;
   list.push(entry);
   trimKept(list);
   void saveKeptScripts(userId);
@@ -3119,6 +3162,8 @@ async function readKeptScripts(userId: string, s: Settings): Promise<void> {
       const folder = str(x.folder, 40).replace(/[^a-z0-9_-]/gi, '');
       if (name) e.name = name;
       if (folder) e.folder = folder;
+      const sc = cleanSceneHand(x.scenes);
+      if (sc) e.scenes = sc;
       return e;
     });
   const all = old.concat(mine);
@@ -3631,6 +3676,9 @@ async function direct(userId: string | undefined, p: any): Promise<Script> {
     list: engine.tags === 'list' ? engine.list : [],
     lineStyle: engine.style && s.tagsOn,
     music: s.musicOn,
+    // Scenes are only asked for while there is more than one background to
+    // pick from, so nobody else pays for the extra words.
+    scenes: s.videoBacks.length > 1,
   };
 
   // The text first: a quote the story itself says who spoke, such as
@@ -3701,9 +3749,10 @@ async function direct(userId: string | undefined, p: any): Promise<Script> {
       find_speakers: s.findSpeakers,
       big_moments: s.bigMoments,
       music: s.musicOn,
+      scenes: s.videoBacks.length > 1,
     },
   };
-  if (s.musicOn) payload.rules.moods = MUSIC_MOODS;
+  if (s.musicOn || s.videoBacks.length > 1) payload.rules.moods = MUSIC_MOODS;
   if (tagsOn && engine.tags === 'list') payload.rules.tag_list = engine.list;
   if (s.engineNoteRole !== 'rules') payload._engineNote = engineNote(s, engine.id);
   if (Object.keys(hints).length) payload.rules.sound_hints = hints;
@@ -4847,13 +4896,18 @@ async function onPanel(p: any, userId: string | undefined) {
           if (folder) hit.folder = folder;
           else delete hit.folder;
         }
+        if (p.scenes !== undefined) {
+          const sc = cleanSceneHand(p.scenes);
+          if (sc) hit.scenes = sc;
+          else delete hit.scenes;
+        }
         await saveKeptScripts(uid);
         return answer({ type: 'kept_edited', ok: true, name: hit.name || '', folder: hit.folder || '' });
       }
       case 'kept_script': {
         const key = str(p.key, 80);
         const hit = (scripts[userId || ''] || []).find((x) => x.key === key);
-        return answer({ type: 'kept_script', script: hit ? hit.script : null });
+        return answer({ type: 'kept_script', script: hit ? hit.script : null, scenes: hit && hit.scenes ? hit.scenes : null });
       }
       case 'clips_have': {
         // Which of these lines have saved audio. Nothing is sent back but the

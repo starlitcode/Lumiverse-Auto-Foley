@@ -110,7 +110,7 @@ const DEFAULT_SETTINGS = {
     videoNameFont: '',
     videoNameSize: 100,
     videoPicRing: true,
-    videoBacks: [{ id: 'main', name: 'Main', kind: 'dark', color: '', dim: 40, blur: 0, shapes: [] }],
+    videoBacks: [{ id: 'main', name: 'Main', kind: 'dark', color: '', dim: 40, blur: 0, shapes: [], use: 'match', moods: [], places: [] }],
     videoBackPick: 'main',
     videoEdges: 50,
     videoEdgeColor: '',
@@ -244,7 +244,7 @@ function cleanShape(v) {
 function cleanBacks(r) {
     let raw = Array.isArray(r.videoBacks) ? r.videoBacks : [];
     if (!raw.length)
-        raw = [{ id: 'main', name: 'Main', kind: r.videoBack, color: r.videoBackColor, dim: r.videoDim, blur: r.videoBlur, shapes: [] }];
+        raw = [{ id: 'main', name: 'Main', kind: r.videoBack, color: r.videoBackColor, dim: r.videoDim, blur: r.videoBlur, shapes: [], use: 'match', moods: [], places: [] }];
     const list = [];
     for (const b of raw.slice(0, BACKS_MAX)) {
         if (!b || typeof b !== 'object')
@@ -266,10 +266,16 @@ function cleanBacks(r) {
             dim: Math.round(num(b.dim, 0, 80, 40)),
             blur: Math.round(num(b.blur, 0, 20, 0)),
             shapes,
+            use: b.use === 'hand' ? 'hand' : 'match',
+            moods: Array.isArray(b.moods) ? MUSIC_MOODS.filter((m) => b.moods.indexOf(m) >= 0) : [],
+            places: (Array.isArray(b.places) ? b.places : [])
+                .map((w) => str(w, 40).replace(/[\u0000-\u001f]/g, ' ').trim().toLowerCase())
+                .filter((w, i, all) => w && all.indexOf(w) === i)
+                .slice(0, 20),
         });
     }
     if (!list.length)
-        list.push({ id: 'main', name: 'Main', kind: 'dark', color: '', dim: 40, blur: 0, shapes: [] });
+        list.push({ id: 'main', name: 'Main', kind: 'dark', color: '', dim: 40, blur: 0, shapes: [], use: 'match', moods: [], places: [] });
     const want = String(r.videoBackPick == null ? '' : r.videoBackPick);
     return { videoBacks: list, videoBackPick: list.some((x) => x.id === want) ? want : list[0].id };
 }
@@ -1742,6 +1748,10 @@ Set "sung": true on a line someone actually sings, like song lyrics or a lullaby
 When "music" is true in the rules, music plays quietly under the scene, and you pick its mood from "moods". Give the first line a "mood" that fits how the scene feels when it opens. After that, set "mood" only on a line where the feeling really turns and stays turned, like a joke that sours into a threat or a chase that finally ends. Everywhere else leave it as "", and the music carries on. Music that flips every other line is worse than music that holds, so let the small wobbles go.
 </music>
 
+<scenes>
+When "scenes" is true in the rules, the video can change what's behind the words when the scene changes. Put a few plain words naming the place in "scene" on the first line, like "night market" or "hospital waiting room", using the text's own words when it gives them. Do it again on a line where the story really moves on: it goes somewhere new, or it jumps ahead in time. A mood that turns hard and stays turned counts too. Give that same line a "mood" from "moods" for how the new scene feels. Everywhere else, "scene" stays "". Most messages are one scene, and that's fine.
+</scenes>
+
 <new_speakers>
 When "find_speakers" is true and someone speaks who isn't in the cast, use the name the text gives them, or a short plain one if it gives none, like "Bartender". List them in "new_speakers" with "gender" (female, male, nonbinary or unknown), "role" (main or minor) and "about": a few words on how they sound, like "gravelly older man" or "bright, quick young woman". Use nonbinary only when the text says it, like "they" for one person or the word itself, and unknown when you can't tell. A main role is someone the story follows, and a minor one is a bartender or a passerby. Anyone in a sex scene is an adult.
 </new_speakers>
@@ -1756,10 +1766,10 @@ Every line comes back, in order, with the same "i" it came with.
 "text" is the whole line: every word of it, exactly as written, with your tags added. Never just the tags.
 "speaker" is a name from the cast, a name from "new_speakers", or "Narrator".
 Leave "before" and "after" as "" when there's no sound, and "big" as false unless it's a real peak and "big_moments" is on.
-Leave "style" as "" and "sung" as false unless the line needs them, and "mood" as "" unless "music" is on and the mood starts or turns there.
+Leave "style" as "" and "sung" as false unless the line needs them, and "mood" as "" unless "music" or "scenes" is on and the mood starts or turns there. Leave "scene" as "" unless "scenes" is on and a scene starts there.
 Leave "new_speakers" as [] when nobody new speaks.
 
-{"lines":[{"i":0,"speaker":"Narrator","text":"...","style":"","before":"","after":"","big":false,"sung":false,"mood":""}],"new_speakers":[]}
+{"lines":[{"i":0,"speaker":"Narrator","text":"...","style":"","before":"","after":"","big":false,"sung":false,"mood":"","scene":""}],"new_speakers":[]}
 </your_answer>`;
 // Pulls one JSON object out of what the model wrote. Models wrap it in a code
 // fence or a sentence often enough that a plain JSON.parse would fail on a
@@ -1892,10 +1902,15 @@ function applyDirection(segs, answer, cast, author, fixed, rules) {
             line.sung = true;
         if (rules.lineStyle)
             line.style = cleanStyle(d.style);
-        if (rules.music) {
+        if (rules.music || rules.scenes) {
             const mood = String(d.mood || '').trim().toLowerCase();
             if (MUSIC_MOODS.indexOf(mood) >= 0)
                 line.mood = mood;
+        }
+        if (rules.scenes) {
+            const place = str(d.scene, 80).replace(/[\u0000-\u001f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 60);
+            if (place)
+                line.scene = place;
         }
         return line;
     });
@@ -2658,6 +2673,21 @@ async function askDecisions(userId, s, segs, author, known) {
 // A script is a few KB, so this many is a small file, and enough for a long
 // chat to be played again without asking the Director.
 const SCRIPTS_KEPT = 300;
+function cleanSceneHand(v) {
+    if (!v || typeof v !== 'object')
+        return undefined;
+    const cuts = {};
+    const backs = {};
+    for (const k of Object.keys(v.cuts || {}).slice(0, 400))
+        if (/^\d{1,4}$/.test(k) && (v.cuts[k] === 'start' || v.cuts[k] === 'join'))
+            cuts[k] = v.cuts[k];
+    for (const k of Object.keys(v.backs || {}).slice(0, 400)) {
+        const id = str(v.backs[k], 24).replace(/[^a-z0-9]/gi, '');
+        if (/^\d{1,4}$/.test(k) && id)
+            backs[k] = id;
+    }
+    return Object.keys(cuts).length || Object.keys(backs).length ? { cuts, backs } : undefined;
+}
 const scripts = {};
 // Past the limit, the oldest script with no name and no folder goes first,
 // so one the reader named or filed stays.
@@ -2680,6 +2710,8 @@ function keepScript(userId, script) {
         entry.name = was.name;
     if (was && was.folder)
         entry.folder = was.folder;
+    if (was && was.scenes)
+        entry.scenes = was.scenes;
     list.push(entry);
     trimKept(list);
     void saveKeptScripts(userId);
@@ -2708,6 +2740,9 @@ async function readKeptScripts(userId, s) {
             e.name = name;
         if (folder)
             e.folder = folder;
+        const sc = cleanSceneHand(x.scenes);
+        if (sc)
+            e.scenes = sc;
         return e;
     });
     const all = old.concat(mine);
@@ -3236,6 +3271,9 @@ async function direct(userId, p) {
         list: engine.tags === 'list' ? engine.list : [],
         lineStyle: engine.style && s.tagsOn,
         music: s.musicOn,
+        // Scenes are only asked for while there is more than one background to
+        // pick from, so nobody else pays for the extra words.
+        scenes: s.videoBacks.length > 1,
     };
     // The text first: a quote the story itself says who spoke, such as
     // "said Wren", needs no model. The Decision model then picks the rest.
@@ -3310,9 +3348,10 @@ async function direct(userId, p) {
             find_speakers: s.findSpeakers,
             big_moments: s.bigMoments,
             music: s.musicOn,
+            scenes: s.videoBacks.length > 1,
         },
     };
-    if (s.musicOn)
+    if (s.musicOn || s.videoBacks.length > 1)
         payload.rules.moods = MUSIC_MOODS;
     if (tagsOn && engine.tags === 'list')
         payload.rules.tag_list = engine.list;
@@ -4503,13 +4542,20 @@ async function onPanel(p, userId) {
                     else
                         delete hit.folder;
                 }
+                if (p.scenes !== undefined) {
+                    const sc = cleanSceneHand(p.scenes);
+                    if (sc)
+                        hit.scenes = sc;
+                    else
+                        delete hit.scenes;
+                }
                 await saveKeptScripts(uid);
                 return answer({ type: 'kept_edited', ok: true, name: hit.name || '', folder: hit.folder || '' });
             }
             case 'kept_script': {
                 const key = str(p.key, 80);
                 const hit = (scripts[userId || ''] || []).find((x) => x.key === key);
-                return answer({ type: 'kept_script', script: hit ? hit.script : null });
+                return answer({ type: 'kept_script', script: hit ? hit.script : null, scenes: hit && hit.scenes ? hit.scenes : null });
             }
             case 'clips_have': {
                 // Which of these lines have saved audio. Nothing is sent back but the

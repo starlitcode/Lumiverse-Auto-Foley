@@ -2010,7 +2010,7 @@ describe("video backgrounds, fonts and names", () => {
   test("settings from before the list become one background with the id main", () => {
     const h = host();
     const s = h.box.cleanSettings({ videoBack: "picture", videoBackColor: "#203040", videoDim: 55, videoBlur: 4 });
-    expect(s.videoBacks).toEqual([{ id: "main", name: "Main", kind: "picture", color: "#203040", dim: 55, blur: 4, shapes: [] }]);
+    expect(s.videoBacks).toEqual([{ id: "main", name: "Main", kind: "picture", color: "#203040", dim: 55, blur: 4, shapes: [], use: "match", moods: [], places: [] }]);
     expect(s.videoBackPick).toBe("main");
     expect("videoBack" in s).toBe(false);
   });
@@ -2096,5 +2096,68 @@ describe("video backgrounds, fonts and names", () => {
     expect(fonts.list).toEqual([]);
     const pic = (await h.ask({ type: "video_bg_get", id: "main" }, "u1")).find((m) => m.type === "video_bg");
     expect(pic.picture).toBe("");
+  });
+});
+
+describe("scenes", () => {
+  const msg = { type: "direct", chatId: "c1", messageId: "m1", swipeId: 0, name: "Mara Vell", text: 'The lamps went out. "Stay low." By morning the ferry had reached Quell Harbor.' };
+  const reply = JSON.stringify({
+    lines: [
+      { i: 0, speaker: "Narrator", text: "The lamps went out.", mood: "tense", scene: "dark warehouse" },
+      { i: 1, speaker: "Mara Vell", text: "Stay low.", scene: "" },
+      { i: 2, speaker: "Narrator", text: "By morning the ferry had reached Quell Harbor.", mood: "calm", scene: "  Quell   Harbor docks " },
+    ],
+    new_speakers: [],
+  });
+  const two = { videoBacks: [{ id: "main", kind: "dark" }, { id: "b2", kind: "color", color: "#203040", moods: ["calm"] }], videoBackPick: "main" };
+
+  test("with two backgrounds, the Director is asked for scenes, and each place and mood is kept", async () => {
+    const h = host({ answers: [reply] });
+    await h.ask({ type: "save", settings: two });
+    const out = await h.ask(msg);
+    const sent = JSON.stringify(h.calls.generate[0]);
+    expect(sent.indexOf('\\"scenes\\":true')).toBeGreaterThan(-1);
+    expect(sent.indexOf("mysterious")).toBeGreaterThan(-1);
+    const lines = out.find((m: any) => m.type === "script").script.lines;
+    expect(lines.map((l: any) => l.scene || "")).toEqual(["dark warehouse", "", "Quell Harbor docks"]);
+    expect(lines.map((l: any) => l.mood || "")).toEqual(["tense", "", "calm"]);
+  });
+
+  test("with one background, no scene is asked for or kept", async () => {
+    const h = host({ answers: [reply] });
+    const out = await h.ask(msg);
+    const sent = JSON.stringify(h.calls.generate[0]);
+    expect(sent.indexOf('\\"scenes\\":false')).toBeGreaterThan(-1);
+    const lines = out.find((m: any) => m.type === "script").script.lines;
+    expect(lines.every((l: any) => !l.scene && !l.mood)).toBe(true);
+  });
+
+  test("the built-in prompt has a part on scenes, and the answer shape names scene", async () => {
+    const h = host();
+    const prompt = (await h.ask({ type: "load" })).find((m: any) => m.type === "state").builtInPrompt;
+    expect(prompt).toContain("<scenes>");
+    expect(prompt).toContain('"scene":""');
+  });
+
+  test("a background keeps its moods and place words, held to the lists", () => {
+    const h = host();
+    const s = h.box.cleanSettings({ videoBacks: [{ id: "main" }, { id: "b2", use: "hand", moods: ["calm", "angry", "calm", "sad"], places: ["Tavern ", "", "tavern", "Old Mill"] }] });
+    expect(s.videoBacks[1].use).toBe("hand");
+    expect(s.videoBacks[1].moods).toEqual(["calm", "sad"]);
+    expect(s.videoBacks[1].places).toEqual(["tavern", "old mill"]);
+  });
+
+  test("scene changes made by hand are kept with the saved script", async () => {
+    const h = host({ answers: [reply] });
+    await h.ask({ type: "save", settings: two }, "u1");
+    const out = await h.ask(msg, "u1");
+    const key = out.find((m: any) => m.type === "script").script.key;
+    const ed = (await h.ask({ type: "kept_edit", key, scenes: { cuts: { "1": "start", "x": "start", "2": "nope" }, backs: { "1": "b2" } } }, "u1")).find((m: any) => m.type === "kept_edited");
+    expect(ed.ok).toBe(true);
+    const got = (await h.ask({ type: "kept_script", key }, "u1")).find((m: any) => m.type === "kept_script");
+    expect(got.scenes).toEqual({ cuts: { "1": "start" }, backs: { "1": "b2" } });
+    await h.ask({ type: "kept_edit", key, scenes: null }, "u1");
+    const none = (await h.ask({ type: "kept_script", key }, "u1")).find((m: any) => m.type === "kept_script");
+    expect(none.scenes).toBe(null);
   });
 });

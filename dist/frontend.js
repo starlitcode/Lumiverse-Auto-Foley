@@ -1248,6 +1248,10 @@ const PANEL_CSS = `
 .af-shape-pick[aria-pressed="true"] { background: var(--af-second); box-shadow: inset 0 0 0 1px var(--af-accent-line, var(--af-line)); }
 .af-shape-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; }
 .af-shape-grid > * { min-width: 0; }
+.af-moods { gap: 6px; }
+.af-scene { gap: 6px; padding: 10px 0; border-top: 1px solid var(--af-line); }
+.af-scene:first-of-type { border-top: 0; }
+.af-scene-head { margin: 0; font-weight: 600; overflow-wrap: anywhere; }
 
 /* The switch. It bounces a little when flipped, the same as Auto Refine's. */
 .af-box {
@@ -1741,7 +1745,7 @@ const DEFAULTS = {
     videoNameFont: '',
     videoNameSize: 100,
     videoPicRing: true,
-    videoBacks: [{ id: 'main', name: 'Main', kind: 'dark', color: '', dim: 40, blur: 0, shapes: [] }],
+    videoBacks: [{ id: 'main', name: 'Main', kind: 'dark', color: '', dim: 40, blur: 0, shapes: [], use: 'match', moods: [], places: [] }],
     videoBackPick: 'main',
     videoEdges: 50,
     videoEdgeColor: '',
@@ -3629,13 +3633,75 @@ export function setup(ctx, overrides) {
             dim: numOr(S.videoDim, 40),
             blur: numOr(S.videoBlur, 0),
             shapes: [],
+            use: 'match',
+            moods: [],
+            places: [],
         };
         S.videoBacks = [one];
         return S.videoBacks;
     }
-    function backNow() {
+    // The background used for every scene nothing else is for.
+    function backDefault() {
         const list = backList();
         return list.find((b) => b.id === S.videoBackPick) || list[0];
+    }
+    // The background the panel is changing. It is the default one until
+    // another is picked under Background to change.
+    let backEditId = '';
+    // While Background is open, the preview shows the background being
+    // changed behind the whole video. Empty shows each scene's own.
+    let previewBack = '';
+    // The moods a background can be for, the same as Scene music's.
+    const sceneMoods = () => (musicMoods.length ? musicMoods : ['calm', 'cozy', 'happy', 'playful', 'romantic', 'sad', 'tense', 'scary', 'action', 'mysterious']);
+    function backNow() {
+        const list = backList();
+        return list.find((b) => b.id === backEditId) || backDefault();
+    }
+    function scenesOf(sh) {
+        if (!sh || !sh.items.length)
+            return [];
+        const hand = sh.sceneHand || { cuts: {}, backs: {} };
+        const out = [];
+        sh.items.forEach((it, k) => {
+            const line = it && it.line;
+            if (!line || (k > 0 && sh.items[k - 1].line === line))
+                return;
+            const cut = hand.cuts[String(line.i)];
+            if (k > 0 && !(cut === 'start' || (line.scene && cut !== 'join')))
+                return;
+            const words = String(line.plain || line.text || '').replace(/\[[^\]]*\]/g, '').replace(/\s+/g, ' ').trim();
+            out.push({ i: line.i, k, words: words.length > 60 ? words.slice(0, 58).trimEnd() + '…' : words, place: String(line.scene || ''), mood: String(line.mood || '') || moodAt(sh, k), hand: String(hand.backs[String(line.i)] || ''), back: '' });
+        });
+        const list = backList();
+        const dflt = backDefault().id;
+        for (const sc of out) {
+            if (sc.hand && list.some((b) => b.id === sc.hand)) {
+                sc.back = sc.hand;
+                continue;
+            }
+            const place = ' ' + sc.place.toLowerCase().replace(/[^a-z0-9' ]+/g, ' ') + ' ';
+            const hit = list.find((b) => b.id !== dflt && b.use !== 'hand' &&
+                ((!!sc.mood && (b.moods || []).indexOf(sc.mood) >= 0) ||
+                    (b.places || []).some((w) => !!w && place.indexOf(' ' + w.toLowerCase().replace(/[^a-z0-9' ]+/g, ' ').trim() + ' ') >= 0)));
+            sc.back = hit ? hit.id : dflt;
+        }
+        return out;
+    }
+    // Sends the hand changes to be kept with the saved script. A script that
+    // is not kept keeps them for this visit, and the line under the scenes
+    // says so.
+    async function keepSceneHand(sh) {
+        const key = sh.script && sh.script.key;
+        if (!key)
+            return 'This performance is not saved in Saved audio, so the change lasts for this visit only.';
+        let r = null;
+        try {
+            r = await rpc({ type: 'kept_edit', key, scenes: sh.sceneHand || null }, 15000);
+        }
+        catch (_) { }
+        if (!r || !r.ok)
+            return (r && r.error ? r.error + ' ' : '') + 'The change lasts for this visit only.';
+        return '';
     }
     // Changes the picked background and saves the settings. save false keeps
     // the change on the page only, for a drag, which is saved when it ends.
@@ -3697,11 +3763,12 @@ export function setup(ctx, overrides) {
             if (!line) {
                 const what = it && it.kind === 'applause' ? 'applause' : String((it && it.sound) || 'a sound');
                 const words = what.split(/\s+/).filter(Boolean);
-                return { kind: 'sound', narration: false, words, times: [], hidden: hiddenWords(words, list), start: p.start, len: p.len, who: 'sound', name: '', picture: '', caption: what };
+                return { k: p.k, kind: 'sound', narration: false, words, times: [], hidden: hiddenWords(words, list), start: p.start, len: p.len, who: 'sound', name: '', picture: '', caption: what };
             }
             const wt = wordsOf(sh, p.k, p.len);
             const mem = line.kind === 'narration' ? narratorMember() : memberFor(line.speaker);
             return {
+                k: p.k,
                 kind: 'line',
                 narration: line.kind === 'narration',
                 words: wt.words,
@@ -3724,10 +3791,11 @@ export function setup(ctx, overrides) {
     }
     // The background, drawn on the stage's own canvas: the picked background,
     // then the darker edges over it.
-    function paintBack(st, bk = backNow()) {
+    function paintBack(st, bk = backNow(), into) {
         const W = st.w;
         const H = st.h;
-        const b = st.back.getContext('2d');
+        const canvas = into || st.layers.get(bk.id) || st.back;
+        const b = canvas.getContext('2d');
         b.save();
         b.setTransform(1, 0, 0, 1, 0, 0);
         b.globalAlpha = 1;
@@ -3737,7 +3805,7 @@ export function setup(ctx, overrides) {
             accent = String(getComputedStyle(root).getPropertyValue('--lumiverse-primary') || '').trim() || '#9370db';
         }
         catch (_) { }
-        const wall = bk.kind === 'picture' ? st.wall : null;
+        const wall = bk.kind === 'picture' ? st.walls.get(bk.id) || null : null;
         const dark = () => {
             // A dark room lit a little in the theme's accent.
             b.fillStyle = '#0b0a0f';
@@ -3869,22 +3937,54 @@ export function setup(ctx, overrides) {
             g.restore();
         }
     }
-    async function videoStage(parts) {
+    // How long one scene's background takes to give way to the next.
+    const SCENE_FADE_S = 1;
+    // only, when set, draws that one background behind the whole video, for
+    // the preview while it is being changed.
+    async function videoStage(parts, sh = null, only = '') {
         const { w: W, h: H } = videoSize();
-        const bk = backNow();
-        if (bk.kind === 'picture')
-            await loadVideoBg(bk.id).catch(() => { });
         // Only a font of your own is waited on. The built-in ones need nothing.
         if (/^own:/.test(String(S.videoFont)) || /^own:/.test(nameFontChoice())) {
             await loadOwnFonts().catch(() => { });
             await Promise.all([ensureFont(S.videoFont), ensureFont(nameFontChoice())]);
         }
-        const wall = bk.kind === 'picture' ? await loadImage(videoBgs.get(bk.id) || '') : null;
+        // The scenes, with the time each starts: the start of its first part
+        // in the video. A scene with no part in the video is left out.
+        const dflt = backDefault().id;
+        const times = [];
+        for (const sc of scenesOf(sh)) {
+            const p = parts.find((x) => x.k >= sc.k);
+            if (!p)
+                continue;
+            if (times.length && times[times.length - 1].t >= p.start)
+                times[times.length - 1] = { t: p.start, id: sc.back };
+            else
+                times.push({ t: p.start, id: sc.back });
+        }
+        if (only && backList().some((b) => b.id === only))
+            times.splice(0, times.length, { t: 0, id: only });
+        if (!times.length)
+            times.push({ t: 0, id: dflt });
+        times[0].t = 0;
+        const used = Array.from(new Set(times.map((x) => x.id)));
+        const backs = used.map((id) => backList().find((b) => b.id === id) || backDefault());
+        const walls = new Map();
+        for (const bk of backs)
+            if (bk.kind === 'picture') {
+                await loadVideoBg(bk.id).catch(() => { });
+                const im = await loadImage(videoBgs.get(bk.id) || '');
+                if (im)
+                    walls.set(bk.id, im);
+            }
+        const layers = new Map();
+        for (const bk of backs)
+            layers.set(bk.id, canvasOf(W, H));
         const st = {
-            w: W, h: H, back: canvasOf(W, H), wall, pics: new Map(), a: canvasOf(W, H), b: canvasOf(W, H),
+            w: W, h: H, back: layers.get(times[0].id), walls, layers, scenes: times, pics: new Map(), a: canvasOf(W, H), b: canvasOf(W, H),
             small: canvasOf(Math.round(W / 4), Math.round(H / 4)), font: videoFont(), nameFont: fontStack(nameFontChoice()),
         };
-        paintBack(st);
+        for (const bk of backs)
+            paintBack(st, bk, layers.get(bk.id));
         const pics = st.pics;
         if (S.videoPics !== false)
             for (const p of parts)
@@ -4296,7 +4396,7 @@ export function setup(ctx, overrides) {
         const fadeOut = Math.min(5, Math.max(0, numOr(S.videoFadeOut, 1.5)));
         g.save();
         g.globalAlpha = 1;
-        g.drawImage(st.back, 0, 0);
+        drawBackAt(g, st, t - intro);
         const audioT = t - intro;
         if (audioT < 0) {
             if (title) {
@@ -4356,6 +4456,26 @@ export function setup(ctx, overrides) {
             g.fillRect(0, 0, W, H);
         }
         g.restore();
+    }
+    // The background of the scene at this moment of the audio. A new scene's
+    // background fades in over the last one, over SCENE_FADE_S. Scenes with
+    // the same background in a row do not fade.
+    function drawBackAt(g, st, at) {
+        const sc = st.scenes;
+        let i = 0;
+        while (i + 1 < sc.length && at >= sc[i + 1].t)
+            i++;
+        const cur = st.layers.get(sc[i].id) || st.back;
+        const since = at - sc[i].t;
+        const prev = i > 0 && sc[i - 1].id !== sc[i].id ? st.layers.get(sc[i - 1].id) : null;
+        if (prev && since < SCENE_FADE_S) {
+            g.drawImage(prev, 0, 0);
+            g.globalAlpha = ease(Math.max(0, since) / SCENE_FADE_S);
+            g.drawImage(cur, 0, 0);
+            g.globalAlpha = 1;
+        }
+        else
+            g.drawImage(cur, 0, 0);
     }
     // The last part giving way to the next. k runs from 0 to 1, eased.
     function videoMove(g, st, move, k, a, aT, b, bT) {
@@ -4505,7 +4625,7 @@ export function setup(ctx, overrides) {
         const parts = videoParts(sh, mix);
         const title = videoTitle(sh);
         keepSaid('Getting the pictures ready');
-        const st = await videoStage(parts);
+        const st = await videoStage(parts, sh);
         canvas.width = st.w;
         canvas.height = st.h;
         const g = canvas.getContext('2d');
@@ -5856,9 +5976,12 @@ export function setup(ctx, overrides) {
     // Says what could not be included, or nothing when all of it was.
     async function openSaved(e) {
         let sc = null;
+        let hand = undefined;
         try {
             const r = await rpc({ type: 'kept_script', key: e.key }, 15000);
             sc = r && r.script ? r.script : null;
+            if (r && r.scenes && typeof r.scenes === 'object')
+                hand = { cuts: Object.assign({}, r.scenes.cuts), backs: Object.assign({}, r.scenes.backs) };
         }
         catch (_) { }
         if (!sc)
@@ -5885,6 +6008,7 @@ export function setup(ctx, overrides) {
             toldLevel: new Set(),
             title: String(e.author || ''),
             fileTitle: String(e.name || '').trim() || undefined,
+            sceneHand: hand,
         };
         let lines = 0;
         let sounds = 0;
@@ -7978,6 +8102,7 @@ export function setup(ctx, overrides) {
         studioRefs = null;
         designing = false;
         designRefs = null;
+        previewBack = '';
         stopPreview();
         for (const w of permissionWarnings())
             page.appendChild(notice('bad', w));
@@ -12265,6 +12390,8 @@ export function setup(ctx, overrides) {
     let trimSaid = () => { };
     // Draws Which parts go in again, while it is open.
     let studioPartsRefill = () => { };
+    // Draws the Scenes fold again, while it is on screen.
+    let scenesRefill = null;
     function stopPreview() {
         const r = previewRun;
         previewRun = null;
@@ -12279,6 +12406,7 @@ export function setup(ctx, overrides) {
         const who = cast.find((m) => !!m.picture) || cast[0] || null;
         const words = 'We leave before the bells ring, so pack only what you can carry.'.split(' ');
         return {
+            k: 0,
             kind: 'line',
             narration: false,
             words,
@@ -12312,7 +12440,7 @@ export function setup(ctx, overrides) {
         const parts = sh && mix ? videoParts(sh, mix) : [samplePart()];
         const title = sh && mix ? videoTitle(sh) : '';
         const total = sh && mix ? mix.channels[0].length / mix.rate : parts[0].len;
-        const st = await videoStage(parts);
+        const st = await videoStage(parts, sh && mix ? sh : null, previewBack);
         if (ask !== studioAsk)
             return;
         const intro = sh && mix ? titleSecs(title) : 0;
@@ -12441,6 +12569,199 @@ export function setup(ctx, overrides) {
     }
     // Teardown takes the layer away at once, with no fade left running.
     disposers.push(() => closeTheater(true));
+    // The list of backgrounds: which one the boxes below change, its name,
+    // which scenes it is for, and adding, copying and deleting one. redraw
+    // builds the Background fold again for the one picked.
+    function backManager(redraw) {
+        const wrap = el('<div class="af-col" data-af-row="backList"></div>');
+        const list = backList();
+        const bk = backNow();
+        const after = () => {
+            designSel = '';
+            previewBack = backNow().id;
+            designing = backNow().kind === 'design';
+            redraw();
+            paintDesignMode();
+            studioBuild(false);
+            if (studioPartsRefill)
+                studioPartsRefill();
+            if (scenesRefill)
+                scenesRefill();
+        };
+        const pick = select('Background to change', list.map((x) => ({ id: x.id, label: x.name + (x.id === backDefault().id ? ' (for every other scene)' : '') })), bk.id, (v) => {
+            backEditId = v;
+            after();
+        }, list.length > 1 ? 'The boxes below change this one.' : 'Add another to show a different one in some scenes.');
+        pick.querySelector('select').setAttribute('data-af-backpick', '');
+        wrap.appendChild(pick);
+        const tools = el('<div class="af-row"></div>');
+        const said = el('<p class="af-status" role="status" data-af-backsaid></p>');
+        const fresh = () => {
+            let id = '';
+            do
+                id = 'b' + Math.random().toString(36).slice(2, 9);
+            while (list.some((x) => x.id === id));
+            return id;
+        };
+        const add = button('Add a background', () => {
+            if (list.length >= 12)
+                return;
+            const nb = { id: fresh(), name: 'Background ' + (list.length + 1), kind: 'dark', color: '', dim: 40, blur: 0, shapes: [], use: 'match', moods: [], places: [] };
+            list.push(nb);
+            backEditId = nb.id;
+            set({ videoBacks: list.slice() });
+            after();
+        });
+        add.setAttribute('data-af-back-act', 'add');
+        add.disabled = list.length >= 12;
+        const dup = button('Duplicate', async () => {
+            if (list.length >= 12)
+                return;
+            const nb = JSON.parse(JSON.stringify(bk));
+            nb.id = fresh();
+            nb.name = (bk.name + ' copy').slice(0, 40);
+            list.splice(list.indexOf(bk) + 1, 0, nb);
+            // A picture is a file of its own, so the copy gets a file of its own.
+            if (bk.kind === 'picture') {
+                await loadVideoBg(bk.id).catch(() => { });
+                const pic = videoBgs.get(bk.id) || '';
+                if (pic) {
+                    let r = null;
+                    try {
+                        r = await rpc({ type: 'video_bg_put', id: nb.id, picture: pic }, 60000);
+                    }
+                    catch (_) { }
+                    if (r && r.ok) {
+                        videoBgs.set(nb.id, pic);
+                        videoBgAsked.set(nb.id, Promise.resolve());
+                    }
+                    else
+                        said.textContent = 'The copy was made, but its picture could not be saved. Choose it again.';
+                }
+            }
+            backEditId = nb.id;
+            set({ videoBacks: list.slice() });
+            after();
+        });
+        dup.setAttribute('data-af-back-act', 'dup');
+        dup.disabled = list.length >= 12;
+        const del = button('Delete', async () => {
+            if (list.length < 2)
+                return;
+            if (!(await askSure('Delete ' + bk.name, 'Delete the background ' + bk.name + '? Scenes that used it get the one for every other scene. There is no undo.', 'Delete', true)))
+                return;
+            const at = list.indexOf(bk);
+            if (at >= 0)
+                list.splice(at, 1);
+            const patch = { videoBacks: list.slice() };
+            if (S.videoBackPick === bk.id)
+                patch.videoBackPick = list[0].id;
+            backEditId = '';
+            set(patch);
+            if (bk.kind === 'picture') {
+                try {
+                    await rpc({ type: 'video_bg_put', id: bk.id, picture: '' }, 15000);
+                }
+                catch (_) { }
+                videoBgs.delete(bk.id);
+            }
+            after();
+        });
+        del.setAttribute('data-af-back-act', 'delete');
+        del.disabled = list.length < 2;
+        tools.appendChild(add);
+        tools.appendChild(dup);
+        tools.appendChild(del);
+        wrap.appendChild(tools);
+        wrap.appendChild(said);
+        // The name, as it is shown in the lists.
+        const nameId = rid('bn');
+        const nameRow = el('<div class="af-col"></div>');
+        nameRow.appendChild(labelRow('Name', 'Shown in the lists of backgrounds.', nameId));
+        const name = el('<input type="text" class="af-field" maxlength="40" autocomplete="off" id="' + nameId + '" data-af-backname>');
+        name.value = bk.name;
+        name.addEventListener('change', () => {
+            const v = name.value.trim();
+            if (!v) {
+                name.value = bk.name;
+                return;
+            }
+            bk.name = v.slice(0, 40);
+            set({ videoBacks: list.slice() });
+            redraw();
+            if (scenesRefill)
+                scenesRefill();
+        });
+        nameRow.appendChild(name);
+        wrap.appendChild(nameRow);
+        if (list.length > 1) {
+            const isDefault = bk.id === backDefault().id;
+            const matchBox = el('<div class="af-sub"><div class="af-under"></div></div>');
+            const inner = matchBox.firstElementChild;
+            const chips = el('<div class="af-row af-moods" role="group" aria-label="Moods"></div>');
+            for (const m of sceneMoods()) {
+                const on = (bk.moods || []).indexOf(m) >= 0;
+                const chip = el('<button type="button" class="af-segbtn af-mood" aria-pressed="' + (on ? 'true' : 'false') + '"></button>');
+                chip.textContent = m.charAt(0).toUpperCase() + m.slice(1);
+                chip.setAttribute('data-af-backmood', m);
+                chip.addEventListener('click', () => {
+                    const has = (bk.moods || []).indexOf(m) >= 0;
+                    bk.moods = has ? bk.moods.filter((x) => x !== m) : sceneMoods().filter((x) => x === m || (bk.moods || []).indexOf(x) >= 0);
+                    chip.setAttribute('aria-pressed', has ? 'false' : 'true');
+                    set({ videoBacks: list.slice() });
+                    studioBuild(false);
+                    if (scenesRefill)
+                        scenesRefill();
+                });
+                chips.appendChild(chip);
+            }
+            inner.appendChild(labelRow('Moods', 'A scene the Director gives one of these moods.'));
+            inner.appendChild(chips);
+            const placeId = rid('bp');
+            inner.appendChild(labelRow('Place words', 'One per line, such as tavern. A scene whose place has one of them.', placeId));
+            const places = el('<textarea class="af-field" rows="3" spellcheck="false" id="' + placeId + '" data-af-backplaces></textarea>');
+            places.value = (bk.places || []).join('\n');
+            places.addEventListener('change', () => {
+                bk.places = places.value
+                    .split('\n')
+                    .map((x) => x.trim().toLowerCase().slice(0, 40))
+                    .filter((x, i, all) => x && all.indexOf(x) === i)
+                    .slice(0, 20);
+                places.value = bk.places.join('\n');
+                set({ videoBacks: list.slice() });
+                studioBuild(false);
+                if (scenesRefill)
+                    scenesRefill();
+            });
+            inner.appendChild(places);
+            const now = isDefault ? 'every' : bk.use === 'hand' ? 'hand' : 'match';
+            const use = select('Use it for', [
+                { id: 'every', label: 'Every scene nothing else is for' },
+                { id: 'match', label: 'Scenes with these moods or places' },
+                { id: 'hand', label: 'Only scenes I pick it for' },
+            ], now, (v) => {
+                if (v === 'every')
+                    set({ videoBackPick: bk.id });
+                else {
+                    bk.use = v === 'hand' ? 'hand' : 'match';
+                    // One background is always the one for every other scene.
+                    if (bk.id === backDefault().id)
+                        set({ videoBacks: list.slice(), videoBackPick: list.find((x) => x.id !== bk.id).id });
+                    else
+                        set({ videoBacks: list.slice() });
+                }
+                redraw();
+                studioBuild(false);
+                if (scenesRefill)
+                    scenesRefill();
+            }, 'One background is always for every scene nothing else is for.');
+            use.setAttribute('data-af-row', 'backUse');
+            wrap.appendChild(use);
+            matchBox.hidden = now !== 'match';
+            wrap.appendChild(matchBox);
+        }
+        return wrap;
+    }
     // A font choice for the video: the built-in fonts, then your own, with a
     // way to add one and to take the picked one out. sameOk adds The same as
     // the words, for the names.
@@ -12611,8 +12932,12 @@ export function setup(ctx, overrides) {
             return;
         designFrame = requestAnimationFrame(() => {
             designFrame = 0;
-            if (studioView.st)
-                paintBack(studioView.st);
+            const st = studioView.st;
+            const bk = backNow();
+            if (st && st.layers.has(bk.id))
+                paintBack(st, bk);
+            else if (st && bk.id === backDefault().id)
+                paintBack(st, bk, st.back);
             paintPreview();
         });
     }
@@ -13373,6 +13698,101 @@ export function setup(ctx, overrides) {
                         fill();
                 };
             }));
+            // The scenes, and the background of each. Only with more than one
+            // background, since with one every scene looks the same.
+            if (backList().length > 1)
+                pc.appendChild(fold('Scenes', (body) => {
+                    const fill = () => {
+                        body.replaceChildren();
+                        const scenes = scenesOf(sh);
+                        const said = el('<p class="af-status" role="status" data-af-scenesaid></p>');
+                        const hand = () => sh.sceneHand || (sh.sceneHand = { cuts: {}, backs: {} });
+                        const changed = async () => {
+                            studioBuild(false);
+                            fill();
+                            const why = await keepSceneHand(sh);
+                            const now = body.querySelector('[data-af-scenesaid]');
+                            if (now)
+                                now.textContent = why;
+                        };
+                        const name = (id) => (backList().find((b) => b.id === id) || backDefault()).name;
+                        body.appendChild(hint(scenes.length > 1 ? 'Each scene has the background it is for. Pick another for one scene below.' : 'One scene. The Director starts a new one where the place or the time changes, or start one yourself below.'));
+                        scenes.forEach((sc, n) => {
+                            const box = el('<div class="af-col af-scene" data-af-scene></div>');
+                            box.setAttribute('data-af-scene', String(sc.i));
+                            const head = el('<p class="af-scene-head"></p>');
+                            head.textContent = 'Scene ' + (n + 1) + ': ' + (sc.words || 'a sound');
+                            box.appendChild(head);
+                            if (sc.place || sc.mood) {
+                                const about = el('<p class="af-note"></p>');
+                                about.textContent = [sc.place ? 'Place: ' + sc.place : '', sc.mood ? 'Mood: ' + sc.mood : ''].filter(Boolean).join('. ') + '.';
+                                box.appendChild(about);
+                            }
+                            const auto = scenesOf({ ...sh, sceneHand: { cuts: hand().cuts, backs: {} } }).find((x) => x.i === sc.i);
+                            const pickBack = select('Background', [{ id: '', label: 'Automatic: ' + name(auto ? auto.back : backDefault().id) }].concat(backList().map((b) => ({ id: b.id, label: b.name }))), sc.hand && backList().some((b) => b.id === sc.hand) ? sc.hand : '', (v) => {
+                                if (v)
+                                    hand().backs[String(sc.i)] = v;
+                                else
+                                    delete hand().backs[String(sc.i)];
+                                void changed();
+                            });
+                            pickBack.querySelector('select').setAttribute('data-af-sceneback', String(sc.i));
+                            box.appendChild(pickBack);
+                            if (n > 0) {
+                                const join = button('Join it to the scene before', () => {
+                                    const key = String(sc.i);
+                                    if (hand().cuts[key] === 'start')
+                                        delete hand().cuts[key];
+                                    else
+                                        hand().cuts[key] = 'join';
+                                    delete hand().backs[key];
+                                    void changed();
+                                });
+                                join.setAttribute('data-af-scenejoin', String(sc.i));
+                                const row = el('<div class="af-row"></div>');
+                                row.appendChild(join);
+                                box.appendChild(row);
+                            }
+                            body.appendChild(box);
+                        });
+                        // A new scene from any line that does not start one yet.
+                        const starts = new Set(scenes.map((x) => x.i));
+                        const lines = [];
+                        sh.items.forEach((it, k) => {
+                            const line = it && it.line;
+                            if (!line || k === 0 || sh.items[k - 1].line === line || starts.has(line.i))
+                                return;
+                            const w = String(line.plain || line.text || '').replace(/\[[^\]]*\]/g, '').replace(/\s+/g, ' ').trim();
+                            lines.push({ id: String(line.i), label: (w.length > 50 ? w.slice(0, 48).trimEnd() + '…' : w) || 'A sound' });
+                        });
+                        if (lines.length) {
+                            let at = lines[0].id;
+                            const from = select('Start a new scene at', lines, at, (v) => {
+                                at = v;
+                            });
+                            from.querySelector('select').setAttribute('data-af-scenefrom', '');
+                            body.appendChild(from);
+                            const go = button('Start a scene there', () => {
+                                const key = String(at);
+                                if (hand().cuts[key] === 'join')
+                                    delete hand().cuts[key];
+                                else
+                                    hand().cuts[key] = 'start';
+                                void changed();
+                            });
+                            go.setAttribute('data-af-scenestart', '');
+                            const row = el('<div class="af-row"></div>');
+                            row.appendChild(go);
+                            body.appendChild(row);
+                        }
+                        body.appendChild(said);
+                    };
+                    fill();
+                    scenesRefill = () => {
+                        if (body.isConnected)
+                            fill();
+                    };
+                }));
             // The trim, in seconds of the whole performance. Start here and End
             // here, under the preview, set it from where the preview is.
             pc.appendChild(fold('Trim', (body) => {
@@ -13562,137 +13982,148 @@ export function setup(ctx, overrides) {
                 look();
             }, 'Each kind’s color by default, the colors set under Colors for each kind of part.'));
         }));
-        vc.appendChild(fold('Background', (b) => {
-            const bk = backNow();
-            const colorBox = el('<div class="af-sub"><div class="af-under"></div></div>');
-            colorBox.firstElementChild.appendChild(colorRow('backColor', 'Background color', 'A very dark gray by default. A design is drawn over it.', '--af-none', '#141218', 'Use the built-in color', look, {
-                get: () => backNow().color,
-                put: (hex, save) => putBack({ color: hex }, save),
-            }));
-            const picBox = el('<div class="af-sub"><div class="af-under"></div></div>');
-            const picIn = picBox.firstElementChild;
-            const status = el('<p class="af-status"></p>');
-            const picRow = el('<div class="af-row"></div>');
-            const keep = async (picture) => {
-                const id = backNow().id;
-                status.textContent = picture ? 'Saving the picture' : '';
-                status.dataset.kind = '';
-                let r = null;
-                try {
-                    r = await rpc({ type: 'video_bg_put', id, picture }, 60000);
-                }
-                catch (_) { }
-                if (!r || r.ok === false) {
-                    status.textContent = (r && r.error) || 'The picture could not be saved: the backend did not answer.';
-                    status.dataset.kind = 'bad';
-                    return;
-                }
-                videoBgs.set(id, r.picture || '');
-                videoBgAsked.set(id, Promise.resolve());
-                status.textContent = r.picture ? '' : 'No picture is chosen, so the background is dark.';
-                drop.disabled = !r.picture;
-                look();
+        vc.appendChild(fold('Background', (outer) => {
+            const draw = () => {
+                outer.replaceChildren();
+                const b = outer;
+                b.appendChild(backManager(draw));
+                const bk = backNow();
+                const colorBox = el('<div class="af-sub"><div class="af-under"></div></div>');
+                colorBox.firstElementChild.appendChild(colorRow('backColor', 'Background color', 'A very dark gray by default. A design is drawn over it.', '--af-none', '#141218', 'Use the built-in color', look, {
+                    get: () => backNow().color,
+                    put: (hex, save) => putBack({ color: hex }, save),
+                }));
+                const picBox = el('<div class="af-sub"><div class="af-under"></div></div>');
+                const picIn = picBox.firstElementChild;
+                const status = el('<p class="af-status"></p>');
+                const picRow = el('<div class="af-row"></div>');
+                const keep = async (picture) => {
+                    const id = backNow().id;
+                    status.textContent = picture ? 'Saving the picture' : '';
+                    status.dataset.kind = '';
+                    let r = null;
+                    try {
+                        r = await rpc({ type: 'video_bg_put', id, picture }, 60000);
+                    }
+                    catch (_) { }
+                    if (!r || r.ok === false) {
+                        status.textContent = (r && r.error) || 'The picture could not be saved: the backend did not answer.';
+                        status.dataset.kind = 'bad';
+                        return;
+                    }
+                    videoBgs.set(id, r.picture || '');
+                    videoBgAsked.set(id, Promise.resolve());
+                    status.textContent = r.picture ? '' : 'No picture is chosen, so the background is dark.';
+                    drop.disabled = !r.picture;
+                    look();
+                };
+                const choose = button('Choose a picture', async () => {
+                    let files = [];
+                    try {
+                        files = await ctx.uploads.pickFile({ accept: ['image/*', '.png', '.jpg', '.jpeg', '.webp'], multiple: false, maxSizeBytes: 20 * 1024 * 1024 });
+                    }
+                    catch (e) {
+                        status.textContent = 'The file picker could not open: ' + String((e && e.message) || e).slice(0, 200);
+                        status.dataset.kind = 'bad';
+                        return;
+                    }
+                    const f = files && files[0];
+                    if (!f)
+                        return;
+                    const url = URL.createObjectURL(new Blob([f.bytes], { type: f.mimeType || 'image/png' }));
+                    const im = await loadImage(url);
+                    URL.revokeObjectURL(url);
+                    if (!im || !im.width) {
+                        status.textContent = 'That file is not a picture Auto Foley can read. Use PNG, JPEG or WebP.';
+                        status.dataset.kind = 'bad';
+                        return;
+                    }
+                    // Kept at most 1920 pixels on its long side, so it is sharp in any
+                    // shape of video and never larger than it needs to be.
+                    const sc = Math.min(1, 1920 / Math.max(im.width, im.height));
+                    const cv = canvasOf(Math.round(im.width * sc), Math.round(im.height * sc));
+                    const g = cv.getContext('2d');
+                    if (!g)
+                        return;
+                    g.imageSmoothingQuality = 'high';
+                    g.drawImage(im, 0, 0, cv.width, cv.height);
+                    let data = cv.toDataURL('image/jpeg', 0.92);
+                    if (data.length > 2900000)
+                        data = cv.toDataURL('image/jpeg', 0.8);
+                    await keep(data);
+                });
+                choose.setAttribute('data-af-videobg', 'choose');
+                const drop = button('Take it out', () => keep(''));
+                drop.setAttribute('data-af-videobg', 'drop');
+                drop.disabled = true;
+                picRow.appendChild(choose);
+                picRow.appendChild(drop);
+                picIn.appendChild(picRow);
+                picIn.appendChild(status);
+                // Sliders, since how dark and how soft a picture looks is set by
+                // eye, watching the preview.
+                const dim = slider('Dim the picture', numOr(bk.dim, 40), 0, 80, 5, (v) => v + '%', (v) => {
+                    putBack({ dim: v });
+                    look();
+                }, '40% by default. Darker makes the words easier to read on a bright picture.');
+                dim.setAttribute('data-af-byeye', '');
+                picIn.appendChild(dim);
+                const blur = slider('Blur the picture', numOr(bk.blur, 0), 0, 20, 1, (v) => (v ? v + ' px' : 'Off'), (v) => {
+                    putBack({ blur: v });
+                    look();
+                }, 'Off by default. A little blur makes a busy picture easier to read words over.');
+                blur.setAttribute('data-af-byeye', '');
+                picIn.appendChild(blur);
+                const designBox = el('<div class="af-sub"><div class="af-under"></div></div>');
+                designBox.setAttribute('data-af-row', 'videoDesign');
+                const designIn = designBox.firstElementChild;
+                buildDesigner(designIn);
+                const sel = select('Background', [
+                    { id: 'dark', label: 'Dark' },
+                    { id: 'color', label: 'A color of your own' },
+                    { id: 'picture', label: 'A picture of your own' },
+                    { id: 'design', label: 'A design of your own' },
+                ], bk.kind || 'dark', (v) => {
+                    putBack({ kind: v });
+                    showUnder(colorBox, v === 'color' || v === 'design');
+                    showUnder(picBox, v === 'picture');
+                    showUnder(designBox, v === 'design');
+                    designing = v === 'design';
+                    paintDesignMode();
+                    look();
+                }, 'Dark by default, lit a little in your theme’s accent.');
+                sel.setAttribute('data-af-row', 'videoBack');
+                b.appendChild(sel);
+                colorBox.hidden = bk.kind !== 'color' && bk.kind !== 'design';
+                picBox.hidden = bk.kind !== 'picture';
+                designBox.hidden = bk.kind !== 'design';
+                picBox.setAttribute('data-af-row', 'videoBg');
+                b.appendChild(colorBox);
+                b.appendChild(picBox);
+                b.appendChild(designBox);
+                const edges = slider('Darken the edges', numOr(S.videoEdges, 50), 0, 100, 5, (v) => (v ? v + '%' : 'Off'), (v) => {
+                    set({ videoEdges: v });
+                    look();
+                }, '50% by default. Off leaves the edges as bright as the middle.');
+                edges.setAttribute('data-af-byeye', '');
+                edges.setAttribute('data-af-row', 'videoEdges');
+                b.appendChild(edges);
+                b.appendChild(colorRow('videoEdgeColor', 'Color of the edges', 'Black by default. Another color tints the edges with it.', '--af-none', '#000000', 'Use the built-in color', look));
+                const id = bk.id;
+                loadVideoBg(id).then(() => {
+                    drop.disabled = !videoBgs.get(id);
+                });
             };
-            const choose = button('Choose a picture', async () => {
-                let files = [];
-                try {
-                    files = await ctx.uploads.pickFile({ accept: ['image/*', '.png', '.jpg', '.jpeg', '.webp'], multiple: false, maxSizeBytes: 20 * 1024 * 1024 });
-                }
-                catch (e) {
-                    status.textContent = 'The file picker could not open: ' + String((e && e.message) || e).slice(0, 200);
-                    status.dataset.kind = 'bad';
-                    return;
-                }
-                const f = files && files[0];
-                if (!f)
-                    return;
-                const url = URL.createObjectURL(new Blob([f.bytes], { type: f.mimeType || 'image/png' }));
-                const im = await loadImage(url);
-                URL.revokeObjectURL(url);
-                if (!im || !im.width) {
-                    status.textContent = 'That file is not a picture Auto Foley can read. Use PNG, JPEG or WebP.';
-                    status.dataset.kind = 'bad';
-                    return;
-                }
-                // Kept at most 1920 pixels on its long side, so it is sharp in any
-                // shape of video and never larger than it needs to be.
-                const sc = Math.min(1, 1920 / Math.max(im.width, im.height));
-                const cv = canvasOf(Math.round(im.width * sc), Math.round(im.height * sc));
-                const g = cv.getContext('2d');
-                if (!g)
-                    return;
-                g.imageSmoothingQuality = 'high';
-                g.drawImage(im, 0, 0, cv.width, cv.height);
-                let data = cv.toDataURL('image/jpeg', 0.92);
-                if (data.length > 2900000)
-                    data = cv.toDataURL('image/jpeg', 0.8);
-                await keep(data);
-            });
-            choose.setAttribute('data-af-videobg', 'choose');
-            const drop = button('Take it out', () => keep(''));
-            drop.setAttribute('data-af-videobg', 'drop');
-            drop.disabled = true;
-            picRow.appendChild(choose);
-            picRow.appendChild(drop);
-            picIn.appendChild(picRow);
-            picIn.appendChild(status);
-            // Sliders, since how dark and how soft a picture looks is set by
-            // eye, watching the preview.
-            const dim = slider('Dim the picture', numOr(bk.dim, 40), 0, 80, 5, (v) => v + '%', (v) => {
-                putBack({ dim: v });
-                look();
-            }, '40% by default. Darker makes the words easier to read on a bright picture.');
-            dim.setAttribute('data-af-byeye', '');
-            picIn.appendChild(dim);
-            const blur = slider('Blur the picture', numOr(bk.blur, 0), 0, 20, 1, (v) => (v ? v + ' px' : 'Off'), (v) => {
-                putBack({ blur: v });
-                look();
-            }, 'Off by default. A little blur makes a busy picture easier to read words over.');
-            blur.setAttribute('data-af-byeye', '');
-            picIn.appendChild(blur);
-            const designBox = el('<div class="af-sub"><div class="af-under"></div></div>');
-            designBox.setAttribute('data-af-row', 'videoDesign');
-            const designIn = designBox.firstElementChild;
-            buildDesigner(designIn);
-            const sel = select('Background', [
-                { id: 'dark', label: 'Dark' },
-                { id: 'color', label: 'A color of your own' },
-                { id: 'picture', label: 'A picture of your own' },
-                { id: 'design', label: 'A design of your own' },
-            ], bk.kind || 'dark', (v) => {
-                putBack({ kind: v });
-                showUnder(colorBox, v === 'color' || v === 'design');
-                showUnder(picBox, v === 'picture');
-                showUnder(designBox, v === 'design');
-                designing = v === 'design';
-                paintDesignMode();
-                look();
-            }, 'Dark by default, lit a little in your theme’s accent.');
-            sel.setAttribute('data-af-row', 'videoBack');
-            b.appendChild(sel);
-            colorBox.hidden = bk.kind !== 'color' && bk.kind !== 'design';
-            picBox.hidden = bk.kind !== 'picture';
-            designBox.hidden = bk.kind !== 'design';
-            picBox.setAttribute('data-af-row', 'videoBg');
-            b.appendChild(colorBox);
-            b.appendChild(picBox);
-            b.appendChild(designBox);
-            const edges = slider('Darken the edges', numOr(S.videoEdges, 50), 0, 100, 5, (v) => (v ? v + '%' : 'Off'), (v) => {
-                set({ videoEdges: v });
-                look();
-            }, '50% by default. Off leaves the edges as bright as the middle.');
-            edges.setAttribute('data-af-byeye', '');
-            edges.setAttribute('data-af-row', 'videoEdges');
-            b.appendChild(edges);
-            b.appendChild(colorRow('videoEdgeColor', 'Color of the edges', 'Black by default. Another color tints the edges with it.', '--af-none', '#000000', 'Use the built-in color', look));
-            const id = bk.id;
-            loadVideoBg(id).then(() => {
-                drop.disabled = !videoBgs.get(id);
-            });
+            draw();
         }, (open) => {
             designing = open && backNow().kind === 'design';
+            const was = previewBack;
+            previewBack = open ? backNow().id : '';
             paintDesignMode();
-            redrawDesign();
+            if (was !== previewBack)
+                look();
+            else
+                redrawDesign();
         }));
         vc.appendChild(fold('Moving between lines', (b) => {
             const move = select('Transition', VIDEO_MOVES, S.videoMove || 'rise', (v) => {

@@ -26,6 +26,7 @@ _2026-11-26_
 - **Font of the names** and **Size of the names, in percent**, under **Show names** in the Studio. The names can have their own font and size, apart from the words and the pictures.
 - **A ring around each picture**, under **Show pictures** in the Studio. On by default. Off shows each picture with no ring.
 - **A design of your own**, a new **Background** in the Studio. Add rectangles, rounded rectangles, ellipses, triangles, lines and text boxes over a color, and drag, size and turn them on the preview, or type exact numbers. Each has its own color, an optional gradient, and how see-through it is. See [A design of your own](docs/studio.md#a-design-of-your-own).
+- **A background for each scene** in the Studio. Add backgrounds under **Background**, and say which scenes each is for under **Use it for**: some moods, some place words, or only scenes you pick it for. With two or more backgrounds, the Director marks where each scene starts, in the call it already makes. **Scenes**, under **The performance**, lists them, with a background for each, and ways to start or join a scene. Changes are kept with the performance in **Saved audio**. One background fades into the next over about a second. See [Scenes and their backgrounds](docs/studio.md#scenes-and-their-backgrounds).
 
 ### Changed
 
@@ -33,6 +34,7 @@ _2026-11-26_
 - **Send a note when it asks again is off by default**, the same as in Auto Refine. A note makes the Director's next ask longer, which costs more. If you were on the old default, a notice says so, and you can take the new one or keep yours.
 - **Freesound licenses is CC0 and CC BY by default.** It was all three, which takes in CC BY-NC, a license for non-commercial use only. A video made in the Studio may be posted where money is made. If you were on the old default, a notice says so. Sounds already in your library stay.
 - **No sound effects are asked for when they cannot play.** With no sound effects in your library, and no Freesound or ElevenLabs key saved or **Get new sounds** off, the Director is not asked for them, so no tokens go on them. The Log says why.
+- **The Director's built-in prompt has a part on scenes.** It is only used while you have two or more backgrounds.
 - **The Director's built-in prompt has a part on music.** It says how to pick a mood and when to change it, and it is only used while Scene music is on. If you have your own prompt, a notice says the built-in one changed. Suggested by a Discord user.
 
 ### Fixed

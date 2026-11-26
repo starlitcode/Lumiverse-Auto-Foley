@@ -126,6 +126,10 @@ The same rules are used in Auto Retry and Auto Refine.
 
 With **Scene music** on, the Director also picks the mood of the scene, from a list of ten, and marks the line where it changes. See [Scene music](music.md).
 
+## Scenes
+
+With two or more backgrounds in the Studio, the Director also marks where a scene starts. It puts a few words naming the place in `"scene"`, and a mood, on that line. The rules for it are in the `<scenes>` part of the prompt. With one background, it is not asked. See [Scenes and their backgrounds](studio.md#scenes-and-their-backgrounds).
+
 ## Notes for each voice engine
 
 The Director tab has a note for each engine. It says how that engine reads tags, and it is sent with the rules.
@@ -192,7 +196,7 @@ The Director tab shows the whole prompt. You can change any of it.
 - The answer has to be JSON in this shape, or the message is read as written:
 
 ```json
-{"lines":[{"i":0,"speaker":"Narrator","text":"...","style":"","before":"","after":"","big":false,"sung":false,"mood":""}],"new_speakers":[{"name":"","gender":"unknown","about":""}]}
+{"lines":[{"i":0,"speaker":"Narrator","text":"...","style":"","before":"","after":"","big":false,"sung":false,"mood":"","scene":""}],"new_speakers":[{"name":"","gender":"unknown","about":""}]}
 ```
 
 The built-in prompt follows the same approach as Auto Refine's:

@@ -172,7 +172,7 @@ function answer(msg) {
     case 'clips_state': { const c = window.__clips || {}; return reply({ type: 'clips_state', count: Object.keys(c).length, bytes: Object.values(c).reduce((n, x) => n + x.base64.length * 0.75, 0) }); }
     case 'clips_clear': window.__clips = {}; return reply({ type: 'clips_state', ok: true, count: 0, bytes: 0 });
     case 'kept_list': return reply({ type: 'kept_list', list: window.__keptList || [] });
-    case 'kept_edit': { const e = (window.__keptList || []).find((x) => x.key === msg.key); if (!e) return reply({ type: 'kept_edited', ok: false }); if (typeof msg.name === 'string') e.name = msg.name; if (typeof msg.folder === 'string') e.folder = msg.folder; return reply({ type: 'kept_edited', ok: true, name: e.name || '', folder: e.folder || '' }); }
+    case 'kept_edit': { if (msg.scenes !== undefined) (window.__sceneEdits = window.__sceneEdits || []).push(msg.scenes); const e = (window.__keptList || []).find((x) => x.key === msg.key); if (!e) return reply({ type: 'kept_edited', ok: false }); if (typeof msg.name === 'string') e.name = msg.name; if (typeof msg.folder === 'string') e.folder = msg.folder; return reply({ type: 'kept_edited', ok: true, name: e.name || '', folder: e.folder || '' }); }
     case 'sound_kept': return reply({ type: 'sound', missing: true });
     // Each background's picture, by its id, as the backend keeps them.
     case 'video_bg_get': return reply({ type: 'video_bg', id: msg.id || 'main', picture: (window.__videoBgs || {})[msg.id || 'main'] || ((msg.id || 'main') === 'main' ? window.__videoBg || '' : '') });
@@ -3768,6 +3768,124 @@ if (section("full screen")) {
     check(!errors.length, size.name + ": no page errors. " + errors.slice(0, 2).join(" | "));
     await context.close();
   }
+}
+
+if (section("scene backgrounds")) {
+  console.log("Each scene can have its own background, with a crossfade between them");
+  // Red for every other scene, and blue for calm scenes. The script opens
+  // in a long hall and moves to a ferry dock on its last line.
+  const pre = () => {
+    window.__settings.videoBacks = [
+      { id: "main", name: "Hall", kind: "color", color: "#c02020", dim: 40, blur: 0, shapes: [], use: "match", moods: [], places: [] },
+      { id: "b2", name: "Dock", kind: "color", color: "#2040c0", dim: 40, blur: 0, shapes: [], use: "match", moods: ["calm"], places: [] },
+    ];
+    window.__settings.videoBackPick = "main";
+    window.__settings.videoEdges = 0;
+    window.__keptList = [{ key: "k", messageId: "m1", chatId: "chat1", author: "Ysolde", keptAt: 1, lines: 3, first: "", how: "directed" }];
+  };
+  for (const size of SIZES) {
+    const { context, page, errors } = await open(THEMES[0], size, 1, pre);
+    await page.evaluate(() => {
+      window.__wav = [0.1, 0.3];
+      window.__clipMs = 400;
+      // A script of its own, with two scenes marked.
+      const base = { key: "k", messageId: "m1", author: "Ysolde", directed: true, added: [], sent: 1, back: 1, counted: true, log: [], lines: [
+        { i: 0, kind: "narration", speaker: "Narrator", text: "The long hall was empty but for the lamps.", plain: "", tags: [], inSounds: [], big: false, before: "", after: "", note: "", scene: "long hall", mood: "tense" },
+        { i: 1, kind: "speech", speaker: "Wyn", text: "We should not wait here much longer, the lamps are failing.", plain: "", tags: [], inSounds: [], big: false, before: "", after: "", note: "" },
+        { i: 2, kind: "narration", speaker: "Narrator", text: "By morning the ferry had reached the far dock and the water was still.", plain: "", tags: [], inSounds: [], big: false, before: "", after: "", note: "", scene: "ferry dock", mood: "calm" },
+      ] };
+      window.__script = base;
+    });
+    await page.click('#mount [data-af-slot="message"]');
+    await page.waitForFunction(() => document.querySelector('#mount [data-af-slot="message"]').getAttribute("aria-busy") === null && (window.__synth || []).length >= 3, null, { timeout: 20000 });
+    await page.waitForTimeout(3000);
+    await page.click('.af-tab[data-tab="studio"]');
+    await page.waitForTimeout(1500);
+    // How red and how blue the left side of the frame is, every tenth of a
+    // second, over the whole preview.
+    const colors = () => page.evaluate(async () => {
+      const r = document.querySelector("[data-af-scrub] input");
+      const c = document.querySelector("[data-af-videopreview]");
+      const g = c.getContext("2d");
+      const out = [];
+      for (let t = 0; t <= Number(r.max); t += 0.1) {
+        r.value = String(t);
+        r.dispatchEvent(new Event("input", { bubbles: true }));
+        await new Promise((x) => requestAnimationFrame(x));
+        const d = g.getImageData(Math.round(c.width * 0.06), Math.round(c.height * 0.45), 4, Math.round(c.height * 0.1)).data;
+        let red = 0, blue = 0, n = 0;
+        for (let i = 0; i < d.length; i += 4) { red += d[i]; blue += d[i + 2]; n++; }
+        out.push({ t: Math.round(t * 10) / 10, red: Math.round(red / n), blue: Math.round(blue / n), max: Number(r.max) });
+      }
+      return out;
+    });
+    const fold = await page.locator(".af-fold", { hasText: "Scenes" }).count();
+    check(fold === 1, size.name + ": with two backgrounds, the performance has a Scenes fold");
+    await page.locator(".af-fold", { hasText: "Scenes" }).first().click();
+    await page.waitForTimeout(400);
+    const list = await page.evaluate(() => Array.from(document.querySelectorAll("[data-af-scene]")).map((x) => ({ head: x.querySelector(".af-scene-head").textContent, auto: x.querySelector("select option").textContent })));
+    check(list.length === 2 && /ferry/.test(list[1].head) && /Dock/.test(list[1].auto) && /Hall/.test(list[0].auto), size.name + ": the two scenes are listed, the calm one on Dock (" + JSON.stringify(list) + ")");
+    const run = await colors();
+    const live = run.filter((x) => x.red + x.blue > 40);
+    const reds = live.filter((x) => x.red > x.blue * 2);
+    const blues = live.filter((x) => x.blue > x.red * 2);
+    const redFirst = reds.length >= 5 && live.slice(0, 3).every((x) => x.red > x.blue * 2);
+    const blueLast = blues.length >= 3 && reds.length > 0 && Math.max(...reds.map((x) => x.t)) < Math.min(...blues.map((x) => x.t));
+    const mixed = run.filter((x) => x.red > 30 && x.blue > 30 && Math.abs(x.red - x.blue) < Math.max(x.red, x.blue) * 0.8).length;
+    check(redFirst && blueLast, size.name + ": the first scene is drawn on Hall and the last on Dock (" + reds.length + " red frames, then " + blues.length + " blue)");
+    check(mixed >= 3 && mixed <= 14, size.name + ": one background gives way to the next over about a second (" + mixed + " frames in between)");
+    // Dock picked by hand for the first scene: every scene is blue, and
+    // the change is kept with the saved script.
+    await page.selectOption('[data-af-sceneback="0"]', "b2");
+    await page.waitForTimeout(900);
+    const allBlue = (await colors()).filter((x) => x.red + x.blue > 40);
+    const edits = await page.evaluate(() => window.__sceneEdits || []);
+    check(allBlue.slice(0, -8).every((x) => x.blue > x.red * 2) && JSON.stringify(edits[edits.length - 1]) === JSON.stringify({ cuts: {}, backs: { "0": "b2" } }), size.name + ": a background picked by hand for a scene is used, and kept with the saved script (" + JSON.stringify(edits.slice(-1)) + ")");
+    await page.selectOption('[data-af-sceneback="0"]', "");
+    await page.waitForTimeout(600);
+    await page.click('[data-af-scenejoin="2"]');
+    await page.waitForTimeout(900);
+    const joined = await page.evaluate(() => document.querySelectorAll("[data-af-scene]").length);
+    const allRed = (await colors()).filter((x) => x.red + x.blue > 40);
+    check(joined === 1 && allRed.every((x) => x.red > x.blue * 2), size.name + ": a scene joined to the one before takes its background");
+    await page.selectOption("[data-af-scenefrom]", "1");
+    await page.click("[data-af-scenestart]");
+    await page.waitForTimeout(900);
+    const started = await page.evaluate(() => Array.from(document.querySelectorAll("[data-af-scene]")).map((x) => x.getAttribute("data-af-scene")));
+    const lastEdit = await page.evaluate(() => (window.__sceneEdits || []).slice(-1)[0]);
+    check(JSON.stringify(started) === JSON.stringify(["0", "1"]) && lastEdit && lastEdit.cuts["1"] === "start" && lastEdit.cuts["2"] === "join", size.name + ": a scene started by hand is listed and kept (" + JSON.stringify([started, lastEdit]) + ")");
+    const m = await page.evaluate(MEASURE, size.touch);
+    check(!m.overflow.length && !m.small.length, size.name + ": the Studio fits with the scenes open. " + m.overflow.concat(m.small).slice(0, 2).join("; "));
+    // The list of backgrounds: added, renamed, and deleted after asking.
+    await page.locator(".af-fold", { hasText: "Background" }).first().click();
+    await page.waitForTimeout(500);
+    await page.click('[data-af-back-act="add"]');
+    await page.waitForTimeout(600);
+    await page.fill("[data-af-backname]", "Rooftop");
+    await page.locator("[data-af-backname]").dispatchEvent("change");
+    await page.waitForTimeout(400);
+    const three = await page.evaluate(() => ({ names: window.__settings.videoBacks.map((b) => b.name), picked: document.querySelector("[data-af-backpick]").selectedOptions[0].textContent }));
+    check(three.names.length === 3 && three.names[2] === "Rooftop" && /Rooftop/.test(three.picked), size.name + ": a background is added and renamed (" + JSON.stringify(three) + ")");
+    await page.evaluate(() => (window.__asked = 0));
+    await page.click('[data-af-back-act="delete"]');
+    await page.waitForTimeout(600);
+    const after = await page.evaluate(() => ({ asked: window.__asked, n: window.__settings.videoBacks.length }));
+    check(after.asked === 1 && after.n === 2, size.name + ": deleting a background asks first (" + JSON.stringify(after) + ")");
+    const m2 = await page.evaluate(MEASURE, size.touch);
+    check(!m2.overflow.length && !m2.small.length, size.name + ": the Studio fits with the list of backgrounds open. " + m2.overflow.concat(m2.small).slice(0, 2).join("; "));
+    check(!errors.length, size.name + ": no page errors. " + errors.slice(0, 2).join(" | "));
+    await context.close();
+  }
+  // With one background, there are no scenes to change.
+  const { context, page } = await open(THEMES[0], SIZES[0]);
+  await page.evaluate(() => { window.__wav = [0.1, 0.3]; window.__clipMs = 200; });
+  await page.click('#mount [data-af-slot="message"]');
+  await page.waitForFunction(() => document.querySelector('#mount [data-af-slot="message"]').getAttribute("aria-busy") === null && (window.__synth || []).length > 0, null, { timeout: 15000 });
+  await page.waitForTimeout(2500);
+  await page.click('.af-tab[data-tab="studio"]');
+  await page.waitForTimeout(1200);
+  check((await page.locator(".af-fold", { hasText: "Scenes" }).count()) === 0, "with one background, there is no Scenes fold");
+  await context.close();
 }
 
 if (section("studio design")) {

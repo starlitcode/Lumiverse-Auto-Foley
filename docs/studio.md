@@ -276,9 +276,68 @@ The moon is a circle in every shape of video, since sizes are in pixels of a 108
 - While the design is shown, a finger on the preview moves shapes and does not scroll the page. Scroll above or below the preview.
 - The outline and the dots show on the preview only. They are never in full screen or in a saved video.
 
+## Scenes and their backgrounds
+
+### In short
+
+- You can have more than one background, and each scene of a performance can have its own.
+- The Director marks where a scene starts: a new place, a jump in time, or a mood that turns and stays turned. It does this in the call it already makes.
+- Each background says which scenes it is for: some moods, some place words, or only scenes you pick it for.
+- One background is for every scene nothing else is for.
+- You can change any scene's background, start a new scene, or join one to the scene before, in the Studio.
+- One background fades into the next over about a second. A video with one scene looks the same as with one background.
+
+### Steps
+
+1. Open **Background** in the Studio's **Video** card.
+2. Press **Add a background**. Give it a **Name**, and set it up like any background.
+3. Under **Use it for**, pick one:
+   - **Every scene nothing else is for**. This is the default background. There is always one.
+   - **Scenes with these moods or places**, then press the moods and type the place words, one per line.
+   - **Only scenes I pick it for**.
+4. Play a message. With two or more backgrounds, the Director names each scene's place and mood.
+5. In the Studio, open **Scenes** under **The performance**. Each scene shows its first words, its place, its mood and its background.
+6. To change a scene's background, pick one in its **Background** box. **Automatic** goes back to the one picked for you.
+7. To split a scene, pick a line under **Start a new scene at** and press **Start a scene there**. To merge one, press **Join it to the scene before**.
+
+**Background to change** picks which background the boxes change. While **Background** is open, the preview shows that background behind the whole video. Close it to see each scene's own.
+
+### What it sends
+
+- With two or more backgrounds, the Director's rules have `"scenes": true` and the list of moods. It sends back a `"scene"`, a few words naming the place, on the line a scene starts, with a `"mood"`. See [The prompt](director.md#the-prompt).
+- With one background, nothing more is sent, so nothing more is spent.
+- Changes you make in **Scenes** are kept with the performance in **Saved audio**. They are not sent anywhere else.
+
+### An example
+
+Ilsabet has two backgrounds:
+
+- **Hall**, a red color, for **Every scene nothing else is for**.
+- **Dock**, a blue color, for **Scenes with these moods or places**, with the mood **Calm** and the place word `dock`.
+
+She plays a message with three lines:
+
+1. "The long hall was empty but for the lamps." The Director sends `"scene": "long hall"` and `"mood": "tense"`.
+2. "We should not wait here much longer, the lamps are failing." No scene.
+3. "By morning the ferry had reached the far dock and the water was still." The Director sends `"scene": "ferry dock"` and `"mood": "calm"`.
+
+**Scenes** lists two scenes. The first is on **Hall**, since nothing else is for a tense long hall. The second is on **Dock**: its mood is calm, and its place has the word dock. In the video, the first two lines are on red. When the third line starts, the blue fades in over about a second.
+
+She picks **Dock** for the first scene too. Now the whole video is blue, and reopening the performance from **Saved audio** keeps that.
+
+### Details
+
+- A background is picked for a scene in this order: one you picked by hand, then the first background in the list whose moods or place words match, then the one for every other scene.
+- Place words match whole words in the Director's place, with capitals and punctuation left out. `dock` matches "ferry dock", and not "docker".
+- A mood comes from the Director's scene mark, or else from the mood the music last had.
+- Scenes in a row on the same background do not fade.
+- A message directed with one background, or read as written, is one scene. Start a scene by hand, or press **Direct again** on the Stage tab once you have two backgrounds.
+- A performance not kept in **Saved audio** keeps your scene changes for this visit only. The line under the scenes says so.
+- You can have up to 12 backgrounds. Deleting one asks first, and its scenes go to the one for every other scene.
+
 ### How backgrounds are kept
 
-Your backgrounds are kept as a list, each with an id, a name and its own settings. One is picked for the whole video. Today the list has one background, the one the panel shows. A picture for a background is kept in a file of its own, named by the background's id.
+Your backgrounds are kept as a list, each with an id, a name and its own settings. One is picked for every scene nothing else is for. A picture for a background is kept in a file of its own, named by the background's id.
 
 ## Hide and bleep words
 
