@@ -1923,3 +1923,46 @@ describe("scene music", () => {
     expect(out[0].sounds[0].mood).toBe(undefined);
   });
 });
+
+describe("fitting the wait to the model", () => {
+  test("an address on your own computer or network counts as local, and a cloud one does not", () => {
+    const h = host();
+    const local = ["http://localhost:5001/v1", "http://127.0.0.1:8080", "http://192.168.1.40:11434/v1", "http://10.0.0.7:5000", "http://172.20.3.4:1234", "http://100.90.12.3:8080", "http://gpu-box:5001", "http://studio.local:1234/v1", "http://[::1]:8080", "https://user:pass@192.168.0.9/v1"];
+    const cloud = ["https://api.openai.com/v1", "https://openrouter.ai/api/v1", "https://172.15.0.1/v1", "https://100.50.1.1", "", "not a url"];
+    expect(local.filter((u) => !h.box.isLocalUrl(u))).toEqual([]);
+    expect(cloud.filter((u) => h.box.isLocalUrl(u))).toEqual([]);
+  });
+
+  test("the wait is stretched for thinking and for a local model, at most an hour", () => {
+    const h = host();
+    expect(h.box.fitWait(120, "https://api.openai.com/v1", "").secs).toBe(120);
+    expect(h.box.fitWait(120, "https://api.openai.com/v1", "low").secs).toBe(120);
+    expect(h.box.fitWait(120, "https://api.openai.com/v1", "high").secs).toBe(240);
+    expect(h.box.fitWait(120, "https://api.openai.com/v1", "max").secs).toBe(360);
+    const local = h.box.fitWait(120, "http://localhost:5001", "medium");
+    expect(local.secs).toBe(900);
+    expect(local.why).toEqual(["thinking is set to medium", "the model runs on your own computer or network"]);
+    expect(h.box.fitWait(600, "http://localhost:5001", "max").secs).toBe(3600);
+  });
+});
+
+describe("fitting the Director's wait", () => {
+  const msg = { type: "direct", chatId: "c1", messageId: "m1", swipeId: 0, name: "Mara Vell", text: 'Mara set the cup down. "Fine."' };
+  const good = JSON.stringify({ lines: [{ i: 0, speaker: "Narrator", text: "Mara set the cup down." }, { i: 1, speaker: "Mara Vell", text: "Fine." }], new_speakers: [] });
+  const home = [{ id: "c9", name: "Home", provider: "custom", api_url: "http://192.168.1.40:5001/v1", model: "local-model", is_default: true, reasoning_bindings: { settings: { apiReasoning: true, reasoningEffort: "high" } } }];
+
+  test("a Director on a local connection with high thinking is given longer, and the Log says why", async () => {
+    const h = host({ answers: [good], connections: home });
+    await h.ask({ type: "save", settings: { thinkingMode: "inherit" } });
+    const out = await h.ask(msg);
+    const log = out.find((m: any) => m.type === "script").script.log.join(" ");
+    expect(log).toContain("The Director is given up to 20 minutes, since thinking is set to high and the model runs on your own computer or network.");
+  });
+
+  test("with Fit the wait to the model off, the wait is used as it is", async () => {
+    const h = host({ answers: [good], connections: home });
+    await h.ask({ type: "save", settings: { thinkingMode: "inherit", waitFit: false } });
+    const out = await h.ask(msg);
+    expect(out.find((m: any) => m.type === "script").script.log.join(" ")).not.toContain("is given up to");
+  });
+});

@@ -73,6 +73,7 @@ const DEFAULT_SETTINGS = {
     thinkingEffort: 'low',
     samplers: {},
     timeoutSecs: 120,
+    waitFit: true,
     costIn: 0,
     costOut: 0,
     voicePrice: 0,
@@ -582,6 +583,7 @@ function cleanSettings(raw) {
         thinkingEffort: pick(r.thinkingEffort, EFFORTS, 'low'),
         samplers: cleanSamplerInput(r.samplers),
         timeoutSecs: Math.round(num(r.timeoutSecs, 0, 3600, d.timeoutSecs)),
+        waitFit: bool(r.waitFit, d.waitFit),
         costIn: num(r.costIn, 0, 10000, d.costIn),
         costOut: num(r.costOut, 0, 10000, d.costOut),
         voicePrice: num(r.voicePrice, 0, 10000, d.voicePrice),
@@ -728,6 +730,9 @@ async function boundPairs(userId) {
     // The model behind each connection, for Lumiverse's tokenizer. '' is the
     // default connection.
     const models = {};
+    // Each connection's address and thinking level, for Fit the wait to the
+    // model. '' is the default connection.
+    const conns = {};
     try {
         const list = await inTime(Promise.resolve(spindle.connections.list(userId)), 15000, 'Lumiverse, listing the connections,');
         for (const c of Array.isArray(list) ? list : []) {
@@ -736,6 +741,11 @@ async function boundPairs(userId) {
             models[String(c.id)] = String(c.model || '');
             if (c.is_default)
                 models[''] = String(c.model || '');
+            const r = c.reasoning_bindings && c.reasoning_bindings.settings;
+            const info = { url: String(c.api_url || ''), provider: String(c.provider || ''), effort: r && r.apiReasoning ? String(r.reasoningEffort || '') : '' };
+            conns[String(c.id)] = info;
+            if (c.is_default)
+                conns[''] = info;
         }
         for (const c of Array.isArray(list) ? list.slice(0, 40) : []) {
             const b = c && c.reasoning_bindings && c.reasoning_bindings.settings;
@@ -752,8 +762,71 @@ async function boundPairs(userId) {
         }
     }
     catch (_) { }
-    boundCache[key] = { at: Date.now(), pairs, models };
+    boundCache[key] = { at: Date.now(), pairs, models, conns };
     return pairs;
+}
+// ---- Fit the wait to the model ----
+// A model on your own computer or network is slower than a cloud one, and
+// thinking takes longer the higher it is set. The same rules are used in
+// Auto Retry and Auto Refine.
+// An address on this computer or this network: localhost, a private
+// address, or a name with no dot, such as a computer on a home network.
+function isLocalUrl(u) {
+    // The host: after the scheme and any user name, before a port or path.
+    const m0 = String(u || '').trim().match(/^[a-z][a-z0-9+.-]*:\/\/(?:[^@\/?#]*@)?(\[[^\]]+\]|[^\/:?#]+)/i);
+    const host = m0 ? m0[1].toLowerCase().replace(/^\[|\]$/g, '') : '';
+    if (!host)
+        return false;
+    if (host === 'localhost' || host === '::1' || host === '0.0.0.0' || /\.(local|lan|home|internal|localhost)$/.test(host) || host.endsWith('.home.arpa'))
+        return true;
+    if (/^127\./.test(host) || /^10\./.test(host) || /^192\.168\./.test(host) || /^169\.254\./.test(host))
+        return true;
+    const m = host.match(/^(\d+)\.(\d+)\./);
+    if (m && Number(m[1]) === 172 && Number(m[2]) >= 16 && Number(m[2]) <= 31)
+        return true;
+    // The range VPNs such as Tailscale give out, for a computer of your own.
+    if (m && Number(m[1]) === 100 && Number(m[2]) >= 64 && Number(m[2]) <= 127)
+        return true;
+    if (/^(fc|fd)[0-9a-f]{2}:/.test(host) || /^fe80:/.test(host))
+        return true;
+    return !host.includes('.') && !host.includes(':');
+}
+// A wait in words, such as "10 minutes" or "90 seconds".
+function minutesText(secs) {
+    if (secs < 120)
+        return secs + ' seconds';
+    const m = Math.round(secs / 60);
+    return m + ' minutes';
+}
+// How many times longer each thinking level is given.
+const EFFORT_TIMES = { none: 1, minimal: 1, low: 1, medium: 1.5, high: 2, xhigh: 3, max: 3 };
+// A model on your own computer or network is given five times as long.
+const LOCAL_TIMES = 5;
+const WAIT_MAX_SECS = 3600;
+// The wait for a call: base seconds, times the thinking level, times five
+// for a local model, at most an hour. why says what made it longer.
+function fitWait(base, url, effort) {
+    const why = [];
+    let secs = base;
+    const e = String(effort || '').toLowerCase();
+    const times = EFFORT_TIMES[e] || 1;
+    if (times > 1) {
+        secs *= times;
+        why.push('thinking is set to ' + (e === 'xhigh' ? 'extra high' : e));
+    }
+    if (isLocalUrl(url)) {
+        secs *= LOCAL_TIMES;
+        why.push('the model runs on your own computer or network');
+    }
+    return { secs: Math.min(WAIT_MAX_SECS, Math.round(secs)), why };
+}
+// The connection's address and thinking level, from the list read with the
+// reasoning pairs.
+async function connInfo(userId, id) {
+    await boundPairs(userId);
+    const kept = boundCache[userId || ''];
+    const c = kept && kept.conns[id];
+    return { url: c ? c.url : '', effort: c ? c.effort : '' };
 }
 // The model a connection runs, read with the reasoning pairs. Empty when it
 // cannot be read, and Lumiverse then counts for the main connection's model.
@@ -2864,6 +2937,18 @@ async function askDirector(userId, s, payload, connection, script, run) {
     let waits = 0;
     let asks = 0;
     let note = '';
+    // How long to wait for the Director. Fitted to the model unless the reader
+    // turned that off, with the reason in the Log when it waits longer.
+    // 0 is Never, which stays never.
+    let waitSecs = s.timeoutSecs;
+    if (s.waitFit && waitSecs > 0) {
+        const c = await connInfo(userId, connection);
+        const effort = s.thinkingMode === 'off' ? 'none' : s.thinkingMode === 'custom' ? s.thinkingEffort : c.effort;
+        const fit = fitWait(waitSecs, c.url, effort);
+        waitSecs = fit.secs;
+        if (fit.why.length)
+            script.log.push('The Director is given up to ' + minutesText(waitSecs) + ', since ' + fit.why.join(' and ') + '.');
+    }
     for (;;) {
         if (run.stopped) {
             script.log.push('Stopped before the Director answered.');
@@ -2893,7 +2978,7 @@ async function askDirector(userId, s, payload, connection, script, run) {
                 req.connection_id = connection;
             if (userId)
                 req.userId = userId;
-            const res = await withTimeout(req, s.timeoutSecs, run);
+            const res = await withTimeout(req, waitSecs, run);
             content = res && typeof res.content === 'string' ? res.content : '';
             const cost = Number(res && res.usage && res.usage.cost);
             if (Number.isFinite(cost))

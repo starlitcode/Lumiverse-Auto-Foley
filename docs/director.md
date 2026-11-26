@@ -94,6 +94,27 @@ All on the Director tab:
 - **Find new speakers.** Someone new who speaks is added to the cast. See [The cast](cast.md).
 - **Big moments.** The Director can mark an emotional peak. On ElevenLabs, that line gets a looser voice: one step toward Creative on Eleven v3, or 0.25 lower stability on Eleven v4. The audience can cheer on it.
 
+## How long it waits
+
+**Give up waiting after** is 2 minutes by default. A Director that has not answered by then is stopped, and the message is read as written.
+
+**Fit the wait to the model**, under it, is on by default. It stretches that wait for a slow model:
+
+| What | How much longer |
+| --- | --- |
+| A model on your own computer or network | 5 times |
+| Thinking set to medium | 1.5 times |
+| Thinking set to high | 2 times |
+| Thinking set to extra high or max | 3 times |
+
+- A model counts as on your own computer or network when its connection's address is `localhost`, a private address such as `192.168.1.40`, a name with no dot, or a name ending in `.local`.
+- The thinking level is the Director's own, under **Thinking**, or the connection's when the Director uses the connection's thinking.
+- Both can apply. A local model with high thinking gets 2 × 5 = 10 times as long: 20 minutes. The wait is never more than an hour.
+- The Log says when the Director is given longer, and why.
+- **Never** stays never. With the switch off, the wait is used as it is.
+
+The same rules are used in Auto Retry and Auto Refine.
+
 ## Singing
 
 - A line someone sings is marked as sung. The Director marks it, and so does a music note in the text, such as ♪. The note is not read.

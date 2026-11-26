@@ -1694,6 +1694,7 @@ const DEFAULTS = {
     thinkingEffort: 'low',
     samplers: {},
     timeoutSecs: 120,
+    waitFit: true,
     costIn: 0,
     costOut: 0,
     voicePrice: 0,
@@ -11471,6 +11472,7 @@ export function setup(ctx, overrides) {
             { id: '300', label: '5 minutes' },
             { id: '0', label: 'Never' },
         ], String(S.timeoutSecs), (v) => set({ timeoutSecs: Number(v) }), '2 minutes by default. A Director that has not answered by then is stopped, and the message is read as written.'));
+        model.appendChild(toggle('Fit the wait to the model', 'On by default. A model on your own computer or network gets five times as long, and high thinking two or three times. Off: the wait above is used as it is.', 'waitFit'));
         model.appendChild(priceRow('costIn', 'Input price, per million tokens', 'Your provider\u2019s input price per million tokens. Type the number, like 5 or 0.075, or paste the whole line. At 0, no cost is worked out.'));
         model.appendChild(priceRow('costOut', 'Output price, per million tokens', 'Your provider\u2019s output price per million tokens, for the text the Director writes. Type the number, or paste the whole line.'));
         model.appendChild(fold('Samplers', (body) => {

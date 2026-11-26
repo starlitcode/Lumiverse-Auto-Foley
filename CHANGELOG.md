@@ -18,6 +18,7 @@ _2026-11-26_
 - **Music**, under **The performance** in the Studio. On by default. The audio and the video keep the scene music that played, with the same fades. Suggested by a Discord user.
 
 - **Full screen**, beside **Play the preview** in the Studio. The preview fills the page in its own shape, with its own play button, bar and close button. It fades in and out, and Escape closes it.
+- **Fit the wait to the model**, under **Give up waiting after** on the Director tab. On by default. A Director on your own computer or network gets five times as long, and high thinking two or three times, so a slow model is not stopped too early. The Log says when it waits longer. See [How long it waits](docs/director.md#how-long-it-waits).
 - **A link to an audio converter**, in the Studio's **Audio** card, for turning the WAV into an MP3. It opens in a new tab.
 - **Color of the captions**, under **Show sounds as captions** in the Studio. Sound captions can have a color of their own, such as yellow. It is the color of the words until one is picked, and it is part of a saved look.
 
