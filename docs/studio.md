@@ -92,7 +92,12 @@ The audio is a 48 kHz, 24-bit WAV file. WAV keeps the sound exactly as it was. E
 
 ### Getting an MP3
 
-Any audio converter can save the WAV as an MP3. The free [audio converter from Wave](https://wave.co/tools/audio-converter) works in the browser. Its page says the file is not uploaded. The **Audio** card in the Studio links it too.
+Any audio converter can save the WAV as an MP3.
+
+- **On a computer:** most audio programs can open a WAV and save it as an MP3.
+- **On a phone:** the free [audio converter from Wave](https://wave.co/tools/audio-converter) works in the browser. Its page says the file is not uploaded. Open it in your phone's own browser, not inside the Lumiverse app, since an app may not let the page pick a file.
+
+The **Audio** card in the Studio links to this section.
 
 ### Better sound from the start
 

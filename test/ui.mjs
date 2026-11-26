@@ -3850,9 +3850,10 @@ if (section("full screen")) {
     check(motion.asked === 0, size.name + ": the phone's own full screen, which switches in one cut, is not asked for");
     check(motion.frames.every((f) => Math.abs(f[3] - motion.cardBefore) <= 1), size.name + ": the Video card keeps its height while the preview is away, so the page does not move (" + motion.cardBefore + " to " + Math.min(...motion.frames.map((f) => f[3])) + ")");
     check(motion.frames.every((f) => f[2] === motion.before) && motion.after === motion.before, size.name + ": the Studio stays scrolled where it was, open and closed (" + motion.before + " to " + motion.after + ", page scrolls: " + motion.scrolls + ")");
-    // The Audio card links the converter, which opens in a new tab.
-    const conv = await page.evaluate(() => { const a = document.querySelector("a[data-af-converter]"); return a ? { href: a.href, target: a.target, rel: a.rel, text: a.textContent } : null; });
-    check(!!conv && conv.href === "https://wave.co/tools/audio-converter" && conv.target === "_blank" && /noopener/.test(conv.rel), size.name + ": the Audio card links the audio converter in a new tab (" + JSON.stringify(conv) + ")");
+    // The Audio card links the guide's section on getting an MP3, in a new
+    // tab, and no converter page of its own.
+    const conv = await page.evaluate(() => { const a = document.querySelector("a[data-af-mp3help]"); return a ? { href: a.href, target: a.target, rel: a.rel, text: a.textContent, other: !!document.querySelector('a[href*="wave.co"]') } : null; });
+    check(!!conv && /github\.com\/starlitcode\/Lumiverse-Auto-Foley\/blob\/stable\/docs\/studio\.md#getting-an-mp3$/.test(conv.href) && conv.target === "_blank" && /noopener/.test(conv.rel) && !conv.other, size.name + ": the Audio card links Getting an MP3 on GitHub in a new tab, and not the converter (" + JSON.stringify(conv) + ")");
     // The close button works too, and Play plays from full screen.
     await page.click('[data-af-studio="full"]');
     await page.waitForTimeout(400);

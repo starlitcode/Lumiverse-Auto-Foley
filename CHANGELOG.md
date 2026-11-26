@@ -19,7 +19,7 @@ _2026-11-26_
 
 - **Full screen**, beside **Play the preview** in the Studio. The preview fills the page in its own shape, with its own play button, bar and close button. It fades in and out, and Escape closes it.
 - **Fit the wait to the model**, under **Give up waiting after** on the Director tab. On by default. A Director on your own computer or network gets five times as long, and high thinking two or three times, so a slow model is not stopped too early. The Log says when it waits longer. See [How long it waits](docs/director.md#how-long-it-waits).
-- **A link to an audio converter**, in the Studio's **Audio** card, for turning the WAV into an MP3. It opens in a new tab.
+- **Getting an MP3**, a link in the Studio's **Audio** card to the guide on GitHub, which says how to turn the WAV into an MP3 on a computer or a phone. It opens in a new tab.
 - **Color of the captions**, under **Show sounds as captions** in the Studio. Sound captions can have a color of their own, such as yellow. It is the color of the words until one is picked, and it is part of a saved look.
 - **Fade in as they are said** and **Blur in as they are said**, under **How the words show** in the Studio. Each word fades in as it is said, or fades in from a blur, over about a third of a second.
 - **Your own fonts** in the Studio. **Add a font**, under **Font**, adds a TTF, OTF, WOFF or WOFF2 file of up to 3 MB, and says which files work and that the font's license must allow your videos. It is kept on your account and listed under **Your fonts**, with a line drawn in it. **Take this font out** asks first. See [Your own fonts](docs/studio.md#your-own-fonts).
