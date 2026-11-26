@@ -17,6 +17,7 @@ _2026-11-26_
 - **The Director's note for ElevenLabs named only v3.** The same note is used for Eleven v4, and now says so.
 - **Exaggeration and CFG weight said they work on Chatterbox-Turbo.** Resemble AI's Turbo code ignores both. Their hints now say they work only on the original Chatterbox model.
 - **The Voice hint said designed or cloned voices always act better.** ElevenLabs says a designed voice may be less expressive on Eleven v4. The hint now says to compare voices with **Hear a sample**.
+- **Drama 3 on Fish Audio played S2.1 Pro instead.** Lumiverse asks Fish for `drama-3-preview`, a name Fish does not know, and Fish then uses S2.1 Pro without an error. Auto Foley now asks for `drama-3`, the name in Fish's docs, and puts **Fish Audio direction** at the start of each line, since Lumiverse does not add it for that name. Lines kept from before were made with S2.1 Pro, so they are made again once.
 - **Cartesia's hint named an older model.** It now names `sonic-3.6`, Cartesia's current model.
 
 ### Changed

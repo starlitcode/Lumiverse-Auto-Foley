@@ -93,6 +93,12 @@ A person can speak through a connection of their own. Open them in the **Cast** 
 - Sounds and pauses, such as `[sighs]` or `[short pause]`, happen once and are never repeated.
 - S1 does not act, so Auto Foley does not use it. Fish Audio is retiring it.
 
+#### Drama 3
+
+- Fish Audio's docs name the model `drama-3`. A name Fish does not know, such as `drama-3-preview`, is read with S2.1 Pro, and Fish gives no error.
+- Lumiverse lists Drama 3 as `drama-3-preview`. So when **Drama 3** is picked, Auto Foley asks Fish for `drama-3`.
+- Lumiverse adds **Fish Audio direction** only for the model names on its own list. For Drama 3, Auto Foley puts the direction at the start of each line instead, as a tag, the same way Lumiverse does for the others.
+
 ### Gemini
 
 Gemini 3.8:

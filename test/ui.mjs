@@ -3237,6 +3237,36 @@ if (section("big moments warning")) {
   await context.close();
 }
 
+if (section("fish drama")) {
+  console.log("Drama 3 is asked for by the name Fish Audio knows, with the Fish Audio direction in the line");
+  for (const [model, expect] of [["drama-3-preview", "drama-3"], ["s2.1-pro", ""]]) {
+    const { context, page, errors } = await open(THEMES[0], SIZES[0]);
+    await page.evaluate((model) => {
+      window.__teardown();
+      document.getElementById("drawer").innerHTML = "";
+      window.__ttsList = [{ id: "t1", name: "Fish here", provider: "fish_audio", model, is_default: true, has_api_key: true }];
+      window.__settings = Object.assign({}, window.__settings, { ttsConnection: "t1", cast: window.__settings.cast.map((m) => Object.assign({}, m, { params: { direction: "low and [tired]" } })) });
+      window.__synth = [];
+      window.__clipMs = 40;
+      window.__teardown = window.__setup(window.__ctx, { fetch: window.__fetch, Audio: window.__Audio });
+    }, model);
+    await page.waitForTimeout(400);
+    await page.click('#mount [data-af-slot="message"]');
+    await page.waitForFunction(() => (window.__synth || []).length > 0, null, { timeout: 10000 }).catch(() => {});
+    await page.waitForTimeout(600);
+    const sent = await page.evaluate(() => window.__synth || []);
+    const one = sent[0] || {};
+    if (expect) {
+      check(sent.length > 0 && sent.every((b) => b.model === "drama-3"), model + ": every line asks Fish Audio for drama-3 (" + sent.map((b) => b.model).join(", ") + ")");
+      check(sent.length > 0 && sent.every((b) => /^\[low and tired\] /.test(b.text) && !(b.parameters || {}).voice_direction), model + ": the direction is at the start of each line, and not sent beside it (" + String(one.text).slice(0, 40) + ")");
+    } else {
+      check(sent.length > 0 && sent.every((b) => b.model !== "drama-3" && (b.parameters || {}).voice_direction === "low and [tired]" && !/^\[low and tired\]/.test(b.text)), model + ": other Fish models are sent as before, with the direction beside the line");
+    }
+    check(!errors.length, model + ": no page errors. " + errors.slice(0, 2).join(" | "));
+    await context.close();
+  }
+}
+
 if (section("colors")) {
   console.log("Colors for the player and the lit word, picked in their own editor");
   // The color drawn at the middle of an element, read from a screenshot.

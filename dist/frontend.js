@@ -2517,6 +2517,12 @@ export function setup(ctx, overrides) {
                 }
             }
         }
+        // Fish Audio names Drama 3 drama-3, and reads a name it does not know as
+        // S2.1 without saying so. Lumiverse lists Drama 3 as drama-3-preview, so
+        // the line asks for drama-3. Lumiverse adds Fish Audio direction only for
+        // the names on its own list, so for Drama 3 the direction goes at the
+        // start of the text here, in the same form Lumiverse uses.
+        const fishDrama = provider === 'fish_audio' && /^drama-3(-preview)?$/i.test(model.trim());
         if (provider === 'fish_audio') {
             if (has('temperature'))
                 params.temperature = own.temperature;
@@ -2524,7 +2530,7 @@ export function setup(ctx, overrides) {
                 params.top_p = own.top_p;
             if (typeof own.normalize === 'boolean')
                 params.normalize_loudness = own.normalize;
-            if (has('direction'))
+            if (has('direction') && !fishDrama)
                 params.voice_direction = own.direction;
         }
         if (provider === 'google_tts' || provider === 'google_vertex_tts') {
@@ -2544,11 +2550,19 @@ export function setup(ctx, overrides) {
         const told = geminiStyle(baseStyle, style);
         if (told)
             params.speech_style = told;
-        const body = { connectionId: conn.id, text, parameters: params };
+        let said = text;
+        if (fishDrama && has('direction')) {
+            const dir = String(own.direction).replace(/[\[\]]/g, '').replace(/\s+/g, ' ').trim();
+            if (dir)
+                said = '[' + dir + '] ' + text;
+        }
+        const body = { connectionId: conn.id, text: said, parameters: params };
         if (pick.voice)
             body.voice = pick.voice;
         if (pick.model)
             body.model = pick.model;
+        if (fishDrama)
+            body.model = 'drama-3';
         const sig = fingerprint(JSON.stringify([conn.id, conn.model || '', conn.voice || '', body]));
         return { body, sig, conn };
     }
