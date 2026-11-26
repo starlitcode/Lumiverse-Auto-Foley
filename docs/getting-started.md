@@ -210,7 +210,7 @@ With **Keep made audio** on, in the Settings tab:
 - While it plays, it says which part is playing and how far through the message it is. **Pause** pauses it.
 - **Back** and **Next** move one part back or on while the message plays.
 - Tap the line to go to that point of the message. In the part playing, it goes to that point in the audio.
-- To download a message's saved audio, use **Download** in **Saved audio**.
+- To download a message's saved audio, or make a video of it, use **Open in the Studio** in **Saved audio**.
 - It sits where Lumiverse puts its own audio player. It takes the side padding of the message text, and it is centered or to the right when your theme puts the text there.
 - It uses your theme's colors and the message's font, unless you pick colors of your own. See [Colors](#colors).
 - It shows only on messages that have saved audio, so a new chat has none.
@@ -245,21 +245,15 @@ The colors are saved with your settings, under your account.
 **Saved audio**, on the Stage tab, lists every message with a saved script, newest first. The list shows as soon as you open the Stage tab.
 
 - Each row says whose script it is, the day it was saved, how many lines it has, and its first line.
-- **Play** plays the saved audio of its lines, joined. Press it again to stop.
-- **Download** saves the same audio as one WAV file.
+- **Play** plays the saved audio of its lines, joined. Press it again to stop. Sounds and the cheer are not in it.
+- **Open in the Studio** opens the whole performance in the Studio tab, with its sounds from your library, to download or make a video of. See [Older performances](studio.md#older-performances).
 - **Delete** deletes the saved script and the saved audio of its lines. Press it, then press **Tap again to delete**. The next time the message plays, it is directed and spoken again.
-- Play and Download use only audio that is saved, so they spend nothing. A line with no saved audio, such as one spoken with a voice you changed since, is left out, and the row says so.
-- Sounds and the cheer are not in it. Download audio, under **Now playing**, has the whole performance with its sounds.
+- Play and Open in the Studio use only audio that is saved, so they spend nothing. A line with no saved audio, such as one spoken with a voice you changed since, is left out, and it says so.
 - To delete everything at once, use **Clear kept audio** in the Settings tab.
 
 ## Downloads and videos
 
-Two buttons under **Now playing**, on the Stage tab, keep what you heard:
-
-- **Download audio** saves the last performance as one WAV file.
-- **Download this part** saves the part playing now.
-
-**Video and more** opens the **Studio** tab. It makes videos, and has every choice for the audio and the video. See [The Studio](studio.md).
+Everything to keep what you heard is in the **Studio** tab: downloading the audio, a part, or a video. **Download or make a video**, under **Now playing**, goes there. For an older message, press **Open in the Studio** on it under **Saved audio**. See [The Studio](studio.md).
 
 ## What it costs
 

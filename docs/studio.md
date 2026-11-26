@@ -2,19 +2,20 @@
 
 ## In short
 
-- The **Studio** tab keeps the last message you played, as audio or as a video.
-- You choose which parts go in, a pause between them, and how loud they are.
+- The **Studio** tab keeps a performance as audio or as a video. It is the one place to download audio.
+- It holds the last message you played, or one opened from **Saved audio** with **Open in the Studio**.
+- You choose which parts go in, where it starts and ends, a pause between parts, and how loud they are.
 - **Audio** saves one WAV file, or a ZIP with a WAV for each part.
-- **Video** makes a video that looks like a story being read. You pick its shape, font, colors, background, transition between lines, title and ending.
+- **Video** makes a video that looks like a story being read. You pick its shape, font, colors, background, transition between lines, title and ending, and add notes for whoever watches.
 - **Hide and bleep words** covers words on screen and bleeps them in the audio, such as a name you do not want to share.
 - A preview shows the video with your choices. Drag its bar to any moment, or play it.
 - Nothing is sent anywhere. Everything is made on your device from the audio you already heard, so it costs nothing.
 
 ## Steps
 
-1. Play a message, on the Stage tab or with the button on a message.
-2. Open the **Studio** tab. **Video and more**, under **Now playing** on the Stage tab, goes there too.
-3. Under **The performance**, open **Which parts go in** and switch off any part you do not want.
+1. Play a message, on the Stage tab or with the button on a message. For an older message, press **Open in the Studio** on it under **Saved audio**, on the Stage tab, instead.
+2. Open the **Studio** tab. **Download or make a video**, under **Now playing** on the Stage tab, goes there too.
+3. Under **The performance**, open **Which parts go in** and switch off any part you do not want. To cut the start or the end, use **Trim**.
 4. For audio, pick **One file** or **A file for each part** under **Audio**, then press **Download audio**.
 5. For a video, set the look in the folds under **Video**. Watch the preview change.
 6. Press **Make a video**. It is saved when it ends.
@@ -51,11 +52,29 @@ The video:
 
 The file is saved as an MP4 or a WebM, named with the chat's name and the day.
 
+## Older performances
+
+The Studio holds the last message you played since the page was opened. A message played before that is in **Saved audio**, on the Stage tab, while **Keep made audio** is on.
+
+1. Find the message under **Saved audio**.
+2. Press **Open in the Studio**.
+
+The whole performance is built from what is saved, in order:
+
+- Each line comes from **Keep made audio**.
+- Each sound comes from your sound library.
+- Nothing is spoken again, found, made or directed, so nothing is spent.
+- A line with no saved audio, or a sound no longer in your library, is left out, and the Studio says how many.
+- The title and file name use the name of whoever the script belongs to, and the day it was saved.
+
+Playing the message again works too. Lines played from kept audio spend nothing, but a sound not in your library may be found or made again.
+
 ## The performance
 
 These choices change both the audio and the video.
 
 - **Which parts go in**: a switch for each part heard, with **All** and **None**. It is for this performance only. Playing another message starts with every part in.
+- **Trim**: **Start at** and **End at**, in seconds of the whole performance. 0 for **End at** is the end. The line under them says how long the whole performance is and what is kept. **Start here** and **End here**, under the preview, set them from where the preview is, and **Clear the trim** keeps it all again. The trim is for this performance only. The new ends fade over 10 thousandths of a second, so they do not click.
 - **Sound effects**: on by default. Off, only the voices are kept.
 - **Pause between parts, in seconds**: 0 by default. A short pause, such as 0.3, gives the lines room, as in an audiobook.
 - **As you heard it**: on by default. It uses your **Voices** and **Sounds** volumes and **Even voice levels**. Off, each part is as the voice service sent it.
@@ -63,7 +82,7 @@ These choices change both the audio and the video.
 
 ## Audio
 
-- **Download audio** saves the whole performance.
+- **Download audio** saves the whole performance, with the parts and trim chosen.
 - **Save as**: **One file** by default. **A file for each part** saves a ZIP, with the parts numbered in order and named by who says them. With **Show names** off, they are named "line", "narration" or "sound".
 - **Download this part** saves the part playing now, exactly as the voice service sent it. A part with a hidden word in it is saved bleeped, as a WAV.
 
@@ -144,9 +163,20 @@ When each word is said is worked out from where the voice is in the clip, so it 
 
 - **Show sounds as captions**: on by default. A sound shows as a caption in square brackets, such as [thunder]. Off, the background shows alone while it plays.
 
+### Notes
+
+A note is a few words for whoever watches, in a dark box at the top or the bottom of the video. It fades in and out.
+
+- **Add a note** adds one for the whole video. **Add a note here** adds one that starts where the preview is.
+- **When it shows**: **The whole video**, **At the start** or **At the end**, which show for 4 seconds, or **From a time**, with **From** and **For how long** in seconds.
+- **Where**: **Top** or **Bottom**. Two notes in the same place at the same time are stacked.
+- Up to 10 notes, each up to 300 characters. **Remove this note** takes one out.
+- Notes are saved to your account, so they can be used on the next video.
+- Hidden words are covered in notes too.
+
 ### Put the look back
 
-**Put the look back** puts back every choice under **Video**: the shape, words, pictures, background, transition and ending. **Show names** and **Show pictures** stay as they are. If nothing would change, it says so.
+**Put the look back** puts back every choice under **Video**: the shape, words, pictures, background, transition and ending. Notes, **Show names** and **Show pictures** stay as they are. If nothing would change, it says so.
 
 ## Hide and bleep words
 

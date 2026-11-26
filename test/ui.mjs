@@ -163,6 +163,7 @@ function answer(msg) {
     case 'clips_state': { const c = window.__clips || {}; return reply({ type: 'clips_state', count: Object.keys(c).length, bytes: Object.values(c).reduce((n, x) => n + x.base64.length * 0.75, 0) }); }
     case 'clips_clear': window.__clips = {}; return reply({ type: 'clips_state', ok: true, count: 0, bytes: 0 });
     case 'kept_list': return reply({ type: 'kept_list', list: window.__keptList || [] });
+    case 'sound_kept': return reply({ type: 'sound', missing: true });
     case 'video_bg_get': return reply({ type: 'video_bg', picture: window.__videoBg || '' });
     case 'video_bg_put': window.__videoBg = msg.picture || ''; return reply({ type: 'video_bg', ok: true, picture: window.__videoBg });
     case 'kept_script': return reply({ type: 'kept_script', script: (window.__keptList || []).some((e) => e.key === msg.key) ? SCRIPT : null });
@@ -1230,10 +1231,20 @@ if (section("saved audio")) {
     const row = page.locator("[data-af-saved-row]");
     check((await row.count()) === 1, size.name + ": the saved script is listed");
     check(((await row.textContent()) || "").includes("Ysolde’s script") && ((await row.textContent()) || "").includes("The quay was empty"), size.name + ": the row names whose script it is and its first line");
+    // Open in the Studio builds the performance from saved audio alone.
+    const spentBefore = await page.evaluate(() => (window.__synth || []).length);
+    await row.locator("[data-af-saved-open]").click();
+    await page.waitForFunction(() => document.querySelector('.af-tab[data-tab="studio"]').getAttribute("aria-selected") === "true", null, { timeout: 15000 }).catch(() => {});
+    await page.waitForTimeout(800);
+    check(await page.evaluate(() => document.querySelector('.af-tab[data-tab="studio"]').getAttribute("aria-selected") === "true"), size.name + ": Open in the Studio opens the Studio tab");
+    check((await page.locator(".af-fold", { hasText: "Which parts go in" }).count()) === 1, size.name + ": with the saved performance in it");
+    check((await page.evaluate(() => (window.__synth || []).length)) === spentBefore, size.name + ": and nothing is spoken again to make it");
     const dl = page.waitForEvent("download", { timeout: 8000 }).catch(() => null);
-    await row.locator(".af-btn", { hasText: "Download" }).click();
+    await page.click('[data-af-studio="dlall"]');
     const file = await dl;
-    check(!!file && /\.wav$/.test(file.suggestedFilename()), size.name + ": Download saves one WAV file (" + (file && file.suggestedFilename()) + ")");
+    check(!!file && /^auto-foley Ysolde 2026-11-20\.wav$/.test(file.suggestedFilename()), size.name + ": its audio downloads, named for whose script it is and the day it was saved (" + (file && file.suggestedFilename()) + ")");
+    await page.click('.af-tab[data-tab="stage"]');
+    await page.waitForTimeout(400);
     await page.evaluate(() => { window.__clipMs = 4000; });
     await row.locator("[data-af-saved-play]").click();
     await page.waitForTimeout(500);
@@ -3495,26 +3506,28 @@ if (section("downloads")) {
     await page.evaluate(() => { window.__wav = [0.1, 0.5]; window.__clipMs = 1500; });
     await page.click('.af-tab[data-tab="stage"]');
     await page.waitForTimeout(300);
-    const state = () => page.evaluate(() => ["dlall", "dlpart"].map((k) => document.querySelector('[data-af="' + k + '"]').disabled));
+    // The Stage has one button for all of it, which opens the Studio.
+    check(await page.evaluate(() => !document.querySelector('[data-af="dlall"]') && !document.querySelector('[data-af="dlpart"]') && /Download or make a video/.test(document.querySelector('[data-af="studio"]').textContent)), where + ": the Stage has one Download or make a video button, and no download buttons of its own");
+    await page.click('[data-af="studio"]');
+    await page.waitForTimeout(500);
+    check(await page.evaluate(() => document.querySelector('.af-tab[data-tab="studio"]').getAttribute("aria-selected") === "true"), where + ": it opens the Studio tab");
+    const state = () => page.evaluate(() => ["dlall", "dlpart"].map((k) => document.querySelector('[data-af-studio="' + k + '"]').disabled));
     check((await state()).join() === "true,true", where + ": with nothing played, both downloads are off (" + (await state()).join() + ")");
     await page.click('#mount [data-af-slot="message"]');
     await page.waitForTimeout(900);
     const part = page.waitForEvent("download", { timeout: 8000 }).catch(() => null);
-    await page.click('[data-af="dlpart"]');
+    await page.click('[data-af-studio="dlpart"]');
     const p1 = await part;
     check(!!p1 && /part 1\.wav$/.test(p1.suggestedFilename()), where + ": Download this part saves the part playing (" + (p1 && p1.suggestedFilename()) + ")");
     // Let the message play to the end.
-    await page.waitForFunction(() => !document.querySelector('[data-af="dlpart"]') || document.querySelector('[data-af="dlpart"]').disabled, null, { timeout: 20000 });
+    await page.waitForFunction(() => document.querySelector('[data-af-studio="dlpart"]') && document.querySelector('[data-af-studio="dlpart"]').disabled, null, { timeout: 20000 });
     await page.waitForTimeout(300);
     const all = page.waitForEvent("download", { timeout: 8000 }).catch(() => null);
-    await page.click('[data-af="dlall"]');
+    await page.click('[data-af-studio="dlall"]');
     const p2 = await all;
     let size2 = 0;
     if (p2) { const fs = await import("node:fs"); size2 = fs.statSync(await p2.path()).size; }
     check(!!p2 && /\.wav$/.test(p2.suggestedFilename()) && size2 > 44 + 8000, where + ": Download audio saves the whole performance as one WAV (" + (p2 && p2.suggestedFilename()) + ", " + size2 + " bytes)");
-    await page.click('[data-af="studio"]');
-    await page.waitForTimeout(500);
-    check(await page.evaluate(() => document.querySelector('.af-tab[data-tab="studio"]').getAttribute("aria-selected") === "true"), where + ": Video and more opens the Studio tab");
     const vid = page.waitForEvent("download", { timeout: 60000 }).catch(() => null);
     await page.click('[data-af-studio="video"]');
     await page.waitForTimeout(600);
@@ -3578,10 +3591,10 @@ if (section("studio")) {
     await page.evaluate(() => { window.__wav = [0.1, 0.5]; window.__clipMs = 300; });
     await page.click('.af-tab[data-tab="stage"]');
     await page.waitForTimeout(300);
-    await page.click('#mount [data-af-slot="message"]');
-    await page.waitForFunction(() => document.querySelector('[data-af="dlall"]') && !document.querySelector('[data-af="dlall"]').disabled, null, { timeout: 20000 });
-    await page.waitForFunction(() => document.querySelector('[data-af="dlpart"]').disabled, null, { timeout: 20000 });
     await page.click('.af-tab[data-tab="studio"]');
+    await page.waitForTimeout(300);
+    await page.click('#mount [data-af-slot="message"]');
+    await page.waitForFunction(() => document.querySelector('[data-af-studio="dlall"]') && !document.querySelector('[data-af-studio="dlall"]').disabled && document.querySelector('[data-af-studio="dlpart"]').disabled, null, { timeout: 20000 });
     await page.waitForTimeout(900);
     const cards = await page.evaluate(() => ["studio-show", "studio-audio", "studio-video", "studio-censor"].map((k) => !!document.querySelector('[data-af-card="' + k + '"]')));
     check(cards.every(Boolean), where + ": the Studio has the performance, audio, video and hide words cards");
@@ -3707,16 +3720,106 @@ if (section("studio follows")) {
   await context.close();
 }
 
+if (section("trim and notes")) {
+  console.log("A trim keeps part of a performance, and notes show over the video");
+  const fs = await import("node:fs");
+  const secsOf = (path) => { const b = fs.readFileSync(path); return b.readUInt32LE(40) / (b.readUInt16LE(22) * (b.readUInt16LE(34) / 8)) / b.readUInt32LE(24); };
+  const grab = async (page) => {
+    const dl = page.waitForEvent("download", { timeout: 20000 }).catch(() => null);
+    await page.click('[data-af-studio="dlall"]');
+    const d = await dl;
+    return d ? secsOf(await d.path()) : 0;
+  };
+  for (const size of SIZES) {
+    const where = size.name;
+    const { context, page, errors } = await open(THEMES[0], size);
+    await page.evaluate(() => { window.__wav = [0.1, 0.5]; window.__clipMs = 300; });
+    await page.click('.af-tab[data-tab="studio"]');
+    await page.waitForTimeout(300);
+    await page.click('#mount [data-af-slot="message"]');
+    await page.waitForFunction(() => document.querySelector('[data-af-studio="dlall"]') && !document.querySelector('[data-af-studio="dlall"]').disabled && document.querySelector('[data-af-studio="dlpart"]').disabled, null, { timeout: 20000 });
+    await page.waitForTimeout(900);
+    const whole = await grab(page);
+    check(whole > 1, where + ": the whole performance is " + whole.toFixed(2) + " s");
+    // Trim by typing.
+    await page.locator(".af-fold", { hasText: /^▶?\s*Trim$/ }).click();
+    await page.waitForTimeout(300);
+    const boxes = page.locator('[data-af-card="studio-show"] input[type="number"]');
+    const type = async (n, v) => {
+      await boxes.nth(n).fill(String(v));
+      await boxes.nth(n).dispatchEvent("change");
+      await page.waitForTimeout(500);
+    };
+    // The Trim fold's two boxes come first in the card, Start at then End at.
+    await type(0, 0.3);
+    await type(1, 1.1);
+    const cut = await grab(page);
+    check(Math.abs(cut - 0.8) < 0.02, where + ": Start at 0.3 and End at 1.1 keep 0.8 s (" + cut.toFixed(2) + " s)");
+    check(/Kept: 0:00 to 0:01/.test(await page.locator("[data-af-trimsaid]").textContent()), where + ": the trim says what is kept");
+    await page.click('[data-af-studio="trimclear"]');
+    await page.waitForTimeout(700);
+    const back = await grab(page);
+    check(Math.abs(back - whole) < 0.02, where + ": Clear the trim keeps it all again");
+    // Trim from where the preview is.
+    const at = await page.evaluate(() => {
+      const bar = document.querySelector("[data-af-scrub] input");
+      bar.value = String(Number(bar.max) - 1.5 - 0.6);
+      bar.dispatchEvent(new Event("input", { bubbles: true }));
+      return Number(bar.value);
+    });
+    await page.click('[data-af-studio="trimend"]');
+    await page.waitForTimeout(700);
+    const ended = await grab(page);
+    check(ended < whole - 0.4 && ended > 0.5, where + ": End here ends it where the preview was (" + ended.toFixed(2) + " s of " + whole.toFixed(2) + ", at " + at.toFixed(2) + ")");
+    await page.click('[data-af-studio="trimclear"]');
+    await page.waitForTimeout(600);
+
+    // Notes.
+    const print = () =>
+      page.evaluate(() => {
+        const c = document.querySelector("[data-af-videopreview]");
+        const d = c.getContext("2d").getImageData(0, Math.round(c.height * 0.75), c.width, Math.round(c.height * 0.25)).data;
+        let sum = 0;
+        for (let i = 0; i < d.length; i += 16) sum = (sum + d[i] * 3 + d[i + 1] * 5 + d[i + 2] * 7) % 1000000007;
+        return sum;
+      });
+    const before = await print();
+    await page.locator(".af-fold", { hasText: /^▶?\s*Notes$/ }).click();
+    await page.waitForTimeout(300);
+    await page.click('[data-af-studio="noteadd"]');
+    await page.waitForTimeout(300);
+    const note = page.locator("[data-af-videonote] textarea").first();
+    await note.fill("Thanks for watching, part two is next week.");
+    await note.dispatchEvent("change");
+    await page.waitForTimeout(600);
+    const saved = await page.evaluate(() => window.__settings.videoNotes);
+    check(Array.isArray(saved) && saved.length === 1 && /part two/.test(saved[0].text) && saved[0].when === "all" && saved[0].place === "bottom", where + ": a note is saved to the account (" + JSON.stringify(saved) + ")");
+    check((await print()) !== before, where + ": the note shows at the bottom of the preview");
+    if (shots) await page.locator("[data-af-videopreview]").screenshot({ path: shots + "/note-" + where + ".png" });
+    await page.click('[data-af-studio="notehere"]');
+    await page.waitForTimeout(300);
+    const two = await page.evaluate(() => window.__settings.videoNotes);
+    check(two.length === 2 && two[1].when === "from", where + ": Add a note here starts one at the preview's place");
+    const m = await page.evaluate(MEASURE, size.touch);
+    check(!m.overflow.length && !m.small.length, where + ": the trim and the notes fit. " + m.overflow.concat(m.small).slice(0, 3).join("; "));
+    await page.locator("[data-af-videonote] .af-btn", { hasText: "Remove this note" }).first().click();
+    await page.waitForTimeout(300);
+    check((await page.evaluate(() => window.__settings.videoNotes.length)) === 1, where + ": Remove this note removes it");
+    check(!errors.length, where + ": no errors. " + errors.slice(0, 2).join("; "));
+    await context.close();
+  }
+}
+
 if (section("transitions")) {
   console.log("Every transition moves from one line to the next, and none is a cut but Cut");
   const { context, page, errors } = await open(THEMES[0], SIZES[1]);
   await page.evaluate(() => { window.__wav = [0.1, 0.5]; window.__clipMs = 300; });
   await page.click('.af-tab[data-tab="stage"]');
   await page.waitForTimeout(300);
-  await page.click('#mount [data-af-slot="message"]');
-  await page.waitForFunction(() => document.querySelector('[data-af="dlall"]') && !document.querySelector('[data-af="dlall"]').disabled, null, { timeout: 20000 });
-  await page.waitForFunction(() => document.querySelector('[data-af="dlpart"]').disabled, null, { timeout: 20000 });
   await page.click('.af-tab[data-tab="studio"]');
+  await page.waitForTimeout(300);
+  await page.click('#mount [data-af-slot="message"]');
+  await page.waitForFunction(() => document.querySelector('[data-af-studio="dlall"]') && !document.querySelector('[data-af-studio="dlall"]').disabled && document.querySelector('[data-af-studio="dlpart"]').disabled, null, { timeout: 20000 });
   await page.waitForTimeout(900);
   await page.locator(".af-fold", { hasText: "Moving between lines" }).click();
   await page.waitForTimeout(300);

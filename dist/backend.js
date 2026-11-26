@@ -107,6 +107,7 @@ const DEFAULT_SETTINGS = {
     videoTitleText: '',
     videoFadeOut: 1.5,
     videoCaptions: true,
+    videoNotes: [],
     censorOn: false,
     censorWords: '',
     censorCover: 'bar',
@@ -413,6 +414,19 @@ function cleanChatsOff(v) {
     }
     return out.slice(-CHATS_OFF_CAP);
 }
+// At most ten notes, each at most 300 characters. A note being written can
+// be empty for a moment, so it is kept.
+function cleanNotesList(v) {
+    if (!Array.isArray(v))
+        return [];
+    return v.slice(0, 10).filter((n) => n && typeof n === 'object').map((n) => ({
+        text: str(n.text, 300),
+        when: pick(n.when, ['all', 'start', 'end', 'from'], 'all'),
+        from: Math.round(num(n.from, 0, 3600, 0) * 10) / 10,
+        secs: Math.round(num(n.secs, 0.5, 600, 4) * 10) / 10,
+        place: pick(n.place, ['top', 'bottom'], 'bottom'),
+    }));
+}
 function partList(v, allowed, dflt) {
     if (!Array.isArray(v))
         return dflt.slice();
@@ -547,6 +561,7 @@ function cleanSettings(raw) {
         videoTitleText: str(r.videoTitleText, 120).trim(),
         videoFadeOut: Math.round(num(r.videoFadeOut, 0, 5, d.videoFadeOut) * 10) / 10,
         videoCaptions: bool(r.videoCaptions, d.videoCaptions),
+        videoNotes: cleanNotesList(r.videoNotes),
         censorOn: bool(r.censorOn, d.censorOn),
         censorWords: str(r.censorWords, 4000),
         censorCover: pick(r.censorCover, ['bar', 'blur', 'pixels'], d.censorCover),
@@ -3839,6 +3854,22 @@ async function onPanel(p, userId) {
                 if (got.made)
                     answer({ type: 'sounds', sounds: await loadSounds(userId) });
                 return;
+            }
+            case 'sound_kept': {
+                // A sound already in the library, by its description, and nothing
+                // more: no search and nothing made, so nothing is spent. Used to
+                // open a saved performance in the Studio.
+                const list = await loadSounds(userId);
+                const e = matchSound(list, cleanSound(p.description));
+                if (!e || e.source === 'link')
+                    return answer({ type: 'sound', missing: true });
+                try {
+                    const bytes = await spindle.userStorage.readBinary('sounds/' + e.id, userId);
+                    return answer({ type: 'sound', base64: toBase64(bytes), mime: e.mime, name: e.name, credit: e.credit });
+                }
+                catch (_) {
+                    return answer({ type: 'sound', missing: true });
+                }
             }
             case 'sound_again': {
                 // A new take of a made sound, for someone who does not like it.

@@ -1201,6 +1201,9 @@ const PANEL_CSS = `
 .af-hint[data-af-moving] { transition: opacity 140ms ease-out, transform 140ms ease-out; }
 .af-hint[data-af-open] { opacity: 1; transform: none; }
 
+/* One note being edited in the Studio, set apart from the next. */
+.af-note-edit { gap: 10px; padding: 10px; border: 1px solid var(--af-line); border-radius: var(--af-r); }
+
 /* One frame of a video, drawn at full size and shown at the card's width. */
 .af-videopreview { display: block; width: 100%; height: auto; aspect-ratio: 16 / 9; border-radius: var(--af-r); border: 1px solid var(--af-line); background: #0b0a0f; }
 
@@ -1750,6 +1753,7 @@ const DEFAULTS: any = {
   videoTitleText: '',
   videoFadeOut: 1.5,
   videoCaptions: true,
+  videoNotes: [],
   censorOn: false,
   censorWords: '',
   censorCover: 'bar',
@@ -2367,6 +2371,12 @@ export function setup(ctx: Ctx, overrides?: any) {
     toldLevel: Set<string>;
     // Set by Back, so the loop plays the part it was moved to.
     jumped?: boolean;
+    // The name for the title and file of a performance opened from Saved
+    // audio, which can be from another chat than the one on screen.
+    title?: string;
+    // Where the Studio's trim starts and ends, in seconds of the whole
+    // performance. An end of 0 is the end.
+    trim?: { from: number; to: number };
   }
   let show: Show | null = null;
   // The parts of the last message that could not be played, for Try the
@@ -2864,7 +2874,6 @@ export function setup(ctx: Ctx, overrides?: any) {
 
   function keepSaid(text: string) {
     keepLine = text;
-    if (stageRefs && tab === 'stage') setText(stageRefs.q('keepsaid'), text);
     if (studioRefs && tab === 'studio') setText(studioRefs.said, text);
   }
   let keepLine = '';
@@ -2900,14 +2909,9 @@ export function setup(ctx: Ctx, overrides?: any) {
     const d = new Date(ms);
     return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
   }
-  // A saved script's file name: who said it and the day, with no name
-  // while Show names is off.
-  function savedName(author: string, keptAt: number): string {
-    return 'auto-foley' + (S.videoNames !== false ? ' ' + fileName(author || 'script') : '') + (keptAt ? ' ' + fileDay(keptAt) : '') + '.wav';
-  }
   function showName(sh: Show): string {
     const day = fileDay(sh.startedAt);
-    return S.videoNames !== false ? 'auto-foley ' + fileName(chatInfo.name || 'chat') + ' ' + day : 'auto-foley ' + day;
+    return S.videoNames !== false ? 'auto-foley ' + fileName(sh.title || chatInfo.name || 'chat') + ' ' + day : 'auto-foley ' + day;
   }
 
   // Every clip heard, decoded at one rate and joined end to end, with when
@@ -3049,6 +3053,10 @@ export function setup(ctx: Ctx, overrides?: any) {
     parts: MixPart[];
     // The gain the whole mix was given to even out its loudness.
     loud: number;
+    // The length of the whole performance before the trim, and where the
+    // trim starts in it, in seconds.
+    full: number;
+    from: number;
   }
 
   // A bleep: a 1 kHz tone, the sound used on television, at a level that is
@@ -3121,14 +3129,34 @@ export function setup(ctx: Ctx, overrides?: any) {
     const ch = use.some((c) => c.data.length > 1) ? 2 : 1;
     const gap = Math.round(Math.min(3, Math.max(0, Number(S.studioGap) || 0)) * MIX_RATE);
     const total = use.reduce((n, c) => n + c.data[0].length, 0) + gap * (use.length - 1);
-    const channels = Array.from({ length: ch }, () => new Float32Array(total));
-    const parts: MixPart[] = [];
+    let channels = Array.from({ length: ch }, () => new Float32Array(total));
+    let parts: MixPart[] = [];
     let at = 0;
     for (const c of use) {
       const sound = partSound(sh, c, ch);
       for (let n = 0; n < ch; n++) channels[n].set(sound[n], at);
       parts.push({ pi: c.pi, k: c.k, start: at / MIX_RATE, len: c.data[0].length / MIX_RATE });
       at += c.data[0].length + gap;
+    }
+    // The trim: only the time between its start and end is kept. A part cut
+    // partway keeps its place, starting before 0, so its words still light
+    // up at the right time. The new ends fade over 10 ms, so they do not
+    // click.
+    const full = total / MIX_RATE;
+    const t = trimOf(sh, full);
+    if (t.from > 0 || t.to < full) {
+      const a = Math.round(t.from * MIX_RATE);
+      const b = Math.round(t.to * MIX_RATE);
+      channels = channels.map((d) => d.slice(a, b));
+      const edge = Math.min(Math.round(MIX_RATE * 0.01), Math.floor((b - a) / 2));
+      for (const d of channels)
+        for (let i = 0; i < edge; i++) {
+          const f = i / edge;
+          d[i] *= f;
+          d[d.length - 1 - i] *= f;
+        }
+      parts = parts.filter((p) => p.start + p.len > t.from && p.start < t.to).map((p) => ({ ...p, start: p.start - t.from }));
+      if (!parts.length) return null;
     }
     // Even out the loudness: the loudest moment is brought to 1 dB under
     // the most a file can hold, up or down.
@@ -3141,7 +3169,17 @@ export function setup(ctx: Ctx, overrides?: any) {
         for (const d of channels) for (let i = 0; i < d.length; i++) d[i] *= loud;
       }
     }
-    return { channels, rate: MIX_RATE, parts, loud };
+    return { channels, rate: MIX_RATE, parts, loud, full, from: t.from };
+  }
+
+  // The trim of a performance, held inside its length. An end of 0, or one
+  // past the end, is the end. At least half a second is always kept.
+  function trimOf(sh: Show, full: number): { from: number; to: number } {
+    const tr = sh.trim || { from: 0, to: 0 };
+    const from = Math.min(Math.max(0, Number(tr.from) || 0), Math.max(0, full - 0.5));
+    const want = Number(tr.to) || 0;
+    const to = want > 0 ? Math.min(full, Math.max(from + 0.5, want)) : full;
+    return { from, to };
   }
 
   // A ZIP file of the files given, stored as they are, which every system
@@ -3222,8 +3260,8 @@ export function setup(ctx: Ctx, overrides?: any) {
       let name: string;
       if (S.audioSplit === 'parts') {
         const files = m.parts.map((p, n) => {
-          const a = Math.round(p.start * m.rate);
-          const b = a + Math.round(p.len * m.rate);
+          const a = Math.max(0, Math.round(p.start * m.rate));
+          const b = Math.min(m.channels[0].length, Math.round((p.start + p.len) * m.rate));
           return { name: partFileName(sh, p.k, n), blob: wavBlob(m.channels.map((d) => d.subarray(a, b)), m.rate) };
         });
         blob = await zipBlob(files);
@@ -3358,11 +3396,11 @@ export function setup(ctx: Ctx, overrides?: any) {
 
   // The title at the start: the reader's own, or the chat's name with names
   // shown, or none.
-  function videoTitle(): string {
+  function videoTitle(sh: Show | null): string {
     const own = String(S.videoTitleText || '').trim();
     if (S.videoTitleOn === false) return '';
     if (own) return own;
-    return S.videoNames !== false ? String(chatInfo.name || '').trim() : '';
+    return S.videoNames !== false ? String((sh && sh.title) || chatInfo.name || '').trim() : '';
   }
   // How long the title holds the screen before the first line, and the fade
   // from black when there is no title.
@@ -3704,6 +3742,102 @@ export function setup(ctx: Ctx, overrides?: any) {
 
   const ease = (k: number) => (k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2);
 
+  // ---- notes over the video ----
+  // A note is a few words for whoever watches, in a box at the top or the
+  // bottom. It shows for the whole video, at the start, at the end, or from
+  // a time for a number of seconds, and fades in and out.
+  interface VideoNote {
+    text: string;
+    when: 'all' | 'start' | 'end' | 'from';
+    from: number;
+    secs: number;
+    place: 'top' | 'bottom';
+  }
+  const NOTES_MAX = 10;
+  function videoNotes(): VideoNote[] {
+    return (Array.isArray(S.videoNotes) ? S.videoNotes : []).filter((n: any) => n && String(n.text || '').trim());
+  }
+  // When a note shows, in seconds of the video, title included.
+  function noteSpan(n: VideoNote, intro: number, total: number, fadeOut: number): [number, number] {
+    const end = intro + total + fadeOut;
+    if (n.when === 'start') return [0, Math.min(end, intro + 4)];
+    if (n.when === 'end') return [Math.max(0, intro + total - 4), end];
+    if (n.when === 'from') {
+      const a = Math.max(0, Number(n.from) || 0);
+      return [a, a + Math.max(0.5, Number(n.secs) || 4)];
+    }
+    return [0, end];
+  }
+  function drawNotes(g: CanvasRenderingContext2D, st: VideoStage, t: number, intro: number, total: number, fadeOut: number) {
+    const notes = videoNotes();
+    if (!notes.length) return;
+    const W = st.w;
+    const H = st.h;
+    const u = Math.min(W, H) / 1080;
+    const size = Math.round(32 * u);
+    const lineH = Math.round(size * 1.4);
+    const pad = Math.round(22 * u);
+    const maxW = Math.min(W - 160 * u, 1300 * u) - pad * 2;
+    const ink = hexOr(S.videoInk, STORY_INK);
+    const list = hiddenList();
+    let top = 56 * u;
+    let bottom = H - 56 * u;
+    g.save();
+    g.font = '500 ' + size + 'px ' + st.font;
+    g.textBaseline = 'alphabetic';
+    for (const n of notes) {
+      const [a, b] = noteSpan(n, intro, total, fadeOut);
+      if (t < a || t > b) continue;
+      const alpha = Math.max(0, Math.min(1, a > 0 ? (t - a) / 0.4 : 1, (b - t) / 0.4));
+      if (alpha <= 0) continue;
+      // Wrapped to the box, five rows at most.
+      const words = String(n.text).trim().split(/\s+/);
+      const space = g.measureText(' ').width;
+      const rows: number[][] = [[]];
+      let width = 0;
+      words.forEach((wd, k) => {
+        const ww = g.measureText(wd).width;
+        const row = rows[rows.length - 1];
+        if (row.length && width + space + ww > maxW) {
+          rows.push([k]);
+          width = ww;
+        } else {
+          row.push(k);
+          width += (row.length > 1 ? space : 0) + ww;
+        }
+      });
+      const shown = rows.slice(0, 5);
+      const widths = shown.map((r) => r.reduce((x, k, i) => x + g.measureText(words[k]).width + (i ? space : 0), 0));
+      const boxW = Math.max(...widths) + pad * 2;
+      const boxH = shown.length * lineH + pad * 1.4;
+      const y = n.place === 'top' ? top : bottom - boxH;
+      if (n.place === 'top') top += boxH + 14 * u;
+      else bottom -= boxH + 14 * u;
+      const hide = hiddenWords(words, list);
+      g.globalAlpha = alpha;
+      g.shadowColor = 'transparent';
+      g.fillStyle = 'rgba(0,0,0,0.58)';
+      g.beginPath();
+      if ((g as any).roundRect) (g as any).roundRect(W / 2 - boxW / 2, y, boxW, boxH, 16 * u);
+      else g.rect(W / 2 - boxW / 2, y, boxW, boxH);
+      g.fill();
+      shown.forEach((row, r) => {
+        let x = W / 2 - widths[r] / 2;
+        const base = y + pad * 0.7 + (r + 1) * lineH - Math.round(lineH * 0.3);
+        row.forEach((k) => {
+          if (hide[k]) coverWord(g, words[k], x, base, size, ink, alpha);
+          else {
+            g.globalAlpha = alpha;
+            g.fillStyle = ink;
+            g.fillText(words[k], x, base);
+          }
+          x += g.measureText(words[k]).width + space;
+        });
+      });
+    }
+    g.restore();
+  }
+
   // One frame. t counts from the start of the video, title included.
   function videoFrame(g: CanvasRenderingContext2D, t: number, parts: VideoPart[], total: number, st: VideoStage, title: string) {
     const W = st.w;
@@ -3756,6 +3890,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       if (i === 0 || local >= D || move === 'cut') drawPart(g, st, p, local, 1, 0, 0);
       else videoMove(g, st, move, ease(local / D), parts[i - 1], now - parts[i - 1].start, p, local);
     }
+    drawNotes(g, st, t, intro, total, fadeOut);
     // In from black at the start, and out to black at the end.
     const fadeIn = Math.max(0, 1 - t / 0.6);
     const fadeEnd = fadeOut > 0 ? Math.max(0, Math.min(1, (t - (intro + total)) / fadeOut)) : 0;
@@ -3884,7 +4019,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     if (!m) return keepSaid(partsLeftOut(sh).size ? 'Every part is left out, so there is nothing to make a video of.' : 'This browser cannot read the audio for a video.');
     const mix = m;
     const parts = videoParts(sh, mix);
-    const title = videoTitle();
+    const title = videoTitle(sh);
     keepSaid('Getting the pictures ready');
     const st = await videoStage(parts);
     canvas.width = st.w;
@@ -3997,6 +4132,8 @@ export function setup(ctx: Ctx, overrides?: any) {
     }
     paintButtons();
     if (tab === 'stage') renderTab();
+    // The Studio picks up what was just heard.
+    else paintStudio();
     return had;
   }
 
@@ -4783,6 +4920,92 @@ export function setup(ctx: Ctx, overrides?: any) {
   // Reads the list again, for the card on screen. Called when a message has
   // been played, so a script saved just now shows.
   let savedRefresh: (() => void) | null = null;
+  // Builds a performance from a saved script and its saved audio, and opens
+  // it in the Studio. Voices come from Keep made audio and sounds from the
+  // sound library. Nothing is made, found or directed, so nothing is spent.
+  // Says what could not be included, or nothing when all of it was.
+  async function openSaved(e: any): Promise<string> {
+    let sc: Script | null = null;
+    try {
+      const r = await rpc({ type: 'kept_script', key: e.key }, 15000);
+      sc = r && r.script ? r.script : null;
+    } catch (_) {}
+    if (!sc) return 'This script is no longer saved.';
+    const items = buildItems(sc);
+    const sh: Show = {
+      script: sc,
+      messageId: String(e.messageId || ''),
+      chatId: String(e.chatId || ''),
+      swipeId: 0,
+      items,
+      index: items.length,
+      clips: new Map(),
+      played: [],
+      complete: true,
+      abort: new AbortController(),
+      startedAt: Number(e.keptAt) || Date.now(),
+      waiting: new Map(),
+      failed: [],
+      voiced: new Map(),
+      voiceKeys: new Map(),
+      saved: new Set(),
+      chars: 0,
+      toldLevel: new Set(),
+      title: String(e.author || ''),
+    };
+    let lines = 0;
+    let sounds = 0;
+    for (let k = 0; k < items.length; k++) {
+      const it = items[k];
+      let blob: Blob | null = null;
+      try {
+        if (it.kind === 'voice') {
+          const req = await voiceRequest(it.line);
+          const r = req && req.sig ? await rpc({ type: 'clip_get', sig: req.sig }, 15000) : null;
+          if (r && r.found && r.base64) blob = base64ToBlob(r.base64, r.mime || 'audio/mpeg');
+          else lines++;
+        } else if (it.kind === 'applause') {
+          const r = await makeApplauseClip();
+          if (r.blob && typeof r.blob !== 'string') blob = r.blob;
+        } else {
+          const r = await rpc({ type: 'sound_kept', description: it.sound || '' }, 15000);
+          if (r && r.base64) blob = base64ToBlob(r.base64, r.mime || 'audio/mpeg');
+          else sounds++;
+        }
+      } catch (_) {
+        if (it.kind === 'voice') lines++;
+        else sounds++;
+      }
+      if (!blob) continue;
+      sh.played.push({ blob, k });
+      if (it.kind === 'voice') {
+        const v = await voicedOf(blob);
+        if (v) {
+          sh.voiced.set(k, v.voiced);
+          if (v.level != null) {
+            const key = voiceKeyOf(it.line);
+            sh.voiceKeys.set(k, key);
+            const list = levels.get(key) || [];
+            list.push(v.level);
+            if (list.length > LEVEL_KEEP) list.shift();
+            levels.set(key, list);
+          }
+        }
+      }
+    }
+    if (!sh.played.some((p) => sh.items[p.k].kind === 'voice')) return 'None of its lines have saved audio. A voice changed since makes a line new.';
+    if (show) stop('Stopped, to open a saved script in the Studio');
+    lastShow = sh;
+    keepSaid(
+      [
+        lines ? lines + (lines === 1 ? ' line has' : ' lines have') + ' no saved audio, so ' + (lines === 1 ? 'it is' : 'they are') + ' left out.' : '',
+        sounds ? sounds + (sounds === 1 ? ' sound is' : ' sounds are') + ' not in your library, so ' + (sounds === 1 ? 'it is' : 'they are') + ' left out.' : '',
+      ].filter(Boolean).join(' '),
+    );
+    goTo('studio');
+    return '';
+  }
+
   function savedCard(): HTMLElement {
     const c = card('Saved audio', 'Every message with a saved script, newest first. Play and Download use only saved audio, so nothing is spent.');
     c.setAttribute('data-af-saved', '');
@@ -4882,13 +5105,14 @@ export function setup(ctx: Ctx, overrides?: any) {
       }
     });
     play.setAttribute('data-af-saved-play', '');
-    const down = button('Download', async () => {
-      say('Joining the saved audio');
-      const j = await joinedSaved(e.key);
-      if (!j.wav) return say(j.why || '');
-      const ok = saveFile(j.wav, savedName(e.author, e.keptAt));
-      say(!ok ? 'The browser would not save the file. Some private windows block downloads.' : j.missing ? j.missing + (j.missing === 1 ? ' line has' : ' lines have') + ' no saved audio, so the file does not have ' + (j.missing === 1 ? 'it.' : 'them.') : '');
-    });
+    // The whole performance, built from saved audio, in the Studio tab,
+    // where it can be downloaded or made into a video.
+    const down = button('Open in the Studio', async () => {
+      say('Getting the saved audio');
+      const why = await openSaved(e);
+      say(why);
+    }, '', ICON_VIDEO);
+    down.setAttribute('data-af-saved-open', '');
     // Delete asks once more on the same button before it deletes.
     let armed = 0 as any;
     const del = button('Delete', async () => {
@@ -7684,20 +7908,13 @@ export function setup(ctx: Ctx, overrides?: any) {
     );
     now.appendChild(againRow);
     now.appendChild(retryRow);
-    // Keeping what was heard: the whole performance as one file, and the
-    // part playing. The Studio tab has every choice, and makes videos.
+    // Keeping what was heard is all in the Studio tab, with every choice
+    // for it in one place.
     const keepRow = el('<div class="af-row" data-af="keeprow"></div>');
-    const dlAll = button('Download audio', () => downloadPerformance(), '', ICON_DOWNLOAD);
-    dlAll.setAttribute('data-af', 'dlall');
-    const dlPart = button('Download this part', () => downloadPart(), '', ICON_DOWNLOAD);
-    dlPart.setAttribute('data-af', 'dlpart');
-    const video = button('Video and more', () => goTo('studio'), '', ICON_VIDEO);
+    const video = button('Download or make a video', () => goTo('studio'), '', ICON_DOWNLOAD);
     video.setAttribute('data-af', 'studio');
-    keepRow.appendChild(dlAll);
-    keepRow.appendChild(dlPart);
     keepRow.appendChild(video);
     now.appendChild(keepRow);
-    now.appendChild(el('<p class="af-note" data-af="keepsaid" role="status"></p>'));
     page.appendChild(now);
     const q = (k: string) => now.querySelector('[data-af="' + k + '"]') as HTMLElement;
     // Playing or paused, Play pauses or goes on. With nothing playing, it
@@ -7966,12 +8183,6 @@ export function setup(ctx: Ctx, overrides?: any) {
     if (stageRefs && tab === 'stage') paintAir(page);
     if (!stageRefs || tab !== 'stage') return;
     const q = stageRefs.q;
-    {
-      const kept = !!keptShow();
-      (q('dlall') as HTMLButtonElement).disabled = !kept || !!videoRun;
-      (q('dlpart') as HTMLButtonElement).disabled = !show;
-      setText(q('keepsaid'), keepLine);
-    }
     const playBtn = q('play') as HTMLButtonElement;
     const script = currentScript();
     const playing = !!show && !paused;
@@ -10152,12 +10363,14 @@ export function setup(ctx: Ctx, overrides?: any) {
   // Keeping a performance: which parts go in, the audio, a video with every
   // choice of how it looks, and words to hide. A preview draws the video
   // with the choices made, and can be played.
-  let studioRefs: { canvas: HTMLCanvasElement; scrub: HTMLInputElement; scrubOut: HTMLElement; play: HTMLButtonElement; make: HTMLButtonElement; dlall: HTMLButtonElement; dlpart: HTMLButtonElement; said: HTMLElement; scrubRow: HTMLElement } | null = null;
+  let studioRefs: { canvas: HTMLCanvasElement; scrub: HTMLInputElement; scrubOut: HTMLElement; play: HTMLButtonElement; make: HTMLButtonElement; dlall: HTMLButtonElement; dlpart: HTMLButtonElement; said: HTMLElement; scrubRow: HTMLElement; trimRow: HTMLElement; tClear: HTMLButtonElement } | null = null;
   // What the preview draws: the last performance, or a made-up line when
   // there is none.
   let studioView: { sh: Show | null; mix: Mix | null; parts: VideoPart[]; st: VideoStage | null; title: string; total: number; length: number; at: number } = { sh: null, mix: null, parts: [], st: null, title: '', total: 0, length: 0, at: 0 };
   let studioAsk = 0;
   let previewRun: { stop: () => void } | null = null;
+  // Repaints the trim's line, while the Trim fold is open.
+  let trimSaid = () => {};
 
   function stopPreview() {
     const r = previewRun;
@@ -10203,7 +10416,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     }
     if (ask !== studioAsk) return;
     const parts = sh && mix ? videoParts(sh, mix) : [samplePart()];
-    const title = sh && mix ? videoTitle() : '';
+    const title = sh && mix ? videoTitle(sh) : '';
     const total = sh && mix ? mix.channels[0].length / mix.rate : parts[0].len;
     const st = await videoStage(parts);
     if (ask !== studioAsk) return;
@@ -10213,6 +10426,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     studioView = { sh: sh && mix ? sh : null, mix, parts, st, title, total, length, at };
     paintPreview();
     paintStudio();
+    trimSaid();
   }
 
   function paintPreview() {
@@ -10232,15 +10446,23 @@ export function setup(ctx: Ctx, overrides?: any) {
   // The performance the Studio was last built for, so a new one played
   // while the tab is open is picked up once, not on every paint.
   let studioFor: Show | null | undefined;
+  // How many parts it had then. A performance still playing grows, and each
+  // new part heard is added to the preview and the downloads.
+  let studioForN = 0;
   function paintStudio() {
     const r = studioRefs;
     if (!r || tab !== 'studio') return;
     const now = keptShow();
     if (now !== studioFor && !videoRun) {
       studioFor = now;
+      studioForN = now ? now.played.length : 0;
       // Drawn again, since its list of parts belongs to that performance.
       renderTab();
       return;
+    }
+    if (now && now.played.length !== studioForN && !videoRun) {
+      studioForN = now.played.length;
+      studioBuild(true);
     }
     const kept = !!now;
     const v = studioView;
@@ -10255,6 +10477,8 @@ export function setup(ctx: Ctx, overrides?: any) {
     const pText = r.play.querySelector('span:last-child') || r.play;
     if (pText.textContent !== pWords) pText.textContent = pWords;
     r.scrubRow.hidden = !v.sh;
+    r.trimRow.hidden = !v.sh;
+    r.tClear.disabled = !v.sh || !v.sh.trim || (!v.sh.trim.from && !v.sh.trim.to);
     if (v.sh) {
       r.scrub.max = String(Math.max(0.1, v.length));
       if (document.activeElement !== r.scrub) r.scrub.value = String(v.at);
@@ -10311,9 +10535,91 @@ export function setup(ctx: Ctx, overrides?: any) {
     paintStudio();
   }
 
+  // The notes, each with its words, when it shows and where. Saved to the
+  // account, so a note can be used again on the next video.
+  function drawNoteEditors(box: HTMLElement, changed: () => void) {
+    box.replaceChildren();
+    const notes: VideoNote[] = (Array.isArray(S.videoNotes) ? S.videoNotes : []).map((n: any) => Object.assign({ text: '', when: 'all', from: 0, secs: 4, place: 'bottom' }, n));
+    const keep = () => {
+      set({ videoNotes: notes.map((n) => ({ ...n })) });
+      changed();
+    };
+    notes.forEach((n, i) => {
+      const one = el('<div class="af-col af-note-edit" data-af-videonote></div>');
+      const words = el('<textarea class="af-field" rows="2" maxlength="300" spellcheck="true"></textarea>') as HTMLTextAreaElement;
+      words.id = rid('vn');
+      words.value = n.text;
+      words.placeholder = 'Words for whoever watches';
+      words.addEventListener('change', () => {
+        n.text = words.value.trim();
+        keep();
+      });
+      one.appendChild(labelRow('Note ' + (i + 1), '', words.id));
+      one.appendChild(words);
+      const timeBox = el('<div class="af-sub"><div class="af-under"></div></div>');
+      const timeIn = timeBox.firstElementChild as HTMLElement;
+      timeIn.appendChild(numberRow('From, in seconds', Number(n.from) || 0, 0, 3600, 0.5, (v) => {
+        n.from = v;
+        keep();
+      }, 'Counted from the start of the video, title included.'));
+      timeIn.appendChild(numberRow('For how long, in seconds', Number(n.secs) || 4, 0.5, 600, 0.5, (v) => {
+        n.secs = v;
+        keep();
+      }));
+      timeBox.hidden = n.when !== 'from';
+      const when = select('When it shows', [
+        { id: 'all', label: 'The whole video' },
+        { id: 'start', label: 'At the start' },
+        { id: 'end', label: 'At the end' },
+        { id: 'from', label: 'From a time' },
+      ], n.when, (v) => {
+        n.when = v as VideoNote['when'];
+        showUnder(timeBox, v === 'from');
+        keep();
+      }, 'At the start and at the end show for 4 seconds.');
+      one.appendChild(when);
+      one.appendChild(timeBox);
+      one.appendChild(segmented('Where', [
+        { id: 'top', label: 'Top' },
+        { id: 'bottom', label: 'Bottom' },
+      ], n.place === 'top' ? 'top' : 'bottom', (v) => {
+        n.place = v === 'top' ? 'top' : 'bottom';
+        keep();
+      }));
+      const row = el('<div class="af-row"></div>');
+      row.appendChild(button('Remove this note', () => {
+        notes.splice(i, 1);
+        keep();
+        drawNoteEditors(box, changed);
+      }));
+      one.appendChild(row);
+      box.appendChild(one);
+    });
+    const add = (from?: number) => {
+      if (notes.length >= NOTES_MAX) return;
+      notes.push(from == null ? { text: '', when: 'all', from: 0, secs: 4, place: 'bottom' } : { text: '', when: 'from', from: Math.round(from * 10) / 10, secs: 4, place: 'bottom' });
+      keep();
+      drawNoteEditors(box, changed);
+      const last = box.querySelectorAll('[data-af-videonote] textarea');
+      const t = last[last.length - 1] as HTMLTextAreaElement | undefined;
+      if (t) t.focus();
+    };
+    const addRow = el('<div class="af-row"></div>');
+    const addOne = button('Add a note', () => add());
+    addOne.setAttribute('data-af-studio', 'noteadd');
+    const addHere = button('Add a note here', () => add(studioView.at || 0));
+    addHere.setAttribute('data-af-studio', 'notehere');
+    addOne.disabled = addHere.disabled = notes.length >= NOTES_MAX;
+    addRow.appendChild(addOne);
+    addRow.appendChild(addHere);
+    box.appendChild(addRow);
+    box.appendChild(hint(notes.length >= NOTES_MAX ? 'Ten notes is the most a video can have.' : 'Add a note here starts it where the preview is. Notes are saved, so they can be used on the next video.'));
+  }
+
   function renderStudio() {
     const sh = keptShow();
     studioFor = sh;
+    studioForN = sh ? sh.played.length : 0;
     // ---- the performance ----
     const pc = card('The performance', sh ? 'The last message played. Choose what goes into the audio and the video.' : 'Play a message first. Its audio and a video of it can then be kept here.');
     pc.setAttribute('data-af-card', 'studio-show');
@@ -10352,6 +10658,36 @@ export function setup(ctx: Ctx, overrides?: any) {
             body.appendChild(row);
           });
           body.appendChild(hint('This is for this performance only. Playing another message starts with every part in.'));
+        }),
+      );
+      // The trim, in seconds of the whole performance. Start here and End
+      // here, under the preview, set it from where the preview is.
+      pc.appendChild(
+        fold('Trim', (body) => {
+          const tr = sh.trim || { from: 0, to: 0 };
+          const long = el('<p class="af-note" data-af-trimsaid></p>');
+          const sayLong = () => {
+            const m = studioView.sh === sh ? studioView.mix : null;
+            if (!m) return setText(long, '');
+            const t = trimOf(sh, m.full);
+            setText(long, 'The whole performance is ' + mmss(m.full) + ' long. Kept: ' + mmss(t.from) + ' to ' + mmss(t.to) + '.');
+          };
+          trimSaid = sayLong;
+          body.appendChild(
+            numberRow('Start at, in seconds', Number(tr.from) || 0, 0, 3600, 0.1, (v) => {
+              sh.trim = { from: v, to: (sh.trim && sh.trim.to) || 0 };
+              studioBuild(true);
+            }, '0 by default, the start.'),
+          );
+          body.appendChild(
+            numberRow('End at, in seconds', Number(tr.to) || 0, 0, 3600, 0.1, (v) => {
+              sh.trim = { from: (sh.trim && sh.trim.from) || 0, to: v };
+              studioBuild(true);
+            }, '0 by default, which is the end.'),
+          );
+          body.appendChild(long);
+          body.appendChild(hint('The trim is for this performance only, and trims the audio too. Start here and End here, under the preview, set it from where the preview is.'));
+          sayLong();
         }),
       );
     }
@@ -10411,6 +10747,37 @@ export function setup(ctx: Ctx, overrides?: any) {
     });
     scrubRow.appendChild(scrub);
     vc.appendChild(scrubRow);
+    // Trims from where the preview is. The preview shows the trimmed video,
+    // so its place is counted from the trim's start.
+    const trimRow = el('<div class="af-row" data-af-trimrow></div>');
+    const trimAt = (end: boolean) => {
+      const v = studioView;
+      if (!v.sh || !v.mix) return;
+      const here = v.mix.from + Math.max(0, Math.min(v.total, v.at - titleSecs(v.title)));
+      const was = v.sh.trim || { from: 0, to: 0 };
+      v.sh.trim = end ? { from: was.from, to: Math.max(here, (was.from || 0) + 0.5) } : { from: here, to: was.to && was.to > here + 0.5 ? was.to : 0 };
+      v.at = 0;
+      // The mix is made again with the new trim when the tab is drawn.
+      v.mix = null;
+      renderTab();
+    };
+    const tStart = button('Start here', () => trimAt(false));
+    tStart.setAttribute('data-af-studio', 'trimstart');
+    const tEnd = button('End here', () => trimAt(true));
+    tEnd.setAttribute('data-af-studio', 'trimend');
+    const tClear = button('Clear the trim', () => {
+      const v = studioView;
+      if (!v.sh) return;
+      v.sh.trim = undefined;
+      v.at = 0;
+      v.mix = null;
+      renderTab();
+    });
+    tClear.setAttribute('data-af-studio', 'trimclear');
+    trimRow.appendChild(tStart);
+    trimRow.appendChild(tEnd);
+    trimRow.appendChild(tClear);
+    vc.appendChild(trimRow);
     const vRow = el('<div class="af-row"></div>');
     const play = button('Play the preview', () => (previewRun ? stopPreview() : playPreview()), '', ICON_PLAY);
     play.setAttribute('data-af-studio', 'play');
@@ -10624,9 +10991,10 @@ export function setup(ctx: Ctx, overrides?: any) {
         b.appendChild(toggle('Show sounds as captions', 'On by default. A sound shows as a caption in square brackets, such as [thunder]. Off: the background only.', 'videoCaptions', look));
       }),
     );
+    vc.appendChild(fold('Notes', (b) => drawNoteEditors(b, look)));
     const lookRow = el('<div class="af-row"></div>');
     const lookBack = button('Put the look back', () => {
-      const keys = Object.keys(DEFAULTS).filter((k) => /^video/.test(k) && k !== 'videoNames' && k !== 'videoPics');
+      const keys = Object.keys(DEFAULTS).filter((k) => /^video/.test(k) && k !== 'videoNames' && k !== 'videoPics' && k !== 'videoNotes');
       if (keys.every((k) => JSON.stringify(S[k]) === JSON.stringify(DEFAULTS[k]))) {
         keepSaid('The look is already the built-in one. Nothing changed.');
         paintStudio();
@@ -10642,7 +11010,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     lookBack.setAttribute('data-af-studio', 'lookback');
     lookRow.appendChild(lookBack);
     vc.appendChild(lookRow);
-    vc.appendChild(hint('Put the look back puts back the shape, words, background, transition and ending. Show names and Show pictures stay as they are.'));
+    vc.appendChild(hint('Put the look back puts back the shape, words, background, transition and ending. Notes, Show names and Show pictures stay as they are.'));
     page.appendChild(vc);
 
     // ---- censor ----
@@ -10712,6 +11080,8 @@ export function setup(ctx: Ctx, overrides?: any) {
       dlpart,
       said,
       scrubRow,
+      trimRow,
+      tClear,
     };
     paintStudio();
     studioBuild(false);
