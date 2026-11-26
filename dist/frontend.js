@@ -1674,6 +1674,7 @@ const DEFAULTS = {
     videoBackColor: '',
     videoDim: 40,
     videoBlur: 0,
+    videoEdges: 50,
     videoMove: 'rise',
     videoMoveSecs: 0.4,
     videoTitleOn: true,
@@ -3447,12 +3448,16 @@ export function setup(ctx, overrides) {
             b.fillRect(0, 0, W, H);
             b.restore();
         }
-        // Darker at the edges, so the words in the middle stand out.
-        const edge = b.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.35, W / 2, H / 2, Math.max(W, H) * 0.65);
-        edge.addColorStop(0, 'rgba(0,0,0,0)');
-        edge.addColorStop(1, 'rgba(0,0,0,0.5)');
-        b.fillStyle = edge;
-        b.fillRect(0, 0, W, H);
+        // Darker at the edges, as much as Darken the edges asks, so the words in
+        // the middle stand out. 0 leaves the edges as they are.
+        const edges = Math.min(100, Math.max(0, Number(S.videoEdges))) / 100;
+        if (edges > 0) {
+            const edge = b.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.35, W / 2, H / 2, Math.max(W, H) * 0.65);
+            edge.addColorStop(0, 'rgba(0,0,0,0)');
+            edge.addColorStop(1, 'rgba(0,0,0,' + edges + ')');
+            b.fillStyle = edge;
+            b.fillRect(0, 0, W, H);
+        }
         const pics = new Map();
         if (S.videoPics !== false)
             for (const p of parts)
@@ -6946,13 +6951,31 @@ export function setup(ctx, overrides) {
         '.af-pl-sw{display:grid;grid-template-columns:1fr 1fr;gap:6px 14px}' +
         '.af-pl-sw>div{display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:32px;font-size:13px}' +
         '.af-pl-cast{display:flex;flex-direction:column;gap:2px;max-height:210px;overflow:auto;overscroll-behavior:contain;scrollbar-width:thin}' +
-        '.af-pl-ch{display:flex;align-items:center;gap:8px;padding:2px 4px;border-radius:var(--af-r-sm);min-width:0}' +
-        '.af-pl-ch[aria-current="true"]{background:var(--af-accent-faint)}' +
-        '.af-pl-ch .af-avatar{width:26px;height:26px;font-size:11px}' +
-        '.af-pl-ch>span:not(.af-avatar){flex:1;min-width:0;font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}' +
-        '.af-pl-ch[data-off="true"]>span:not(.af-avatar){color:var(--af-muted)}' +
+        // Who is voiced, drawn like a voice call. The person speaking has a ring
+        // and a soft glow in the theme's good color, which fades in and stays
+        // for the whole line, so it never flickers with the words. Someone not
+        // voiced has a red mic on their picture and a dimmed picture. The line
+        // under each name says the same in words.
+        '.af-pl-ch{display:flex;align-items:center;gap:10px;padding:4px 6px;border-radius:var(--af-r-sm);min-width:0}' +
+        '.af-pl-face{position:relative;flex:none;display:grid}' +
+        '.af-pl-ch .af-avatar{width:30px;height:30px;font-size:11px;transition:box-shadow 260ms ease-out,opacity 200ms ease-out}' +
+        '.af-pl-ch[data-speaking="true"] .af-avatar{box-shadow:0 0 0 2px var(--af-good),0 0 10px 2px rgba(34,197,94,.4);' +
+        'box-shadow:0 0 0 2px var(--af-good),0 0 10px 2px color-mix(in srgb,var(--af-good) 40%,transparent)}' +
+        '.af-pl-ch[data-off="true"] .af-avatar{opacity:.5}' +
+        '.af-pl-badge{position:absolute;right:-4px;bottom:-4px;width:16px;height:16px;border-radius:50%;display:none;place-items:center;' +
+        'background:var(--af-bad);color:#fff;box-shadow:0 0 0 2px var(--af-mp-back,var(--lumiverse-bg-elevated,#231e30))}' +
+        '.af-pl-badge svg{width:10px;height:10px}' +
+        '.af-pl-ch[data-off="true"] .af-pl-badge{display:grid}' +
+        '.af-pl-who{flex:1;min-width:0;display:flex;flex-direction:column}' +
+        '.af-pl-name{font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;transition:color 200ms ease-out}' +
+        '.af-pl-state{font-size:11px;line-height:1.3;color:var(--af-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;transition:color 200ms ease-out}' +
+        '.af-pl-ch[data-speaking="true"] .af-pl-name{font-weight:600}' +
+        '.af-pl-ch[data-speaking="true"] .af-pl-state{color:var(--af-good)}' +
+        '.af-pl-ch[data-off="true"] .af-pl-name{color:var(--af-muted)}' +
+        '.af-pl-ch[data-off="true"] .af-pl-state{color:var(--af-bad)}' +
         '.af-pl-ch .af-round{width:32px;height:32px}' +
-        '.af-pl-ch .af-round[aria-pressed="true"]{color:var(--af-accent-text)}' +
+        '.af-pl-ch .af-round[aria-pressed="true"]{color:var(--af-muted)}' +
+        '.af-pl-ch[data-off="true"] .af-round{color:var(--af-bad)}' +
         '@media (pointer:coarse){.af-pl .af-round{width:40px;height:40px}.af-pl-tr .af-pl-side{width:40px;height:40px}.af-pl-tr{padding:0 46px}.af-pl-tr .af-play{width:54px;height:54px}.af-pl-sw>div{min-height:40px}.af-pl-ch .af-round{width:36px;height:36px}}' +
         // The subtitles on the Stage.
         '.af-theater{display:flex;flex-direction:column;gap:8px;min-height:112px;padding:14px;border-radius:var(--lumiverse-radius-md,10px);' +
@@ -7778,16 +7801,30 @@ export function setup(ctx, overrides) {
         fillCast(box);
         paintFloat();
     }
+    // The line under a name in Who is voiced.
+    function paintCallState(ch) {
+        const st = ch.querySelector('.af-pl-state');
+        if (!st)
+            return;
+        setText(st, ch.dataset.off === 'true' ? 'Not voiced' : ch.dataset.speaking === 'true' ? 'Speaking' : st.dataset.kindLabel || '');
+    }
     function fillCast(wrap) {
         const box = wrap.querySelector('.af-pl-cast') || wrap;
         box.innerHTML = '';
         const people = castInOrder();
         for (const m of people) {
-            const ch = el('<div class="af-pl-ch" data-person="' + esc(m.id) + '"><span class="af-avatar">' + faceHtml(m, String(m.display || '').trim() || m.name) + '</span><span></span><button type="button" class="af-round"></button></div>');
-            ch.children[1].textContent = shownName(m);
+            const ch = el('<div class="af-pl-ch" data-person="' + esc(m.id) + '" data-speaking="false">' +
+                '<span class="af-pl-face"><span class="af-avatar">' + faceHtml(m, String(m.display || '').trim() || m.name) + '</span><span class="af-pl-badge" aria-hidden="true">' + ICON_MIC_OFF + '</span></span>' +
+                '<span class="af-pl-who"><span class="af-pl-name"></span><span class="af-pl-state" data-kind-label=""></span></span>' +
+                '<button type="button" class="af-round"></button></div>');
+            ch.querySelector('.af-pl-name').textContent = shownName(m);
+            // Under the name: Speaking, Not voiced, or the kind of part. Always one
+            // line, so a row keeps its height as the speaker changes.
+            ch.querySelector('.af-pl-state').dataset.kindLabel = KIND_LABEL[m.kind] || 'In the cast';
             const b = ch.querySelector('button');
             const paintB = () => {
                 ch.dataset.off = m.muted ? 'true' : 'false';
+                paintCallState(ch);
                 b.innerHTML = m.muted ? ICON_MIC_OFF : ICON_MIC;
                 b.setAttribute('aria-pressed', m.muted ? 'false' : 'true');
                 const said = m.muted ? 'Voice ' + m.name + ' again' : 'Do not voice ' + m.name;
@@ -7920,6 +7957,13 @@ export function setup(ctx, overrides) {
                 ch.setAttribute('aria-current', 'true');
             else
                 ch.removeAttribute('aria-current');
+            // Speaking only while the line plays: not while it is paused or still
+            // being made.
+            const speaking = now && playing && !!audio ? 'true' : 'false';
+            if (ch.dataset.speaking !== speaking) {
+                ch.dataset.speaking = speaking;
+                paintCallState(ch);
+            }
         });
         if (playing && !playerTick)
             playerTick = setInterval(() => paintFloat(), 250);
@@ -11272,6 +11316,13 @@ export function setup(ctx, overrides) {
             picBox.setAttribute('data-af-row', 'videoBg');
             b.appendChild(colorBox);
             b.appendChild(picBox);
+            const edges = slider('Darken the edges', Number(S.videoEdges), 0, 100, 5, (v) => (v ? v + '%' : 'Off'), (v) => {
+                set({ videoEdges: v });
+                look();
+            }, '50% by default. Off leaves the edges as bright as the middle.');
+            edges.setAttribute('data-af-byeye', '');
+            edges.setAttribute('data-af-row', 'videoEdges');
+            b.appendChild(edges);
             loadVideoBg().then(() => {
                 drop.disabled = !videoBg;
             });

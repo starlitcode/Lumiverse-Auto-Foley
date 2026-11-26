@@ -173,6 +173,8 @@ interface Settings {
   videoBackColor: string;
   videoDim: number;
   videoBlur: number;
+  // How dark the edges of the frame are made, in percent. 0 is none.
+  videoEdges: number;
   videoMove: string;
   videoMoveSecs: number;
   videoTitleOn: boolean;
@@ -371,6 +373,7 @@ const DEFAULT_SETTINGS: Settings = {
   videoBackColor: '',
   videoDim: 40,
   videoBlur: 0,
+  videoEdges: 50,
   videoMove: 'rise',
   videoMoveSecs: 0.4,
   videoTitleOn: true,
@@ -816,6 +819,7 @@ function cleanSettings(raw: any): Settings {
     videoBackColor: hexColor(r.videoBackColor),
     videoDim: Math.round(num(r.videoDim, 0, 80, d.videoDim)),
     videoBlur: Math.round(num(r.videoBlur, 0, 20, d.videoBlur)),
+    videoEdges: Math.round(num(r.videoEdges, 0, 100, d.videoEdges)),
     videoMove: pick(r.videoMove, ['rise', 'fade', 'dissolve', 'black', 'slide', 'wipe', 'focus', 'zoom', 'cut'] as const, 'rise'),
     videoMoveSecs: Math.round(num(r.videoMoveSecs, 0.1, 2, d.videoMoveSecs) * 10) / 10,
     videoTitleOn: bool(r.videoTitleOn, d.videoTitleOn),

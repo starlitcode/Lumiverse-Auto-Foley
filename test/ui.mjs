@@ -618,6 +618,80 @@ if (section("perform")) {
 }
 
 
+if (section("voice call")) {
+  console.log("Who is voiced looks like a voice call: a green ring while speaking, red when not voiced");
+  for (const size of SIZES) {
+    const { context, page, errors } = await open(THEMES[0], size);
+    const where = size.name;
+    await page.click('.af-tab[data-tab="settings"]');
+    await page.waitForTimeout(200);
+    await page.evaluate(() => document.querySelector('[data-af-row="widgetOn"] .af-box').click());
+    await page.waitForTimeout(250);
+    await page.evaluate(() => { window.__wav = [0.2, 3]; window.__clipMs = 6000; window.__widget.querySelector(".af-float").click(); });
+    await page.waitForTimeout(400);
+    await page.evaluate(() => window.__widget.querySelector('[data-p="fold"]').click());
+    await page.waitForTimeout(500);
+    const rows = () =>
+      page.evaluate(() =>
+        [...window.__widget.querySelectorAll(".af-pl-ch")].map((ch) => ({
+          id: ch.dataset.person,
+          speaking: ch.dataset.speaking,
+          off: ch.dataset.off,
+          state: ch.querySelector(".af-pl-state").textContent,
+          ring: getComputedStyle(ch.querySelector(".af-avatar")).boxShadow,
+          badge: getComputedStyle(ch.querySelector(".af-pl-badge")).display,
+        })),
+      );
+    const quiet = await rows();
+    check(quiet.length > 1 && quiet.every((r) => r.speaking === "false" && !/rgb\(34, 197, 94\)/.test(r.ring)), where + ": with nothing playing, nobody has a ring");
+    check(quiet.every((r) => r.state && r.state !== "Speaking"), where + ": each name has a line under it saying what kind of part it is (" + quiet.map((r) => r.state).join(", ") + ")");
+    await page.evaluate(() => window.__widget.querySelector('[data-p="play"]').click());
+    await page.waitForTimeout(1500);
+    const live = await rows();
+    const on = live.filter((r) => r.speaking === "true");
+    check(on.length === 1 && on[0].state === "Speaking", where + ": the person speaking is marked, and says Speaking (" + JSON.stringify(on.map((r) => r.id)) + ")");
+    check(on.length === 1 && /rgb\(34, 197, 94\)/.test(on[0].ring), where + ": with a green ring (" + (on[0] && on[0].ring) + ")");
+    check(live.filter((r) => r.speaking === "false").every((r) => !/rgb\(34, 197, 94\)/.test(r.ring)), where + ": and nobody else has one");
+    if (shots) await page.locator('[data-p="cast"]').screenshot({ path: shots + "/voice-call-" + where + ".png" });
+    // Paused, nobody is speaking.
+    await page.evaluate(() => window.__widget.querySelector('[data-p="play"]').click());
+    await page.waitForTimeout(500);
+    check((await rows()).every((r) => r.speaking === "false"), where + ": paused, the ring goes");
+    // Not voiced: a red mic on the picture, and the words say so.
+    await page.evaluate(() => window.__widget.querySelectorAll(".af-pl-ch .af-round")[1].click());
+    await page.waitForTimeout(300);
+    const muted = (await rows())[1];
+    check(muted.off === "true" && muted.state === "Not voiced" && muted.badge === "grid", where + ": someone not voiced has a red mic on their picture and says Not voiced (" + JSON.stringify(muted) + ")");
+    const m = await page.evaluate(MEASURE, size.touch);
+    check(!m.overflow.length, where + ": the list fits. " + m.overflow.slice(0, 2).join("; "));
+    check(!errors.length, where + ": no errors. " + errors.slice(0, 2).join("; "));
+    await context.close();
+  }
+}
+
+if (section("video edges")) {
+  console.log("Darken the edges of a video, or leave them as they are");
+  const { context, page, errors } = await open(THEMES[0], SIZES[1]);
+  await page.click('.af-tab[data-tab="studio"]');
+  await page.waitForTimeout(600);
+  await page.locator(".af-fold", { hasText: /^▶?\s*Background$/ }).click();
+  await page.waitForTimeout(300);
+  const corner = () => page.evaluate(() => { const d = document.querySelector("[data-af-videopreview]").getContext("2d").getImageData(20, 20, 1, 1).data; return d[0] + d[1] + d[2]; });
+  const set = async (v) => {
+    await page.evaluate((v) => { const r = document.querySelector('[data-af-row="videoEdges"] input[type="range"]'); r.value = String(v); r.dispatchEvent(new Event("input", { bubbles: true })); }, v);
+    await page.waitForTimeout(500);
+  };
+  const half = await corner();
+  await set(0);
+  const none = await corner();
+  await set(100);
+  const full = await corner();
+  check(none > half && half > full, "the corners are darkest at 100, lighter at 50, and lightest when off (" + [full, half, none].join(", ") + ")");
+  check(await page.evaluate(() => window.__settings.videoEdges === 100), "and the choice is saved");
+  check(!errors.length, "no errors. " + errors.slice(0, 2).join("; "));
+  await context.close();
+}
+
 if (section("on air")) {
   console.log("The On air light and the script page");
   for (const size of SIZES) {

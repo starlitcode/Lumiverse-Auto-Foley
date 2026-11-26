@@ -135,6 +135,8 @@ When each word is said is worked out from where the voice is in the clip, so it 
 - **A color of your own**, picked under it.
 - **A picture of your own**. **Choose a picture** keeps it on your account. It is cut to the video's shape from the middle. **Dim the picture**, 40% by default, makes the words easier to read. **Blur the picture**, off by default, keeps a busy picture behind the words.
 
+**Darken the edges**, under any background, makes the edges of the frame darker than the middle. It is 50% by default. **Off** leaves the edges as bright as the middle.
+
 ### Moving between lines
 
 **Transition** sets how one line gives way to the next. None of them flashes.
@@ -176,7 +178,7 @@ A note is a few words for whoever watches, in a dark box at the top or the botto
 
 ### Put the look back
 
-**Put the look back** puts back every choice under **Video**: the shape, words, pictures, background, transition and ending. Notes, **Show names** and **Show pictures** stay as they are. If nothing would change, it says so.
+**Put the look back** puts back every choice under **Video**: the shape, words, pictures, background, edges, transition and ending. Notes, **Show names** and **Show pictures** stay as they are. If nothing would change, it says so.
 
 ## Hide and bleep words
 

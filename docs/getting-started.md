@@ -166,7 +166,12 @@ In the player:
 - A line divides these from the options under them.
 - **Voices** and **Sounds** set the two volumes.
 - **Autoplay**, **Sounds**, **Narrator** and **Applause** turn those settings on or off.
-- **Who is voiced** lists the cast. The microphone beside a name is the same as **Do not voice** in the Cast tab.
+- **Who is voiced** lists the cast, like the people in a voice call:
+  - The person speaking has a green ring around their picture, and **Speaking** under their name. The ring fades in and stays for the whole line. It goes while the message is paused.
+  - Someone not voiced has a red microphone on their picture, a dimmed picture, and **Not voiced** under their name.
+  - Everyone else has nothing extra, and the kind of part they are under their name.
+  - The microphone beside a name is the same as **Do not voice** in the Cast tab.
+  - The green and red are your theme's own colors for good and bad.
 - Where it sits, and whether it is open, are kept in this browser. With reduce motion on, it opens and closes at once, and no ring is drawn.
 
 ## Keys to pause and play
