@@ -19,6 +19,7 @@
 | A request for the server's model and voices | Your Chatterbox server | When you press **Save and test** for it |
 | The key words of a sound description | `freesound.org`, with your Freesound key | Each new sound searched for |
 | A request for the sound's preview, with no key | Freesound, at the preview's address | Each new sound found |
+| The search words for a music mood, such as "sad piano music" | `freesound.org`, with your Freesound key | With **Scene music** on, each mood your library has no track for, while **Where music comes from** allows it |
 | A short sound description | `api.elevenlabs.io`, with your ElevenLabs key | Each new sound made |
 | A key test | `freesound.org` or `api.elevenlabs.io` | When you save or test that key |
 
@@ -34,7 +35,7 @@ All of this is kept by Lumiverse, under your account, with `spindle.userStorage`
 - The ids of the chats you switched Auto Foley off in. A temporary chat is never kept.
 - The background picture for videos in the Studio tab, if you choose one, at most 1920 pixels on its long side.
 - A picture taken from a character or persona in Lumiverse, when you press **Use pictures from Lumiverse** or **Use their Lumiverse picture**, made small like a picture you choose.
-- Your sound library: sounds found on Freesound, with their credit, sounds made by ElevenLabs, your uploads, and your links.
+- Your sound library: sounds found on Freesound, with their credit, sounds made by ElevenLabs, your uploads, and your links. A music track is kept here too, with the mood it is marked with.
 - With **Keep made audio** on, which it is by default: each spoken line, up to the size you pick, and the last 300 scripts, with their text. **Clear kept audio** deletes them, and **Do not keep it** stops it.
 
 Your Freesound and ElevenLabs keys are kept in Lumiverse's secure storage, under your account.

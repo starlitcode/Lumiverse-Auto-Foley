@@ -10,7 +10,7 @@
 // The key for speech stays in Lumiverse. Lines are spoken through
 // Lumiverse's own TTS route, as the signed-in reader, so this file never sees
 // that key.
-const VERSION = '1.9.0';
+const VERSION = '1.10.0';
 // The marks Lumiverse puts on another extension's part of the page. Nothing
 // inside one is read, written or pressed.
 const OTHER_UI = '[data-spindle-extension-root],[data-spindle-ext],[data-spindle-modal]';
@@ -1616,6 +1616,10 @@ const DEFAULTS = {
     decisionSure: 50,
     makeSounds: true,
     soundFrom: 'both',
+    musicOn: false,
+    musicVolume: 0.35,
+    musicDip: true,
+    musicFrom: 'both',
     freesoundLicense: 'any',
     soundSeconds: 0,
     autoplayDelay: 0,
@@ -1687,6 +1691,7 @@ const DEFAULTS = {
     resetParts: ['settings', 'prompt', 'cast', 'chats', 'sounds', 'audio', 'key'],
     chatsOff: [],
     studioSounds: true,
+    studioMusic: true,
     studioGap: 0,
     studioAsHeard: true,
     studioLoud: true,
@@ -1754,7 +1759,7 @@ export function setup(ctx, overrides) {
     // The Stage tab's live parts, while it is drawn.
     let stageRefs = null;
     // Mute on the mixer is for this page only, and is not saved.
-    const muted = { voice: false, sound: false };
+    const muted = { voice: false, sound: false, music: false };
     // ---- settings ----
     let S = Object.assign({}, DEFAULTS);
     try {
@@ -3163,6 +3168,8 @@ export function setup(ctx, overrides) {
             parts.push({ pi: c.pi, k: c.k, start: at / MIX_RATE, len: c.data[0].length / MIX_RATE });
             at += c.data[0].length + gap;
         }
+        if (S.studioMusic !== false)
+            await layMusic(sh, channels, parts);
         // The trim: only the time between its start and end is kept. A part cut
         // partway keeps its place, starting before 0, so its words still light
         // up at the right time. The new ends fade over 10 ms, so they do not
@@ -3199,6 +3206,103 @@ export function setup(ctx, overrides) {
             }
         }
         return { channels, rate: MIX_RATE, parts, loud, full, from: t.from };
+    }
+    // Each music track, decoded once at the mix rate, by its library id.
+    const musicData = new Map();
+    function musicDecoded(id, mood) {
+        const key = id || 'mood:' + mood;
+        const had = musicData.get(key);
+        if (had)
+            return had;
+        const p = (async () => {
+            try {
+                const got = id ? await rpc({ type: 'sound_play', id }, 60000) : await rpc({ type: 'music_for', mood, skip: [] }, 120000);
+                let raw = null;
+                if (got && got.base64)
+                    raw = await base64ToBlob(got.base64, got.mime || 'audio/mpeg').arrayBuffer();
+                else if (got && got.url) {
+                    // A track kept as a link is fetched from its address, which works
+                    // only where that site allows it.
+                    const r = await fetch(String(got.url));
+                    if (r.ok)
+                        raw = await r.arrayBuffer();
+                }
+                if (!raw)
+                    return null;
+                const w = window;
+                const Off = w.OfflineAudioContext || w.webkitOfflineAudioContext;
+                if (!Off)
+                    return null;
+                const ctxA = new Off(1, 1, MIX_RATE);
+                const b = await new Promise((done, fail) => {
+                    const r = ctxA.decodeAudioData(raw, done, fail);
+                    if (r && typeof r.then === 'function')
+                        r.then(done, fail);
+                });
+                if (!b || !b.length)
+                    return null;
+                const out = [];
+                for (let c = 0; c < Math.min(2, b.numberOfChannels); c++)
+                    out.push(new Float32Array(b.getChannelData(c)));
+                return out;
+            }
+            catch (_) {
+                return null;
+            }
+        })();
+        musicData.set(key, p);
+        return p;
+    }
+    // Scene music under a kept performance, as it was heard: the track for
+    // each mood loops from the part where that mood starts to where the next
+    // one does, at the Music volume. It fades in and out over a second, and
+    // goes down under the voices when Lower the music while someone speaks
+    // is on. A track that cannot be read is left out, and the Log says so.
+    async function layMusic(sh, channels, parts) {
+        const total = channels[0].length;
+        const runs = [];
+        for (const p of parts) {
+            const mood = moodAt(sh, p.k);
+            const at = Math.round(p.start * MIX_RATE);
+            const last = runs[runs.length - 1];
+            if (last && last.mood === mood)
+                continue;
+            if (last)
+                last.to = at;
+            if (mood)
+                runs.push({ mood, from: at, to: total });
+        }
+        if (!runs.length)
+            return;
+        const level = Math.min(1, Math.max(0, Number(S.musicVolume) || 0));
+        const voiceAt = (i) => parts.some((p) => {
+            const it = sh.items[p.k];
+            return !!it && it.kind === 'voice' && i >= p.start * MIX_RATE && i < (p.start + p.len) * MIX_RATE;
+        });
+        const fade = MIX_RATE;
+        const ramp = Math.round(MIX_RATE * 0.3);
+        for (const run of runs) {
+            const data = await musicDecoded((sh.musicIds || {})[run.mood] || '', run.mood);
+            if (!data || !data[0].length) {
+                log('The ' + run.mood + ' music could not be read, so it is not in the download.', 'bad');
+                continue;
+            }
+            const len = data[0].length;
+            // The dip under voices, worked out once per part and eased in and out.
+            const dip = S.musicDip !== false;
+            let g = 1;
+            for (let i = run.from; i < run.to; i++) {
+                if (dip && (i - run.from) % 480 === 0) {
+                    const want = voiceAt(i) ? 0.45 : 1;
+                    g = g + (want - g) * Math.min(1, 480 / ramp);
+                }
+                const edge = Math.min(1, (i - run.from) / fade, (run.to - i) / fade);
+                const v = level * edge * (dip ? g : 1);
+                const j = (i - run.from) % len;
+                for (let c = 0; c < channels.length; c++)
+                    channels[c][i] += data[Math.min(c, data.length - 1)][j] * v;
+            }
+        }
     }
     // The trim of a performance, held inside its length. An end of 0, or one
     // past the end, is the end. At least half a second is always kept.
@@ -4292,6 +4396,7 @@ export function setup(ctx, overrides) {
             catch (_) { }
         }
         stopAudio();
+        musicEnd();
         paused = false;
         phase = why || '';
         if (tick) {
@@ -4305,6 +4410,190 @@ export function setup(ctx, overrides) {
         else
             paintStudio();
         return had;
+    }
+    // ---- Scene music ----
+    // A track for the scene's mood loops quietly under the voices and sounds.
+    // The Director marks the line where a mood starts or turns. The music
+    // fades from one track to the next, goes down while someone speaks,
+    // pauses with the performance, and fades out when it stops. A message
+    // that keeps the same mood as the one before carries on the same track.
+    let musicMoods = [];
+    let musicNow = null;
+    const musicGoing = [];
+    let musicTimer = null;
+    // The mood being fetched, so a second ask for it waits for the first.
+    let musicAsking = '';
+    // Tracks played for each mood this visit, so the next scene in that mood
+    // can get another one.
+    const musicPlayed = {};
+    const musicSaid = new Set();
+    // The mood at a part: the last one the Director set on or before it.
+    function moodAt(sh, k) {
+        for (let j = Math.min(k, sh.items.length - 1); j >= 0; j--) {
+            const line = sh.items[j] && sh.items[j].line;
+            if (line && line.mood)
+                return line.mood;
+        }
+        return '';
+    }
+    // How loud the music should be now.
+    function musicLevel() {
+        if (muted.music || !S.musicOn)
+            return 0;
+        const v = Math.min(1, Math.max(0, Number(S.musicVolume) || 0));
+        const speaking = !!audio && !paused && audio.dataset && audio.dataset.kind === 'voice';
+        return S.musicDip !== false && speaking ? v * 0.45 : v;
+    }
+    // Moves each track's volume a step toward where it should be, so a fade
+    // or a dip takes about a second and never jumps. With reduce motion the
+    // music still fades, since a jump in sound is not motion.
+    function musicTick() {
+        const want = musicLevel();
+        const step = 0.04;
+        const toward = (t, goal) => {
+            const v = Number(t.el.volume) || 0;
+            const next = Math.abs(goal - v) <= step ? goal : v + (goal > v ? step : -step);
+            try {
+                t.el.volume = Math.min(1, Math.max(0, next));
+            }
+            catch (_) { }
+            return next;
+        };
+        if (musicNow) {
+            if (toward(musicNow, musicNow.leaving ? 0 : want) <= 0 && musicNow.leaving) {
+                musicLetGo(musicNow);
+                musicNow = null;
+            }
+        }
+        for (const t of musicGoing.slice())
+            if (toward(t, 0) <= 0)
+                musicLetGo(t);
+        if (!musicNow && !musicGoing.length && musicTimer) {
+            clearInterval(musicTimer);
+            musicTimer = null;
+        }
+    }
+    function musicRun() {
+        if (!musicTimer)
+            musicTimer = setInterval(musicTick, 40);
+    }
+    function musicLetGo(t) {
+        try {
+            t.el.pause();
+        }
+        catch (_) { }
+        if (t.url.indexOf('blob:') === 0) {
+            try {
+                URL.revokeObjectURL(t.url);
+            }
+            catch (_) { }
+        }
+        const at = musicGoing.indexOf(t);
+        if (at >= 0)
+            musicGoing.splice(at, 1);
+    }
+    disposers.push(() => {
+        if (musicNow)
+            musicLetGo(musicNow);
+        musicNow = null;
+        for (const t of musicGoing.slice())
+            musicLetGo(t);
+        if (musicTimer)
+            clearInterval(musicTimer);
+        musicTimer = null;
+    });
+    // Called as each part starts. Starts the music for the mood at that part,
+    // or fades to it from another one.
+    async function musicFor(sh, k) {
+        if (!S.musicOn)
+            return;
+        const mood = moodAt(sh, k);
+        if (!mood)
+            return;
+        if (musicNow && musicNow.mood === mood) {
+            musicNow.leaving = false;
+            if (musicNow.id)
+                (sh.musicIds = sh.musicIds || {})[mood] = musicNow.id;
+            musicRun();
+            return;
+        }
+        if (musicAsking === mood)
+            return;
+        musicAsking = mood;
+        let got = null;
+        try {
+            got = await rpc({ type: 'music_for', mood, skip: musicPlayed[mood] || [] }, 120000);
+            // Every track for the mood was played this visit, so they start over.
+            if (got && got.error && (musicPlayed[mood] || []).length) {
+                musicPlayed[mood] = [];
+                got = await rpc({ type: 'music_for', mood, skip: [] }, 120000);
+            }
+        }
+        catch (e) {
+            got = { error: 'Music could not be fetched: ' + String((e && e.message) || e).slice(0, 160) };
+        }
+        musicAsking = '';
+        if (show !== sh || !S.musicOn || moodAt(sh, sh.index) !== mood)
+            return;
+        if (!got || (!got.base64 && !got.url)) {
+            const why = (got && got.error) || 'No music could be found for ' + mood + '.';
+            // Said once a visit, not on every part.
+            if (!musicSaid.has(why)) {
+                musicSaid.add(why);
+                log(why, 'bad');
+            }
+            return;
+        }
+        if (!AudioCtor)
+            return;
+        if (got.id) {
+            (musicPlayed[mood] = musicPlayed[mood] || []).push(String(got.id));
+            (sh.musicIds = sh.musicIds || {})[mood] = String(got.id);
+        }
+        const el = new AudioCtor();
+        const url = got.url ? String(got.url) : URL.createObjectURL(base64ToBlob(got.base64, got.mime || 'audio/mpeg'));
+        el.src = url;
+        el.loop = true;
+        el.volume = 0;
+        if (el.dataset)
+            el.dataset.kind = 'music';
+        if (musicNow) {
+            musicNow.leaving = true;
+            musicGoing.push(musicNow);
+        }
+        musicNow = { el, mood, id: String(got.id || ''), url, leaving: false };
+        if (!paused) {
+            try {
+                const p = el.play();
+                if (p && typeof p.catch === 'function')
+                    p.catch(() => { });
+            }
+            catch (_) { }
+        }
+        log('Music for a ' + mood + ' mood: ' + String(got.name || 'a track') + (got.credit ? ', by ' + got.credit.by + ' on Freesound' : '') + '.', '', 'sound');
+        musicRun();
+    }
+    function musicPause(on) {
+        for (const t of (musicNow ? [musicNow] : []).concat(musicGoing)) {
+            try {
+                if (on)
+                    t.el.pause();
+                else {
+                    const p = t.el.play();
+                    if (p && typeof p.catch === 'function')
+                        p.catch(() => { });
+                }
+            }
+            catch (_) { }
+        }
+        musicRun();
+    }
+    // The performance stopped: the music fades out. A next message in the
+    // same mood, started while it fades, carries it on.
+    function musicEnd() {
+        if (musicNow)
+            musicNow.leaving = true;
+        musicRun();
     }
     // Plays the show from item k to the end. The index can be moved while a
     // clip plays, by Skip, and the loop carries on from wherever it points.
@@ -4344,6 +4633,7 @@ export function setup(ctx, overrides) {
                 sh.index++;
                 continue;
             }
+            musicFor(sh, at);
             const how = await playBlob(got.blob, sh.items[at].kind, sh.items[at].kind === 'voice' ? levelFor(sh, at) : 1);
             if (show !== sh)
                 return;
@@ -4486,6 +4776,7 @@ export function setup(ctx, overrides) {
             if (audio)
                 startClip(audio);
         }
+        musicPause(paused);
         paintStage();
         paintButtons();
     }
@@ -5152,6 +5443,8 @@ export function setup(ctx, overrides) {
                 stopDirecting();
             stop('Stopped');
         }
+        if (keep !== 'show')
+            musicEnd();
         if (keep !== 'saved')
             stopSavedPlay();
         if (keep !== 'sample' && preview) {
@@ -8214,6 +8507,7 @@ export function setup(ctx, overrides) {
             '<div class="af-pl-mix">' +
             '<label><span>Voices<b data-p="vv"></b></span><input type="range" data-p="vol" min="0" max="100" step="5" aria-label="Voices volume"></label>' +
             '<label><span>Sounds<b data-p="sv"></b></span><input type="range" data-p="svol" min="0" max="100" step="5" aria-label="Sounds volume"></label>' +
+            '<label data-p="mrow"><span>Music<b data-p="mv"></b></span><input type="range" data-p="mvol" min="0" max="100" step="5" aria-label="Music volume"></label>' +
             '</div>' +
             '<div class="af-pl-sw" role="group" aria-label="Quick switches">' +
             // Only the switch flips it, the same as every switch in the panel.
@@ -8274,6 +8568,14 @@ export function setup(ctx, overrides) {
             paintFloat();
         });
         svol.addEventListener('change', () => set({ soundVolume: Number(svol.value) / 100 }));
+        const mvol = q('mvol');
+        mvol.value = String(Math.round((Number(S.musicVolume) || 0) * 100));
+        mvol.addEventListener('input', () => {
+            S.musicVolume = Number(mvol.value) / 100;
+            musicTick();
+            paintFloat();
+        });
+        mvol.addEventListener('change', () => set({ musicVolume: Number(mvol.value) / 100 }));
         c.querySelectorAll('[data-sw]').forEach((b) => b.addEventListener('change', () => {
             const k = b.dataset.sw;
             const on = b.checked;
@@ -8543,7 +8845,11 @@ export function setup(ctx, overrides) {
         q('back').disabled = !show;
         q('next').disabled = !show;
         q('stop').disabled = !on;
-        for (const [k, b] of [['vol', 'vv'], ['svol', 'sv']]) {
+        // The music slider shows only while Scene music is on.
+        const mrow = q('mrow');
+        if (mrow.hidden === !!S.musicOn)
+            mrow.hidden = !S.musicOn;
+        for (const [k, b] of [['vol', 'vv'], ['svol', 'sv'], ['mvol', 'mv']]) {
             const r = q(k);
             r.style.setProperty('--af-fill-to', r.value + '%');
             setText(q(b), r.value + '%');
@@ -8902,22 +9208,26 @@ export function setup(ctx, overrides) {
                     startShow(sc, lastMeta, items[k].at);
             }
         });
-        const mix = card('Mixer', 'How loud the voices and the sounds are, apart from each other. Mute is for this page only. Back to defaults sets voices to 100% and sounds to 80%, unmutes both, and turns on Even out voice levels.');
+        const mix = card('Mixer', 'How loud the voices, the sounds and the music are, apart from each other. Mute is for this page only. Back to defaults sets voices to 100%, sounds to 80% and music to 35%, unmutes them, and turns on Even out voice levels.');
         const mixer = el('<div class="af-mixer"></div>');
         mixer.appendChild(strip('Voices', 'voice', 'voiceVolume'));
         mixer.appendChild(strip('Sounds', 'sound', 'soundVolume'));
+        if (S.musicOn)
+            mixer.appendChild(strip('Music', 'music', 'musicVolume'));
         mix.appendChild(mixer);
         mix.appendChild(toggle('Even out voice levels', 'On by default. A voice louder than the quietest one in the message is turned down, by 6 dB at most.', 'evenVoices'));
         const mixRow = el('<div class="af-row"></div>');
         mixRow.appendChild(button('Back to defaults', () => {
-            const same = Number(S.voiceVolume) === Number(DEFAULTS.voiceVolume) && Number(S.soundVolume) === Number(DEFAULTS.soundVolume) && !muted.voice && !muted.sound && S.evenVoices === DEFAULTS.evenVoices;
+            const same = Number(S.voiceVolume) === Number(DEFAULTS.voiceVolume) && Number(S.soundVolume) === Number(DEFAULTS.soundVolume) && Number(S.musicVolume) === Number(DEFAULTS.musicVolume) && !muted.voice && !muted.sound && !muted.music && S.evenVoices === DEFAULTS.evenVoices;
             if (same)
                 return alreadyLine(mix, 'These are already the default volumes. Nothing changed.');
             muted.voice = false;
             muted.sound = false;
-            set({ voiceVolume: DEFAULTS.voiceVolume, soundVolume: DEFAULTS.soundVolume, evenVoices: DEFAULTS.evenVoices });
+            muted.music = false;
+            set({ voiceVolume: DEFAULTS.voiceVolume, soundVolume: DEFAULTS.soundVolume, musicVolume: DEFAULTS.musicVolume, evenVoices: DEFAULTS.evenVoices });
             if (audio && audio.dataset)
                 audio.volume = liveVolume(audio);
+            musicTick();
             renderTab();
         }));
         mix.appendChild(mixRow);
@@ -9036,6 +9346,8 @@ export function setup(ctx, overrides) {
             set({ [key]: v / 100 });
             if (audio && audio.dataset && audio.dataset.kind === kind)
                 audio.volume = liveVolume(audio);
+            if (kind === 'music')
+                musicTick();
         }));
         const m = s.querySelector('.af-btn');
         m.addEventListener('click', () => {
@@ -9044,6 +9356,8 @@ export function setup(ctx, overrides) {
             m.textContent = muted[kind] ? 'Unmute' : 'Mute';
             if (audio && audio.dataset && audio.dataset.kind === kind)
                 audio.volume = liveVolume(audio);
+            if (kind === 'music')
+                musicTick();
         });
         return s;
     }
@@ -11385,6 +11699,16 @@ export function setup(ctx, overrides) {
             ], String(S.soundSeconds || 0), (v) => set({ soundSeconds: Number(v) }), 'How long a made sound is. Let ElevenLabs choose is the default. Longer sounds cost more credits.'),
         ]));
         page.appendChild(src);
+        const mus = card('Scene music', 'Music for the mood of the scene, under the voices and sounds. The Director picks the mood, and changes it when the scene turns.');
+        mus.appendChild(toggle('Scene music', 'Off by default. Its volume is in the Mixer, on the Stage tab.', 'musicOn', undefined, () => [
+            select('Where music comes from', [
+                { id: 'both', label: 'Your library, then Freesound' },
+                { id: 'library', label: 'Your library only' },
+            ], S.musicFrom || 'both', (v) => set({ musicFrom: v }), 'Your library first by default. A track found on Freesound is kept in your library, marked with its mood.'),
+            toggle('Lower the music while someone speaks', 'On by default. The music goes down while a voice plays.', 'musicDip'),
+            hint('To use your own music, upload a track below and pick its mood under Music for. The moods are ' + (musicMoods.length ? musicMoods.join(', ') : 'listed on each sound') + '.'),
+        ]));
+        page.appendChild(mus);
         page.appendChild(keyCard('freesound'));
         page.appendChild(keyCard('eleven'));
         const lib = card('Your sound library', 'Every sound found or made is saved here, so the same sound is free the next time. Your own clips are used first. Trigger words make a clip play whenever a sound description holds one of them.', '<span class="af-pill">' + sounds.length + '</span>');
@@ -11485,6 +11809,16 @@ export function setup(ctx, overrides) {
         const again = r.querySelector('[data-again]');
         if (again)
             again.addEventListener('click', () => soundAgain(s.name, s.id, s.source === 'found'));
+        // A sound with a mood is a music track for that mood, never a sound
+        // effect.
+        const moodPick = select('Music for', [{ id: '', label: 'Not music, a sound effect' }].concat(musicMoods.map((m) => ({ id: m, label: m.charAt(0).toUpperCase() + m.slice(1) }))), s.mood || '', (v) => {
+            rpc({ type: 'sound_edit', id: s.id, mood: v }, 15000).then((res) => {
+                if (res && Array.isArray(res.sounds))
+                    sounds = res.sounds;
+            }, () => log('The music mood could not be saved: the backend did not answer.', 'bad'));
+        });
+        moodPick.setAttribute('data-af-soundmood', s.id);
+        r.querySelector('.af-sound-main').appendChild(moodPick);
         r.querySelector('.af-sound-name').textContent = s.name;
         const trig = r.querySelector('input');
         trig.setAttribute('aria-label', 'Trigger words for ' + s.name);
@@ -11988,6 +12322,7 @@ export function setup(ctx, overrides) {
             }));
         }
         pc.appendChild(toggle('Sound effects', 'On by default. Off: only the voices are kept.', 'studioSounds', () => studioBuild(true)));
+        pc.appendChild(toggle('Music', 'On by default. Keeps the scene music that played under the performance. Off: no music is kept.', 'studioMusic', () => studioBuild(true)));
         pc.appendChild(numberRow('Pause between parts, in seconds', Number(S.studioGap) || 0, 0, 3, 0.1, (v) => {
             set({ studioGap: v });
             studioBuild(true);
@@ -12590,7 +12925,8 @@ export function setup(ctx, overrides) {
                 '<li><b>Enable text-to-speech</b> can stay on. Auto Foley works either way.</li>' +
                 '<li><b>Auto-play responses</b> should be off while Auto Foley’s Autoplay is on, or each reply is read twice.</li>' +
                 '<li><b>Connection</b> is the one Auto Foley uses, unless you pick another above.</li>' +
-                '<li><b>Speed</b>, <b>Volume</b>, the separate narrator voice and Speech detection are Lumiverse’s own. Auto Foley uses the Cast tab and the Mixer instead.</li>' +
+                '<li><b>Speed</b>, <b>Volume</b> and the separate narrator voice are Lumiverse’s own. Auto Foley uses the Cast tab and the Mixer instead.</li>' +
+                '<li><b>Speech detection</b> is Lumiverse’s own too. Auto Foley has the same choices under Reading messages, in this tab, set apart from Lumiverse’s.</li>' +
                 '<li>Lumiverse’s own play button on a message still reads it the plain way. The headphones button is Auto Foley’s.</li>' +
                 '</ul>'));
         }));
@@ -13661,6 +13997,8 @@ export function setup(ctx, overrides) {
         builtInEngineNotes = r.builtInEngineNotes && typeof r.builtInEngineNotes === 'object' ? r.builtInEngineNotes : {};
         builtInSkips = typeof r.builtInSkips === 'string' ? r.builtInSkips : '';
         builtInQuestions = r.builtInQuestions && typeof r.builtInQuestions === 'object' ? r.builtInQuestions : {};
+        if (Array.isArray(r.musicMoods))
+            musicMoods = r.musicMoods.map((x) => String(x));
         hostHasDecisions = r.decisions !== false;
         backendVersion = String(r.version || '');
         // A new account starts on every default and every built-in text as they

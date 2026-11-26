@@ -6,6 +6,27 @@ Versions follow [Semantic Versioning](https://semver.org). A new major version m
 
 ---
 
+## 1.10.0
+
+_2026-11-26_
+
+### Added
+
+- **Scene music**, in the Sounds tab. Off by default. Music for the mood of the scene plays quietly under the voices and sounds. The Director picks the mood from ten, such as calm, tense or romantic, and changes it where the scene turns. The music fades from one track to the next, goes down while someone speaks, pauses with the performance, and fades out at the end. See [Scene music](docs/music.md). Suggested by a Discord user.
+- **Music for**, on each sound in your library, marks it as a music track for one mood. A track is never played as a sound effect. With no track for a mood, one can be found on Freesound with your key, and kept in your library with its credit. **Where music comes from** can keep it to your library. Suggested by a Discord user.
+- **Music** volume, in the Mixer and the floating player, while Scene music is on. Suggested by a Discord user.
+- **Music**, under **The performance** in the Studio. On by default. The audio and the video keep the scene music that played, with the same fades. Suggested by a Discord user.
+
+### Changed
+
+- **The Director's built-in prompt has a part on music.** It says how to pick a mood and when to change it, and it is only used while Scene music is on. If you have your own prompt, a notice says the built-in one changed. Suggested by a Discord user.
+
+### Fixed
+
+- **A note said Speech detection is only Lumiverse's.** Under **How Auto Foley works with Lumiverse’s own voice settings**, in the Settings tab, it said Auto Foley uses the Cast tab and the Mixer instead. It now says Auto Foley has the same choices under **Reading messages**.
+
+---
+
 ## 1.9.0
 
 _2026-11-26_

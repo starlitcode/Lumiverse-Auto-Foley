@@ -48,6 +48,7 @@ Once a message has been performed, a small player sits under its text, with Back
 - [The cast](docs/cast.md): voices for personas, characters and NPCs
 - [Writing for each voice engine](docs/writing.md): which box is read by what, and examples to copy for each engine
 - [Sounds](docs/sounds.md): sounds in the voice, sound effects and your library
+- [Scene music](docs/music.md): music for the mood of the scene, from your library or Freesound
 - [The Studio](docs/studio.md): keep a performance as audio or a video, and hide words in it
 
 **About it**

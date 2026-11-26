@@ -15,7 +15,7 @@ declare const spindle: any;
 declare function setTimeout(fn: () => void, ms: number): any;
 declare function clearTimeout(handle: any): void;
 
-const VERSION = '1.9.0';
+const VERSION = '1.10.0';
 
 // ---------------------------------------------------------------------------
 // Settings
@@ -114,6 +114,16 @@ interface Settings {
   // Which Freesound licenses may be used: all three, the two that allow any
   // use, or Creative Commons 0 only.
   freesoundLicense: 'any' | 'free' | 'cc0';
+  // Scene music: off by default. The Director picks a mood for the scene,
+  // and a track for that mood plays quietly under it.
+  musicOn: boolean;
+  // How loud the music is, from 0 to 1.
+  musicVolume: number;
+  // The music is turned down while someone speaks.
+  musicDip: boolean;
+  // Where music comes from: the tracks in your library only, or your
+  // library first and then Freesound.
+  musicFrom: 'library' | 'both';
   soundSeconds: number;
   // The Director's model settings, named and sent the way Auto Refine sends
   // its own: thinking, the samplers typed in, and how long to wait.
@@ -333,6 +343,10 @@ const DEFAULT_SETTINGS: Settings = {
   makeSounds: true,
   soundFrom: 'both',
   freesoundLicense: 'any',
+  musicOn: false,
+  musicVolume: 0.35,
+  musicDip: true,
+  musicFrom: 'both',
   soundSeconds: 0,
   autoplayDelay: 0,
   extraThinkTags: [],
@@ -823,6 +837,10 @@ function cleanSettings(raw: any): Settings {
     makeSounds: bool(r.makeSounds, d.makeSounds),
     soundFrom: pick(r.soundFrom, ['both', 'freesound', 'eleven'] as const, d.soundFrom),
     freesoundLicense: pick(r.freesoundLicense, ['any', 'free', 'cc0'] as const, d.freesoundLicense),
+    musicOn: bool(r.musicOn, d.musicOn),
+    musicVolume: num(r.musicVolume, 0, 1, d.musicVolume),
+    musicDip: bool(r.musicDip, d.musicDip),
+    musicFrom: pick(r.musicFrom, ['library', 'both'] as const, d.musicFrom),
     soundSeconds: num(r.soundSeconds, 0, 30, d.soundSeconds),
     autoplayDelay: num(r.autoplayDelay, 0, 30, d.autoplayDelay),
     extraThinkTags: Array.isArray(r.extraThinkTags) ? r.extraThinkTags.map((x: any) => str(x, 40).trim()).filter(Boolean).slice(0, 20) : [],
@@ -1894,6 +1912,10 @@ When "big_moments" is true in the rules, set "big": true on a line that's a real
 Set "sung": true on a line someone actually sings, like song lyrics or a lullaby. Only mark it when the words are sung. A character who mentions a song, or teases in a sing-song voice, is still talking. Don't add a tag that says they sing, because "sung" handles that, and a voice that can't sing will just speak the line. Humming with no words is a sound a voice makes, so it's a tag like [hums].
 </singing>
 
+<music>
+When "music" is true in the rules, music plays quietly under the scene, and you pick its mood from "moods". Give the first line a "mood" that fits how the scene feels when it opens. After that, set "mood" only on a line where the feeling really turns and stays turned, like a joke that sours into a threat or a chase that finally ends. Everywhere else leave it as "", and the music carries on. Music that flips every other line is worse than music that holds, so let the small wobbles go.
+</music>
+
 <new_speakers>
 When "find_speakers" is true and someone speaks who isn't in the cast, use the name the text gives them, or a short plain one if it gives none, like "Bartender". List them in "new_speakers" with "gender" (female, male, nonbinary or unknown), "role" (main or minor) and "about": a few words on how they sound, like "gravelly older man" or "bright, quick young woman". Use nonbinary only when the text says it, like "they" for one person or the word itself, and unknown when you can't tell. A main role is someone the story follows, and a minor one is a bartender or a passerby. Anyone in a sex scene is an adult.
 </new_speakers>
@@ -1908,10 +1930,10 @@ Every line comes back, in order, with the same "i" it came with.
 "text" is the whole line: every word of it, exactly as written, with your tags added. Never just the tags.
 "speaker" is a name from the cast, a name from "new_speakers", or "Narrator".
 Leave "before" and "after" as "" when there's no sound, and "big" as false unless it's a real peak and "big_moments" is on.
-Leave "style" as "" and "sung" as false unless the line needs them.
+Leave "style" as "" and "sung" as false unless the line needs them, and "mood" as "" unless "music" is on and the mood starts or turns there.
 Leave "new_speakers" as [] when nobody new speaks.
 
-{"lines":[{"i":0,"speaker":"Narrator","text":"...","style":"","before":"","after":"","big":false,"sung":false}],"new_speakers":[]}
+{"lines":[{"i":0,"speaker":"Narrator","text":"...","style":"","before":"","after":"","big":false,"sung":false,"mood":""}],"new_speakers":[]}
 </your_answer>`;
 
 interface DirectedLine {
@@ -1935,6 +1957,8 @@ interface DirectedLine {
   style: string;
   // The line is sung.
   sung: boolean;
+  // The mood of the scene's music from this line on, when it changes here.
+  mood?: string;
 }
 
 interface Script {
@@ -2018,7 +2042,7 @@ function applyDirection(
   cast: CastMember[],
   author: string,
   fixed: Record<number, string>,
-  rules: TagRules & { sounds: boolean; effects: boolean; narrationRead: boolean; findSpeakers: boolean; bigMoments: boolean; lineStyle?: boolean },
+  rules: TagRules & { sounds: boolean; effects: boolean; narrationRead: boolean; findSpeakers: boolean; bigMoments: boolean; lineStyle?: boolean; music?: boolean },
 ): { lines: DirectedLine[]; newSpeakers: { name: string; gender: string; about: string; role: string }[]; log: string[] } {
   const log: string[] = [];
   const byIndex: Record<number, any> = {};
@@ -2092,6 +2116,10 @@ function applyDirection(
     line.big = rules.bigMoments && d.big === true;
     if (d.sung === true) line.sung = true;
     if (rules.lineStyle) line.style = cleanStyle(d.style);
+    if (rules.music) {
+      const mood = String(d.mood || '').trim().toLowerCase();
+      if (MUSIC_MOODS.indexOf(mood) >= 0) line.mood = mood;
+    }
     return line;
   });
   if (changed) log.push(changed + (changed === 1 ? ' line was' : ' lines were') + ' read as written, because the Director changed the words.');
@@ -3389,6 +3417,7 @@ async function direct(userId: string | undefined, p: any): Promise<Script> {
     bigMoments: s.bigMoments,
     list: engine.tags === 'list' ? engine.list : [],
     lineStyle: engine.style && s.tagsOn,
+    music: s.musicOn,
   };
 
   // The text first: a quote the story itself says who spoke, such as
@@ -3458,8 +3487,10 @@ async function direct(userId: string | undefined, p: any): Promise<Script> {
       intimate: s.soundsOn && s.intimateOn,
       find_speakers: s.findSpeakers,
       big_moments: s.bigMoments,
+      music: s.musicOn,
     },
   };
+  if (s.musicOn) payload.rules.moods = MUSIC_MOODS;
   if (tagsOn && engine.tags === 'list') payload.rules.tag_list = engine.list;
   if (s.engineNoteRole !== 'rules') payload._engineNote = engineNote(s, engine.id);
   if (Object.keys(hints).length) payload.rules.sound_hints = hints;
@@ -3618,6 +3649,23 @@ function fromBase64(text: string): Uint8Array {
 // Sounds: the library, made sounds and uploads
 // ---------------------------------------------------------------------------
 
+// The moods scene music is picked by. A track in the library is marked with
+// one of them, and the Director picks one for each turn in a scene.
+const MUSIC_MOODS = ['calm', 'cozy', 'happy', 'playful', 'romantic', 'sad', 'tense', 'scary', 'action', 'mysterious'];
+// What Freesound is searched for, for each mood.
+const MUSIC_SEARCH: Record<string, string> = {
+  calm: 'calm ambient music',
+  cozy: 'cozy acoustic music',
+  happy: 'happy upbeat music',
+  playful: 'playful whimsical music',
+  romantic: 'romantic piano music',
+  sad: 'sad piano music',
+  tense: 'tense suspense music',
+  scary: 'horror dark ambient music',
+  action: 'action battle music',
+  mysterious: 'mysterious ambient music',
+};
+
 interface SoundEntry {
   id: string;
   // What the sound is, as the Director describes it or as you name it.
@@ -3634,6 +3682,9 @@ interface SoundEntry {
   // For a sound found on Freesound: who made it, its license and its page,
   // shown wherever the sound is, since most licenses ask for credit.
   credit?: Credit;
+  // A music track: the mood it is played for. A sound with a mood is never
+  // used as a sound effect.
+  mood?: string;
 }
 
 interface Credit {
@@ -3692,6 +3743,7 @@ function cleanSoundEntry(e: any): SoundEntry | null {
   };
   if (url) entry.url = url;
   if (credit) entry.credit = credit;
+  if (MUSIC_MOODS.indexOf(String(e.mood)) >= 0) entry.mood = String(e.mood);
   return entry;
 }
 
@@ -3721,8 +3773,9 @@ function matchSound(list: SoundEntry[], description: string): SoundEntry | null 
   if (!want) return null;
   const words = want.split(' ');
   // Your own sounds, uploaded or linked, come before made and found ones.
+  // Music tracks are never a sound effect.
   const mine = (e: SoundEntry) => (e.source === 'made' || e.source === 'found' ? 1 : 0);
-  const ordered = list.slice().sort((a, b) => mine(a) - mine(b));
+  const ordered = list.filter((e) => !e.mood).sort((a, b) => mine(a) - mine(b));
   for (const e of ordered) {
     if (e.triggers.some((t) => t && (' ' + want + ' ').indexOf(' ' + soundKey(t) + ' ') >= 0)) return e;
   }
@@ -3856,16 +3909,20 @@ function freesoundQueries(desc: string): string[] {
 // A sound from Freesound for a description: the first result with an
 // allowed license and a preview, skipping the ones in skip. Sounds longer
 // than 20 seconds are left out, since a sound plays between lines.
+// For music, the searches and the filter are given: tracks tagged music,
+// from 30 seconds to two and a half minutes, which loop under a scene and
+// stay small enough to pass to the panel.
 async function findFreesound(
   key: string,
   s: Settings,
   desc: string,
   skip: number[],
+  music?: { queries: string[] },
 ): Promise<{ b64?: string; bytes?: Uint8Array; credit?: Credit; error?: string; none?: boolean }> {
-  for (const q of freesoundQueries(desc)) {
+  for (const q of music ? music.queries : freesoundQueries(desc)) {
     const url =
       'https://freesound.org/apiv2/search/?query=' + encodeURIComponent(q) +
-      '&filter=' + encodeURIComponent('duration:[0.2 TO 20]') +
+      '&filter=' + encodeURIComponent(music ? 'duration:[30 TO 150] tag:music' : 'duration:[0.2 TO 20]') +
       '&fields=id,name,username,license,url,previews&page_size=15';
     let res: any;
     try {
@@ -4099,6 +4156,41 @@ async function soundFor(userId: string | undefined, description: string, again?:
   return { error: 'No sound in your library fits "' + desc + '". ' + why.join(' ') };
 }
 
+// A music track for a mood. Your own tracks marked with the mood come
+// first, the least played one, skipping those in skip. With none, and Where
+// music comes from set to look on Freesound too, a track is found there and
+// kept in the library, marked with the mood.
+async function musicFor(userId: string | undefined, mood: string, skip: string[]): Promise<{ id?: string; base64?: string; url?: string; mime?: string; name?: string; credit?: Credit; error?: string }> {
+  if (MUSIC_MOODS.indexOf(mood) < 0) return { error: 'There is no music mood called "' + mood + '".' };
+  const list = await loadSounds(userId);
+  const mine = list.filter((e) => e.mood === mood && skip.indexOf(e.id) < 0).sort((a, b) => a.uses - b.uses);
+  for (const hit of mine) {
+    if (hit.source === 'link' && hit.url) {
+      hit.uses++;
+      await saveSounds(userId, list);
+      return { id: hit.id, url: hit.url, name: hit.name };
+    }
+    try {
+      const bytes = await spindle.userStorage.readBinary('sounds/' + hit.id, userId);
+      hit.uses++;
+      await saveSounds(userId, list);
+      return { id: hit.id, base64: toBase64(bytes), mime: hit.mime, name: hit.name, credit: hit.credit };
+    } catch (_) {
+      // The file is gone while its entry stayed. The next track is tried.
+    }
+  }
+  const s = await loadSettings(userId);
+  const none = 'No music in your library is marked ' + mood + '.';
+  if (s.musicFrom !== 'both') return { error: none + ' Mark a track with it in the Sounds tab.' };
+  const fsKey = await getKey(userId, FS_KEY_NAME);
+  if (!fsKey) return { error: none + ' Mark a track with it in the Sounds tab, or save a Freesound key to find one.' };
+  const seen = list.filter((e) => e.mood === mood && e.credit).map((e) => (e.credit as Credit).fsId);
+  const got = await findFreesound(fsKey, s, mood, seen, { queries: [MUSIC_SEARCH[mood], mood + ' music'] });
+  if (got.error) return { error: none + ' ' + got.error };
+  if (got.none || !got.bytes || !got.credit) return { error: none + ' Freesound found no music for it either.' };
+  return keepSound(userId, list, null, got.credit.title, got.bytes, got.b64 || '', 'found', got.credit, mood);
+}
+
 // Saves a new sound to the library, or a new take over an old one.
 async function keepSound(
   userId: string | undefined,
@@ -4109,6 +4201,7 @@ async function keepSound(
   b64: string,
   source: 'made' | 'found',
   credit?: Credit,
+  mood?: string,
 ): Promise<{ id?: string; base64?: string; mime?: string; name?: string; credit?: Credit; error?: string; made?: boolean }> {
   if (old) {
     try {
@@ -4134,6 +4227,7 @@ async function keepSound(
     uses: 1,
   };
   if (credit) entry.credit = credit;
+  if (mood) entry.mood = mood;
   try {
     await spindle.userStorage.writeBinary('sounds/' + entry.id, bytes, userId);
     list.push(entry);
@@ -4301,7 +4395,7 @@ async function onPanel(p: any, userId: string | undefined) {
         // The messages with a saved script, so each gets its player.
         await readKeptScripts(userId || '', settings);
         const keptIds = Array.from(new Set((scripts[userId || ''] || []).map((x) => x.script.messageId).filter(Boolean)));
-        answer({ type: 'state', settings, sounds, hasKey, hasFsKey, fresh, keptIds, builtInPrompt: BUILT_IN_PROMPT, builtInNotes: ASK_NOTES, builtInEngineNotes: ENGINE_NOTES, builtInSkips: BUILT_IN_SKIPS, builtInQuestions: DECISION_QUESTIONS, version: VERSION, decisions: hasDecisions() });
+        answer({ type: 'state', settings, sounds, hasKey, hasFsKey, fresh, keptIds, builtInPrompt: BUILT_IN_PROMPT, builtInNotes: ASK_NOTES, builtInEngineNotes: ENGINE_NOTES, builtInSkips: BUILT_IN_SKIPS, builtInQuestions: DECISION_QUESTIONS, musicMoods: MUSIC_MOODS, version: VERSION, decisions: hasDecisions() });
         return;
       }
       case 'save': {
@@ -4552,12 +4646,23 @@ async function onPanel(p: any, userId: string | undefined) {
         answer({ type: 'sounds', sounds: await loadSounds(userId) });
         return;
       }
+      case 'music_for': {
+        const skip = Array.isArray(p.skip) ? p.skip.map((x: any) => str(x, 64)).slice(0, 50) : [];
+        const got = await musicFor(userId, str(p.mood, 30).trim().toLowerCase(), skip);
+        answer(Object.assign({ type: 'music' }, got));
+        return;
+      }
       case 'sound_edit': {
         const list = await loadSounds(userId);
         const e = list.find((x) => x.id === str(p.id, 64));
         if (!e) return answer({ type: 'sounds', sounds: list });
         if (typeof p.name === 'string') e.name = str(p.name, 160).trim() || e.name;
         if (Array.isArray(p.triggers)) e.triggers = p.triggers.map((t: any) => str(t, 40).trim().toLowerCase()).filter(Boolean).slice(0, 12);
+        // '' makes a music track a sound effect again.
+        if (typeof p.mood === 'string') {
+          if (MUSIC_MOODS.indexOf(p.mood) >= 0) e.mood = p.mood;
+          else delete e.mood;
+        }
         const ok = await saveSounds(userId, list);
         if (!ok) notify('warning', 'The change to this sound could not be saved.', userId);
         answer({ type: 'sounds', sounds: list });

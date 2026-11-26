@@ -100,6 +100,10 @@ All on the Director tab:
 - Each engine that can sing is told the line is sung: `[sings]` on Eleven v3, `[singing]` on Fish Audio, and a note on Gemini 3.8.
 - On an engine that cannot sing, the line is spoken.
 
+## Scene music
+
+With **Scene music** on, the Director also picks the mood of the scene, from a list of ten, and marks the line where it changes. See [Scene music](music.md).
+
 ## Notes for each voice engine
 
 The Director tab has a note for each engine. It says how that engine reads tags, and it is sent with the rules.
@@ -166,7 +170,7 @@ The Director tab shows the whole prompt. You can change any of it.
 - The answer has to be JSON in this shape, or the message is read as written:
 
 ```json
-{"lines":[{"i":0,"speaker":"Narrator","text":"...","style":"","before":"","after":"","big":false,"sung":false}],"new_speakers":[{"name":"","gender":"unknown","about":""}]}
+{"lines":[{"i":0,"speaker":"Narrator","text":"...","style":"","before":"","after":"","big":false,"sung":false,"mood":""}],"new_speakers":[{"name":"","gender":"unknown","about":""}]}
 ```
 
 The built-in prompt follows the same approach as Auto Refine's:

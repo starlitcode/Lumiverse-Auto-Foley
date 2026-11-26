@@ -126,7 +126,8 @@ Your own uploads and links are checked before found and made sounds at every ste
 - **Add a sound by link** keeps a link to a sound, starting with `https://`. The sound is played from that address each time, so a big file costs no space. Name it so the Director's descriptions can find it. A linked sound cannot be saved to a message with **Save the performance to the message**.
 - A sound from Freesound shows who made it, its license and a link to its page. **Find another** puts the next Freesound result in its place, at no cost.
 - A sound made by ElevenLabs has **Make it again**, which costs credits.
-- The library holds up to 400 sounds.
+- The library holds up to 400 sounds, music tracks included.
+- **Music for** marks a sound as a music track for one mood. A track is never played as a sound effect. See [Scene music](music.md).
 
 ## Intimate sounds
 

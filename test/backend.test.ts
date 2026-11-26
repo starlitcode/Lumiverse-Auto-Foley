@@ -1840,3 +1840,75 @@ describe("thinking formats, the same nine as Auto Retry and Auto Refine", () => 
     expect(script.lines.map((l: any) => l.text).join(" | ")).toBe(want);
   });
 });
+
+describe("scene music", () => {
+  const msg = { type: "direct", chatId: "c1", messageId: "m1", swipeId: 0, name: "Mara Vell", text: 'The lamps went out. "Stay low." Nobody came back.' };
+  const reply = JSON.stringify({
+    lines: [
+      { i: 0, speaker: "Narrator", text: "The lamps went out.", mood: "Tense" },
+      { i: 1, speaker: "Mara Vell", text: "Stay low.", mood: "furious" },
+      { i: 2, speaker: "Narrator", text: "Nobody came back.", mood: "sad" },
+    ],
+    new_speakers: [],
+  });
+
+  test("with Scene music on, the Director is given the moods, and a mood it names is kept", async () => {
+    const h = host({ answers: [reply] });
+    await h.ask({ type: "save", settings: { musicOn: true } });
+    const out = await h.ask(msg);
+    const sent = JSON.stringify(h.calls.generate[0]);
+    expect(sent.indexOf('\\"music\\":true')).toBeGreaterThan(-1);
+    expect(sent.indexOf("mysterious")).toBeGreaterThan(-1);
+    const lines = out.find((m: any) => m.type === "script").script.lines;
+    // A mood not on the list is dropped, and the case does not matter.
+    expect(lines.map((l: any) => l.mood || "")).toEqual(["tense", "", "sad"]);
+  });
+
+  test("with Scene music off, no mood is asked for or kept", async () => {
+    const h = host({ answers: [reply] });
+    const out = await h.ask(msg);
+    const sent = JSON.stringify(h.calls.generate[0]);
+    expect(sent.indexOf('\\"music\\":false')).toBeGreaterThan(-1);
+    expect(sent.indexOf("mysterious")).toBe(-1);
+    const lines = out.find((m: any) => m.type === "script").script.lines;
+    expect(lines.every((l: any) => !l.mood)).toBe(true);
+  });
+
+  const library = (sounds: any[]) => [["u1/sounds/index.json", JSON.stringify({ sounds })]].concat(sounds.map((s) => ["u1/sounds/" + s.id, new Uint8Array([1, 2, 3, 4])])) as any;
+
+  test("a track is picked from the library by mood, the least played first, skipping ones already played", async () => {
+    const h = host({
+      files: library([
+        { id: "a1", name: "Harbor at night", source: "upload", mood: "calm", uses: 4, triggers: [] },
+        { id: "a2", name: "Still water", source: "upload", mood: "calm", uses: 1, triggers: [] },
+        { id: "a3", name: "Chase on the docks", source: "upload", mood: "action", uses: 0, triggers: [] },
+      ]),
+    });
+    let out = await h.ask({ type: "music_for", mood: "calm" });
+    expect(out[0].id).toBe("a2");
+    out = await h.ask({ type: "music_for", mood: "calm", skip: ["a2"] });
+    expect(out[0].id).toBe("a1");
+    expect(!!out[0].base64).toBe(true);
+  });
+
+  test("with no track for the mood and Your library only, it says how to add one", async () => {
+    const h = host({ files: library([{ id: "a3", name: "Chase on the docks", source: "upload", mood: "action", uses: 0, triggers: [] }]) });
+    await h.ask({ type: "save", settings: { musicFrom: "library" } });
+    const out = await h.ask({ type: "music_for", mood: "sad" });
+    expect(out[0].error).toBe("No music in your library is marked sad. Mark a track with it in the Sounds tab.");
+  });
+
+  test("a music track is never played as a sound effect, and Music for can be set and cleared", async () => {
+    const sounds = [{ id: "a4", name: "rain on a window", source: "upload", mood: "sad", uses: 0, triggers: ["rain"] }];
+    const h = host({ files: library(sounds) });
+    const list = await h.box.loadSounds("u1");
+    expect(h.box.matchSound(list, "rain on a window")).toBe(null);
+    let out = await h.ask({ type: "sound_edit", id: "a4", mood: "" });
+    expect(out[0].sounds[0].mood).toBe(undefined);
+    expect(h.box.matchSound(await h.box.loadSounds("u1"), "rain on a window").id).toBe("a4");
+    out = await h.ask({ type: "sound_edit", id: "a4", mood: "romantic" });
+    expect(out[0].sounds[0].mood).toBe("romantic");
+    out = await h.ask({ type: "sound_edit", id: "a4", mood: "not a mood" });
+    expect(out[0].sounds[0].mood).toBe(undefined);
+  });
+});

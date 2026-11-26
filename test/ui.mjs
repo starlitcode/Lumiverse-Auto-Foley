@@ -126,7 +126,7 @@ window.__sounds = [
 function answer(msg) {
   const reply = (m) => setTimeout(() => backendFns.forEach((fn) => fn(Object.assign({ requestId: msg.requestId }, m))), 5);
   switch (msg.type) {
-    case 'load': return reply({ type: 'state', fresh: window.__fresh !== false, settings: window.__settings, sounds: window.__sounds, hasKey: true, builtInPrompt: '<the_director>\\nYou direct.\\n</the_director>', builtInSkips: '^[ \\\\t]*\\\\|.*\\\\|[ \\\\t]*$\\n【[^】\\\\n]*】', version: '0', decisions: true });
+    case 'load': return reply({ type: 'state', fresh: window.__fresh !== false, settings: window.__settings, sounds: window.__sounds, hasKey: true, musicMoods: ['calm', 'cozy', 'happy', 'playful', 'romantic', 'sad', 'tense', 'scary', 'action', 'mysterious'], builtInPrompt: '<the_director>\\nYou direct.\\n</the_director>', builtInSkips: '^[ \\\\t]*\\\\|.*\\\\|[ \\\\t]*$\\n【[^】\\\\n]*】', version: '0', decisions: true });
     case 'save': window.__settings = msg.settings; return reply({ type: 'saved', ok: true, settings: msg.settings });
     case 'direct': {
       // A check can hold the answer, and send the note that the Director is
@@ -177,6 +177,9 @@ function answer(msg) {
     case 'video_bg_get': return reply({ type: 'video_bg', picture: window.__videoBg || '' });
     case 'video_bg_put': window.__videoBg = msg.picture || ''; return reply({ type: 'video_bg', ok: true, picture: window.__videoBg });
     case 'kept_script': return reply({ type: 'kept_script', script: (window.__keptList || []).some((e) => e.key === msg.key) ? SCRIPT : null });
+    case 'sound_play': if (String(msg.id).indexOf('mu-') === 0 && window.__musicB64) return reply({ type: 'sound', base64: window.__musicB64, mime: 'audio/wav' }); return;
+    case 'music_for': (window.__musicAsked = window.__musicAsked || []).push(msg.mood); return reply({ type: 'music', id: 'mu-' + msg.mood, url: 'https://example.invalid/' + msg.mood + '.mp3', name: 'A ' + msg.mood + ' track' });
+    case 'sound_edit': (window.__soundEdits = window.__soundEdits || []).push(msg); { const e = (window.__sounds || []).find((x) => x.id === msg.id); if (e && typeof msg.mood === 'string') { if (msg.mood) e.mood = msg.mood; else delete e.mood; } } return reply({ type: 'sounds', sounds: window.__sounds });
     case 'kept_drop': (window.__dropped = window.__dropped || []).push(msg); window.__keptList = (window.__keptList || []).filter((e) => e.key !== msg.key); return reply({ type: 'kept_dropped', ok: true, clips: (msg.sigs || []).length });
     default: return;
   }
@@ -3548,6 +3551,109 @@ if (section("speech detection")) {
     check((await page.evaluate(() => window.__settings.asterisks)) === "thought", size.name + ": picking thoughts is saved");
     const m = await page.evaluate(MEASURE, size.touch);
     check(!m.overflow.length && !m.small.length, size.name + ": the Settings tab fits. " + m.overflow.concat(m.small).slice(0, 2).join("; "));
+    check(!errors.length, size.name + ": no page errors. " + errors.slice(0, 2).join(" | "));
+    await context.close();
+  }
+}
+
+if (section("scene music")) {
+  console.log("Scene music plays the Director's mood under the voices, dips while someone speaks, changes with the mood, and fades out at the end");
+  for (const size of SIZES) {
+    const { context, page, errors } = await open(THEMES[0], size);
+    await page.evaluate(() => {
+      window.__teardown();
+      document.getElementById("drawer").innerHTML = "";
+      window.__settings = Object.assign({}, window.__settings, { musicOn: true, musicVolume: 0.35, musicDip: true, pauseKeyOn: true, pauseKey: "Alt+P" });
+      window.__teardown = window.__setup(window.__ctx, { fetch: window.__fetch, Audio: window.__Audio });
+    });
+    await page.waitForTimeout(300);
+    await page.evaluate(() => {
+      const base = { key: "km", messageId: "m1", author: "Ysolde Marrow-Kestrel of the Lower Quays", directed: true, added: [], sent: 10, back: 10, counted: true, log: [], lines: [
+        { i: 0, kind: "narration", speaker: "Narrator", text: "The lamps went out along the quay.", plain: "", tags: [], inSounds: [], big: false, before: "", after: "", note: "", mood: "tense" },
+        { i: 1, kind: "speech", speaker: "Ferryman", text: "Stay low and keep quiet.", plain: "", tags: [], inSounds: [], big: false, before: "", after: "", note: "" },
+        { i: 2, kind: "narration", speaker: "Narrator", text: "Nobody came back for the boat.", plain: "", tags: [], inSounds: [], big: false, before: "", after: "", note: "", mood: "sad" },
+      ] };
+      window.__script = base;
+      window.__clipMs = 1400;
+      window.__wav = [0.2, 0.3];
+      window.__musicAsked = [];
+    });
+    await page.click('#mount [data-af-slot="message"]');
+    await page.waitForFunction(() => (window.__musicAsked || []).indexOf("tense") >= 0, null, { timeout: 10000 }).catch(() => {});
+    await page.waitForTimeout(900);
+    const music = () => page.evaluate(() => window.__Audio.all.filter((a) => a.dataset && a.dataset.kind === "music").map((a) => ({ src: a.src, loop: a.loop, vol: Math.round(a.volume * 100) / 100, paused: a.paused })));
+    const m1 = await music();
+    check(m1.length === 1 && /tense/.test(m1[0].src) && m1[0].loop === true, size.name + ": the tense track loops under the first line (" + JSON.stringify(m1) + ")");
+    // The narrator is a voice too, so the music sits at 45% of the Music
+    // volume under it.
+    check(m1.length === 1 && m1[0].vol > 0.12 && m1[0].vol < 0.2, size.name + ": it fades up, lowered under the voice reading (" + (m1[0] && m1[0].vol) + ")");
+    await page.waitForFunction(() => { const a = window.__Audio.all.filter((x) => x.dataset && x.dataset.kind === "voice" && !x.paused); return a.length && a[a.length - 1] && document.body; }, null, { timeout: 5000 }).catch(() => {});
+    // Paused, the music pauses with the performance, and goes on with it.
+    await page.keyboard.press("Alt+P");
+    await page.waitForTimeout(200);
+    const paused = await music();
+    check(paused.length >= 1 && paused.every((x) => x.paused), size.name + ": paused, the music pauses too (" + JSON.stringify(paused) + ")");
+    await page.keyboard.press("Alt+P");
+    await page.waitForFunction(() => (window.__musicAsked || []).indexOf("sad") >= 0, null, { timeout: 8000 }).catch(() => {});
+    await page.waitForTimeout(1300);
+    const m3 = await music();
+    const sad = m3.find((x) => /sad/.test(x.src));
+    const tense = m3.find((x) => /tense/.test(x.src));
+    check(!!sad && sad.vol > 0.1 && (!tense || tense.vol < 0.05 || tense.paused), size.name + ": where the mood turns, the music fades to the sad track (" + JSON.stringify(m3) + ")");
+    await page.waitForTimeout(2500);
+    const m4 = await music();
+    check(m4.length > 0 && m4.every((x) => x.vol === 0 || x.paused), size.name + ": when the message ends, the music fades out (" + JSON.stringify(m4) + ")");
+    // The Studio keeps the music under the performance, and Music off
+    // leaves it out.
+    await page.evaluate(async () => {
+      const b = window.__makeWav(0, 4, 4000);
+      window.__musicB64 = await new Promise((r) => { const f = new FileReader(); f.onload = () => r(String(f.result).split(",")[1]); f.readAsDataURL(b); });
+    });
+    const fsm = await import("node:fs");
+    const energy = (path) => {
+      const b = fsm.readFileSync(path);
+      const ch = b.readUInt16LE(22), bits = b.readUInt16LE(34), n = b.readUInt32LE(40) / (ch * (bits / 8));
+      // The test voices start with a stretch of silence. Music fills it.
+      let silent = 0;
+      for (let i = 0; i < n; i++) {
+        const o = 44 + i * ch * (bits / 8);
+        let v = bits === 24 ? b[o] | (b[o + 1] << 8) | (b[o + 2] << 16) : b.readInt16LE(o);
+        if (bits === 24 && v & 0x800000) v -= 0x1000000;
+        if (Math.abs(v) < 64) silent++;
+      }
+      return { n, silent: Math.round((silent / Math.max(1, n)) * 100) / 100 };
+    };
+    const takeAudio = async () => {
+      const dl = page.waitForEvent("download", { timeout: 30000 }).catch(() => null);
+      await page.click('[data-af-studio="dlall"]');
+      const d = await dl;
+      return d ? energy(await d.path()) : null;
+    };
+    await page.click('.af-tab[data-tab="studio"]');
+    await page.waitForTimeout(1500);
+    const withMusic = await takeAudio();
+    await page.locator('[data-af-row="studioMusic"] .af-box').first().click();
+    await page.waitForTimeout(1500);
+    const without = await takeAudio();
+    check(!!withMusic && !!without && withMusic.n === without.n && without.silent > 0.2 && withMusic.silent < without.silent / 2, size.name + ": the downloaded audio has the music in it, and Music off leaves it out (" + JSON.stringify([withMusic, without]) + ")");
+    await page.locator('[data-af-row="studioMusic"] .af-box').first().click();
+    await page.waitForTimeout(300);
+    // The Mixer has a Music strip while Scene music is on, and the Log names
+    // each track.
+    await page.click('.af-tab[data-tab="stage"]');
+    await page.waitForTimeout(300);
+    check(await page.evaluate(() => /Music for a tense mood: A tense track\./.test((document.querySelector(".af-log") || {}).textContent || "")), size.name + ": the Log names the track");
+    check((await page.locator(".af-strip", { hasText: "Music" }).count()) === 1, size.name + ": the Mixer has a Music strip");
+    // Each library sound can be marked as music for a mood.
+    await page.click('.af-tab[data-tab="sounds"]');
+    await page.waitForTimeout(400);
+    const pick = page.locator("[data-af-soundmood] select").first();
+    await pick.selectOption("calm");
+    await page.waitForTimeout(300);
+    const ed = await page.evaluate(() => (window.__soundEdits || []).slice(-1)[0] || null);
+    check(!!ed && ed.mood === "calm", size.name + ": Music for marks a sound as a calm track (" + JSON.stringify(ed) + ")");
+    const ms = await page.evaluate(MEASURE, size.touch);
+    check(!ms.overflow.length && !ms.small.length, size.name + ": the Sounds tab fits. " + ms.overflow.concat(ms.small).slice(0, 2).join("; "));
     check(!errors.length, size.name + ": no page errors. " + errors.slice(0, 2).join(" | "));
     await context.close();
   }
