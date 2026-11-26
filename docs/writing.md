@@ -38,7 +38,7 @@ The Director's own prompt can be changed too, in the Director tab. See [The prom
 - **Acting notes** is put in the Director's request, with the name of each person in the cast. It is never sent to the voice service. It holds up to 1000 characters.
 - The Director writes tags into the line, and a note on how it is said where the engine takes one.
 - **Gemini style** and the line's own note go to Gemini together: the style first, then "This line:" and the note.
-- **Fish Audio direction** goes to Fish Audio with every line. Lumiverse puts it at the start of the line, as one more tag before the line's own tags. Keep it to how they usually speak, so it does not pull against a line's tag, such as "calm" against `[shouting]`.
+- **Fish Audio direction** goes to Fish Audio with every line. It is put at the start of the line, as one more tag before the line's own tags. See [Drama 3](engines.md#drama-3). Keep it to how they usually speak, so it does not pull against a line's tag, such as "calm" against `[shouting]`.
 - Before a line is sent, it is fitted to the engine. A tag the engine cannot read is taken out, so it is never read aloud. See [What it sends](engines.md#what-it-sends).
 
 ## An example
