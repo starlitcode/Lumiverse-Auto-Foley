@@ -662,7 +662,7 @@ if (section("voice call")) {
     await page.waitForTimeout(500);
     const rows = () =>
       page.evaluate(() =>
-        [...window.__widget.querySelectorAll(".af-pl-ch")].map((ch) => ({
+        [...window.__widget.querySelectorAll(".af-pl-ch")].filter((ch) => !ch.closest("[hidden]")).map((ch) => ({
           id: ch.dataset.person,
           speaking: ch.dataset.speaking,
           off: ch.dataset.off,
@@ -684,11 +684,18 @@ if (section("voice call")) {
     const order = live.map((r) => r.id).join(",");
     const more = await page.evaluate(() => { const b = window.__widget.querySelector('[data-p="more"]'); return b ? b.textContent : ""; });
     check(order === "n,a,b" && /Everyone else \(1\)/.test(more), where + ": during a message, its people are listed in the order they speak, with Everyone else (1) under them (" + order + " | " + more + ")");
+    const grow = await page.evaluate(async () => {
+      window.__widget.querySelector('[data-p="more"]').click();
+      await new Promise((r) => setTimeout(r, 90));
+      const mid = window.__widget.querySelector('[data-p="rest"]').getBoundingClientRect().height;
+      await new Promise((r) => setTimeout(r, 600));
+      return [mid, window.__widget.querySelector('[data-p="rest"]').getBoundingClientRect().height];
+    });
+    check(grow[0] > 0 && grow[0] < grow[1], where + ": Everyone else opens over several frames (" + grow.map((x) => x.toFixed(1)).join(" of ") + " px)");
+    check((await rows()).map((r) => r.id).join(",") === "n,a,b,c", where + ": and shows the rest of the cast");
     await page.evaluate(() => window.__widget.querySelector('[data-p="more"]').click());
-    await page.waitForTimeout(300);
-    check((await rows()).map((r) => r.id).join(",") === "n,a,b,c", where + ": Everyone else opens the rest of the cast");
-    await page.evaluate(() => window.__widget.querySelector('[data-p="more"]').click());
-    await page.waitForTimeout(300);
+    await page.waitForTimeout(600);
+    check((await rows()).map((r) => r.id).join(",") === "n,a,b", where + ": pressed again, it closes");
     const on = live.filter((r) => r.speaking === "true");
     check(on.length === 1 && on[0].state === "Speaking", where + ": the person speaking is marked, and says Speaking (" + JSON.stringify(on.map((r) => r.id)) + ")");
     check(on.length === 1 && /rgb\(34, 197, 94\)/.test(on[0].ring), where + ": with a green ring (" + (on[0] && on[0].ring) + ")");

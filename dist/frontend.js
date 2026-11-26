@@ -7070,6 +7070,7 @@ export function setup(ctx, overrides) {
         '.af-pl-ch[data-off="true"] .af-pl-state{color:var(--af-bad)}' +
         '.af-pl-ch .af-round{width:32px;height:32px;color:var(--af-muted)}' +
         '.af-pl-more{margin-top:4px;flex:none}' +
+        '.af-pl-rest{display:flex;flex-direction:column;gap:2px;padding-top:2px}' +
         '.af-pl-ch[data-off="true"] .af-round{color:var(--af-bad)}' +
         '@media (pointer:coarse){.af-pl .af-round{width:40px;height:40px}.af-pl-tr .af-pl-side{width:40px;height:40px}.af-pl-tr{padding:0 46px}.af-pl-tr .af-play{width:54px;height:54px}.af-pl-sw>div{min-height:40px}.af-pl-ch .af-round{width:36px;height:36px}}' +
         // The subtitles on the Stage.
@@ -7851,34 +7852,40 @@ export function setup(ctx, overrides) {
             fold.setAttribute('aria-expanded', levelsOpen ? 'true' : 'false');
             if (levelsOpen)
                 fillCast(box);
-            if (calm()) {
-                box.hidden = !levelsOpen;
-                fitWidget();
-                return;
-            }
-            let zoom = 1;
-            try {
-                zoom = parseFloat(getComputedStyle(document.documentElement).zoom) || 1;
-            }
-            catch (_) { }
-            const vh = (window.innerHeight || 640) / zoom;
-            try {
-                widget.setSize(Math.min(PLAYER_W, (window.innerWidth || 360) / zoom - 16), Math.floor(vh - 16));
-            }
-            catch (_) { }
-            holdSize = true;
-            reveal(box, levelsOpen);
-            const t = setTimeout(() => {
-                timers.delete(t);
-                holdSize = false;
-                fitWidget();
-            }, 380);
-            timers.add(t);
+            revealInPlayer(box, levelsOpen);
         });
         floatBox.appendChild(c);
         paintLevels();
         paintFloat();
         fitWidget();
+    }
+    // Opens or closes a part of the open player over several frames. The
+    // widget is made tall enough first, and fitted to the card once the part
+    // has finished moving.
+    function revealInPlayer(box, open) {
+        if (calm() || !widget) {
+            box.hidden = !open;
+            fitWidget();
+            return;
+        }
+        let zoom = 1;
+        try {
+            zoom = parseFloat(getComputedStyle(document.documentElement).zoom) || 1;
+        }
+        catch (_) { }
+        const vh = (window.innerHeight || 640) / zoom;
+        try {
+            widget.setSize(Math.min(PLAYER_W, (window.innerWidth || 360) / zoom - 16), Math.floor(vh - 16));
+        }
+        catch (_) { }
+        holdSize = true;
+        reveal(box, open);
+        const t = setTimeout(() => {
+            timers.delete(t);
+            holdSize = false;
+            fitWidget();
+        }, 380);
+        timers.add(t);
     }
     // Who is voiced: a switch for each person in the cast, the same as Do not
     // voice in the Cast tab.
@@ -7934,19 +7941,28 @@ export function setup(ctx, overrides) {
         if (!rest.length)
             return;
         const more = el('<button type="button" class="af-fold af-pl-more" data-p="more"><span class="af-caret"></span><span></span></button>');
-        more.setAttribute('aria-expanded', everyoneOpen ? 'true' : 'false');
-        more.firstElementChild.textContent = everyoneOpen ? '▼' : '▶';
+        const caret = more.firstElementChild;
+        const paintMore = () => {
+            more.setAttribute('aria-expanded', everyoneOpen ? 'true' : 'false');
+            caret.textContent = everyoneOpen ? '▼' : '▶';
+        };
+        paintMore();
         more.lastElementChild.textContent = 'Everyone else (' + rest.length + ')';
+        // The rest of the cast opens and closes over several frames, as the
+        // other folds do.
+        const restBox = el('<div class="af-sub" data-p="rest"><div class="af-pl-rest"></div></div>');
+        const restIn = restBox.firstElementChild;
+        for (const m of rest)
+            restIn.appendChild(castRow(m));
+        restBox.hidden = !everyoneOpen;
         more.addEventListener('click', () => {
             everyoneOpen = !everyoneOpen;
-            fillCast(wrap);
-            fitWidget();
+            paintMore();
+            revealInPlayer(restBox, everyoneOpen);
             paintFloat();
         });
         box.appendChild(more);
-        if (everyoneOpen)
-            for (const m of rest)
-                box.appendChild(castRow(m));
+        box.appendChild(restBox);
     }
     function castRow(m) {
         {
