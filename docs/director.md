@@ -107,7 +107,8 @@ All on the Director tab:
 | Thinking set to high | 2 times |
 | Thinking set to extra high or max | 3 times |
 
-- A model counts as on your own computer or network when its connection's address is `localhost`, a private address such as `192.168.1.40`, a name with no dot, or a name ending in `.local`.
+- A model counts as on your own computer or network when its connection's address is `localhost`, a private address such as `192.168.1.40` or `10.0.0.7`, an address a VPN such as Tailscale gives out (`100.64` to `100.127`), a name with no dot, or a name ending in `.local`, `.lan`, `.home`, `.internal` or `.home.arpa`.
+- The connection's thinking level counts only while **API Reasoning** is on for that connection in Lumiverse.
 - The thinking level is the Director's own, under **Thinking**, or the connection's when the Director uses the connection's thinking.
 - Both can apply. A local model with high thinking gets 2 × 5 = 10 times as long: 20 minutes. The wait is never more than an hour.
 - The Log says when the Director is given longer, and why.

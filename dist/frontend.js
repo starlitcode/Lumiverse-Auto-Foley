@@ -1588,11 +1588,11 @@ const MOVED_DEFAULTS = [
     { key: 'messageButton', was: true, label: 'A button on every message', why: 'it is now off by default, so a new install adds nothing to your messages until you turn it on.' },
     { key: 'barButton', was: true, label: 'A button in the chat’s row of controls', why: 'it is now off by default.' },
     { key: 'extrasMenu', was: true, label: 'In the Extras menu', why: 'it is now off by default.' },
-    // 1.10.0 turned it off, the same as in the sister extension that refines
-    // replies. Each note makes the Director's next ask longer, which costs more.
     // 1.10.0 left non-commercial sounds out by default, since a video made in
     // the Studio may be posted where money is made.
     { key: 'freesoundLicense', was: 'any', label: 'Freesound licenses', why: 'it is now CC0 and CC BY by default, so new sounds and music allow any use, such as a video on a channel that earns money. Sounds already in your library stay.' },
+    // 1.10.0 turned it off, the same as in the sister extension that refines
+    // replies. Each note makes the Director's next ask longer, which costs more.
     { key: 'askNote', was: true, label: 'Send a note when it asks again', why: 'it is now off by default, since each note makes the next ask longer and costs more.' },
 ];
 // What a reader is marked with once told about a row: the setting and a mark
@@ -3191,7 +3191,7 @@ export function setup(ctx, overrides) {
             parts.push({ pi: c.pi, k: c.k, start: at / MIX_RATE, len: c.data[0].length / MIX_RATE });
             at += c.data[0].length + gap;
         }
-        if (S.studioMusic !== false)
+        if (S.musicOn && S.studioMusic !== false)
             await layMusic(sh, channels, parts);
         // The trim: only the time between its start and end is kept. A part cut
         // partway keeps its place, starting before 0, so its words still light
@@ -3230,13 +3230,17 @@ export function setup(ctx, overrides) {
         }
         return { channels, rate: MIX_RATE, parts, loud, full, from: t.from };
     }
-    // Each music track, decoded once at the mix rate, by its library id.
+    // Each music track, decoded once at the mix rate, by its library id. A
+    // decoded track is large, so only the last four are kept, and one that
+    // could not be read is tried again next time.
     const musicData = new Map();
     function musicDecoded(id, mood) {
         const key = id || 'mood:' + mood;
         const had = musicData.get(key);
         if (had)
             return had;
+        while (musicData.size >= 4)
+            musicData.delete(musicData.keys().next().value);
         const p = (async () => {
             try {
                 const got = id ? await rpc({ type: 'sound_play', id }, 60000) : await rpc({ type: 'music_for', mood, skip: [] }, 120000);
@@ -3274,6 +3278,10 @@ export function setup(ctx, overrides) {
             }
         })();
         musicData.set(key, p);
+        p.then((d) => {
+            if (!d && musicData.get(key) === p)
+                musicData.delete(key);
+        });
         return p;
     }
     // Scene music under a kept performance, as it was heard: the track for
@@ -4475,7 +4483,9 @@ export function setup(ctx, overrides) {
     // music still fades, since a jump in sound is not motion.
     function musicTick() {
         const want = musicLevel();
-        const step = 0.04;
+        // A fade or a dip takes about a second, whatever the volume: each step
+        // is a 25th of the music's own level.
+        const step = Math.max(0.004, Math.min(1, Math.max(0, Number(S.musicVolume) || 0)) / 25);
         const toward = (t, goal) => {
             const v = Number(t.el.volume) || 0;
             const next = Math.abs(goal - v) <= step ? goal : v + (goal > v ? step : -step);
@@ -5065,12 +5075,16 @@ export function setup(ctx, overrides) {
     // stop it. Each preparation has its own number.
     let aheadRun = 0;
     let aheadBusy = false;
+    // The message being prepared ahead, so stopping it never stops a message
+    // the reader pressed Play on.
+    let aheadId = '';
     async function prepare(messageId) {
         const chatId = activeChatId();
         if (chatIsOff(chatId))
             return;
         const run = ++aheadRun;
         aheadBusy = true;
+        aheadId = messageId;
         const got = await getScript(chatId, messageId, false);
         if (run === aheadRun)
             aheadBusy = false;
@@ -8326,6 +8340,7 @@ export function setup(ctx, overrides) {
             return;
         const run = ++aheadRun;
         aheadBusy = true;
+        aheadId = id;
         phase = 'Directing it ahead';
         paintFloat();
         const got = await getScript(activeChatId(), id, false);
@@ -8344,9 +8359,13 @@ export function setup(ctx, overrides) {
     // spent on it, and the status line says the switch is off.
     function stopAhead() {
         aheadRun++;
-        if (aheadBusy && !show)
+        if (aheadBusy && !show && busyMessage === aheadId)
             stopDirecting();
         aheadBusy = false;
+        if (!show) {
+            phase = 'Prepare replies ahead is off.';
+            paintFloat();
+        }
     }
     // The menu, from a press and hold or a right click on the round button, or
     // from More in the player. It is in groups, with a line between them: where
@@ -8586,8 +8605,8 @@ export function setup(ctx, overrides) {
             set({ prepareAhead: !S.prepareAhead });
             if (!S.prepareAhead)
                 stopAhead();
-            if (!show)
-                phase = S.prepareAhead ? 'Prepare replies ahead is on. Each new reply is directed now, so Play starts at once.' : 'Prepare replies ahead is off.';
+            else if (!show)
+                phase = 'Prepare replies ahead is on. Each new reply is directed now, so Play starts at once.';
             paintFloat();
             if (S.prepareAhead && !show && !busyMessage)
                 playerPrepare();
@@ -12101,7 +12120,7 @@ export function setup(ctx, overrides) {
     }
     // The layer fades out, then the preview goes back into the box that held
     // its place.
-    function closeTheater() {
+    function closeTheater(now) {
         const t = theater;
         if (!t)
             return;
@@ -12117,12 +12136,13 @@ export function setup(ctx, overrides) {
             t.root.remove();
             paintStudio();
         };
-        if (calm())
+        if (calm() || now)
             return back();
         t.root.removeAttribute('data-af-open');
         setTimeout(back, 230);
     }
-    disposers.push(() => closeTheater());
+    // Teardown takes the layer away at once, with no fade left running.
+    disposers.push(() => closeTheater(true));
     function paintPreview() {
         const r = studioRefs;
         const v = studioView;

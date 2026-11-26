@@ -56,9 +56,9 @@ With **Save the performance to the message** on, the finished audio is saved to 
 
 | Permission | What it is for |
 | --- | --- |
-| Generation | Asking the Director, listing your connections for **Which connection**, and reading the thinking Prefix and Suffix saved on them |
+| Generation | Asking the Director, listing your connections for **Which connection**, reading the thinking Prefix and Suffix saved on them, and reading each connection's address and thinking level for **Fit the wait to the model** |
 | Decision models | Asking the Decision model, and listing your Decision connections |
-| CORS proxy | Finding sounds on Freesound, making them with ElevenLabs, testing the keys, and reaching a Chatterbox server you added |
+| CORS proxy | Finding sounds and music on Freesound, making sounds with ElevenLabs, testing the keys, and reaching a Chatterbox server you added |
 | UI panels | The floating player, when you turn it on in the Settings tab |
 
 Refusing **UI panels** stops only the floating player. Refusing **CORS proxy** stops new sound effects and a Chatterbox server reached directly. Refusing **Decision models** turns the Decision model off. Refusing **Generation** turns the Director off, and messages are read as written.

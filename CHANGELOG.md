@@ -12,7 +12,7 @@ _2026-11-26_
 
 ### Added
 
-- **Scene music**, in the Sounds tab. Off by default. Music for the mood of the scene plays quietly under the voices and sounds. The Director picks the mood from ten, such as calm, tense or romantic, and changes it where the scene turns. The music fades from one track to the next, goes down while someone speaks, pauses with the performance, and fades out at the end. See [Scene music](docs/music.md). Suggested by a Discord user.
+- **Scene music**, in the Sounds tab. Off by default. Music for the mood of the scene plays at a low volume under the voices and sounds. The Director picks the mood from ten, such as calm, tense or romantic, and changes it where the scene turns. The music fades from one track to the next, goes down while someone speaks, pauses with the performance, and fades out at the end. See [Scene music](docs/music.md). Suggested by a Discord user.
 - **Music for**, on each sound in your library, marks it as a music track for one mood. A track is never played as a sound effect. With no track for a mood, one can be found on Freesound with your key, and kept in your library with its credit. **Where music comes from** can keep it to your library. Suggested by a Discord user.
 - **Music** volume, in the Mixer and the floating player, while Scene music is on. Suggested by a Discord user.
 - **Music**, under **The performance** in the Studio. On by default. The audio and the video keep the scene music that played, with the same fades. Suggested by a Discord user.
@@ -26,7 +26,7 @@ _2026-11-26_
 
 - **Send a note when it asks again is off by default**, the same as in Auto Refine. A note makes the Director's next ask longer, which costs more. If you were on the old default, a notice says so, and you can take the new one or keep yours.
 - **Freesound licenses is CC0 and CC BY by default.** It was all three, which takes in CC BY-NC, a license for non-commercial use only. A video made in the Studio may be posted where money is made. If you were on the old default, a notice says so. Sounds already in your library stay.
-- **No sound effects are asked for when they cannot play.** With your sound library empty and no Freesound or ElevenLabs key saved, the Director is not asked for them, so no tokens go on them. The Log says so.
+- **No sound effects are asked for when they cannot play.** With no sound effects in your library, and no Freesound or ElevenLabs key saved or **Get new sounds** off, the Director is not asked for them, so no tokens go on them. The Log says why.
 - **The Director's built-in prompt has a part on music.** It says how to pick a mood and when to change it, and it is only used while Scene music is on. If you have your own prompt, a notice says the built-in one changed. Suggested by a Discord user.
 
 ### Fixed

@@ -1105,7 +1105,7 @@ describe("sounds that make sense where they are", () => {
     const rules = JSON.parse(h.calls.generate[0].messages[h.calls.generate[0].messages.length - 1].content).rules;
     expect(rules.sounds).toBe(false);
     expect(script.lines.every((l: any) => !l.after && !l.before)).toBe(true);
-    expect(script.log.join(" ")).toContain("No sound effects were asked for: your sound library is empty and no Freesound or ElevenLabs key is saved.");
+    expect(script.log.join(" ")).toContain("No sound effects were asked for: your sound library has none and no Freesound or ElevenLabs key is saved.");
   });
 });
 

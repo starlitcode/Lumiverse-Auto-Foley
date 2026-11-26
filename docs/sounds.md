@@ -89,7 +89,7 @@ All are on the Sounds tab, under **Get new sounds**:
   - **All three**: CC0, CC BY and CC BY-NC. CC BY-NC is for non-commercial use only.
   - **CC0 and CC BY, for any use** (the default), so a video made in the Studio can be posted anywhere, a channel that earns money included.
   - **CC0 only, no credit needed**.
-- With your library empty and no Freesound or ElevenLabs key saved, the Director is not asked for sound effects, so no tokens go on sounds that cannot play. The Log says so. Sounds inside the line, on ElevenLabs v3 and v4, need no key.
+- With no sound effects in your library, and no Freesound or ElevenLabs key saved or **Get new sounds** off, the Director is not asked for sound effects, so no tokens go on sounds that cannot play. The Log says why. Sounds inside the line, on ElevenLabs v3 and v4, need no key.
 - **ElevenLabs sound length**: how long a made sound is. **Let ElevenLabs choose** is the default. Longer sounds cost more credits.
 
 ### The keys

@@ -2,7 +2,7 @@
 
 ## In short
 
-- **Scene music** plays music for the mood of the scene, quietly, under the voices and sounds.
+- **Scene music** plays music for the mood of the scene, at a low volume, under the voices and sounds.
 - It is off by default. Turn it on in the **Sounds** tab.
 - The Director picks the mood of each scene, and changes it when the scene turns.
 - The music comes from your sound library. A track is marked with a mood under **Music for**.
@@ -75,13 +75,15 @@ Wynn and Halloran are made-up characters, waiting on a night train. The reader h
 
 **Music**, under **The performance** in the Studio, keeps the music in the audio and the video. It is on by default.
 
-- The same track that played is used for each mood, at the **Music** volume, with the same fades and the same dip under voices.
+- The same track that played is used for each mood, at the **Music** volume. It fades in and out over a second, and goes down under voices.
+- It is only added while **Scene music** is on.
 - A performance opened from **Saved audio** gets the least played track for each mood, since which one played before is not saved.
 - **A file for each part** has no music, since music is not one of the parts.
 - A track added by link is in a download only when its site allows the browser to fetch it.
 
 ## Limits
 
+- A message directed before **Scene music** was turned on has no mood, since its script was kept from then. Turn on **Scene music** before playing a new message, or press **Direct again** on the Stage tab, which directs the message afresh and costs a Director call.
 - The Director has to direct the message for a mood to be picked. A message read as written, because the Director could not direct it, has no new mood, and music that was playing fades out at the end.
 - The music loops. A short track repeats more often.
 - The Director's mood is a judgment of the scene. It can be wrong. The Log says which mood and track played, so a wrong one is easy to spot.

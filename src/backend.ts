@@ -3507,7 +3507,11 @@ async function direct(userId: string | undefined, p: any): Promise<Script> {
     if (!source) {
       if (soundStyle === 'both') soundStyle = 'voice';
       else soundsOn = false;
-      script.log.push('No sound effects were asked for: your sound library is empty and no Freesound or ElevenLabs key is saved. Add one in the Sounds tab.');
+      script.log.push(
+        s.makeSounds
+          ? 'No sound effects were asked for: your sound library has none and no Freesound or ElevenLabs key is saved. Add one in the Sounds tab.'
+          : 'No sound effects were asked for: your sound library has none and Get new sounds is off.',
+      );
     }
   }
   const tagsOn = s.tagsOn && engine.tags !== 'none';
@@ -4269,7 +4273,12 @@ async function soundFor(userId: string | undefined, description: string, again?:
 async function musicFor(userId: string | undefined, mood: string, skip: string[]): Promise<{ id?: string; base64?: string; url?: string; mime?: string; name?: string; credit?: Credit; error?: string }> {
   if (MUSIC_MOODS.indexOf(mood) < 0) return { error: 'There is no music mood called "' + mood + '".' };
   const list = await loadSounds(userId);
-  const mine = list.filter((e) => e.mood === mood && skip.indexOf(e.id) < 0).sort((a, b) => a.uses - b.uses);
+  // The tracks for the mood, the ones not in skip first, then the least
+  // played. skip only picks among them: a mood with a track in the library
+  // never sends anyone to Freesound.
+  const all = list.filter((e) => e.mood === mood);
+  const fresh = (e: SoundEntry) => (skip.indexOf(e.id) < 0 ? 0 : 1);
+  const mine = all.slice().sort((a, b) => fresh(a) - fresh(b) || a.uses - b.uses);
   for (const hit of mine) {
     if (hit.source === 'link' && hit.url) {
       hit.uses++;
@@ -4286,7 +4295,8 @@ async function musicFor(userId: string | undefined, mood: string, skip: string[]
     }
   }
   const s = await loadSettings(userId);
-  const none = 'No music in your library is marked ' + mood + '.';
+  const none = all.length ? 'The ' + mood + ' music in your library could not be read.' : 'No music in your library is marked ' + mood + '.';
+  if (all.length) return { error: none };
   if (s.musicFrom !== 'both') return { error: none + ' Mark a track with it in the Sounds tab.' };
   const fsKey = await getKey(userId, FS_KEY_NAME);
   if (!fsKey) return { error: none + ' Mark a track with it in the Sounds tab, or save a Freesound key to find one.' };
