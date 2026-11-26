@@ -105,7 +105,7 @@ The sound can only be as good as what the voice service sends.
 
 The preview at the top draws the video with your choices. **Where** moves through it. **Play the preview** plays it with its sound, from where the bar is.
 
-**Full screen** shows the preview over the whole screen, in its own shape, with nothing else in view. It has its own play button, bar and close button. Press **Close full screen** or Escape to go back. On a phone that has no full screen for a page, such as an iPhone, it fills the page instead. On another tab or app, the preview stops where it is, and **Play the preview** goes on from there.
+**Full screen** shows the preview over the whole page, in its own shape, with nothing else in view. It fades in and out. It has its own play button, bar and close button. Press **Close full screen** or Escape to go back. It does not switch your phone or browser into its own full screen, since that switch is a sudden cut to black. On another tab or app, the preview stops where it is, and **Play the preview** goes on from there.
 
 **Make a video** records it as it plays, silently, so it takes as long as the performance and a few seconds more.
 

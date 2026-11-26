@@ -3691,41 +3691,41 @@ if (section("full screen")) {
       const back = await page.evaluate(() => ({ gone: !document.querySelector("[data-af-theater]"), home: !!document.querySelector('[data-af-card="studio-video"] canvas[data-af-videopreview]'), drawer: !!document.querySelector('.af-tab[data-tab="studio"]') }));
       check(back.gone && back.home && back.drawer, size.name + ", " + shape + ": Escape closes it, the preview is back in the Studio, and the drawer stays open");
     }
-    // Smooth: a browser's switch to full screen changes the size of the
-    // screen. The video must fade in once that is done, at its final size,
-    // and on close fade out before full screen ends.
+    // Smooth: the layer fades in over several frames at one size, and on
+    // close the Studio is where it was, with no jump in where it is
+    // scrolled to. The browser's own full screen is never asked for, since
+    // a phone switches to it in one cut.
     const motion = await page.evaluate(async () => {
-      let inFull = null;
-      Object.defineProperty(document, "fullscreenElement", { configurable: true, get: () => inFull });
-      const exitAt = [];
-      document.exitFullscreen = () => { const r = document.querySelector("[data-af-theater]"); exitAt.push(r ? Number(getComputedStyle(r).opacity) : -1); inFull = null; return Promise.resolve(); };
-      Element.prototype.requestFullscreen = function () {
-        const el = this;
-        return new Promise((done) => {
-          // The screen changes size halfway through the switch.
-          setTimeout(() => { el.style.paddingTop = "140px"; window.dispatchEvent(new Event("resize")); }, 150);
-          setTimeout(() => { inFull = el; done(); }, 300);
-        });
-      };
+      let asked = 0;
+      Element.prototype.requestFullscreen = function () { asked++; return Promise.resolve(); };
+      const cv = document.querySelector("[data-af-videopreview]");
+      let box = cv.parentElement;
+      while (box && !(box.scrollHeight > box.clientHeight + 2 && /auto|scroll/.test(getComputedStyle(box).overflowY))) box = box.parentElement;
+      if (box) box.scrollTop = Math.max(0, cv.getBoundingClientRect().top + box.scrollTop - box.getBoundingClientRect().top - 40);
+      const before = box ? box.scrollTop : 0;
+      const card = document.querySelector('[data-af-card="studio-video"]');
+      const cardBefore = Math.round(card.getBoundingClientRect().height);
       const frames = [];
       document.querySelector('[data-af-studio="full"]').click();
       const t0 = performance.now();
-      while (performance.now() - t0 < 900) {
+      while (performance.now() - t0 < 700) {
         await new Promise((r) => requestAnimationFrame(r));
         const r = document.querySelector("[data-af-theater]");
         const c = r && r.querySelector("canvas");
-        frames.push([r ? Number(getComputedStyle(r).opacity) : -1, c ? Math.round(c.getBoundingClientRect().width) : 0]);
+        frames.push([r ? Number(getComputedStyle(r).opacity) : -1, c ? Math.round(c.getBoundingClientRect().width) : 0, box ? box.scrollTop : 0, Math.round(card.getBoundingClientRect().height)]);
       }
       document.querySelector('[data-af-theater] [data-th="close"]').click();
-      await new Promise((r) => setTimeout(r, 400));
-      return { frames, exitAt };
+      await new Promise((r) => setTimeout(r, 450));
+      return { frames, asked, before, after: box ? box.scrollTop : 0, scrolls: !!box, cardBefore };
     });
     const seen = motion.frames.filter((f) => f[0] > 0.01);
     const widths = new Set(seen.map((f) => f[1]));
     const mids = motion.frames.filter((f) => f[0] > 0.05 && f[0] < 0.95).length;
-    check(seen.length > 0 && widths.size === 1, size.name + ": the video fades in at its final size, and does not jump while it shows (" + [...widths].join(", ") + ")");
+    check(seen.length > 0 && widths.size === 1, size.name + ": the video fades in at one size, and does not jump while it shows (" + [...widths].join(", ") + ")");
     check(mids >= 3, size.name + ": it fades in over several frames (" + mids + ")");
-    check(motion.exitAt.length === 1 && motion.exitAt[0] < 0.05, size.name + ": on close, it fades out before full screen ends (" + motion.exitAt.join(", ") + ")");
+    check(motion.asked === 0, size.name + ": the phone's own full screen, which switches in one cut, is not asked for");
+    check(motion.frames.every((f) => Math.abs(f[3] - motion.cardBefore) <= 1), size.name + ": the Video card keeps its height while the preview is away, so the page does not move (" + motion.cardBefore + " to " + Math.min(...motion.frames.map((f) => f[3])) + ")");
+    check(motion.frames.every((f) => f[2] === motion.before) && motion.after === motion.before, size.name + ": the Studio stays scrolled where it was, open and closed (" + motion.before + " to " + motion.after + ", page scrolls: " + motion.scrolls + ")");
     // The Audio card links the converter, which opens in a new tab.
     const conv = await page.evaluate(() => { const a = document.querySelector("a[data-af-converter]"); return a ? { href: a.href, target: a.target, rel: a.rel, text: a.textContent } : null; });
     check(!!conv && conv.href === "https://wave.co/tools/audio-converter" && conv.target === "_blank" && /noopener/.test(conv.rel), size.name + ": the Audio card links the audio converter in a new tab (" + JSON.stringify(conv) + ")");
