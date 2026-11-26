@@ -96,6 +96,7 @@ const DEFAULT_SETTINGS = {
     videoFont: 'book',
     videoSize: 100,
     videoInk: '',
+    videoCaptionInk: '',
     videoWords: 'light',
     videoPlace: 'middle',
     videoQuotes: true,
@@ -457,7 +458,7 @@ function cleanSavedFolders(v) {
 // who it names. Names, pictures and notes stay as they are when a look is
 // used.
 const LOOK_KEYS = [
-    'videoShape', 'videoFont', 'videoSize', 'videoInk', 'videoWords', 'videoPlace', 'videoQuotes', 'videoPicShape', 'videoPicSize',
+    'videoShape', 'videoFont', 'videoSize', 'videoInk', 'videoCaptionInk', 'videoWords', 'videoPlace', 'videoQuotes', 'videoPicShape', 'videoPicSize',
     'videoNameColor', 'videoBack', 'videoBackColor', 'videoDim', 'videoBlur', 'videoEdges', 'videoEdgeColor', 'videoMove', 'videoMoveSecs',
     'videoTitleOn', 'videoFadeOut', 'videoCaptions',
 ];
@@ -604,6 +605,7 @@ function cleanSettings(raw) {
         videoFont: pick(r.videoFont, ['book', 'clean', 'type', 'round', 'theme'], 'book'),
         videoSize: Math.round(num(r.videoSize, 60, 160, d.videoSize)),
         videoInk: hexColor(r.videoInk),
+        videoCaptionInk: hexColor(r.videoCaptionInk),
         videoWords: pick(r.videoWords, ['light', 'appear', 'all'], d.videoWords),
         videoPlace: pick(r.videoPlace, ['middle', 'lower'], d.videoPlace),
         videoQuotes: bool(r.videoQuotes, d.videoQuotes),

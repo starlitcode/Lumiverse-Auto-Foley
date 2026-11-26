@@ -1016,6 +1016,8 @@ function rateWait(attempt, err) {
 // Headphones with three short sound bars between the ear cups: something
 // to listen to.
 const ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 15v-3a8 8 0 0 1 16 0v3"/><rect x="3" y="14" width="4" height="7" rx="1.5"/><rect x="17" y="14" width="4" height="7" rx="1.5"/><path d="M10 16.5v2M12 15v5M14 16.5v2"/></svg>';
+const ICON_FULL = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9V4h5"/><path d="M20 9V4h-5"/><path d="M4 15v5h5"/><path d="M20 15v5h-5"/></svg>';
+const ICON_CLOSE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12"/><path d="M18 6L6 18"/></svg>';
 const ICON_PLAY = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5.5v13a1 1 0 0 0 1.5.86l10.5-6.5a1 1 0 0 0 0-1.72L9.5 4.64A1 1 0 0 0 8 5.5Z"/></svg>';
 const ICON_PAUSE = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6.5" y="5" width="4" height="14" rx="1"/><rect x="13.5" y="5" width="4" height="14" rx="1"/></svg>';
 const ICON_STOP = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="1.5"/></svg>';
@@ -1225,6 +1227,19 @@ const PANEL_CSS = `
 .af-note-edit { gap: 10px; padding: 10px; border: 1px solid var(--af-line); border-radius: var(--af-r); }
 
 /* One frame of a video, drawn at full size and shown at the card's width. */
+.af.af-fullview { position: fixed; inset: 0; z-index: 2147483000; display: flex; flex-direction: column; width: auto; max-width: none; margin: 0; padding: 0; gap: 0; background: #000; color: #f4f1ea; opacity: 0; transform: translateY(4px); transition: opacity .22s ease-out, transform .22s ease-out; }
+.af-fullview[data-af-open] { opacity: 1; transform: none; }
+.af-fullview .af-th-stage { flex: 1 1 auto; min-height: 0; display: grid; place-items: center; padding: 8px; }
+.af-fullview .af-videopreview { border: 0; border-radius: 0; max-width: 100%; max-height: 100%; }
+.af-fullview .af-th-bar { flex: none; display: flex; align-items: center; gap: 10px; padding: 10px 14px calc(10px + env(safe-area-inset-bottom, 0px)); background: rgba(12,11,16,.92); }
+.af-fullview .af-th-bar input[type="range"] { flex: 1 1 auto; min-width: 0; }
+.af-fullview .af-th-time { flex: none; font-variant-numeric: tabular-nums; font-size: 13px; color: #d9d4ca; }
+.af-fullview .af-th-btn { flex: none; display: grid; place-items: center; width: 40px; height: 40px; border: 1px solid rgba(255,255,255,.22); border-radius: 999px; background: rgba(255,255,255,.08); color: #f4f1ea; cursor: pointer; }
+.af-fullview .af-th-btn svg { width: 18px; height: 18px; }
+.af-fullview .af-th-btn:focus-visible { outline: 2px solid var(--af-accent); outline-offset: 2px; }
+@media (hover: hover) { .af-fullview .af-th-btn:hover { background: rgba(255,255,255,.16); } }
+@media (prefers-reduced-motion: reduce) { .af-fullview { transition: none; transform: none; } }
+[data-af-still] .af-fullview { transition: none; transform: none; }
 .af-videopreview { display: block; width: 100%; height: auto; aspect-ratio: 16 / 9; border-radius: var(--af-r); border: 1px solid var(--af-line); background: #0b0a0f; }
 
 /* The switch. It bounces a little when flipped, the same as Auto Refine's. */
@@ -1700,6 +1715,7 @@ const DEFAULTS = {
     videoFont: 'book',
     videoSize: 100,
     videoInk: '',
+    videoCaptionInk: '',
     videoWords: 'light',
     videoPlace: 'middle',
     videoQuotes: true,
@@ -3722,6 +3738,9 @@ export function setup(ctx, overrides) {
             }
             const size = Math.round(44 * u * scale);
             g.font = 'italic 400 ' + size + 'px ' + font;
+            // Captions have a color of their own, which is the words' color
+            // until one is picked.
+            const capInk = hexOr(S.videoCaptionInk, ink);
             const words = p.words.slice();
             if (words.length) {
                 words[0] = '[' + words[0];
@@ -3733,10 +3752,10 @@ export function setup(ctx, overrides) {
             const y = (lower ? H * 0.8 : H / 2) + dy;
             words.forEach((wd, n) => {
                 if (p.hidden[n])
-                    coverWord(g, wd, x, y, size, ink, alpha * 0.8);
+                    coverWord(g, wd, x, y, size, capInk, alpha * 0.8);
                 else {
                     g.globalAlpha = alpha * 0.8;
-                    g.fillStyle = ink;
+                    g.fillStyle = capInk;
                     g.fillText(wd, x, y);
                 }
                 x += widths[n] + space;
@@ -11937,6 +11956,131 @@ export function setup(ctx, overrides) {
         paintStudio();
         trimSaid();
     }
+    // ---- Full screen ----
+    // The preview fills the screen, for watching it with nothing else in
+    // view. The same canvas moves into a layer over the whole page, with its
+    // own play button, bar and close button, and moves back on close. Where
+    // the browser can, the layer is put in full screen too. A phone that has
+    // no full screen for a page, such as an iPhone, still gets the layer.
+    let theater = null;
+    function fitTheater() {
+        const t = theater;
+        if (!t)
+            return;
+        const stage = t.root.querySelector('.af-th-stage');
+        const w = Math.max(1, stage.clientWidth - 16);
+        const h = Math.max(1, stage.clientHeight - 16);
+        const ratio = (t.canvas.width || 16) / (t.canvas.height || 9);
+        const fw = Math.min(w, h * ratio);
+        t.canvas.style.width = Math.floor(fw) + 'px';
+        t.canvas.style.height = Math.floor(fw / ratio) + 'px';
+    }
+    function openTheater() {
+        const r = studioRefs;
+        if (theater || !r || !r.canvas.parentNode)
+            return;
+        const canvas = r.canvas;
+        const slot = document.createComment('auto-foley preview');
+        canvas.parentNode.insertBefore(slot, canvas);
+        const root = el('<div class="af af-fullview" role="dialog" aria-modal="true" aria-label="The video preview, full screen" data-af-theater>' +
+            '<div class="af-th-stage"></div>' +
+            '<div class="af-th-bar">' +
+            '<button type="button" class="af-th-btn" data-th="play" aria-label="Play the preview" title="Play the preview">' + ICON_PLAY + '</button>' +
+            '<input type="range" min="0" max="1" step="0.05" value="0" aria-label="Where in the video" data-th="scrub">' +
+            '<span class="af-th-time" data-th="time"></span>' +
+            '<button type="button" class="af-th-btn" data-th="close" aria-label="Close full screen" title="Close full screen">' + ICON_CLOSE + '</button>' +
+            '</div>' +
+            '</div>');
+        root.querySelector('.af-th-stage').appendChild(canvas);
+        const play = root.querySelector('[data-th="play"]');
+        const scrub = root.querySelector('[data-th="scrub"]');
+        const time = root.querySelector('[data-th="time"]');
+        play.addEventListener('click', () => (videoRun && videoRun.paused ? videoRun.goOn() : previewRun ? stopPreview() : playPreview()));
+        scrub.addEventListener('input', () => {
+            stopPreview();
+            studioView.at = Number(scrub.value);
+            paintPreview();
+            paintStudio();
+        });
+        const onKey = (e) => {
+            // Escape closes full screen only, not the drawer behind it.
+            if (e.key === 'Escape') {
+                e.preventDefault();
+                e.stopPropagation();
+                closeTheater();
+            }
+        };
+        const onFull = () => {
+            // Leaving the browser's full screen, by its own key or gesture, closes
+            // the layer too.
+            if (theater && theater.asked && !document.fullscreenElement)
+                closeTheater();
+        };
+        const onResize = () => fitTheater();
+        root.querySelector('[data-th="close"]').addEventListener('click', () => closeTheater());
+        document.addEventListener('keydown', onKey, true);
+        document.addEventListener('fullscreenchange', onFull);
+        window.addEventListener('resize', onResize);
+        (document.body || document.documentElement).appendChild(root);
+        theater = {
+            root, slot, canvas, play, scrub, time, asked: false,
+            leave: () => {
+                document.removeEventListener('keydown', onKey, true);
+                document.removeEventListener('fullscreenchange', onFull);
+                window.removeEventListener('resize', onResize);
+            },
+        };
+        fitTheater();
+        paintStudio();
+        requestAnimationFrame(() => root.setAttribute('data-af-open', ''));
+        try {
+            const go = root.requestFullscreen;
+            if (typeof go === 'function') {
+                const p = go.call(root);
+                theater.asked = true;
+                if (p && typeof p.then === 'function')
+                    p.then(() => fitTheater(), () => {
+                        if (theater)
+                            theater.asked = false;
+                    });
+            }
+        }
+        catch (_) {
+            if (theater)
+                theater.asked = false;
+        }
+        try {
+            play.focus({ preventScroll: true });
+        }
+        catch (_) { }
+    }
+    function closeTheater() {
+        const t = theater;
+        if (!t)
+            return;
+        theater = null;
+        t.leave();
+        try {
+            if (document.fullscreenElement && typeof document.exitFullscreen === 'function')
+                document.exitFullscreen().catch(() => { });
+        }
+        catch (_) { }
+        const back = () => {
+            t.canvas.style.width = '';
+            t.canvas.style.height = '';
+            if (t.slot.parentNode) {
+                t.slot.parentNode.insertBefore(t.canvas, t.slot);
+                t.slot.remove();
+            }
+            t.root.remove();
+            paintStudio();
+        };
+        if (calm())
+            return back();
+        t.root.removeAttribute('data-af-open');
+        setTimeout(back, 230);
+    }
+    disposers.push(() => closeTheater());
     function paintPreview() {
         const r = studioRefs;
         const v = studioView;
@@ -11946,10 +12090,25 @@ export function setup(ctx, overrides) {
             r.canvas.width = v.st.w;
             r.canvas.height = v.st.h;
             r.canvas.style.aspectRatio = v.st.w + ' / ' + v.st.h;
+            if (theater && theater.canvas === r.canvas)
+                fitTheater();
         }
         const g = r.canvas.getContext('2d');
         if (g)
             videoFrame(g, v.at, v.parts, v.total, v.st, v.title);
+        // A tab drawn again while full screen is open makes a new canvas, so
+        // the one in the full-screen layer is drawn too.
+        if (theater && theater.canvas !== r.canvas) {
+            const c = theater.canvas;
+            if (c.width !== v.st.w || c.height !== v.st.h) {
+                c.width = v.st.w;
+                c.height = v.st.h;
+                fitTheater();
+            }
+            const g2 = c.getContext('2d');
+            if (g2)
+                videoFrame(g2, v.at, v.parts, v.total, v.st, v.title);
+        }
     }
     // The buttons and lines of the Studio tab, kept in step with what there is.
     // The performance the Studio was last built for, so a new one played
@@ -12002,6 +12161,21 @@ export function setup(ctx, overrides) {
             setText(r.scrubOut, mmss(v.at) + ' of ' + mmss(v.length));
         }
         setText(r.said, keepLine);
+        if (theater) {
+            const t = theater;
+            const goOnNow2 = !!(videoRun && videoRun.paused);
+            const label = goOnNow2 ? 'Go on with the video' : previewRun ? 'Stop the preview' : 'Play the preview';
+            if (t.play.getAttribute('aria-label') !== label) {
+                t.play.setAttribute('aria-label', label);
+                t.play.title = label;
+                t.play.innerHTML = previewRun ? ICON_STOP : ICON_PLAY;
+            }
+            t.play.disabled = goOnNow2 ? false : !v.sh || !!videoRun || videoPreparing;
+            t.scrub.max = String(Math.max(0.1, v.length));
+            if (document.activeElement !== t.scrub)
+                t.scrub.value = String(v.at);
+            setText(t.time, mmss(v.at) + ' of ' + mmss(v.length));
+        }
     }
     // Plays the preview from where the bar is, with its sound.
     function playPreview() {
@@ -12076,7 +12250,7 @@ export function setup(ctx, overrides) {
     // The settings a look holds: how a video looks, not what it says or who it
     // names. Names, pictures and notes stay as they are when a look is used.
     const LOOK_KEYS = [
-        'videoShape', 'videoFont', 'videoSize', 'videoInk', 'videoWords', 'videoPlace', 'videoQuotes', 'videoPicShape', 'videoPicSize',
+        'videoShape', 'videoFont', 'videoSize', 'videoInk', 'videoCaptionInk', 'videoWords', 'videoPlace', 'videoQuotes', 'videoPicShape', 'videoPicSize',
         'videoNameColor', 'videoBack', 'videoBackColor', 'videoDim', 'videoBlur', 'videoEdges', 'videoEdgeColor', 'videoMove', 'videoMoveSecs',
         'videoTitleOn', 'videoFadeOut', 'videoCaptions',
     ];
@@ -12410,7 +12584,10 @@ export function setup(ctx, overrides) {
         play.setAttribute('data-af-studio', 'play');
         const make = button('Make a video', () => (videoRun ? videoRun.cancel() : makeVideo()), 'af-primary', ICON_VIDEO);
         make.setAttribute('data-af-studio', 'video');
+        const full = button('Full screen', () => openTheater(), '', ICON_FULL);
+        full.setAttribute('data-af-studio', 'full');
         vRow.appendChild(play);
+        vRow.appendChild(full);
         vRow.appendChild(make);
         vc.appendChild(vRow);
         const said = el('<p class="af-note" data-af-studio="said" role="status"></p>');
@@ -12613,7 +12790,9 @@ export function setup(ctx, overrides) {
             }, '1.5 by default. 0 ends at once.'));
         }));
         vc.appendChild(fold('Sounds', (b) => {
-            b.appendChild(toggle('Show sounds as captions', 'On by default. A sound shows as a caption in square brackets, such as [thunder]. Off: the background only.', 'videoCaptions', look));
+            b.appendChild(toggle('Show sounds as captions', 'On by default. A sound shows as a caption in square brackets, such as [thunder]. Off: the background only.', 'videoCaptions', look, () => [
+                colorRow('videoCaptionInk', 'Color of the captions', 'The color of the words by default. Pick another, such as yellow, to set captions apart.', '--af-none', hexOr(S.videoInk, STORY_INK), 'Use the color of the words', look),
+            ]));
         }));
         vc.appendChild(fold('Notes', (b) => drawNoteEditors(b, look)));
         vc.appendChild(fold('Saved looks', (b) => drawLooks(b)));
@@ -12627,7 +12806,7 @@ export function setup(ctx, overrides) {
             }
             // Asked first, since it puts back every choice of the look at once.
             // A look saved under Saved looks is kept, and can be used again.
-            if (!(await askSure('Put the look back', 'The shape, words, pictures, background, edges, transition and ending go back to the built-in look. Saved looks, notes, Show names and Show pictures stay as they are.', 'Put it back', true)))
+            if (!(await askSure('Put the look back', 'The shape, words, captions, pictures, background, edges, transition and ending go back to the built-in look. Saved looks, notes, Show names and Show pictures stay as they are.', 'Put it back', true)))
                 return;
             const patch = {};
             for (const k of keys)
@@ -12639,7 +12818,7 @@ export function setup(ctx, overrides) {
         lookBack.setAttribute('data-af-studio', 'lookback');
         lookRow.appendChild(lookBack);
         vc.appendChild(lookRow);
-        vc.appendChild(hint('Put the look back asks first, then puts back the shape, words, pictures, background, edges, transition and ending. Saved looks and notes stay.'));
+        vc.appendChild(hint('Put the look back asks first, then puts back the shape, words, captions, pictures, background, edges, transition and ending. Saved looks and notes stay.'));
         page.appendChild(vc);
         // ---- censor ----
         const cc = card('Hide and bleep words', 'Covers words on screen and bleeps them in the audio, such as a name you do not want to share.');

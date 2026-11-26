@@ -171,6 +171,8 @@ interface Settings {
   videoFont: string;
   videoSize: number;
   videoInk: string;
+  // The color of sound captions in a video. Empty uses the words' color.
+  videoCaptionInk: string;
   videoWords: 'light' | 'appear' | 'all';
   videoPlace: 'middle' | 'lower';
   videoQuotes: boolean;
@@ -396,6 +398,7 @@ const DEFAULT_SETTINGS: Settings = {
   videoFont: 'book',
   videoSize: 100,
   videoInk: '',
+  videoCaptionInk: '',
   videoWords: 'light',
   videoPlace: 'middle',
   videoQuotes: true,
@@ -754,7 +757,7 @@ function cleanSavedFolders(v: any): Settings['savedFolders'] {
 // who it names. Names, pictures and notes stay as they are when a look is
 // used.
 const LOOK_KEYS = [
-  'videoShape', 'videoFont', 'videoSize', 'videoInk', 'videoWords', 'videoPlace', 'videoQuotes', 'videoPicShape', 'videoPicSize',
+  'videoShape', 'videoFont', 'videoSize', 'videoInk', 'videoCaptionInk', 'videoWords', 'videoPlace', 'videoQuotes', 'videoPicShape', 'videoPicSize',
   'videoNameColor', 'videoBack', 'videoBackColor', 'videoDim', 'videoBlur', 'videoEdges', 'videoEdgeColor', 'videoMove', 'videoMoveSecs',
   'videoTitleOn', 'videoFadeOut', 'videoCaptions',
 ];
@@ -892,6 +895,7 @@ function cleanSettings(raw: any): Settings {
     videoFont: pick(r.videoFont, ['book', 'clean', 'type', 'round', 'theme'] as const, 'book'),
     videoSize: Math.round(num(r.videoSize, 60, 160, d.videoSize)),
     videoInk: hexColor(r.videoInk),
+    videoCaptionInk: hexColor(r.videoCaptionInk),
     videoWords: pick(r.videoWords, ['light', 'appear', 'all'] as const, d.videoWords),
     videoPlace: pick(r.videoPlace, ['middle', 'lower'] as const, d.videoPlace),
     videoQuotes: bool(r.videoQuotes, d.videoQuotes),

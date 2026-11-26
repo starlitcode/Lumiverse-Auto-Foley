@@ -17,6 +17,9 @@ _2026-11-26_
 - **Music** volume, in the Mixer and the floating player, while Scene music is on. Suggested by a Discord user.
 - **Music**, under **The performance** in the Studio. On by default. The audio and the video keep the scene music that played, with the same fades. Suggested by a Discord user.
 
+- **Full screen**, beside **Play the preview** in the Studio. The preview fills the screen in its own shape, with its own play button, bar and close button. Escape closes it.
+- **Color of the captions**, under **Show sounds as captions** in the Studio. Sound captions can have a color of their own, such as yellow. It is the color of the words until one is picked, and it is part of a saved look.
+
 ### Changed
 
 - **The Director's built-in prompt has a part on music.** It says how to pick a mood and when to change it, and it is only used while Scene music is on. If you have your own prompt, a notice says the built-in one changed. Suggested by a Discord user.

@@ -103,7 +103,9 @@ The sound can only be as good as what the voice service sends.
 
 ## Video
 
-The preview at the top draws the video with your choices. **Where** moves through it. **Play the preview** plays it with its sound, from where the bar is. On another tab or app, the preview stops where it is, and **Play the preview** goes on from there.
+The preview at the top draws the video with your choices. **Where** moves through it. **Play the preview** plays it with its sound, from where the bar is.
+
+**Full screen** shows the preview over the whole screen, in its own shape, with nothing else in view. It has its own play button, bar and close button. Press **Close full screen** or Escape to go back. On a phone that has no full screen for a page, such as an iPhone, it fills the page instead. On another tab or app, the preview stops where it is, and **Play the preview** goes on from there.
 
 **Make a video** records it as it plays, silently, so it takes as long as the performance and a few seconds more.
 
@@ -169,6 +171,7 @@ When each word is said is worked out from where the voice is in the clip, so it 
 ### Sounds
 
 - **Show sounds as captions**: on by default. A sound shows as a caption in square brackets, such as [thunder]. Off, the background shows alone while it plays.
+- **Color of the captions**, under it: the color of the words by default. Pick another, such as yellow, to set captions apart from the lines.
 
 ### Notes
 
@@ -185,7 +188,7 @@ A note is a few words for whoever watches, in a dark box at the top or the botto
 
 **Saved looks** keeps the look of a video under a name, to use again.
 
-- **Save this look**: type a name, then press it. The look holds the shape, words, pictures, background, edges, transition and ending.
+- **Save this look**: type a name, then press it. The look holds the shape, words, captions, pictures, background, edges, transition and ending.
 - **Use** puts a saved look back. If it is already the look in use, it says so.
 - Type over a look's name to rename it. **Delete** asks first.
 - Notes, the title you typed, **Show names** and **Show pictures** are not part of a look, so using one never changes them.
@@ -194,7 +197,7 @@ A note is a few words for whoever watches, in a dark box at the top or the botto
 
 ### Put the look back
 
-**Put the look back** asks first, then puts back every choice under **Video**: the shape, words, pictures, background, edges, transition and ending. Saved looks, notes, **Show names** and **Show pictures** stay as they are. If nothing would change, it says so and asks nothing.
+**Put the look back** asks first, then puts back every choice under **Video**: the shape, words, captions, pictures, background, edges, transition and ending. Saved looks, notes, **Show names** and **Show pictures** stay as they are. If nothing would change, it says so and asks nothing.
 
 ### Start again
 

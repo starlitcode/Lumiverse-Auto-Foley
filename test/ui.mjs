@@ -146,7 +146,7 @@ function answer(msg) {
       }
       return reply({ type: 'script', script: sc });
     }
-    case 'sound': return reply({ type: 'sound', base64: 'AAAA', mime: 'audio/mpeg' });
+    case 'sound': return reply({ type: 'sound', base64: window.__soundB64 || 'AAAA', mime: window.__soundB64 ? 'audio/wav' : 'audio/mpeg' });
     case 'list_connections': return reply({ type: 'connections', list: window.__llmList || [{ id: 'l1', name: 'Fast helper with a very long connection name for testing', model: 'maker/tiny-fast-model' }] });
     case 'list_decision_connections': return reply({ type: 'decision_connections', list: window.__decList || [{ id: 'd1', name: 'Quick', model: 'fast-judge', isDefault: true, hasKey: true }], state: 'ok' });
     case 'key_test': return reply({ type: 'key', hasKey: true, ok: true, text: 'The key works.' });
@@ -3654,6 +3654,100 @@ if (section("scene music")) {
     check(!!ed && ed.mood === "calm", size.name + ": Music for marks a sound as a calm track (" + JSON.stringify(ed) + ")");
     const ms = await page.evaluate(MEASURE, size.touch);
     check(!ms.overflow.length && !ms.small.length, size.name + ": the Sounds tab fits. " + ms.overflow.concat(ms.small).slice(0, 2).join("; "));
+    check(!errors.length, size.name + ": no page errors. " + errors.slice(0, 2).join(" | "));
+    await context.close();
+  }
+}
+
+if (section("full screen")) {
+  console.log("The Studio's preview opens full screen, fitted to the screen, with its own controls, and closes back");
+  for (const size of SIZES) {
+    const { context, page, errors } = await open(THEMES[0], size);
+    await page.click('.af-tab[data-tab="studio"]');
+    await page.waitForTimeout(600);
+    for (const shape of ["wide", "tall"]) {
+      if (shape === "tall") {
+        await page.locator(".af-fold", { hasText: "Shape and words" }).first().click();
+        await page.waitForTimeout(400);
+        await page.locator("select").filter({ has: page.locator('option[value="tall"]') }).first().selectOption("tall");
+        await page.waitForTimeout(500);
+      }
+      await page.click('[data-af-studio="full"]');
+      await page.waitForTimeout(400);
+      const got = await page.evaluate(() => {
+        const root = document.querySelector("[data-af-theater]");
+        const c = root && root.querySelector("canvas");
+        const r = c ? c.getBoundingClientRect() : null;
+        const btns = root ? Array.from(root.querySelectorAll("button")).map((b) => Math.round(b.getBoundingClientRect().height)) : [];
+        return { open: !!root && root.hasAttribute("data-af-open"), inside: !!c, r: r && { l: Math.round(r.left), t: Math.round(r.top), w: Math.round(r.width), h: Math.round(r.height) }, vw: innerWidth, vh: innerHeight, btns, ratio: c ? c.width / c.height : 0, op: root ? getComputedStyle(root).opacity : "" };
+      });
+      const fits = !!got.r && got.r.l >= 0 && got.r.t >= 0 && got.r.l + got.r.w <= got.vw && got.r.t + got.r.h <= got.vh;
+      const big = !!got.r && (got.r.w >= got.vw * 0.94 || got.r.h >= (got.vh - 80) * 0.94);
+      check(got.open && got.inside && fits && big, size.name + ", " + shape + ": the preview fills the screen and fits on it (" + JSON.stringify(got.r) + " in " + got.vw + "x" + got.vh + ")");
+      check(!!got.r && Math.abs(got.r.w / got.r.h - got.ratio) < 0.05, size.name + ", " + shape + ": in its own shape");
+      check(got.btns.length === 2 && got.btns.every((h) => h >= 32), size.name + ", " + shape + ": its buttons are big enough to tap (" + got.btns.join(", ") + ")");
+      await page.keyboard.press("Escape");
+      await page.waitForTimeout(400);
+      const back = await page.evaluate(() => ({ gone: !document.querySelector("[data-af-theater]"), home: !!document.querySelector('[data-af-card="studio-video"] canvas[data-af-videopreview]'), drawer: !!document.querySelector('.af-tab[data-tab="studio"]') }));
+      check(back.gone && back.home && back.drawer, size.name + ", " + shape + ": Escape closes it, the preview is back in the Studio, and the drawer stays open");
+    }
+    // The close button works too, and Play plays from full screen.
+    await page.click('[data-af-studio="full"]');
+    await page.waitForTimeout(400);
+    await page.click('[data-af-theater] [data-th="close"]');
+    await page.waitForTimeout(400);
+    check(await page.evaluate(() => !document.querySelector("[data-af-theater]")), size.name + ": the close button closes it");
+    check(!errors.length, size.name + ": no page errors. " + errors.slice(0, 2).join(" | "));
+    await context.close();
+  }
+}
+
+if (section("caption color")) {
+  console.log("Sound captions in a video can have a color of their own");
+  for (const size of SIZES) {
+    const { context, page, errors } = await open(THEMES[0], size);
+    await page.evaluate(async () => {
+      const b = window.__makeWav(0, 0.6, 3000);
+      window.__soundB64 = await new Promise((r) => { const f = new FileReader(); f.onload = () => r(String(f.result).split(",")[1]); f.readAsDataURL(b); });
+      window.__wav = [0.1, 0.3];
+      window.__clipMs = 200;
+    });
+    await page.click('#mount [data-af-slot="message"]');
+    await page.waitForFunction(() => document.querySelector('#mount [data-af-slot="message"]').getAttribute("aria-busy") === null && (window.__synth || []).length > 0, null, { timeout: 15000 });
+    await page.waitForTimeout(2500);
+    await page.click('.af-tab[data-tab="studio"]');
+    await page.waitForTimeout(1500);
+    // The most yellow pixels in any frame of the preview, looked at every
+    // fifth of a second.
+    const mostYellow = () => page.evaluate(async () => {
+      const r = document.querySelector("[data-af-scrub] input");
+      const c = document.querySelector("[data-af-videopreview]");
+      const g = c.getContext("2d");
+      let most = 0;
+      for (let t = 0; t <= Number(r.max); t += 0.2) {
+        r.value = String(t);
+        r.dispatchEvent(new Event("input", { bubbles: true }));
+        await new Promise((x) => requestAnimationFrame(x));
+        const d = g.getImageData(0, 0, c.width, c.height).data;
+        let n = 0;
+        for (let i = 0; i < d.length; i += 4 * 7) if (d[i] > 200 && d[i + 1] > 160 && d[i + 2] < 90) n++;
+        most = Math.max(most, n);
+      }
+      return most;
+    });
+    const before = await mostYellow();
+    await page.locator(".af-fold", { hasText: "Sounds" }).last().click();
+    await page.waitForTimeout(400);
+    await page.locator('[data-af-colorswatch="videoCaptionInk"]').click();
+    await page.waitForTimeout(300);
+    await page.fill('[data-af-colorcode="videoCaptionInk"]', "#ffd400");
+    await page.locator('[data-af-colorcode="videoCaptionInk"]').dispatchEvent("change");
+    await page.waitForTimeout(600);
+    const after = await mostYellow();
+    check(before < 20 && after > 200, size.name + ": a yellow caption color draws the sound captions yellow (" + before + " yellow before, " + after + " after)");
+    check(await page.evaluate(() => window.__settings.videoCaptionInk === "#ffd400"), size.name + ": and it is saved");
+    const m = await page.evaluate(MEASURE, size.touch);
+    check(!m.overflow.length && !m.small.length, size.name + ": the Studio fits. " + m.overflow.concat(m.small).slice(0, 2).join("; "));
     check(!errors.length, size.name + ": no page errors. " + errors.slice(0, 2).join(" | "));
     await context.close();
   }
