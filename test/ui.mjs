@@ -643,11 +643,23 @@ if (section("voice call")) {
         })),
       );
     const quiet = await rows();
+    const quietMore = await page.evaluate(() => !!window.__widget.querySelector('[data-p="more"]'));
     check(quiet.length > 1 && quiet.every((r) => r.speaking === "false" && !/rgb\(34, 197, 94\)/.test(r.ring)), where + ": with nothing playing, nobody has a ring");
     check(quiet.every((r) => r.state && r.state !== "Speaking"), where + ": each name has a line under it saying what kind of part it is (" + quiet.map((r) => r.state).join(", ") + ")");
     await page.evaluate(() => window.__widget.querySelector('[data-p="play"]').click());
     await page.waitForTimeout(1500);
     const live = await rows();
+    // The people in the message come first, in the order they speak, and the
+    // rest of the cast is behind one fold.
+    check(quiet.length === 4 && !quietMore, where + ": with no message yet, everyone is listed");
+    const order = live.map((r) => r.id).join(",");
+    const more = await page.evaluate(() => { const b = window.__widget.querySelector('[data-p="more"]'); return b ? b.textContent : ""; });
+    check(order === "n,a,b" && /Everyone else \(1\)/.test(more), where + ": during a message, its people are listed in the order they speak, with Everyone else (1) under them (" + order + " | " + more + ")");
+    await page.evaluate(() => window.__widget.querySelector('[data-p="more"]').click());
+    await page.waitForTimeout(300);
+    check((await rows()).map((r) => r.id).join(",") === "n,a,b,c", where + ": Everyone else opens the rest of the cast");
+    await page.evaluate(() => window.__widget.querySelector('[data-p="more"]').click());
+    await page.waitForTimeout(300);
     const on = live.filter((r) => r.speaking === "true");
     check(on.length === 1 && on[0].state === "Speaking", where + ": the person speaking is marked, and says Speaking (" + JSON.stringify(on.map((r) => r.id)) + ")");
     check(on.length === 1 && /rgb\(34, 197, 94\)/.test(on[0].ring), where + ": with a green ring (" + (on[0] && on[0].ring) + ")");

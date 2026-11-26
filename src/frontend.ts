@@ -6764,6 +6764,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     '.af-pl-ch[data-off="true"] .af-pl-state{color:var(--af-bad)}' +
     '.af-pl-ch .af-round{width:32px;height:32px}' +
     '.af-pl-ch .af-round[aria-pressed="true"]{color:var(--af-muted)}' +
+    '.af-pl-more{margin-top:4px;flex:none}' +
     '.af-pl-ch[data-off="true"] .af-round{color:var(--af-bad)}' +
     '@media (pointer:coarse){.af-pl .af-round{width:40px;height:40px}.af-pl-tr .af-pl-side{width:40px;height:40px}.af-pl-tr{padding:0 46px}.af-pl-tr .af-play{width:54px;height:54px}.af-pl-sw>div{min-height:40px}.af-pl-ch .af-round{width:36px;height:36px}}' +
     // The subtitles on the Stage.
@@ -7529,11 +7530,48 @@ export function setup(ctx: Ctx, overrides?: any) {
     setText(st, ch.dataset.off === 'true' ? 'Not voiced' : ch.dataset.speaking === 'true' ? 'Speaking' : st.dataset.kindLabel || '');
   }
 
+  // Who is voiced lists the people in the message first, in the order they
+  // speak, as in a call. Everyone else in the cast is behind one fold, so a
+  // large cast is not one long list. With no message yet, everyone is
+  // listed.
+  let everyoneOpen = false;
+  let castFor: Script | null | undefined;
+  function inScript(sc: Script | null): string[] {
+    const ids: string[] = [];
+    for (const l of (sc && Array.isArray(sc.lines) ? sc.lines : []) as Line[]) {
+      if (l.kind !== 'speech' && l.kind !== 'narration') continue;
+      const m = l.kind === 'narration' ? narratorMember() : memberFor(l.speaker);
+      if (m && ids.indexOf(m.id) < 0) ids.push(m.id);
+    }
+    return ids;
+  }
   function fillCast(wrap: HTMLElement) {
     const box = (wrap.querySelector('.af-pl-cast') as HTMLElement) || wrap;
     box.innerHTML = '';
-    const people = castInOrder();
-    for (const m of people) {
+    const sc = currentScript();
+    castFor = sc;
+    const all = castInOrder();
+    const ids = inScript(sc);
+    const here = ids.length ? (ids.map((id) => all.find((m) => m.id === id)).filter(Boolean) as Member[]) : all;
+    const rest = ids.length ? all.filter((m) => ids.indexOf(m.id) < 0) : [];
+    for (const m of here) box.appendChild(castRow(m));
+    if (!rest.length) return;
+    const more = el('<button type="button" class="af-fold af-pl-more" data-p="more"><span class="af-caret"></span><span></span></button>') as HTMLButtonElement;
+    more.setAttribute('aria-expanded', everyoneOpen ? 'true' : 'false');
+    (more.firstElementChild as HTMLElement).textContent = everyoneOpen ? '▼' : '▶';
+    (more.lastElementChild as HTMLElement).textContent = 'Everyone else (' + rest.length + ')';
+    more.addEventListener('click', () => {
+      everyoneOpen = !everyoneOpen;
+      fillCast(wrap);
+      fitWidget();
+      paintFloat();
+    });
+    box.appendChild(more);
+    if (everyoneOpen) for (const m of rest) box.appendChild(castRow(m));
+  }
+
+  function castRow(m: Member): HTMLElement {
+    {
       const ch = el(
         '<div class="af-pl-ch" data-person="' + esc(m.id) + '" data-speaking="false">' +
           '<span class="af-pl-face"><span class="af-avatar">' + faceHtml(m, String(m.display || '').trim() || m.name) + '</span><span class="af-pl-badge" aria-hidden="true">' + ICON_MIC_OFF + '</span></span>' +
@@ -7561,7 +7599,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         paintB();
         if (tab === 'cast') renderTab();
       });
-      box.appendChild(ch);
+      return ch;
     }
   }
 
@@ -7665,6 +7703,14 @@ export function setup(ctx: Ctx, overrides?: any) {
       const isOn = k === 'narrate' ? S.narration === 'read' : !!S[k];
       if ((b as HTMLInputElement).checked !== isOn) (b as HTMLInputElement).checked = isOn;
     });
+    // A new message brings its own people to the top of Who is voiced.
+    if (levelsOpen && currentScript() !== castFor) {
+      const cast = q('cast');
+      if (cast) {
+        fillCast(cast);
+        fitWidget();
+      }
+    }
     c.querySelectorAll('.af-pl-ch').forEach((ch) => {
       const now = !!who && (ch as HTMLElement).dataset.person === who.id;
       if (now) ch.setAttribute('aria-current', 'true');

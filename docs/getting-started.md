@@ -167,6 +167,7 @@ In the player:
 - **Voices** and **Sounds** set the two volumes.
 - **Autoplay**, **Sounds**, **Narrator** and **Applause** turn those settings on or off.
 - **Who is voiced** lists the cast, like the people in a voice call:
+  - The people in the message come first, in the order they speak. The rest of the cast is behind **Everyone else**, with how many there are. With no message yet, everyone is listed.
   - The person speaking has a green ring around their picture, and **Speaking** under their name. The ring fades in and stays for the whole line. It goes while the message is paused.
   - Someone not voiced has a red microphone on their picture, a dimmed picture, and **Not voiced** under their name.
   - Everyone else has nothing extra, and the kind of part they are under their name.
