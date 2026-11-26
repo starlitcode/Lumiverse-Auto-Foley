@@ -178,6 +178,7 @@ function answer(msg) {
     case 'video_bg_put': window.__videoBg = msg.picture || ''; return reply({ type: 'video_bg', ok: true, picture: window.__videoBg });
     case 'kept_script': return reply({ type: 'kept_script', script: (window.__keptList || []).some((e) => e.key === msg.key) ? SCRIPT : null });
     case 'sound_play': if (String(msg.id).indexOf('mu-') === 0 && window.__musicB64) return reply({ type: 'sound', base64: window.__musicB64, mime: 'audio/wav' }); return;
+    case 'direct_stop': (window.__stops = window.__stops || []).push(Date.now()); return;
     case 'music_for': (window.__musicAsked = window.__musicAsked || []).push(msg.mood); return reply({ type: 'music', id: 'mu-' + msg.mood, url: 'https://example.invalid/' + msg.mood + '.mp3', name: 'A ' + msg.mood + ' track' });
     case 'sound_edit': (window.__soundEdits = window.__soundEdits || []).push(msg); { const e = (window.__sounds || []).find((x) => x.id === msg.id); if (e && typeof msg.mood === 'string') { if (msg.mood) e.mood = msg.mood; else delete e.mood; } } return reply({ type: 'sounds', sounds: window.__sounds });
     case 'kept_drop': (window.__dropped = window.__dropped || []).push(msg); window.__keptList = (window.__keptList || []).filter((e) => e.key !== msg.key); return reply({ type: 'kept_dropped', ok: true, clips: (msg.sigs || []).length });
@@ -250,6 +251,13 @@ window.__ctx = {
       surface.appendChild(r);
       document.body.appendChild(surface);
       window.__widget = surface;
+      // Lumiverse starts a drag from a press that reaches the surface, unless
+      // it is on a text box, a slider or a link. The count is what a check
+      // reads.
+      surface.addEventListener('pointerdown', (e) => {
+        if (e.target.closest && e.target.closest('input, textarea, select, a[href], [role="slider"]')) return;
+        window.__dragStarts = (window.__dragStarts || 0) + 1;
+      });
       let at = { x: o.initialPosition.x, y: o.initialPosition.y };
       return (window.__floatApi = {
         root: r,
@@ -3789,6 +3797,50 @@ if (section("caption color")) {
     check(!errors.length, size.name + ": no page errors. " + errors.slice(0, 2).join(" | "));
     await context.close();
   }
+}
+
+if (section("player scroll")) {
+  console.log("A tall floating player scrolls under a swipe instead of moving");
+  const { context, page, errors } = await open(THEMES[0], SIZES[0]);
+  await page.setViewportSize({ width: 390, height: 560 });
+  await page.click('.af-tab[data-tab="settings"]');
+  await page.waitForTimeout(300);
+  await page.evaluate(() => document.querySelector('[data-af-row="widgetOn"] .af-box').click());
+  await page.waitForTimeout(500);
+  await page.evaluate(() => window.__widget.querySelector(".af-float").click());
+  await page.waitForTimeout(600);
+  await page.evaluate(() => { const f = window.__widget.querySelector('[data-p="fold"]'); if (f && f.getAttribute("aria-expanded") !== "true") f.click(); });
+  await page.waitForTimeout(900);
+  const got = await page.evaluate(() => {
+    const card = window.__widget.querySelector(".af-pl");
+    const press = (el) => { window.__dragStarts = 0; el.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, composed: true, pointerId: 1, pointerType: "touch", clientX: 10, clientY: 10 })); return window.__dragStarts; };
+    const inList = card.querySelector('[data-p="cast"]') || card.querySelector(".af-pl-mix");
+    const top = card.querySelector(".af-pl-top");
+    return { scrolls: card.scrollHeight > card.clientHeight + 1, list: press(inList), top: press(top), touch: getComputedStyle(card).touchAction };
+  });
+  check(got.scrolls, "the player is taller than the screen, so it scrolls");
+  check(got.list === 0 && got.top === 1, "a press in the player's list does not move it, and the top row still does (" + got.list + ", " + got.top + ")");
+  check(/pan-y|auto/.test(got.touch), "the card lets a finger scroll it (" + got.touch + ")");
+  // Prepare replies ahead: turned off while the Director is still at work,
+  // the work is stopped, and the player says the switch is off.
+  await page.evaluate(() => { window.__directHold = 8000; window.__stops = []; });
+  await page.evaluate(() => window.__widget.querySelector('[data-p="prep"]').click());
+  await page.waitForTimeout(300);
+  // The checks' settings start with it on, so the first press turned it off.
+  if (/Prepare replies ahead is off/.test(await page.evaluate(() => window.__widget.querySelector(".af-pl").innerText))) {
+    await page.evaluate(() => window.__widget.querySelector('[data-p="prep"]').click());
+    await page.waitForTimeout(500);
+  }
+  const busy = await page.evaluate(() => window.__widget.querySelector(".af-pl").innerText);
+  await page.evaluate(() => window.__widget.querySelector('[data-p="prep"]').click());
+  await page.waitForTimeout(400);
+  const after = await page.evaluate(() => ({ text: window.__widget.querySelector(".af-pl").innerText, stops: (window.__stops || []).length }));
+  check(/Directing it ahead/.test(busy), "turned on, the latest reply is directed ahead");
+  check(after.stops === 1 && /Prepare replies ahead is off\./.test(after.text) && !/Directing it ahead/.test(after.text), "turned off, the directing is stopped, and the player says Prepare replies ahead is off (" + after.stops + " stops)");
+  await page.waitForTimeout(8500);
+  check(!/Ready\. Press Play\.|Directing it ahead/.test(await page.evaluate(() => window.__widget.querySelector(".af-pl").innerText)), "and the answer that comes late changes nothing");
+  check(!errors.length, "no page errors. " + errors.slice(0, 2).join(" | "));
+  await context.close();
 }
 
 if (section("person close")) {

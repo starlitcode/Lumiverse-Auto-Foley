@@ -5061,11 +5061,21 @@ export function setup(ctx, overrides) {
             savedRefresh();
         startShow(got.script, got.meta, 0);
     }
+    // A reply being prepared ahead, so turning Prepare replies ahead off can
+    // stop it. Each preparation has its own number.
+    let aheadRun = 0;
+    let aheadBusy = false;
     async function prepare(messageId) {
         const chatId = activeChatId();
         if (chatIsOff(chatId))
             return;
+        const run = ++aheadRun;
+        aheadBusy = true;
         const got = await getScript(chatId, messageId, false);
+        if (run === aheadRun)
+            aheadBusy = false;
+        if (run !== aheadRun || !S.prepareAhead)
+            return;
         if (got.script) {
             for (const line of got.script.log || [])
                 log(line, '', 'director');
@@ -7766,7 +7776,7 @@ export function setup(ctx, overrides) {
         // The open player is drawn with the panel's own parts: its switches,
         // sliders, Play button, two-way choice and fold, so it looks like the
         // rest of Auto Foley. It carries the panel's class for their colors.
-        '.af.af-pl{max-width:none;margin:0;width:100%;gap:10px;padding:12px;overflow-x:hidden;overflow-y:auto;overscroll-behavior:contain;scrollbar-width:none;border:1px solid var(--af-line-hover);border-radius:var(--lumiverse-radius-lg,16px);' +
+        '.af.af-pl{max-width:none;margin:0;width:100%;gap:10px;padding:12px;overflow-x:hidden;overflow-y:auto;overscroll-behavior:contain;touch-action:pan-y;scrollbar-width:none;border:1px solid var(--af-line-hover);border-radius:var(--lumiverse-radius-lg,16px);' +
         'background-color:var(--lumiverse-card-bg-solid,#1a1526);background-image:linear-gradient(var(--lumiverse-bg-elevated,#1f1a2e),var(--lumiverse-bg-elevated,#1f1a2e));' +
         'box-shadow:var(--lumiverse-shadow-lg,0 18px 48px rgba(0,0,0,.5));transform-origin:var(--af-from,22px 22px)}' +
         // The top bar is where the open player is dragged from. touch-action keeps
@@ -8314,13 +8324,29 @@ export function setup(ctx, overrides) {
         const id = await latestId(playerWhose === 'mine');
         if (!id)
             return;
+        const run = ++aheadRun;
+        aheadBusy = true;
         phase = 'Directing it ahead';
         paintFloat();
         const got = await getScript(activeChatId(), id, false);
+        if (run === aheadRun)
+            aheadBusy = false;
+        // Turned off, or started again, while it was directed: nothing more is
+        // said here.
+        if (run !== aheadRun || !S.prepareAhead)
+            return;
         phase = got.script ? 'Ready. Press Play.' : got.why || '';
         if (got.why)
             log(got.why, 'bad');
         paintFloat();
+    }
+    // Turned off, a reply being prepared ahead is stopped, so nothing more is
+    // spent on it, and the status line says the switch is off.
+    function stopAhead() {
+        aheadRun++;
+        if (aheadBusy && !show)
+            stopDirecting();
+        aheadBusy = false;
     }
     // The menu, from a press and hold or a right click on the round button, or
     // from More in the player. It is in groups, with a line between them: where
@@ -8554,8 +8580,14 @@ export function setup(ctx, overrides) {
         q('play').addEventListener('click', () => playerPlay());
         // Prepare replies ahead, on or off. Turned on, the latest reply is
         // directed now too, so Play starts at once.
+        // The status line says which way it went, since the button is an icon
+        // and a phone shows no hover text.
         q('prep').addEventListener('click', () => {
             set({ prepareAhead: !S.prepareAhead });
+            if (!S.prepareAhead)
+                stopAhead();
+            if (!show)
+                phase = S.prepareAhead ? 'Prepare replies ahead is on. Each new reply is directed now, so Play starts at once.' : 'Prepare replies ahead is off.';
             paintFloat();
             if (S.prepareAhead && !show && !busyMessage)
                 playerPrepare();
@@ -8629,6 +8661,18 @@ export function setup(ctx, overrides) {
             if (levelsOpen)
                 fillCast(box);
             revealInPlayer(box, levelsOpen);
+        });
+        // A card taller than the screen scrolls inside itself. Lumiverse moves
+        // the widget on any press that moves, so a press below the top row stays
+        // in the card while the card can scroll: a swipe there scrolls it, and
+        // the top row still moves the player.
+        c.addEventListener('pointerdown', (e) => {
+            if (c.scrollHeight <= c.clientHeight + 1)
+                return;
+            const t = e.target;
+            if (t && t.closest && t.closest('.af-pl-top'))
+                return;
+            e.stopPropagation();
         });
         floatBox.appendChild(c);
         paintLevels();
@@ -13141,7 +13185,10 @@ export function setup(ctx, overrides) {
             ], String(S.autoplayDelay || 0), (v) => set({ autoplayDelay: Number(v) }), 'Play at once by default. Gives another extension time to change a reply first. A reply changed while it plays starts again with the new text either way.'),
             toggle('Read your own messages', 'Off by default. Your own messages are performed too, in your persona’s voice. The button on a message always works.', 'readOwnMessages'),
         ].concat(bothAutoplayWarning())));
-        p.appendChild(toggle('Prepare replies ahead', 'Off by default. With Autoplay off, each new reply is directed in the background, so pressing Play starts at once. It costs a Director call for every reply, played or not.', 'prepareAhead'));
+        p.appendChild(toggle('Prepare replies ahead', 'Off by default. With Autoplay off, each new reply is directed in the background, so pressing Play starts at once. It costs a Director call for every reply, played or not.', 'prepareAhead', (on) => {
+            if (!on)
+                stopAhead();
+        }));
         p.appendChild(toggle('Keys to pause and play', 'Off by default. On a keyboard, press the keys to pause, and again to play. They do nothing while you type in a box.', 'pauseKeyOn', undefined, () => [pauseKeyRow()]));
         p.appendChild(toggle('Save the performance to the message', 'Off by default. Auto Foley’s own player under each message already plays it again for free. On, the audio is also saved for Lumiverse’s player, which uses storage on the server.', 'saveAudio'));
         p.appendChild(keptAudioBox());

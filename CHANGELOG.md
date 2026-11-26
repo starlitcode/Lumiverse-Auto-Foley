@@ -31,6 +31,8 @@ _2026-11-26_
 
 ### Fixed
 
+- **Prepare replies ahead kept directing after it was turned off.** The reply being prepared was still directed, which costs a Director call, and the player kept saying Directing it ahead. Turning it off now stops it, and the player says Prepare replies ahead is off. Pressing the button now says whether it is on or off, since a phone shows no hover text.
+- **Scrolling the floating player moved it instead.** With Who is voiced open on a small screen, a swipe in the player dragged the whole player. A swipe below its top row now scrolls it, and the top row still moves it.
 - **A saved line could be paid for twice.** Reading a line from **Keep made audio** gave up after 5 seconds, then the line was made again. On a slow server, the read now gets 15 seconds, the same as other reads.
 - **The message for no usable TTS connection left out services.** It now names Cartesia, OpenRouter and OpenVox too.
 - **Check for the Director could wait forever** on a connection that never answered. It now gives up after the same wait as the Director.
