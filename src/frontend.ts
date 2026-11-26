@@ -10994,7 +10994,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       );
       const withGone = (picked: string) =>
         picked && !(def && picked === def.id) && !opts.some((o) => o.id === picked) ? opts.concat([{ id: picked, label: 'A connection that is gone' }]) : opts;
-      connBox.appendChild(select('Which connection', withGone(S.directorConnection), def && S.directorConnection === def.id ? '' : S.directorConnection, (v) => set({ directorConnection: v }), 'Any connection you set up in Lumiverse. The first choice is your default connection. ' + (llmWhy || '')));
+      connBox.appendChild(select('Which connection', withGone(S.directorConnection), def && S.directorConnection === def.id ? '' : S.directorConnection, (v) => set({ directorConnection: v }), 'Any connection you set up in Lumiverse. The first choice is your default connection. A fast, low-cost model is enough, and costs less on every message. ' + (llmWhy || '')));
       backBox.innerHTML = '';
       backBox.appendChild(select('Second Director’s connection', withGone(S.backupConnection), def && S.backupConnection === def.id ? '' : S.backupConnection, (v) => set({ backupConnection: v }), 'Pick a different connection from the first, such as another provider. The same one is not asked twice.'));
     };
