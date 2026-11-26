@@ -177,6 +177,9 @@ function answer(msg) {
     // Each background's picture, by its id, as the backend keeps them.
     case 'video_bg_get': return reply({ type: 'video_bg', id: msg.id || 'main', picture: (window.__videoBgs || {})[msg.id || 'main'] || ((msg.id || 'main') === 'main' ? window.__videoBg || '' : '') });
     case 'video_bg_put': window.__videoBgs = Object.assign(window.__videoBgs || {}, { [msg.id || 'main']: msg.picture || '' }); if ((msg.id || 'main') === 'main') window.__videoBg = msg.picture || ''; return reply({ type: 'video_bg', id: msg.id || 'main', ok: true, picture: msg.picture || '' });
+    // Watermark pictures, by id.
+    case 'mark_pic_get': return reply({ type: 'mark_pic', id: msg.id, picture: (window.__markPics || {})[msg.id] || '' });
+    case 'mark_pic_put': window.__markPics = Object.assign(window.__markPics || {}, { [msg.id]: msg.picture || '' }); return reply({ type: 'mark_pic', id: msg.id, ok: true });
     // Mood pictures, by person and feeling.
     case 'mood_pic_get': return reply({ type: 'mood_pic', member: msg.member, feeling: msg.feeling, picture: (window.__moodPics || {})[msg.member + ':' + msg.feeling] || '' });
     case 'mood_pic_put': if (window.__moodPutFail && !msg.picture) return reply({ type: 'mood_pic', ok: false, error: 'The account did not answer.' }); window.__moodPics = Object.assign(window.__moodPics || {}, { [msg.member + ':' + msg.feeling]: msg.picture || '' }); return reply({ type: 'mood_pic', ok: true, member: msg.member, feeling: msg.feeling, picture: msg.picture || '' });
@@ -4580,6 +4583,99 @@ if (section("caption transitions")) {
     const startUp = coming.filter((f) => f.t > 5.82 && f.t < 5.95);
     if (move !== "cut") check(top > 0 && startUp.every((f) => f.yellow < top * 0.7), move + ": a caption coming in after a line comes in with the transition (" + coming.map((f) => Math.round((f.yellow / Math.max(1, top)) * 100)).join(" ") + ")");
     check(!errors.length, move + ": no page errors. " + errors.slice(0, 2).join(" | "));
+    await context.close();
+  }
+}
+
+if (section("watermarks")) {
+  console.log("A line under the title, and watermarks only where and when they are set");
+  // The share of a color in each part of the frame at one moment: the
+  // whole frame, the top right corner, and the band under the title.
+  const look = (page, t, color) => page.evaluate(async ([t, color]) => {
+    const r = document.querySelector("[data-af-scrub] input");
+    r.value = String(t);
+    r.dispatchEvent(new Event("input", { bubbles: true }));
+    await new Promise((x) => requestAnimationFrame(() => requestAnimationFrame(x)));
+    const c = document.querySelector("[data-af-videopreview]");
+    const W = c.width, H = c.height, u = Math.min(W, H) / 1080;
+    const d = c.getContext("2d").getImageData(0, 0, W, H).data;
+    const is = (i) => color === "yellow" ? d[i] > 200 && d[i + 1] > 160 && d[i + 2] < 90 : d[i] > 200 && d[i + 1] < 60 && d[i + 2] < 60;
+    let all = 0, corner = 0, under = 0;
+    for (let y = 0; y < H; y += 2) for (let x = 0; x < W; x += 2) {
+      if (!is((y * W + x) * 4)) continue;
+      all++;
+      if (x > W * 0.6 && y < H * 0.3) corner++;
+      if (y > H / 2 + 34 * u && y < H / 2 + 140 * u) under++;
+    }
+    return { all, corner, under };
+  }, [t, color]);
+  for (const size of SIZES) {
+    const { context, page, errors } = await open(THEMES[0], size, 1, () => {
+      const c = document.createElement("canvas");
+      c.width = 80;
+      c.height = 80;
+      const g = c.getContext("2d");
+      g.fillStyle = "#ff1010";
+      g.fillRect(0, 0, 80, 80);
+      window.__markPics = { wred: c.toDataURL("image/png") };
+      Object.assign(window.__settings, {
+        videoByline: "by Wren Calloway", videoBylineInk: "#ffd400", videoEdges: 0,
+        videoMarks: [{ id: "wred", text: "", pic: true, place: "tr", size: 80, strength: 100, when: "from", from: 5, secs: 3, backs: [] }],
+      });
+    });
+    await page.click('.af-tab[data-tab="studio"]');
+    await page.waitForTimeout(1500);
+    const title = await look(page, 1.2, "yellow");
+    check(title.under > 50 && title.under >= title.all * 0.95, size.name + ": the line under the title is drawn under it (" + JSON.stringify(title) + ")");
+    const before = await look(page, 3, "red");
+    const during = await look(page, 6.5, "red");
+    const after = await look(page, 9.5, "red");
+    check(during.all > 100 && during.corner === during.all, size.name + ": a watermark in the top right shows only in that corner (" + JSON.stringify(during) + ")");
+    check(before.all === 0 && after.all === 0, size.name + ": and only at the times chosen (" + before.all + " before, " + after.all + " after)");
+    // The panel: its strength at 0 draws nothing.
+    await page.locator(".af-fold", { hasText: "Watermarks" }).first().click();
+    await page.waitForTimeout(400);
+    await page.evaluate(() => {
+      const r = document.querySelector('[data-af-markstrength="wred"] input[type=range]');
+      r.value = "0";
+      r.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await page.waitForTimeout(700);
+    const none = await look(page, 6.5, "red");
+    check(none.all === 0 && (await page.evaluate(() => window.__settings.videoMarks[0].strength)) === 0, size.name + ": at strength 0, nothing is drawn (" + none.all + ")");
+    // Add one with text, and delete it after asking.
+    await page.click("[data-af-markadd]");
+    await page.waitForTimeout(500);
+    const n = await page.evaluate(() => window.__settings.videoMarks.length);
+    const fresh = page.locator("[data-af-mark]").last();
+    // White pixels in the bottom right corner, at a moment with only the
+    // title on screen.
+    const corner = () => page.evaluate(async () => {
+      const r = document.querySelector("[data-af-scrub] input");
+      r.value = "1.2";
+      r.dispatchEvent(new Event("input", { bubbles: true }));
+      await new Promise((x) => requestAnimationFrame(() => requestAnimationFrame(x)));
+      const c = document.querySelector("[data-af-videopreview]");
+      const W = c.width, H = c.height;
+      const d = c.getContext("2d").getImageData(Math.round(W * 0.6), Math.round(H * 0.8), Math.round(W * 0.4), Math.round(H * 0.2)).data;
+      let n = 0;
+      for (let i = 0; i < d.length; i += 4) if (d[i] > 120 && d[i + 1] > 120 && d[i + 2] > 120) n++;
+      return n;
+    });
+    const plainCorner = await corner();
+    await fresh.locator("[data-af-marktext]").fill("Studio Wren");
+    await fresh.locator("[data-af-marktext]").dispatchEvent("change");
+    await page.waitForTimeout(400);
+    const text = await page.evaluate(() => window.__settings.videoMarks[1] && window.__settings.videoMarks[1].text);
+    const textCorner = await corner();
+    check(plainCorner < 20 && textCorner > 100, size.name + ": a text watermark draws its words in its corner at once (" + plainCorner + ", then " + textCorner + ")");
+    const m = await page.evaluate(MEASURE, size.touch);
+    check(n === 2 && text === "Studio Wren" && !m.overflow.length && !m.small.length, size.name + ": a watermark is added with its text, and the rows fit (" + m.overflow.concat(m.small).slice(0, 2).join("; ") + ")");
+    await page.evaluate(() => (window.__asked = 0));
+    await fresh.locator("[data-af-markdel]").click();
+    await page.waitForTimeout(600);
+    check((await page.evaluate(() => ({ a: window.__asked, n: window.__settings.videoMarks.length }))).a === 1 && (await page.evaluate(() => window.__settings.videoMarks.length)) === 1, size.name + ": deleting a watermark asks first");
+    check(!errors.length, size.name + ": no page errors. " + errors.slice(0, 2).join(" | "));
     await context.close();
   }
 }

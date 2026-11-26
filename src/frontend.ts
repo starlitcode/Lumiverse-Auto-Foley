@@ -1236,6 +1236,8 @@ const PANEL_CSS = `
 .af-shape-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; }
 .af-shape-grid > * { min-width: 0; }
 .af-moods { gap: 6px; }
+.af-markbox { gap: 6px; padding: 10px 0; border-top: 1px solid var(--af-line); }
+.af-markbox:first-of-type { border-top: 0; }
 .af-moodpic .af-row { flex-wrap: wrap; }
 .af-moodedit { gap: 6px; padding: 10px 0; border-top: 1px solid var(--af-line); }
 .af-moodedit:first-of-type { border-top: 0; }
@@ -1875,6 +1877,9 @@ const DEFAULTS: any = {
   videoTwo: true,
   videoMoodPics: true,
   moodList: [],
+  videoByline: '',
+  videoBylineInk: '',
+  videoMarks: [],
   videoWordFill: 'solid',
   videoWordStops: ['#f2b880'],
   videoWordDir: 'down',
@@ -4211,6 +4216,7 @@ export function setup(ctx: Ctx, overrides?: any) {
           const im = await loadImage(p.picture);
           if (im) pics.set(p.picture, im);
         }
+    for (const m of marksNow()) if (m.pic) await loadMarkPic(m.id).catch(() => {});
     pairUp(st, parts);
     return st;
   }
@@ -4727,6 +4733,9 @@ export function setup(ctx: Ctx, overrides?: any) {
     st.from = -intro;
     st.to = total + fadeOut;
     drawBackAt(g, st, t - intro);
+    // A watermark in the middle is drawn under the words, so it never
+    // covers them.
+    drawMarks(g, st, t, intro, total, fadeOut, true);
     const audioT = t - intro;
     if (audioT < 0) {
       if (title) {
@@ -4757,6 +4766,20 @@ export function setup(ctx: Ctx, overrides?: any) {
         g.globalAlpha = a * 0.55;
         g.fillStyle = ink;
         g.fillRect(W / 2 - 60 * u, H / 2 + 34 * u, 120 * u, 2 * u);
+        // The line under the title, smaller, in its font and with its
+        // shadow, in its own color or the title's.
+        const by = String(S.videoByline || '').trim();
+        if (by) {
+          const bySize = Math.round(34 * u);
+          g.font = '400 ' + bySize + 'px ' + st.font;
+          g.shadowColor = 'rgba(0,0,0,0.65)';
+          g.shadowBlur = 18 * u;
+          g.globalAlpha = a;
+          g.fillStyle = hexOr(S.videoBylineInk, ink);
+          g.textAlign = 'center';
+          g.fillText(fitText(g, by, W - 240 * u), W / 2, H / 2 + 34 * u + 24 * u + bySize);
+          g.textAlign = 'left';
+        }
       }
     } else if (parts.length) {
       const now = Math.min(audioT, total);
@@ -4792,7 +4815,97 @@ export function setup(ctx: Ctx, overrides?: any) {
       g.fillStyle = '#000';
       g.fillRect(0, 0, W, H);
     }
+    // Watermarks go over everything else, the fades included.
+    drawMarks(g, st, t, intro, total, fadeOut, false);
     g.restore();
+  }
+
+  // ---- watermarks ----
+  // Up to five, each text, a picture, or both, in a corner, at the top or
+  // bottom in the middle, or in the middle. A picture is kept on the
+  // account in a file of its own, by the watermark's id.
+  interface VideoMark { id: string; text: string; pic: boolean; place: string; size: number; strength: number; when: 'all' | 'start' | 'end' | 'from' | 'backs'; from: number; secs: number; backs: string[] }
+  const MARKS_MAX = 5;
+  const MARK_PLACES = [
+    { id: 'tl', label: 'Top left' },
+    { id: 'tr', label: 'Top right' },
+    { id: 'bl', label: 'Bottom left' },
+    { id: 'br', label: 'Bottom right' },
+    { id: 'tc', label: 'Top, in the middle' },
+    { id: 'bc', label: 'Bottom, in the middle' },
+    { id: 'mid', label: 'The middle, under the words' },
+  ];
+  const marksNow = (): VideoMark[] => (Array.isArray(S.videoMarks) ? S.videoMarks : []);
+  const markPics = new Map<string, HTMLImageElement | null>();
+  const markPicAsked = new Map<string, Promise<void>>();
+  function loadMarkPic(id: string): Promise<void> {
+    let ask = markPicAsked.get(id);
+    if (!ask) {
+      ask = rpc({ type: 'mark_pic_get', id }, 15000).then(
+        async (r: any) => {
+          markPics.set(id, r && r.picture ? await loadImage(r.picture) : null);
+        },
+        () => {
+          markPicAsked.delete(id);
+        },
+      );
+      markPicAsked.set(id, ask);
+    }
+    return ask;
+  }
+  // How strong a watermark is now, from 0 to 1: its strength, while its
+  // time is on, faded in and out over 0.4 seconds at the ends of it.
+  function markStrength(m: VideoMark, st: VideoStage, t: number, intro: number, total: number, fadeOut: number): number {
+    const strength = Math.min(100, Math.max(0, numOr(m.strength, 50))) / 100;
+    if (strength <= 0) return 0;
+    if (m.when === 'backs') {
+      const at = t - intro;
+      let i = 0;
+      while (i + 1 < st.scenes.length && at >= st.scenes[i + 1].t) i++;
+      return (m.backs || []).indexOf(st.scenes[i].id) >= 0 ? strength : 0;
+    }
+    const [a, b] = noteSpan(m as any, intro, total, fadeOut);
+    const edge = Math.min(1, (t - a) / 0.4, (b - t) / 0.4);
+    return edge <= 0 ? 0 : strength * Math.min(1, edge);
+  }
+  function drawMarks(g: CanvasRenderingContext2D, st: VideoStage, t: number, intro: number, total: number, fadeOut: number, middle: boolean) {
+    const W = st.w;
+    const H = st.h;
+    const u = Math.min(W, H) / 1080;
+    // Kept inside the edges, and further in on a tall video, where a phone
+    // puts its own buttons.
+    const padX = Math.round((W < H ? 0.06 * W : 40 * u));
+    const padY = Math.round((W < H ? 0.08 * H : 36 * u));
+    for (const m of marksNow()) {
+      if ((m.place === 'mid') !== middle) continue;
+      const a = markStrength(m, st, t, intro, total, fadeOut);
+      if (a <= 0) continue;
+      const size = Math.round(Math.min(400, Math.max(12, numOr(m.size, 64))) * u);
+      const pic = m.pic ? markPics.get(m.id) || null : null;
+      const text = String(m.text || '').trim();
+      if (!pic && !text) continue;
+      g.save();
+      g.globalAlpha = a;
+      g.font = '600 ' + Math.round(size * 0.6) + 'px ' + st.font;
+      g.textBaseline = 'middle';
+      const pw = pic && pic.height ? (pic.width / pic.height) * size : 0;
+      const gap = pic && text ? size * 0.25 : 0;
+      const tw = text ? Math.min(g.measureText(text).width, W * 0.4) : 0;
+      const w = pw + gap + tw;
+      const left = m.place === 'tl' || m.place === 'bl';
+      const right = m.place === 'tr' || m.place === 'br';
+      const top = m.place === 'tl' || m.place === 'tr' || m.place === 'tc';
+      const x = left ? padX : right ? W - padX - w : (W - w) / 2;
+      const y = m.place === 'mid' ? (H - size) / 2 : top ? padY : H - padY - size;
+      g.shadowColor = 'rgba(0,0,0,0.6)';
+      g.shadowBlur = 10 * u;
+      if (pic) g.drawImage(pic, x, y, pw, size);
+      if (text) {
+        g.fillStyle = '#ffffff';
+        g.fillText(fitText(g, text, W * 0.4), x + pw + gap, y + size / 2);
+      }
+      g.restore();
+    }
   }
 
   // The background of the scene at this moment of the audio. A new scene's
@@ -13989,6 +14102,7 @@ export function setup(ctx: Ctx, overrides?: any) {
   const LOOK_KEYS = [
     'videoShape', 'videoFont', 'videoSize', 'videoInk', 'videoCaptionInk', 'videoWords', 'videoPlace', 'videoQuotes', 'videoPicShape', 'videoPicSize',
     'videoNameColor', 'videoNameFont', 'videoNameSize', 'videoPicRing', 'videoPicRingWidth', 'videoPicMove', 'videoTwo', 'videoMoodPics',
+    'videoByline', 'videoBylineInk', 'videoMarks',
     'videoWordFill', 'videoWordStops', 'videoWordDir', 'videoNameFill', 'videoNameStops', 'videoNameDir', 'videoCapFill', 'videoCapStops', 'videoCapDir',
     'videoWordShadow', 'videoWordShadowInk', 'videoWordShadowDark', 'videoWordShadowSoft', 'videoWordShadowFar',
     'videoNameShadow', 'videoNameShadowInk', 'videoNameShadowDark', 'videoNameShadowSoft', 'videoNameShadowFar', 'videoEdges', 'videoEdgeColor', 'videoMove', 'videoMoveSecs',
@@ -14027,6 +14141,185 @@ export function setup(ctx: Ctx, overrides?: any) {
     return { videoBacks: list, videoBackPick: copy.id };
   }
   const sameBack = (a: VideoBack | null) => !a || JSON.stringify(backDefault()) === JSON.stringify(a);
+  // The watermarks, each with its own rows, and Add a watermark.
+  function drawMarkEditors(box: HTMLElement, look: () => void) {
+    box.replaceChildren();
+    box.appendChild(hint('Your mark on a video, such as your name or a logo. It is drawn over everything in the video, in a corner clear of the words.'));
+    const list = marksNow();
+    const save = (redraw?: boolean) => {
+      set({ videoMarks: list.slice() });
+      if (redraw) drawMarkEditors(box, look);
+      look();
+    };
+    list.forEach((m, n) => {
+      const card = el('<div class="af-col af-markbox"></div>');
+      card.setAttribute('data-af-mark', m.id);
+      const head = el('<p class="af-scenebox-head"></p>');
+      head.textContent = 'Watermark ' + (n + 1);
+      card.appendChild(head);
+      const textId = rid('mt');
+      card.appendChild(labelRow('Text', 'Optional, up to 60 characters.', textId));
+      const text = el('<input type="text" class="af-field" maxlength="60" autocomplete="off" data-af-marktext id="' + textId + '">') as HTMLInputElement;
+      text.value = m.text || '';
+      text.addEventListener('change', () => {
+        m.text = text.value.trim().slice(0, 60);
+        save();
+      });
+      card.appendChild(text);
+      const picSaid = el('<p class="af-status" role="status"></p>');
+      const picRow = el('<div class="af-row"></div>');
+      const keepPic = async (picture: string) => {
+        let r: any = null;
+        try {
+          r = await rpc({ type: 'mark_pic_put', id: m.id, picture }, 60000);
+        } catch (_) {}
+        if (!r || !r.ok) {
+          picSaid.textContent = (r && r.error) || 'The picture could not be saved: the backend did not answer.';
+          picSaid.dataset.kind = 'bad';
+          return;
+        }
+        picSaid.textContent = '';
+        m.pic = !!picture;
+        markPicAsked.delete(m.id);
+        markPics.delete(m.id);
+        save(true);
+      };
+      const choose = button(m.pic ? 'Choose another picture' : 'Choose a picture', async () => {
+        let files: any[] = [];
+        try {
+          files = await ctx.uploads.pickFile({ accept: ['image/png', 'image/jpeg', 'image/webp', '.png', '.jpg', '.jpeg', '.webp'], multiple: false, maxSizeBytes: 20 * 1024 * 1024 });
+        } catch (e: any) {
+          picSaid.textContent = 'The file picker could not open: ' + String((e && e.message) || e).slice(0, 200);
+          picSaid.dataset.kind = 'bad';
+          return;
+        }
+        const f = files && files[0];
+        if (!f) return;
+        const url = URL.createObjectURL(new Blob([f.bytes as any], { type: f.mimeType || 'image/png' }));
+        const im = await loadImage(url);
+        URL.revokeObjectURL(url);
+        if (!im || !im.width) {
+          picSaid.textContent = 'That file is not a picture Auto Foley can read. Use PNG, JPEG or WebP.';
+          picSaid.dataset.kind = 'bad';
+          return;
+        }
+        // Kept as a PNG, so a logo keeps its see-through parts, at most 512
+        // pixels on its long side.
+        const sc = Math.min(1, 512 / Math.max(im.width, im.height));
+        const cv = canvasOf(Math.max(1, Math.round(im.width * sc)), Math.max(1, Math.round(im.height * sc)));
+        const g = cv.getContext('2d');
+        if (!g) return;
+        g.imageSmoothingQuality = 'high';
+        g.drawImage(im, 0, 0, cv.width, cv.height);
+        await keepPic(cv.toDataURL('image/png'));
+      });
+      choose.setAttribute('data-af-markpic', m.id);
+      picRow.appendChild(choose);
+      if (m.pic) {
+        const drop = button('Take the picture out', () => keepPic(''));
+        drop.setAttribute('data-af-markpicdrop', m.id);
+        picRow.appendChild(drop);
+      }
+      card.appendChild(picRow);
+      card.appendChild(picSaid);
+      const where = select('Where', MARK_PLACES, m.place || 'br', (v) => {
+        m.place = v;
+        save();
+      }, 'Bottom right by default. In the middle, it is under the words.');
+      where.querySelector('select')!.setAttribute('data-af-markplace', m.id);
+      card.appendChild(where);
+      const big = numberRow('How big, in pixels', Math.round(numOr(m.size, 64)), 12, 400, 1, (v) => {
+        m.size = v;
+        save();
+      }, '64 by default, its height in pixels of a 1080-pixel frame.');
+      big.setAttribute('data-af-marksize', m.id);
+      card.appendChild(big);
+      const strong = slider('How strong', numOr(m.strength, 50), 0, 100, 5, (v) => (v ? v + '%' : 'Not shown'), (v) => {
+        m.strength = v;
+        save();
+      }, '50% by default. Lower lets more of the video show through it.');
+      strong.setAttribute('data-af-byeye', '');
+      strong.setAttribute('data-af-markstrength', m.id);
+      card.appendChild(strong);
+      const whenOpts = [
+        { id: 'all', label: 'The whole video' },
+        { id: 'start', label: 'At the start' },
+        { id: 'end', label: 'At the end' },
+        { id: 'from', label: 'From a time, for a number of seconds' },
+      ];
+      if (backList().length > 1) whenOpts.push({ id: 'backs', label: 'Only during scenes on these backgrounds' });
+      const fromBox = el('<div class="af-sub"><div class="af-under"></div></div>');
+      const fromIn = fromBox.firstElementChild as HTMLElement;
+      fromIn.appendChild(numberRow('From, in seconds', numOr(m.from, 0), 0, 3600, 0.5, (v) => {
+        m.from = v;
+        save();
+      }, 'From the start of the video, title included.'));
+      fromIn.appendChild(numberRow('For, in seconds', numOr(m.secs, 4), 0.5, 3600, 0.5, (v) => {
+        m.secs = v;
+        save();
+      }));
+      const backsBox = el('<div class="af-sub"><div class="af-under af-row af-moods"></div></div>');
+      const backsIn = backsBox.firstElementChild as HTMLElement;
+      for (const b of backList()) {
+        const on = (m.backs || []).indexOf(b.id) >= 0;
+        const chip = el('<button type="button" class="af-segbtn" aria-pressed="' + (on ? 'true' : 'false') + '"></button>') as HTMLButtonElement;
+        chip.textContent = b.name;
+        chip.addEventListener('click', () => {
+          const has = (m.backs || []).indexOf(b.id) >= 0;
+          m.backs = has ? (m.backs || []).filter((x) => x !== b.id) : (m.backs || []).concat([b.id]);
+          chip.setAttribute('aria-pressed', has ? 'false' : 'true');
+          save();
+        });
+        backsIn.appendChild(chip);
+      }
+      const when = select('When', whenOpts, whenOpts.some((o) => o.id === m.when) ? m.when : 'all', (v) => {
+        m.when = v as VideoMark['when'];
+        showUnder(fromBox, v === 'from');
+        showUnder(backsBox, v === 'backs');
+        save();
+      }, 'The whole video by default. At the start or the end is the first or last 4 seconds.');
+      when.querySelector('select')!.setAttribute('data-af-markwhen', m.id);
+      card.appendChild(when);
+      fromBox.hidden = m.when !== 'from';
+      backsBox.hidden = m.when !== 'backs';
+      card.appendChild(fromBox);
+      card.appendChild(backsBox);
+      const del = button('Delete', async () => {
+        if (!(await askSure('Delete watermark ' + (n + 1), 'Delete this watermark' + (m.pic ? ' and its picture' : '') + '? There is no undo.', 'Delete', true))) return;
+        const at = list.indexOf(m);
+        if (at >= 0) list.splice(at, 1);
+        save(true);
+        if (m.pic) {
+          let r: any = null;
+          try {
+            r = await rpc({ type: 'mark_pic_put', id: m.id, picture: '' }, 15000);
+          } catch (_) {}
+          markPics.delete(m.id);
+          if (!r || !r.ok) notify('warning', 'The watermark was deleted, but its picture could not be taken out of your account. It is taken out the next time your settings are saved.');
+        }
+      });
+      del.setAttribute('data-af-markdel', m.id);
+      const row = el('<div class="af-row"></div>');
+      row.appendChild(del);
+      card.appendChild(row);
+      box.appendChild(card);
+    });
+    const add = button('Add a watermark', () => {
+      if (list.length >= MARKS_MAX) return;
+      let id = '';
+      do id = 'w' + Math.random().toString(36).slice(2, 9);
+      while (list.some((x) => x.id === id));
+      list.push({ id, text: '', pic: false, place: 'br', size: 64, strength: 50, when: 'all', from: 0, secs: 4, backs: [] });
+      S.videoMarks = list;
+      save(true);
+    });
+    add.setAttribute('data-af-markadd', '');
+    add.disabled = list.length >= MARKS_MAX;
+    const r = el('<div class="af-row"></div>');
+    r.appendChild(add);
+    box.appendChild(r);
+  }
+
   // Each saved look: its name, which can be typed over, Use and Delete. Save
   // this look, under them, keeps the look now under a new name.
   function drawLooks(box: HTMLElement) {
@@ -14735,7 +15028,19 @@ export function setup(ctx: Ctx, overrides?: any) {
         const titleRow = el('<div class="af-col"></div>');
         titleRow.appendChild(labelRow('Title', 'Empty uses the chat’s name, while Show names is on.', box.id));
         titleRow.appendChild(box);
-        b.appendChild(toggle('Title at the start', 'On by default. The title shows for two seconds before the first line.', 'videoTitleOn', look, () => [titleRow]));
+        const byBox = el('<input type="text" class="af-field" maxlength="80" spellcheck="true" autocomplete="off" data-af-byline>') as HTMLInputElement;
+        byBox.id = rid('vb');
+        byBox.value = String(S.videoByline || '');
+        byBox.placeholder = 'by Wren Calloway';
+        byBox.addEventListener('change', () => {
+          set({ videoByline: byBox.value.trim().slice(0, 80) });
+          look();
+        });
+        const byRow = el('<div class="af-col"></div>');
+        byRow.appendChild(labelRow('A line under the title', 'Empty by default. Shown smaller under the title, such as by and your name. With no title, it is not shown.', byBox.id));
+        byRow.appendChild(byBox);
+        const byInk = colorRow('videoBylineInk', 'Color of the line', 'The title’s color by default.', '--af-none', hexOr(S.videoInk, STORY_INK), 'Use the title’s color', look);
+        b.appendChild(toggle('Title at the start', 'On by default. The title shows for two seconds before the first line.', 'videoTitleOn', look, () => [titleRow, byRow, byInk]));
         b.appendChild(numberRow('Fade to black at the end, in seconds', numOr(S.videoFadeOut, 1.5), 0, 5, 0.5, (v) => {
           set({ videoFadeOut: v });
           look();
@@ -14753,6 +15058,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       }),
     );
     vc.appendChild(fold('Notes', (b) => drawNoteEditors(b, look)));
+    vc.appendChild(fold('Watermarks', (b) => drawMarkEditors(b, look)));
     vc.appendChild(fold('Saved looks', (b) => drawLooks(b)));
     const lookRow = el('<div class="af-row"></div>');
     const lookBack = button('Put the look back', async () => {

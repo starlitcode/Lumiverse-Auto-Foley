@@ -2256,3 +2256,28 @@ describe("looks keep one background", () => {
     expect([b.id, b.kind, b.shapes.length]).toEqual(["b9", "design", 1]);
   });
 });
+
+describe("watermarks and the line under the title", () => {
+  test("at most 5 watermarks, each held to its limits", () => {
+    const h = host();
+    const many = Array.from({ length: 8 }, (_, i) => ({ id: "w" + i, text: "x".repeat(90), pic: "yes", place: "left", size: 9999, strength: -4, when: "later", from: -3, secs: 0, backs: ["main", "b!2"] }));
+    const s = h.box.cleanSettings({ videoMarks: many, videoByline: "  by Wren Calloway  ", videoBylineInk: "gold" });
+    expect(s.videoMarks.length).toBe(5);
+    expect(s.videoMarks[0]).toEqual({ id: "w0", text: "x".repeat(60), pic: false, place: "br", size: 400, strength: 0, when: "all", from: 0, secs: 0.5, backs: ["main", "b2"] });
+    expect([s.videoByline, s.videoBylineInk]).toEqual(["by Wren Calloway", ""]);
+  });
+
+  test("a watermark's picture is kept, and taken out when the watermark leaves the list or on Start again", async () => {
+    const h = host();
+    const pic = "data:image/png;base64,AAAA";
+    await h.ask({ type: "save", settings: { videoMarks: [{ id: "w1", pic: true }, { id: "w2", pic: true }] } }, "u1");
+    await h.ask({ type: "mark_pic_put", id: "w1", picture: pic }, "u1");
+    await h.ask({ type: "mark_pic_put", id: "w2", picture: pic }, "u1");
+    expect((await h.ask({ type: "mark_pic_get", id: "w1" }, "u1")).find((m: any) => m.type === "mark_pic").picture).toBe(pic);
+    await h.ask({ type: "save", settings: { videoMarks: [{ id: "w2", pic: true }] } }, "u1");
+    expect(h.files.has("u1/video-marks/w1.json")).toBe(false);
+    expect(h.files.has("u1/video-marks/w2.json")).toBe(true);
+    await h.ask({ type: "reset", parts: ["settings"] }, "u1");
+    expect(h.files.has("u1/video-marks/w2.json")).toBe(false);
+  });
+});

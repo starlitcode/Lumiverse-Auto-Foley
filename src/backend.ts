@@ -92,6 +92,18 @@ interface VideoShapeDef {
   clear: number;
   text: string;
 }
+interface VideoMark {
+  id: string;
+  text: string;
+  pic: boolean;
+  place: 'tl' | 'tr' | 'bl' | 'br' | 'tc' | 'bc' | 'mid';
+  size: number;
+  strength: number;
+  when: 'all' | 'start' | 'end' | 'from' | 'backs';
+  from: number;
+  secs: number;
+  backs: string[];
+}
 // One background. A picture is kept in a file of its own, by the
 // background's id. dim and blur are for a picture, color for a color, and
 // shapes for a design. use says which scenes it is for: match is scenes with
@@ -254,6 +266,13 @@ interface Settings {
   // The reader's own list of moods for pictures, each with an id, a name
   // and the words that pick it. Empty is the built-in list.
   moodList: { id: string; name: string; words: string[] }[];
+  // The line under the title, and its color. Empty color is the title's.
+  videoByline: string;
+  videoBylineInk: string;
+  // Up to 5 watermarks: text, a picture kept in a file of its own by the
+  // watermark's id, or both; where, how big in pixels of a 1080-pixel
+  // frame, how strong in percent, and when.
+  videoMarks: VideoMark[];
   // The fill of the words, the names and the sound captions: one color, or a
   // linear or radial gradient from their color through each stop. dir is a
   // linear gradient's direction.
@@ -525,6 +544,9 @@ const DEFAULT_SETTINGS: Settings = {
   videoTwo: true,
   videoMoodPics: true,
   moodList: [],
+  videoByline: '',
+  videoBylineInk: '',
+  videoMarks: [],
   videoWordFill: 'solid',
   videoWordStops: ['#f2b880'],
   videoWordDir: 'down',
@@ -661,6 +683,29 @@ const FONT_IDS = ['book', 'clean', 'type', 'round', 'theme'];
 function fontChoice(v: any, dflt: string): string {
   const t = String(v == null ? '' : v);
   return FONT_IDS.indexOf(t) >= 0 || /^own:[a-z0-9]{1,40}$/.test(t) ? t : dflt;
+}
+
+const MARKS_MAX = 5;
+function cleanMarks(v: any): VideoMark[] {
+  if (!Array.isArray(v)) return [];
+  const out: VideoMark[] = [];
+  for (const m of v.slice(0, MARKS_MAX)) {
+    const id = str(m && m.id, 24).replace(/[^a-z0-9]/gi, '');
+    if (!id || out.some((x) => x.id === id)) continue;
+    out.push({
+      id,
+      text: str(m.text, 60).replace(/[\u0000-\u001f]/g, ' ').trim(),
+      pic: m.pic === true,
+      place: pick(m.place, ['tl', 'tr', 'bl', 'br', 'tc', 'bc', 'mid'] as const, 'br'),
+      size: Math.round(num(m.size, 12, 400, 64)),
+      strength: Math.round(num(m.strength, 0, 100, 50)),
+      when: pick(m.when, ['all', 'start', 'end', 'from', 'backs'] as const, 'all'),
+      from: Math.round(num(m.from, 0, 3600, 0) * 10) / 10,
+      secs: Math.round(num(m.secs, 0.5, 3600, 4) * 10) / 10,
+      backs: (Array.isArray(m.backs) ? m.backs : []).map((x: any) => str(x, 24).replace(/[^a-z0-9]/gi, '')).filter(Boolean).slice(0, 12),
+    });
+  }
+  return out;
 }
 
 // A gradient's colors after its first: 1 to 5 of them, so 2 to 6 in all.
@@ -1014,6 +1059,7 @@ function cleanSavedFolders(v: any): Settings['savedFolders'] {
 const LOOK_KEYS = [
   'videoShape', 'videoFont', 'videoSize', 'videoInk', 'videoCaptionInk', 'videoWords', 'videoPlace', 'videoQuotes', 'videoPicShape', 'videoPicSize',
   'videoNameColor', 'videoNameFont', 'videoNameSize', 'videoPicRing', 'videoPicRingWidth', 'videoPicMove', 'videoTwo', 'videoMoodPics',
+  'videoByline', 'videoBylineInk', 'videoMarks',
   'videoWordFill', 'videoWordStops', 'videoWordDir', 'videoNameFill', 'videoNameStops', 'videoNameDir', 'videoCapFill', 'videoCapStops', 'videoCapDir',
   'videoWordShadow', 'videoWordShadowInk', 'videoWordShadowDark', 'videoWordShadowSoft', 'videoWordShadowFar',
   'videoNameShadow', 'videoNameShadowInk', 'videoNameShadowDark', 'videoNameShadowSoft', 'videoNameShadowFar', 'videoEdges', 'videoEdgeColor', 'videoMove', 'videoMoveSecs',
@@ -1178,6 +1224,9 @@ function cleanSettings(raw: any): Settings {
     videoTwo: bool(r.videoTwo, d.videoTwo),
     videoMoodPics: bool(r.videoMoodPics, d.videoMoodPics),
     moodList: cleanMoods(r.moodList),
+    videoByline: str(r.videoByline, 80).replace(/[\u0000-\u001f]/g, ' ').trim(),
+    videoBylineInk: hexColor(r.videoBylineInk),
+    videoMarks: cleanMarks(r.videoMarks),
     videoWordFill: pick(r.videoWordFill, ['solid', 'linear', 'radial'] as const, 'solid'),
     videoWordStops: cleanStops(r.videoWordStops, '#f2b880'),
     videoWordDir: pick(r.videoWordDir, GRAD_DIRS, 'down'),
@@ -4086,10 +4135,40 @@ async function dropVideoBgs(s: Settings, userId: string | undefined): Promise<bo
   for (const id of await bgIds(s, userId)) ok = (await dropVideoBg(id, userId)) && ok;
   return ok;
 }
+// Each watermark's picture, in a file named by its id, with an index of
+// the ids that have one, so a picture is found after its watermark left.
+const markFile = (id: string) => 'video-marks/' + id + '.json';
+const MARK_INDEX_FILE = 'video-marks/index.json';
+async function markIndex(userId: string | undefined): Promise<string[]> {
+  const v = await readJson(MARK_INDEX_FILE, userId);
+  return Array.isArray(v) ? v.map((x: any) => backId(x)).filter((x: string, i: number, all: string[]) => all.indexOf(x) === i) : [];
+}
+async function dropMarkPic(id: string, userId: string | undefined): Promise<boolean> {
+  let ok = true;
+  try {
+    await spindle.userStorage.delete(markFile(id), userId);
+  } catch (_) {
+    const v = await readJson(markFile(id), userId);
+    if (v && v.picture) ok = false;
+  }
+  const index = await markIndex(userId);
+  if (index.indexOf(id) >= 0) ok = (await writeJson(MARK_INDEX_FILE, index.filter((x) => x !== id), userId)) && ok;
+  return ok;
+}
+async function dropMarkPics(s: Settings, userId: string | undefined): Promise<boolean> {
+  let ok = true;
+  const ids = (await markIndex(userId)).concat(s.videoMarks.map((m) => m.id));
+  for (const id of ids.filter((x, i) => ids.indexOf(x) === i)) ok = (await dropMarkPic(id, userId)) && ok;
+  return ok;
+}
+
 // After the list is saved: the pictures of backgrounds no longer in it.
 async function dropLeftBgs(s: Settings, userId: string | undefined): Promise<void> {
   const keep = s.videoBacks.map((b) => b.id);
   for (const id of await bgIndex(userId)) if (keep.indexOf(id) < 0) await dropVideoBg(id, userId);
+  // The same for watermarks.
+  const marks = s.videoMarks.map((m) => m.id);
+  for (const id of await markIndex(userId)) if (marks.indexOf(id) < 0) await dropMarkPic(id, userId);
 }
 
 // Fonts of the reader's own, for videos. The list is a file of its own, and
@@ -5178,6 +5257,23 @@ async function onPanel(p: any, userId: string | undefined) {
         const ok = await writeJson(moodPicFile(member, feeling), { picture }, userId);
         return answer({ type: 'mood_pic', ok, member, feeling, picture: ok ? picture : '', error: ok ? '' : 'The picture could not be saved to your account.' });
       }
+      case 'mark_pic_get': {
+        const id = backId(p.id);
+        const v = await readJson(markFile(id), userId);
+        return answer({ type: 'mark_pic', id, picture: cleanVideoBg(v && v.picture) });
+      }
+      case 'mark_pic_put': {
+        const id = backId(p.id);
+        const picture = cleanVideoBg(p.picture);
+        if (p.picture && !picture) return answer({ type: 'mark_pic', id, ok: false, error: 'That picture is too large to keep. Pick a smaller one.' });
+        let ok = true;
+        if (picture) {
+          ok = await writeJson(markFile(id), { picture }, userId);
+          const index = await markIndex(userId);
+          if (ok && index.indexOf(id) < 0) await writeJson(MARK_INDEX_FILE, index.concat([id]), userId);
+        } else ok = await dropMarkPic(id, userId);
+        return answer({ type: 'mark_pic', id, ok, error: ok ? '' : 'The picture could not be saved to your account.' });
+      }
       case 'font_list':
         return answer({ type: 'fonts', ok: true, list: await loadFonts(userId) });
       case 'font_upload': {
@@ -5452,7 +5548,7 @@ async function onPanel(p: any, userId: string | undefined) {
         for (const part of parts) {
           let same = false;
           if (part === 'settings') {
-            same = strip(s) === strip(fresh) && !(await anyVideoBg(s, userId)) && !(await loadFonts(userId)).length;
+            same = strip(s) === strip(fresh) && !(await anyVideoBg(s, userId)) && !(await loadFonts(userId)).length && !(await markIndex(userId)).length;
           }
           else if (part === 'prompt')
             same = !s.prompt && empty(s.askNotes) && empty(s.engineNotes) && empty(s.decisionQuestions) &&
@@ -5478,7 +5574,7 @@ async function onPanel(p: any, userId: string | undefined) {
         // The pictures are found from the backgrounds in the settings, so
         // they are taken out before the settings go back to their defaults.
         let bgsOk = true;
-        if (parts.indexOf('settings') >= 0) bgsOk = await dropVideoBgs(s, userId);
+        if (parts.indexOf('settings') >= 0) bgsOk = (await dropVideoBgs(s, userId)) && (await dropMarkPics(s, userId));
         if (parts.indexOf('settings') >= 0) {
           const keep = { cast: s.cast, groups: s.groups, moodList: s.moodList, prompt: s.prompt, promptRole: s.promptRole, engineNoteRole: s.engineNoteRole, askNoteRole: s.askNoteRole, askNotes: s.askNotes, engineNotes: s.engineNotes, decisionQuestions: s.decisionQuestions, exportParts: s.exportParts, importParts: s.importParts, resetParts: s.resetParts, builtInSeen: s.builtInSeen, movedSeen: s.movedSeen, chatsOff: s.chatsOff };
           Object.assign(s, fresh, keep);

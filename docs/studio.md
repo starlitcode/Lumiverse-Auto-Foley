@@ -426,6 +426,56 @@ Brisa and Tollan are made-up characters, in one scene. Both have a picture, and 
 - Between one picture and two, a person on screen in both lines moves to their new place over the transition, and only the one who arrives or leaves fades. See [Moving between lines](#moving-between-lines).
 - A line's mood comes from its voice tags and its note on how it is said, matched against the words of each mood. With none, it is the scene's mood. With no mood either, the main picture is used.
 
+## Marking a video as yours
+
+### In short
+
+- **A line under the title** puts a short line, such as "by" and your name, under the title at the start of the video.
+- **Watermarks**, up to five, put your name, a logo, or both on the video.
+- A watermark sits in a corner, at the top or bottom in the middle, or in the middle under the words. It never covers the words.
+- Each one can show for the whole video, at the start, at the end, from a time for some seconds, or only during scenes on some backgrounds.
+- They are drawn in the preview, the example clip, full screen and every saved video. The downloaded audio has none.
+- Both are empty or off by default, so a video has none until you add them.
+
+### Steps
+
+1. Open **Title and ending** under **Video**, and type in **A line under the title**. Pick **Color of the line** if you want it apart from the title.
+2. Open **Watermarks** and press **Add a watermark**.
+3. Type its **Text**, or press **Choose a picture** for a PNG, JPEG or WebP logo, or both.
+4. Pick **Where**, **How big, in pixels** and **How strong**.
+5. Pick **When**. For **From a time, for a number of seconds**, set the time and how long.
+6. Look at the preview. Each change shows at once.
+
+**Delete** takes a watermark out, and asks first. Its picture is taken out of your account with it.
+
+### What it sends
+
+Nothing. The line and the watermarks are drawn on your device. A watermark's picture is kept on your account in a file of its own. See [Privacy](privacy.md).
+
+### An example
+
+Wren Calloway posts her videos and wants them marked.
+
+1. **A line under the title**: `by Wren Calloway`. The title card now reads the chat's name, then her line under it, smaller.
+2. A watermark with her logo, a small round picture, and the text `Wren`. **Where**: **Bottom right**. **How big**: 64. **How strong**: 50%. **When**: **The whole video**.
+3. A second watermark with the text `wrencalloway.example`. **Where**: **Top, in the middle**. **When**: **At the end**, so it shows for the last 4 seconds.
+
+In the video, her logo and name sit in the bottom right corner the whole time, half see-through, clear of the words. Her address fades in at the top for the end.
+
+### Details
+
+- The line under the title is drawn only with a title. With **Title at the start** off, it is not shown.
+- It uses the title's font and shadow, and the title's color unless you pick one.
+- **How big** is the height of the watermark, from 12 to 400 pixels of a 1080-pixel frame. Its text is about two thirds of that.
+- **How strong** is 50% by default. 0% shows nothing, and 100% is solid.
+- **At the start** and **At the end** are the first and last 4 seconds, the same as notes.
+- **Only during scenes on these backgrounds** shows with two or more backgrounds. It picks backgrounds, not scenes, since every performance has scenes of its own.
+- A watermark fades in and out over less than half a second at the ends of its time.
+- In a tall video, the corners are further in, clear of where a phone puts its own buttons.
+- A watermark in the middle is drawn under the words, so it never covers them. Every other one is drawn over everything, the fades included.
+- A picture is kept as a PNG, at most 512 pixels on its long side, so a logo keeps its see-through parts.
+- Both are part of a saved look. **Start again** with **Settings** ticked takes the watermarks and their pictures out.
+
 ## Hide and bleep words
 
 - **Hide words**: off by default.
