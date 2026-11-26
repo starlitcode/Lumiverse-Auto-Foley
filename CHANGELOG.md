@@ -14,6 +14,7 @@ _2026-11-26_
 
 - **Make a video could not go on after you left the tab.** On some phones, the sound does not start again by itself, so the video stayed stuck when you came back. It now goes on by itself where it can. Where it cannot, **Play the preview** becomes **Go on with the video**, and one press carries it on.
 - **The preview could get stuck after you left the tab.** It now stops where it is, and **Play the preview** goes on from there.
+- **The Language hint did not say what to do for someone who speaks two languages.** Under **More settings** on ElevenLabs and Gemini, it now says to leave **Language** empty, so each line is read in its own language. A code reads every line in that one language.
 - **A person's label did not follow Who they are.** In the Cast tab, changing **Who they are**, such as from NPC to Character, left the old label beside their name until the tab was drawn again. It now changes at once.
 
 ---

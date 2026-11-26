@@ -10132,7 +10132,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     };
     const words = (k: string, label: string, ph: string, help: string, max?: number) => text(label, String(own[k] || ''), (v) => setP(k, v.trim()), ph, help, max);
     if (eng.eleven && prov === 'elevenlabs') {
-      out.push(words('lang', 'Language', 'en, de, ja', 'Empty lets ElevenLabs tell from the text. A two-letter code, such as en or fr, makes it read the text in that language.'));
+      out.push(words('lang', 'Language', 'en, de, ja', 'Empty lets ElevenLabs tell each line\u2019s language, so leave it empty for someone who speaks more than one. A code, such as en, reads every line in that language.'));
     }
     if (prov === 'fish_audio') {
       out.push(words('direction', 'Fish Audio direction', 'warm and tired', 'Optional. Sent to Fish Audio with every line of theirs, such as warm and tired. A custom voice may not need it.', 300));
@@ -10144,7 +10144,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     if (prov === 'google_tts' || prov === 'google_vertex_tts') {
       if (eng.style) out.push(words('style_base', 'Gemini style', 'calm and dry', 'Optional. Sent to Gemini with every line of theirs, before that line\u2019s own note, such as calm and dry. A custom voice may not need it.', 300));
       out.push(num('temperature', 'Temperature', 0, 2, 0.05, 1, 'How much each take varies. 1.00 by default.'));
-      out.push(words('lang', 'Language', 'en-US', 'Empty lets Gemini tell from the text. A code such as en-US or fr-FR sets the language and accent.'));
+      out.push(words('lang', 'Language', 'en-US', 'Empty lets Gemini tell each line\u2019s language, so leave it empty for someone who speaks more than one. A code, such as en-US, reads every line in that language.'));
     }
     if (prov === 'chatterbox_direct') {
       out.push(num('exaggeration', 'Exaggeration', 0.25, 2, 0.05, 0.5, 'How strong the feeling is, on the original Chatterbox model. Turbo ignores it. 0.50 by default.'));

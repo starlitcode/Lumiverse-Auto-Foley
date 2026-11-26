@@ -40,6 +40,8 @@ Someone the AI added has no voice picked. The first time they speak, Auto Foley 
 - **Similarity.** Eleven v4 only. Auto Foley does not send it to Eleven v3.
 - **Speed.** Fish Audio, Chatterbox, OmniVoice and Cartesia. ElevenLabs' docs say Eleven v4 takes no speed, and Auto Foley sends none to Eleven v3. Gemini has none either.
 - **More settings.** A fold under the voice, with only the settings their engine takes. **Back to defaults** clears them.
+- **Language**, in **More settings**, on ElevenLabs and Gemini. Empty, the voice service tells the language of each line from its words. A code, such as `en-US` on Gemini or `en` on ElevenLabs, reads every line in that language.
+  - Leave it empty for someone who speaks more than one language. For example, a person who flirts in French and talks in English then has the French lines read as French. With `en-US`, those lines may sound English.
 - **Acting notes.** A note for the Director, such as "soft-spoken and dry, rarely raises their voice". It holds up to 1000 characters. See [How much a box holds](#how-much-a-box-holds), and [Writing for each voice engine](writing.md) for what helps on each engine.
 - **Do not voice.** Their lines are skipped.
 - **Hear a sample** speaks a test line with these settings. It costs a few credits.
