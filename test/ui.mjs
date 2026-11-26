@@ -163,6 +163,8 @@ function answer(msg) {
     case 'clips_state': { const c = window.__clips || {}; return reply({ type: 'clips_state', count: Object.keys(c).length, bytes: Object.values(c).reduce((n, x) => n + x.base64.length * 0.75, 0) }); }
     case 'clips_clear': window.__clips = {}; return reply({ type: 'clips_state', ok: true, count: 0, bytes: 0 });
     case 'kept_list': return reply({ type: 'kept_list', list: window.__keptList || [] });
+    case 'video_bg_get': return reply({ type: 'video_bg', picture: window.__videoBg || '' });
+    case 'video_bg_put': window.__videoBg = msg.picture || ''; return reply({ type: 'video_bg', ok: true, picture: window.__videoBg });
     case 'kept_script': return reply({ type: 'kept_script', script: (window.__keptList || []).some((e) => e.key === msg.key) ? SCRIPT : null });
     case 'kept_drop': (window.__dropped = window.__dropped || []).push(msg); window.__keptList = (window.__keptList || []).filter((e) => e.key !== msg.key); return reply({ type: 'kept_dropped', ok: true, clips: (msg.sigs || []).length });
     default: return;
@@ -3085,6 +3087,180 @@ if (section("log kinds")) {
   const m = await page.evaluate(MEASURE, true);
   check(!m.overflow.length && !m.small.length, "the switches fit on a phone. " + m.overflow.concat(m.small).slice(0, 2).join("; "));
   await context.close();
+}
+
+if (section("log all none")) {
+  console.log("All and None over the Log switches, as in Auto Refine");
+  for (const size of SIZES) {
+    for (const still of [false, true]) {
+      const tag = size.name + (still ? ", Reduce motion" : "");
+      const { context, page, errors } = await open(THEMES[0], size, 1, still ? () => (window.__settings.reduceMotion = true) : null);
+      await page.click('.af-tab[data-tab="stage"]');
+      await page.waitForTimeout(200);
+      await page.locator(".af-fold", { hasText: "What the Log shows" }).click();
+      await page.waitForTimeout(350);
+      const read = () =>
+        page.evaluate(() => {
+          const bar = document.querySelector("[data-af-bulk]");
+          const boxes = [...document.querySelectorAll("[data-af-logkind] .af-box")];
+          return {
+            bar: !!bar,
+            said: bar ? bar.querySelector(".af-note").textContent : "",
+            on: boxes.filter((b) => b.checked).length,
+            total: boxes.length,
+            nudged: boxes.filter((b) => b.classList.contains("af-nudge")).length,
+            all: bar ? bar.querySelector('[data-af-pick="all"]').disabled : null,
+            none: bar ? bar.querySelector('[data-af-pick="none"]').disabled : null,
+          };
+        });
+      const first = await read();
+      check(first.bar && first.total === 7 && first.on === 7 && first.said === "7 of 7 chosen" && first.all && !first.none, tag + ": the bar counts every switch on, with All grayed. " + JSON.stringify(first));
+      await page.locator('[data-af-pick="none"]').click();
+      const pressed = await read();
+      if (still) check(pressed.on === 0 && pressed.nudged === 0, tag + ": None turns every switch off at once, with no press. " + JSON.stringify(pressed));
+      else check(pressed.nudged === 7 && pressed.on === 7, tag + ": None first gives every switch the press a finger gives it. " + JSON.stringify(pressed));
+      await page.waitForTimeout(700);
+      const off = await read();
+      check(off.on === 0 && off.nudged === 0 && off.said === "0 of 7 chosen" && off.none && !off.all, tag + ": then every switch is off, and None is grayed. " + JSON.stringify(off));
+      const savedOff = await page.evaluate(() => window.__settings.logShow);
+      check(Object.keys(savedOff || {}).length === 7 && Object.values(savedOff).every((v) => v === false), tag + ": every kind is saved as hidden. " + JSON.stringify(savedOff));
+      check(await page.evaluate(() => { const l = document.querySelectorAll(".af-log .af-log-line"); return l.length === 1 && /^Nothing (to show|has happened)/.test(l[0].textContent); }), tag + ": the Log shows only the line that says nothing is shown");
+      await page.locator('[data-af-pick="all"]').click();
+      await page.waitForTimeout(700);
+      const on = await read();
+      check(on.on === 7 && on.said === "7 of 7 chosen" && on.all && !on.none, tag + ": All turns every switch back on. " + JSON.stringify(on));
+      check(JSON.stringify(await page.evaluate(() => window.__settings.logShow)) === "{}", tag + ": and saves every kind as shown");
+      await page.locator('[data-af-logkind="director"] .af-box').click();
+      await page.waitForTimeout(200);
+      const one = await read();
+      check(one.on === 6 && one.said === "6 of 7 chosen" && !one.all && !one.none, tag + ": one switch by hand moves the count. " + JSON.stringify(one));
+      const m = await page.evaluate(MEASURE, size.touch);
+      check(!m.overflow.length && !m.small.length, tag + ": the bar fits. " + m.overflow.concat(m.small).slice(0, 2).join("; "));
+      check(!errors.length, tag + ": no errors. " + errors.slice(0, 2).join("; "));
+      await context.close();
+    }
+  }
+}
+
+if (section("this chat")) {
+  console.log("Auto Foley can be switched off in one chat, as in Auto Retry and Auto Refine");
+  for (const size of SIZES) {
+    const { context, page, errors } = await open(THEMES[0], size);
+    await page.click('.af-tab[data-tab="settings"]');
+    await page.waitForTimeout(300);
+    const row = page.locator('[data-af-row="thisChat"]');
+    check((await row.count()) === 1, size.name + ": Settings has a This chat row");
+    const slots = () => page.evaluate(() => document.querySelectorAll("#mount [data-af-slot]").length);
+    const before = await slots();
+    check(before > 0 && (await page.locator('[data-af="pill"]').textContent()) === "On", size.name + ": on in this chat, its messages have buttons");
+    check(((await row.locator("[data-af-chatswitch]").textContent()) || "").trim() === "Turn off here", size.name + ": the button says Turn off here");
+    await row.locator("[data-af-chatswitch]").click();
+    await page.waitForTimeout(700);
+    check(((await row.locator("[data-af-chatswitch]").textContent()) || "").trim() === "Turn on here", size.name + ": pressed, it says Turn on here");
+    check((await slots()) === 0, size.name + ": the messages in this chat lose their buttons");
+    check((await page.locator('[data-af="pill"]').textContent()) === "Off here", size.name + ": the pill at the top says Off here");
+    check(/switched off here/.test(await page.locator('[data-af="chatline"]').textContent()), size.name + ": the line under the title says so");
+    check(await page.evaluate(() => JSON.stringify(window.__settings.chatsOff) === '["chat1"]'), size.name + ": the chat is saved on the account");
+    check(/1 chat switched off/.test(await row.textContent()) && (await row.locator(".af-btn", { hasText: "Turn them all back on" }).isVisible()), size.name + ": the row counts the chats switched off");
+    const sentBefore = await page.evaluate(() => window.__sent.filter((m) => m.type === "direct").length);
+    await page.evaluate(() => window.__emit("GENERATION_ENDED", { chatId: "chat1", messageId: "m1" }));
+    await page.waitForTimeout(400);
+    check((await page.evaluate(() => window.__sent.filter((m) => m.type === "direct").length)) === sentBefore, size.name + ": a new reply in this chat is not prepared");
+    const m = await page.evaluate(MEASURE, size.touch);
+    check(!m.overflow.length && !m.small.length, size.name + ": the row fits. " + m.overflow.concat(m.small).slice(0, 2).join("; "));
+    if (shots) await row.screenshot({ path: shots + "/this-chat-" + size.name + ".png" });
+    await row.locator("[data-af-chatswitch]").click();
+    await page.waitForTimeout(700);
+    check((await slots()) === before && (await page.locator('[data-af="pill"]').textContent()) === "On", size.name + ": Turn on here puts the buttons back");
+    check(await page.evaluate(() => JSON.stringify(window.__settings.chatsOff) === "[]"), size.name + ": and the account no longer holds the chat");
+    check(!(await row.locator("[data-af-chatsoff]").isVisible()), size.name + ": with none switched off, the count is gone");
+    check(!errors.length, size.name + ": no errors. " + errors.slice(0, 2).join("; "));
+    await context.close();
+  }
+  // Read from the account when the panel loads.
+  {
+    const { context, page, errors } = await open(THEMES[0], SIZES[1], 1, () => (window.__settings.chatsOff = ["chat1"]));
+    await page.waitForTimeout(300);
+    check((await page.evaluate(() => document.querySelectorAll("#mount [data-af-slot]").length)) === 0, "a chat switched off on another device has no buttons when the page opens");
+    check((await page.locator('[data-af="pill"]').textContent()) === "Off here", "and the pill says Off here");
+    // A press of the floating button or Extras goes nowhere, and says why.
+    await page.evaluate(() => window.__emit("GENERATION_ENDED", { chatId: "chat1", messageId: "m1" }));
+    await page.waitForTimeout(300);
+    check(!(await page.evaluate(() => window.__sent.some((m) => m.type === "direct"))), "nothing is directed in it");
+    check(!errors.length, "no errors. " + errors.slice(0, 2).join("; "));
+    await context.close();
+  }
+}
+
+if (section("video look")) {
+  console.log("Videos: names, pictures and a background picture, with a preview");
+  // A face for one of the cast, drawn in the page, so Show pictures has one
+  // to show.
+  const face = () => {
+    const c = document.createElement("canvas");
+    c.width = 64;
+    c.height = 64;
+    const g = c.getContext("2d");
+    g.fillStyle = "#30c060";
+    g.fillRect(0, 0, 64, 64);
+    window.__settings.cast[1].picture = c.toDataURL("image/png");
+  };
+  for (const size of SIZES) {
+    const { context, page, errors } = await open(THEMES[0], size, 1, face);
+    const where = size.name;
+    await page.click('.af-tab[data-tab="settings"]');
+    await page.waitForTimeout(500);
+    const prev = page.locator("[data-af-videopreview]");
+    check((await prev.count()) === 1, where + ": Settings has a preview of a video frame");
+    // A fingerprint of a part of the preview, so a change to it can be seen.
+    const print = (x, y, w, h) =>
+      page.evaluate(([x, y, w, h]) => {
+        const d = document.querySelector("[data-af-videopreview]").getContext("2d").getImageData(x, y, w, h).data;
+        let sum = 0;
+        let lit = 0;
+        let red = 0;
+        for (let i = 0; i < d.length; i += 4) {
+          sum = (sum + d[i] * 3 + d[i + 1] * 5 + d[i + 2] * 7) % 1000000007;
+          if (d[i] + d[i + 1] + d[i + 2] > 300) lit++;
+          if (d[i] > d[i + 2] + 40) red++;
+        }
+        return { sum, lit, red };
+      }, [x, y, w, h]);
+    const head = () => print(560, 180, 800, 330);
+    const withAll = await head();
+    check(withAll.lit > 200, where + ": the speaker's picture and name are drawn above the line (" + withAll.lit + " light pixels)");
+    if (shots) await prev.screenshot({ path: shots + "/video-preview-" + where + ".png" });
+    await page.locator('[data-af-row="videoNames"] .af-box').click();
+    await page.waitForTimeout(400);
+    const noNames = await head();
+    check(noNames.sum !== withAll.sum, where + ": Show names off takes the name out of the frame");
+    check(await page.evaluate(() => window.__settings.videoNames === false), where + ": and is saved");
+    await page.locator('[data-af-row="videoPics"] .af-box').click();
+    await page.waitForTimeout(400);
+    const bare = await head();
+    check(bare.lit < 50 && bare.sum !== noNames.sum, where + ": Show pictures off takes the picture out too (" + bare.lit + " light pixels left)");
+    if (shots) await prev.screenshot({ path: shots + "/video-preview-bare-" + where + ".png" });
+    // A background picture: the stub's picture is red on the left.
+    const corner = () => print(40, 400, 200, 200);
+    const dark = await corner();
+    check(!(await page.locator('[data-af-row="videoBg"] .af-sub').isVisible()), where + ": with no picture, Dim the picture is hidden");
+    await page.locator('[data-af-videobg="choose"]').click();
+    await page.waitForTimeout(900);
+    const bg = await corner();
+    check(bg.red > 30000 && dark.red < 1000, where + ": a chosen picture fills the background (" + dark.red + " then " + bg.red + " red pixels)");
+    check(await page.evaluate(() => /^data:image\/jpeg;base64,/.test(window.__videoBg || "")), where + ": the picture is saved to the account as a JPEG");
+    check(await page.evaluate(() => { const i = new Image(); return new Promise((r) => { i.onload = () => r(i.width === 1920 && i.height === 1080); i.onerror = () => r(false); i.src = window.__videoBg; }); }), where + ": at the video's full size, 1920 by 1080");
+    check(await page.locator('[data-af-row="videoBg"] .af-sub').isVisible(), where + ": Dim the picture shows under it");
+    if (shots) await prev.screenshot({ path: shots + "/video-preview-picture-" + where + ".png" });
+    const m = await page.evaluate(MEASURE, size.touch);
+    check(!m.overflow.length && !m.small.length, where + ": the card fits. " + m.overflow.concat(m.small).slice(0, 2).join("; "));
+    await page.locator('[data-af-videobg="drop"]').click();
+    await page.waitForTimeout(700);
+    const back = await corner();
+    check(back.red < 1000 && (await page.evaluate(() => window.__videoBg === "")), where + ": Take it out puts the dark background back");
+    check(!errors.length, where + ": no errors. " + errors.slice(0, 2).join("; "));
+    await context.close();
+  }
 }
 
 if (section("pictures")) {

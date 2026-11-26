@@ -10,7 +10,7 @@
 // The key for speech stays in Lumiverse. Lines are spoken through
 // Lumiverse's own TTS route, as the signed-in reader, so this file never sees
 // that key.
-const VERSION = '1.7.1';
+const VERSION = '1.8.0';
 // The marks Lumiverse puts on another extension's part of the page. Nothing
 // inside one is read, written or pressed.
 const OTHER_UI = '[data-spindle-extension-root],[data-spindle-ext],[data-spindle-modal]';
@@ -518,35 +518,41 @@ function levelGain(mine, quietest) {
         return 1;
     return Math.round(Math.pow(10, -down / 20) * 1000) / 1000;
 }
-// A WAV file of 16-bit samples, from one channel or two.
+// A WAV file of 24-bit samples, from one channel or two. 24 bits keeps the
+// quiet ends of each line as clean as the browser decoded them, and every
+// audio program reads it.
 function wavBlob(channels, rate) {
     const ch = Math.max(1, Math.min(2, channels.length));
     const n = channels.length ? channels[0].length : 0;
-    const buf = new ArrayBuffer(44 + n * ch * 2);
+    const BYTES = 3;
+    const buf = new ArrayBuffer(44 + n * ch * BYTES);
     const v = new DataView(buf);
     const ascii = (o, t) => {
         for (let k = 0; k < t.length; k++)
             v.setUint8(o + k, t.charCodeAt(k));
     };
     ascii(0, 'RIFF');
-    v.setUint32(4, 36 + n * ch * 2, true);
+    v.setUint32(4, 36 + n * ch * BYTES, true);
     ascii(8, 'WAVE');
     ascii(12, 'fmt ');
     v.setUint32(16, 16, true);
     v.setUint16(20, 1, true);
     v.setUint16(22, ch, true);
     v.setUint32(24, rate, true);
-    v.setUint32(28, rate * ch * 2, true);
-    v.setUint16(32, ch * 2, true);
-    v.setUint16(34, 16, true);
+    v.setUint32(28, rate * ch * BYTES, true);
+    v.setUint16(32, ch * BYTES, true);
+    v.setUint16(34, BYTES * 8, true);
     ascii(36, 'data');
-    v.setUint32(40, n * ch * 2, true);
+    v.setUint32(40, n * ch * BYTES, true);
     let o = 44;
     for (let i = 0; i < n; i++)
         for (let c = 0; c < ch; c++) {
             const x = Math.max(-1, Math.min(1, Number(channels[c][i]) || 0));
-            v.setInt16(o, x < 0 ? x * 0x8000 : x * 0x7fff, true);
-            o += 2;
+            const q = Math.round(x < 0 ? x * 0x800000 : x * 0x7fffff);
+            v.setUint8(o, q & 0xff);
+            v.setUint8(o + 1, (q >> 8) & 0xff);
+            v.setUint8(o + 2, (q >> 16) & 0xff);
+            o += 3;
         }
     return new Blob([buf], { type: 'audio/wav' });
 }
@@ -1173,6 +1179,9 @@ const PANEL_CSS = `
 .af-hint[data-af-moving] { transition: opacity 140ms ease-out, transform 140ms ease-out; }
 .af-hint[data-af-open] { opacity: 1; transform: none; }
 
+/* One frame of a video, drawn at full size and shown at the card's width. */
+.af-videopreview { display: block; width: 100%; height: auto; aspect-ratio: 16 / 9; border-radius: var(--af-r); border: 1px solid var(--af-line); background: #0b0a0f; }
+
 /* The switch. It bounces a little when flipped, the same as Auto Refine's. */
 .af-box {
   -webkit-appearance: none; appearance: none; margin: 0; flex: none; position: relative; width: 38px; height: 22px;
@@ -1188,9 +1197,10 @@ const PANEL_CSS = `
 .af-box:checked::after { left: 19px; background: var(--af-accent); }
 .af-box:disabled { opacity: .45; cursor: not-allowed; }
 .af-box:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--af-accent-soft), 0 0 8px 0 var(--af-accent-soft); }
+/* af-nudge is the same press, given by All and None. */
 @media (prefers-reduced-motion: no-preference) {
-  html:not([data-af-still]) .af-box:active:not(:disabled)::after { width: 18px; }
-  html:not([data-af-still]) .af-box:checked:active:not(:disabled)::after { left: 15px; }
+  html:not([data-af-still]) .af-box:active:not(:disabled)::after, html:not([data-af-still]) .af-box.af-nudge::after { width: 18px; }
+  html:not([data-af-still]) .af-box:checked:active:not(:disabled)::after, html:not([data-af-still]) .af-box.af-nudge:checked::after { left: 15px; }
 }
 @media (hover: hover) { .af-box:hover:not(:disabled) { box-shadow: 0 0 0 3px var(--af-accent-soft); } }
 
@@ -1422,8 +1432,8 @@ html[data-af-still] .af-making-room { transition: none; }
   .af-box::before { content: ""; position: absolute; inset: -6px -4px; }
   }
 @media (pointer: coarse) and (prefers-reduced-motion: no-preference) {
-  html:not([data-af-still]) .af-box:active:not(:disabled)::after { width: 29px; }
-  html:not([data-af-still]) .af-box:checked:active:not(:disabled)::after { left: 19px; }
+  html:not([data-af-still]) .af-box:active:not(:disabled)::after, html:not([data-af-still]) .af-box.af-nudge::after { width: 29px; }
+  html:not([data-af-still]) .af-box:checked:active:not(:disabled)::after, html:not([data-af-still]) .af-box.af-nudge:checked::after { left: 19px; }
 }
 
 /* The big editor that Expand opens over the page. */
@@ -1601,9 +1611,13 @@ const DEFAULTS = {
     messageButton: false,
     barButton: false,
     guideSeen: false,
-    exportParts: ['settings', 'prompt', 'cast'],
-    importParts: ['settings', 'prompt', 'cast'],
-    resetParts: ['settings', 'prompt', 'cast', 'sounds', 'audio', 'key'],
+    exportParts: ['settings', 'prompt', 'cast', 'chats'],
+    importParts: ['settings', 'prompt', 'cast', 'chats'],
+    resetParts: ['settings', 'prompt', 'cast', 'chats', 'sounds', 'audio', 'key'],
+    chatsOff: [],
+    videoPics: true,
+    videoNames: true,
+    videoDim: 40,
     cast: [],
 };
 // ---------------------------------------------------------------------------
@@ -2002,7 +2016,7 @@ export function setup(ctx, overrides) {
     }
     // Both play a new reply when Lumiverse's auto-play and Auto Foley's are on.
     function bothAutoplay() {
-        return !!S.autoplay && !!S.enabled && !!hostVoice && !!hostVoice.ttsEnabled && !!hostVoice.ttsAutoPlay;
+        return !!S.autoplay && onHere() && !!hostVoice && !!hostVoice.ttsEnabled && !!hostVoice.ttsAutoPlay;
     }
     const voiceCache = {};
     // The voices for a connection, and for the model a person uses on it.
@@ -2101,6 +2115,34 @@ export function setup(ctx, overrides) {
         catch (_) { }
         return '';
     }
+    // ---- switched off in one chat ----
+    // The chats switched off are saved on the account with the settings. A
+    // temporary chat is held only while the page is open, since its id is
+    // never seen again once it closes.
+    const tempOff = new Set();
+    const CHATS_OFF_CAP = 500;
+    function chatIsOff(id) {
+        if (!id)
+            return false;
+        return tempOff.has(id) || (Array.isArray(S.chatsOff) && S.chatsOff.indexOf(id) >= 0);
+    }
+    // Whether Auto Foley acts in the chat on screen: on, and not switched off
+    // there. Off in a chat, nothing plays or is prepared on its own there, and
+    // its messages get no buttons and no players.
+    function onHere() {
+        return !!S.enabled && !chatIsOff(activeChatId());
+    }
+    // Whether Auto Foley acts in a chat a host event names. An event with no
+    // chat id is taken to be about the chat on screen.
+    function onIn(chatId) {
+        if (!S.enabled)
+            return false;
+        const id = chatId ? String(chatId) : activeChatId();
+        return !chatIsOff(id);
+    }
+    const OFF_HERE = 'Auto Foley is switched off in this chat.';
+    // Repaints the This chat row in Settings, while it is on screen.
+    let chatRowPaint = () => { };
     let chatInfo = { id: '', kind: 'none', name: '' };
     let chatAsk = 0;
     async function readChat() {
@@ -2751,8 +2793,11 @@ export function setup(ctx, overrides) {
             return show;
         return lastShow;
     }
+    // The file name: the chat's name and the day. With Show names off, the
+    // name is left out, so a shared file never names the character.
     function showName(sh) {
-        return 'auto-foley ' + fileName(chatInfo.name || 'chat') + ' ' + new Date(sh.startedAt).toISOString().slice(0, 10);
+        const day = new Date(sh.startedAt).toISOString().slice(0, 10);
+        return S.videoNames !== false ? 'auto-foley ' + fileName(chatInfo.name || 'chat') + ' ' + day : 'auto-foley ' + day;
     }
     // Every clip heard, decoded at one rate and joined end to end, with when
     // each one starts. Null when the browser cannot decode them.
@@ -2762,7 +2807,9 @@ export function setup(ctx, overrides) {
         const Off = w.OfflineAudioContext || w.webkitOfflineAudioContext;
         if (!Off)
             return null;
-        const rate = 44100;
+        // 48 kHz, the highest rate any voice service here sends, so no clip is
+        // made coarser by the join.
+        const rate = 48000;
         const bufs = [];
         const used = [];
         let skipped = 0;
@@ -2792,11 +2839,22 @@ export function setup(ctx, overrides) {
         const starts = [];
         const lens = [];
         let at = 0;
+        // Each clip fades in and out over 3 ms, too short to hear, so two clips
+        // never meet with a click.
+        const EDGE = Math.round(rate * 0.003);
         for (const b of bufs) {
             starts.push(at / rate);
             lens.push(b.length / rate);
-            for (let c = 0; c < ch; c++)
+            for (let c = 0; c < ch; c++) {
                 channels[c].set(b.getChannelData(Math.min(c, b.numberOfChannels - 1)), at);
+                const d = channels[c];
+                const edge = Math.min(EDGE, Math.floor(b.length / 2));
+                for (let k = 0; k < edge; k++) {
+                    const f = k / edge;
+                    d[at + k] *= f;
+                    d[at + b.length - 1 - k] *= f;
+                }
+            }
             at += b.length;
         }
         return { channels, rate, starts, lens, used, skipped };
@@ -2832,9 +2890,342 @@ export function setup(ctx, overrides) {
         const ok = saveFile(got.blob, showName(sh) + ' part ' + (k + 1) + '.' + ext);
         keepSaid(ok ? '' : 'The browser would not save the file. Some private windows block downloads.');
     }
-    // A video of the script page, made from the audio already heard, so it
-    // costs nothing. It is recorded as it plays, silently, so it takes as long
-    // as the performance. The words light up as they are said.
+    // ---- the video ----
+    // A video of the last performance, made from the audio already heard, so
+    // it costs nothing. It is recorded as it plays, silently, so it takes as
+    // long as the performance and a few seconds more.
+    //
+    // It is drawn like a story being read: a dark background or the reader's
+    // own picture, the chat's title at the start, then each line large in the
+    // middle, with the words lighting up as they are said. A speaker's picture
+    // and name sit above their line, each with a switch of its own, so a video
+    // can be shared without them. Sounds are captions in brackets.
+    const VIDEO_W = 1920;
+    const VIDEO_H = 1080;
+    // The title at the start, and the fade to black at the end, in seconds.
+    const VIDEO_INTRO = 2;
+    const VIDEO_OUTRO = 1.5;
+    const STORY_FONT = '"Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif';
+    const STORY_INK = '#f4efe6';
+    // The picture behind the video, kept on the account in a file of its own,
+    // since it is too big to save with every change to the settings.
+    let videoBg = '';
+    let videoBgAsked = null;
+    function loadVideoBg() {
+        if (!videoBgAsked)
+            videoBgAsked = rpc({ type: 'video_bg_get' }, 15000).then((r) => {
+                videoBg = r && typeof r.picture === 'string' ? r.picture : '';
+            }, () => {
+                videoBgAsked = null;
+            });
+        return videoBgAsked;
+    }
+    function loadImage(src) {
+        return new Promise((done) => {
+            if (!src)
+                return done(null);
+            try {
+                const im = new Image();
+                im.onload = () => done(im);
+                im.onerror = () => done(null);
+                im.src = src;
+            }
+            catch (_) {
+                done(null);
+            }
+        });
+    }
+    // The name in the video's title and file: the chat's, or none with names
+    // switched off, so a shared video never names the character.
+    function videoTitle() {
+        return S.videoNames !== false ? String(chatInfo.name || '').trim() : '';
+    }
+    // The parts of a performance, in the order heard.
+    function videoParts(sh, joined) {
+        return joined.used.map((pi, i) => {
+            const p = sh.played[pi];
+            const it = sh.items[p.k];
+            const line = it && it.kind === 'voice' ? it.line : null;
+            if (!line) {
+                const what = it && it.kind === 'applause' ? 'applause' : String((it && it.sound) || 'a sound');
+                return { kind: 'sound', narration: false, words: [], times: [], start: joined.starts[i], len: joined.lens[i], who: 'sound', name: '', picture: '', caption: what };
+            }
+            const lp = lineParts(line);
+            const words = [];
+            const times = [];
+            const all = partTimes(lp.weights, sh.voiced.get(p.k) || [], joined.lens[i]);
+            lp.parts.forEach((pt, k) => {
+                if (pt.kind !== 'word')
+                    return;
+                words.push(pt.text);
+                times.push(all[k] || 0);
+            });
+            const m = line.kind === 'narration' ? narratorMember() : memberFor(line.speaker);
+            return {
+                kind: 'line',
+                narration: line.kind === 'narration',
+                words,
+                times,
+                start: joined.starts[i],
+                len: joined.lens[i],
+                who: partWho(line),
+                name: speakerName(line),
+                picture: m && m.picture ? String(m.picture) : '',
+                caption: '',
+            };
+        });
+    }
+    // Everything that is drawn the same in every frame, made once: the
+    // background, and each speaker's picture.
+    async function videoStage(parts) {
+        await loadVideoBg().catch(() => { });
+        const back = document.createElement('canvas');
+        back.width = VIDEO_W;
+        back.height = VIDEO_H;
+        const b = back.getContext('2d');
+        const css = getComputedStyle(root);
+        const accent = String(css.getPropertyValue('--lumiverse-primary') || '').trim() || '#9370db';
+        const wall = await loadImage(videoBg);
+        if (wall && wall.width && wall.height) {
+            // Cover the frame, cropped from the middle.
+            const s = Math.max(VIDEO_W / wall.width, VIDEO_H / wall.height);
+            const w = wall.width * s;
+            const h = wall.height * s;
+            b.drawImage(wall, (VIDEO_W - w) / 2, (VIDEO_H - h) / 2, w, h);
+            const dim = Math.min(80, Math.max(0, Number(S.videoDim) || 0)) / 100;
+            b.fillStyle = 'rgba(0,0,0,' + dim + ')';
+            b.fillRect(0, 0, VIDEO_W, VIDEO_H);
+        }
+        else {
+            // A dark room lit a little in the theme's accent, darker at the edges.
+            b.fillStyle = '#0b0a0f';
+            b.fillRect(0, 0, VIDEO_W, VIDEO_H);
+            const glow = b.createRadialGradient(VIDEO_W / 2, VIDEO_H * 0.45, 0, VIDEO_W / 2, VIDEO_H * 0.45, VIDEO_W * 0.6);
+            b.save();
+            b.globalAlpha = 0.22;
+            glow.addColorStop(0, accent);
+            glow.addColorStop(1, 'rgba(0,0,0,0)');
+            b.fillStyle = glow;
+            b.fillRect(0, 0, VIDEO_W, VIDEO_H);
+            b.restore();
+        }
+        // Darker at the edges, so the words in the middle stand out on any
+        // picture.
+        const edge = b.createRadialGradient(VIDEO_W / 2, VIDEO_H / 2, VIDEO_H * 0.35, VIDEO_W / 2, VIDEO_H / 2, VIDEO_W * 0.65);
+        edge.addColorStop(0, 'rgba(0,0,0,0)');
+        edge.addColorStop(1, 'rgba(0,0,0,0.55)');
+        b.fillStyle = edge;
+        b.fillRect(0, 0, VIDEO_W, VIDEO_H);
+        const pics = new Map();
+        if (S.videoPics !== false)
+            for (const p of parts)
+                if (p.picture && !pics.has(p.picture)) {
+                    const im = await loadImage(p.picture);
+                    if (im)
+                        pics.set(p.picture, im);
+                }
+        return { back, pics };
+    }
+    // Draws one frame. `t` counts from the start of the video, title included.
+    function videoFrame(g, t, parts, total, stage, title) {
+        const W = VIDEO_W;
+        const H = VIDEO_H;
+        g.save();
+        g.globalAlpha = 1;
+        g.shadowColor = 'transparent';
+        g.drawImage(stage.back, 0, 0);
+        g.textBaseline = 'alphabetic';
+        const showPics = S.videoPics !== false;
+        const showNames = S.videoNames !== false;
+        const ink = (a) => {
+            g.globalAlpha = a;
+            g.fillStyle = STORY_INK;
+        };
+        const shadow = () => {
+            g.shadowColor = 'rgba(0,0,0,0.65)';
+            g.shadowBlur = 18;
+            g.shadowOffsetY = 2;
+        };
+        const audioT = t - VIDEO_INTRO;
+        if (audioT < 0) {
+            // The title fades in, holds, and fades out before the first line.
+            if (title) {
+                const a = Math.max(0, Math.min(1, t / 0.5, (VIDEO_INTRO - 0.2 - t) / 0.5));
+                shadow();
+                ink(a);
+                g.textAlign = 'center';
+                g.font = '500 76px ' + STORY_FONT;
+                g.fillText(fitText(g, title, W - 320), W / 2, H / 2 - 4);
+                g.shadowColor = 'transparent';
+                g.globalAlpha = a * 0.55;
+                g.fillRect(W / 2 - 60, H / 2 + 34, 120, 2);
+            }
+        }
+        else {
+            const now = Math.min(audioT, total);
+            let i = 0;
+            while (i + 1 < parts.length && now >= parts[i + 1].start)
+                i++;
+            const local = now - parts[i].start;
+            // The last part fades out and moves up a little, then the new one fades
+            // in from a little below, over a third of a second in all. They are
+            // never drawn over each other.
+            const HALF = 0.16;
+            if (i > 0 && local < HALF)
+                videoPart(g, parts[i - 1], now - parts[i - 1].start, 1 - local / HALF, -6 * (local / HALF), stage, showPics, showNames);
+            else if (i > 0 && local < HALF * 2)
+                videoPart(g, parts[i], local, (local - HALF) / HALF, 6 * (1 - (local - HALF) / HALF), stage, showPics, showNames);
+            else
+                videoPart(g, parts[i], local, 1, 0, stage, showPics, showNames);
+        }
+        // In from black at the start, and out to black at the end.
+        const fadeIn = Math.max(0, 1 - t / 0.6);
+        const fadeOut = Math.max(0, Math.min(1, (t - (VIDEO_INTRO + total)) / VIDEO_OUTRO));
+        const black = Math.max(fadeIn, fadeOut);
+        if (black > 0) {
+            g.shadowColor = 'transparent';
+            g.globalAlpha = black;
+            g.fillStyle = '#000';
+            g.fillRect(0, 0, W, H);
+        }
+        g.restore();
+    }
+    // Text cut to a width, with an ellipsis.
+    function fitText(g, text, max) {
+        if (g.measureText(text).width <= max)
+            return text;
+        let s = text;
+        while (s.length > 1 && g.measureText(s + '…').width > max)
+            s = s.slice(0, -1);
+        return s.trimEnd() + '…';
+    }
+    function videoPart(g, p, local, alpha, dy, stage, showPics, showNames) {
+        const W = VIDEO_W;
+        const H = VIDEO_H;
+        g.save();
+        g.textAlign = 'center';
+        g.shadowColor = 'rgba(0,0,0,0.65)';
+        g.shadowBlur = 18;
+        g.shadowOffsetY = 2;
+        if (p.kind === 'sound') {
+            g.globalAlpha = alpha * 0.8;
+            g.fillStyle = STORY_INK;
+            g.font = 'italic 400 44px ' + STORY_FONT;
+            g.fillText(fitText(g, '[' + p.caption + ']', W - 360), W / 2, H / 2 + dy);
+            g.restore();
+            return;
+        }
+        // Speech is put in quotation marks, as in a book. Narration is not.
+        const words = p.words.slice();
+        if (!p.narration && words.length) {
+            words[0] = '“' + words[0];
+            words[words.length - 1] = words[words.length - 1] + '”';
+        }
+        // The largest size at which the line fits in seven rows. A longer line
+        // is shown seven rows at a time, moving on as the words are said.
+        const MAX_W = 1500;
+        const ROWS = 7;
+        let size = 56;
+        let rows = [];
+        for (;;) {
+            g.font = '400 ' + size + 'px ' + STORY_FONT;
+            rows = [[]];
+            let width = 0;
+            const space = g.measureText(' ').width;
+            words.forEach((wd, k) => {
+                const ww = g.measureText(wd).width;
+                const row = rows[rows.length - 1];
+                if (row.length && width + space + ww > MAX_W) {
+                    rows.push([k]);
+                    width = ww;
+                }
+                else {
+                    row.push(k);
+                    width += (row.length > 1 ? space : 0) + ww;
+                }
+            });
+            if (rows.length <= ROWS || size <= 42)
+                break;
+            size -= 4;
+        }
+        const lineH = Math.round(size * 1.42);
+        let said = -1;
+        p.times.forEach((tm, k) => {
+            if (tm <= local)
+                said = k;
+        });
+        let firstRow = 0;
+        if (rows.length > ROWS) {
+            const at = Math.max(0, rows.findIndex((r) => r.indexOf(Math.max(0, said)) >= 0));
+            firstRow = Math.min(rows.length - ROWS, Math.floor(at / ROWS) * ROWS);
+        }
+        const shown = rows.slice(firstRow, firstRow + ROWS);
+        // Who says it, above the words: their picture and their name, each only
+        // when its switch is on. Narration has neither.
+        const pic = showPics && !p.narration && p.picture ? stage.pics.get(p.picture) : undefined;
+        const name = showNames && !p.narration ? p.name : '';
+        const PIC = 150;
+        const head = (pic ? PIC + 28 : 0) + (name ? 52 : 0);
+        const block = head + shown.length * lineH;
+        let y = Math.max(90, Math.round(H * 0.52 - block / 2)) + dy;
+        g.globalAlpha = alpha;
+        const ring = kindHex(p.who);
+        if (pic) {
+            const cx = W / 2;
+            const cy = y + PIC / 2;
+            g.save();
+            g.beginPath();
+            g.arc(cx, cy, PIC / 2, 0, Math.PI * 2);
+            g.fill();
+            g.shadowColor = 'transparent';
+            g.clip();
+            const s = Math.max(PIC / pic.width, PIC / pic.height);
+            g.drawImage(pic, cx - (pic.width * s) / 2, cy - (pic.height * s) / 2, pic.width * s, pic.height * s);
+            g.restore();
+            g.save();
+            g.shadowColor = 'transparent';
+            g.globalAlpha = alpha * 0.9;
+            g.lineWidth = 3;
+            g.strokeStyle = ring;
+            g.beginPath();
+            g.arc(cx, cy, PIC / 2 + 1.5, 0, Math.PI * 2);
+            g.stroke();
+            g.restore();
+            y += PIC + 28;
+        }
+        if (name) {
+            g.font = '600 28px ' + STORY_FONT;
+            g.fillStyle = ring;
+            const label = fitText(g, name.toUpperCase(), MAX_W);
+            // Letters spaced a little apart, drawn one by one so it works in every
+            // browser.
+            const gap = 4;
+            const widths = Array.from(label).map((ch) => g.measureText(ch).width);
+            let x = W / 2 - (widths.reduce((a, b) => a + b, 0) + gap * (widths.length - 1)) / 2;
+            g.textAlign = 'left';
+            Array.from(label).forEach((ch, k) => {
+                g.fillText(ch, x, y + 28);
+                x += widths[k] + gap;
+            });
+            g.textAlign = 'center';
+            y += 52;
+        }
+        // The words: said ones in full, the rest dimmer. Each row is centered.
+        g.font = '400 ' + size + 'px ' + STORY_FONT;
+        const space = g.measureText(' ').width;
+        shown.forEach((row, r) => {
+            const ws = row.map((k) => g.measureText(words[k]).width);
+            let x = W / 2 - (ws.reduce((a, b) => a + b, 0) + space * (row.length - 1)) / 2;
+            g.textAlign = 'left';
+            row.forEach((k, n) => {
+                g.globalAlpha = alpha * (k <= said ? 1 : 0.45);
+                g.fillStyle = STORY_INK;
+                g.fillText(words[k], x, y + (r + 1) * lineH - Math.round(lineH * 0.3));
+                x += ws[n] + space;
+            });
+        });
+        g.restore();
+    }
     async function makeVideo() {
         const sh = keptShow();
         if (!sh)
@@ -2842,7 +3233,15 @@ export function setup(ctx, overrides) {
         const w = window;
         const ACtx = w.AudioContext || w.webkitAudioContext;
         const canvas = document.createElement('canvas');
-        const types = ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm', 'video/mp4'];
+        // MP4 first, which phones and sharing sites play, then WebM.
+        const types = [
+            'video/mp4;codecs=avc1.640028,mp4a.40.2',
+            'video/mp4;codecs=avc1,mp4a',
+            'video/webm;codecs=vp9,opus',
+            'video/webm;codecs=vp8,opus',
+            'video/webm',
+            'video/mp4',
+        ];
         const Rec = w.MediaRecorder;
         const type = Rec && typeof Rec.isTypeSupported === 'function' ? types.find((t) => Rec.isTypeSupported(t)) : '';
         if (!ACtx || !Rec || !type || typeof canvas.captureStream !== 'function')
@@ -2856,35 +3255,13 @@ export function setup(ctx, overrides) {
         if (!j)
             return keepSaid('This browser cannot read the audio for a video.');
         const joined = j;
-        const W = 1280;
-        const H = 720;
-        canvas.width = W;
-        canvas.height = H;
+        canvas.width = VIDEO_W;
+        canvas.height = VIDEO_H;
         const g = canvas.getContext('2d');
-        // The panel's own colors and font, so the video looks like the theme.
-        const css = getComputedStyle(root);
-        const pick = (name, fallback) => String(css.getPropertyValue(name) || '').trim() || fallback;
-        const C = {
-            bg: pick('--lumiverse-bg-elevated', '#1f1a2e'),
-            text: pick('--lumiverse-text', '#ece8f6'),
-            muted: pick('--lumiverse-text-muted', '#a49cb8'),
-            accent: pick('--lumiverse-primary', '#9370db'),
-            narrator: kindHex('narrator'), character: kindHex('character'), persona: kindHex('persona'), npc: kindHex('npc'), sound: kindHex('sound'),
-        };
-        const font = css.fontFamily || 'sans-serif';
-        // A theme's background can be see-through, and a frame drawn on a
-        // see-through color shows the one before it. So a solid base goes first:
-        // dark under light text and light under dark text.
-        let base = '#16131f';
-        try {
-            g.fillStyle = C.text;
-            g.fillRect(0, 0, 1, 1);
-            const px = g.getImageData(0, 0, 1, 1).data;
-            if (px[0] * 0.3 + px[1] * 0.59 + px[2] * 0.11 < 128)
-                base = '#f7f5fb';
-        }
-        catch (_) { }
-        const pageBg = pick('--lumiverse-bg', base);
+        const parts = videoParts(sh, joined);
+        const title = videoTitle();
+        keepSaid('Getting the pictures ready');
+        const stage = await videoStage(parts);
         const actx = new ACtx();
         const buf = actx.createBuffer(joined.channels.length, joined.channels[0].length, joined.rate);
         joined.channels.forEach((d, c) => buf.getChannelData(c).set(d));
@@ -2897,7 +3274,7 @@ export function setup(ctx, overrides) {
         const chunks = [];
         let rec;
         try {
-            rec = new Rec(stream, { mimeType: type, videoBitsPerSecond: 4000000, audioBitsPerSecond: 128000 });
+            rec = new Rec(stream, { mimeType: type, videoBitsPerSecond: 12000000, audioBitsPerSecond: 256000 });
         }
         catch (e) {
             try {
@@ -2908,147 +3285,7 @@ export function setup(ctx, overrides) {
         }
         rec.ondataavailable = (e) => e.data && e.data.size && chunks.push(e.data);
         const total = buf.duration;
-        // The parts heard, with where each starts and the timing of its words.
-        const parts = joined.used.map((pi, i) => {
-            const p = sh.played[pi];
-            const it = sh.items[p.k];
-            const line = it && it.kind === 'voice' ? it.line : null;
-            const lp = line ? lineParts(line) : null;
-            return {
-                it,
-                line,
-                start: joined.starts[i],
-                len: joined.lens[i],
-                parts: lp ? lp.parts : [],
-                times: lp ? partTimes(lp.weights, sh.voiced.get(p.k) || [], joined.lens[i]) : [],
-                who: line ? partWho(line) : 'sound',
-                name: line ? speakerName(line) : it && it.kind === 'applause' ? 'The audience' : 'A sound',
-            };
-        });
-        const wrap = (words, max) => {
-            const rows = [[]];
-            for (const wd of words) {
-                const row = rows[rows.length - 1];
-                if (row.length && g.measureText(row.concat([wd]).join(' ')).width > max)
-                    rows.push([wd]);
-                else
-                    row.push(wd);
-            }
-            return rows;
-        };
-        const drawPart = (p, local, alpha) => {
-            g.save();
-            g.globalAlpha = alpha;
-            // Who is speaking: a ring in their color, their first letter and name.
-            const ring = C[p.who] || C.character;
-            g.lineWidth = 4;
-            g.strokeStyle = ring;
-            g.beginPath();
-            g.arc(100, 170, 34, 0, Math.PI * 2);
-            g.stroke();
-            g.fillStyle = C.text;
-            g.font = '700 30px ' + font;
-            g.textAlign = 'center';
-            g.fillText(p.line ? firstLetter(p.name) : '\u266a', 100, 171);
-            g.textAlign = 'left';
-            g.font = '700 26px ' + font;
-            g.fillText(String(p.name).toUpperCase().slice(0, 48), 152, 171);
-            // The margin rule, and the line, word by word.
-            g.fillStyle = ring;
-            g.fillRect(64, 230, 6, H - 340);
-            if (p.line) {
-                g.font = '500 40px ' + font;
-                const words = [];
-                p.parts.forEach((pt, k) => {
-                    if (pt.kind === 'word')
-                        words.push({ text: pt.text, k });
-                });
-                const rows = wrap(words.map((x) => x.text), W - 200);
-                let n = 0;
-                rows.slice(0, 8).forEach((row, r) => {
-                    let x = 100;
-                    for (const wd of row) {
-                        const k = words[n] ? words[n].k : 0;
-                        n++;
-                        g.fillStyle = (p.times[k] || 0) <= local ? C.text : C.muted;
-                        g.fillText(wd, x, 270 + r * 54);
-                        x += g.measureText(wd + ' ').width;
-                    }
-                });
-            }
-            else {
-                g.font = 'italic 500 40px ' + font;
-                g.fillStyle = C.sound;
-                const what = p.it && p.it.kind === 'applause' ? 'The audience cheers' : (p.it && p.it.sound) || 'A sound';
-                wrap(String(what).split(/\s+/), W - 200).slice(0, 6).forEach((row, r) => g.fillText(row.join(' '), 100, 270 + r * 54));
-            }
-            g.restore();
-        };
-        const draw = (t) => {
-            let i = 0;
-            while (i + 1 < parts.length && t >= parts[i + 1].start)
-                i++;
-            const p = parts[i];
-            const local = t - p.start;
-            g.fillStyle = base;
-            g.fillRect(0, 0, W, H);
-            g.fillStyle = pageBg;
-            g.fillRect(0, 0, W, H);
-            g.fillStyle = C.bg;
-            g.fillRect(0, 0, W, H);
-            // The slate stripe along the top.
-            g.save();
-            g.globalAlpha = 0.5;
-            g.fillStyle = C.accent;
-            for (let x = -20; x < W + 20; x += 24) {
-                g.beginPath();
-                g.moveTo(x, 0);
-                g.lineTo(x + 12, 0);
-                g.lineTo(x + 4, 10);
-                g.lineTo(x - 8, 10);
-                g.closePath();
-                g.fill();
-            }
-            g.restore();
-            // The chat's name, and the On air light.
-            g.font = '600 26px ' + font;
-            g.fillStyle = C.muted;
-            g.textBaseline = 'middle';
-            g.fillText(chatInfo.name || 'Auto Foley', 64, 60);
-            g.font = '700 20px ' + font;
-            const airW = g.measureText('ON AIR').width + 52;
-            g.strokeStyle = 'rgba(239,68,68,.6)';
-            g.lineWidth = 2;
-            g.beginPath();
-            g.roundRect ? g.roundRect(W - 64 - airW, 40, airW, 40, 20) : g.rect(W - 64 - airW, 40, airW, 40);
-            g.stroke();
-            g.fillStyle = '#ef4444';
-            g.beginPath();
-            g.arc(W - 64 - airW + 22, 60, 6, 0, Math.PI * 2);
-            g.fill();
-            g.fillStyle = C.text;
-            g.fillText('ON AIR', W - 64 - airW + 36, 61);
-            // The last part fades out, then the new one fades in, over a third of
-            // a second in all. They are never drawn over each other, and nothing
-            // changes in one frame.
-            const HALF = 0.15;
-            if (i > 0 && local < HALF)
-                drawPart(parts[i - 1], t - parts[i - 1].start, 1 - local / HALF);
-            else if (i > 0 && local < HALF * 2)
-                drawPart(p, local, (local - HALF) / HALF);
-            else
-                drawPart(p, local, 1);
-            // The strip of parts, in their colors, filled up to now.
-            const y = H - 70;
-            parts.forEach((q2) => {
-                const x0 = 64 + ((W - 128) * q2.start) / total;
-                const x1 = 64 + ((W - 128) * (q2.start + q2.len)) / total;
-                g.fillStyle = C[q2.who] || C.character;
-                g.globalAlpha = q2.start + q2.len <= t ? 0.95 : q2.start <= t ? 0.75 : 0.3;
-                g.fillRect(x0 + 2, y, Math.max(1, x1 - x0 - 4), 10);
-            });
-            g.globalAlpha = 1;
-        };
+        const length = VIDEO_INTRO + total + VIDEO_OUTRO;
         let ended = false;
         let raf = 0;
         const t0 = actx.currentTime + 0.1;
@@ -3112,18 +3349,19 @@ export function setup(ctx, overrides) {
             if (ended)
                 return;
             const t = Math.max(0, actx.currentTime - t0);
-            draw(Math.min(t, total));
-            keepSaid('Making the video: ' + mmss(Math.min(t, total)) + ' of ' + mmss(total) + '. It pauses while you are on another tab or app.');
+            videoFrame(g, Math.min(t, length), parts, total, stage, title);
+            keepSaid('Making the video: ' + mmss(Math.min(t, length)) + ' of ' + mmss(length) + '. It pauses while you are on another tab or app.');
+            if (t >= length + 0.2)
+                return finish(true);
             raf = document.visibilityState === 'hidden' ? 0 : requestAnimationFrame(tick);
         };
-        draw(0);
+        videoFrame(g, 0, parts, total, stage, title);
         try {
             await actx.resume();
         }
         catch (_) { }
         rec.start(1000);
-        src.onended = () => setTimeout(() => finish(true), 300);
-        src.start(t0);
+        src.start(t0 + VIDEO_INTRO);
         tick();
         paintStage();
     }
@@ -3354,7 +3592,7 @@ export function setup(ctx, overrides) {
         return tag === 'INPUT' && !/^(checkbox|radio|button|submit|reset|range|color|file|image)$/i.test(String(t.type || ''));
     };
     const onPauseKey = (e) => {
-        if (!S.enabled || !S.pauseKeyOn || !e || e.repeat || e.defaultPrevented)
+        if (!onHere() || !S.pauseKeyOn || !e || e.repeat || e.defaultPrevented)
             return;
         const combo = keyCombo(e);
         if (!combo || combo !== String(S.pauseKey || PAUSE_KEY_DEFAULT))
@@ -3539,6 +3777,16 @@ export function setup(ctx, overrides) {
             stop('Stopped');
             return;
         }
+        // Reached only by a press, such as the floating button or Extras, since
+        // nothing starts on its own in a chat switched off.
+        if (chatIsOff(activeChatId())) {
+            phase = OFF_HERE;
+            if (!drawerOpen())
+                notify('info', OFF_HERE + ' Turn it on in the Settings tab, under This chat.');
+            if (tab === 'stage')
+                renderTab();
+            return;
+        }
         const chatId = activeChatId();
         stop();
         busyMessage = messageId;
@@ -3582,6 +3830,8 @@ export function setup(ctx, overrides) {
     }
     async function prepare(messageId) {
         const chatId = activeChatId();
+        if (chatIsOff(chatId))
+            return;
         const got = await getScript(chatId, messageId, false);
         if (got.script) {
             for (const line of got.script.log || [])
@@ -3815,8 +4065,8 @@ export function setup(ctx, overrides) {
     function fillSlots() {
         if (typeof document === 'undefined')
             return;
-        const wantBar = !!S.enabled && !!S.barButton;
-        const wantMsg = !!S.enabled && !!S.messageButton;
+        const wantBar = onHere() && !!S.barButton;
+        const wantMsg = onHere() && !!S.messageButton;
         filling = true;
         try {
             if (!wantBar || !wantMsg) {
@@ -4174,7 +4424,7 @@ export function setup(ctx, overrides) {
     // performed since the panel loaded.
     const playerIds = new Set();
     function playerWanted(id) {
-        if (!S.enabled || !S.messagePlayer || !id)
+        if (!onHere() || !S.messagePlayer || !id)
             return false;
         return playerIds.has(id) || (!!show && show.messageId === id) || busyMessage === id;
     }
@@ -4393,7 +4643,7 @@ export function setup(ctx, overrides) {
     // Keeps the buttons in step with the page. The host redraws messages as the
     // chat scrolls and as replies arrive, and a button has to follow.
     function syncSlots() {
-        const want = !!S.enabled && (!!S.barButton || !!S.messageButton || !!S.messagePlayer);
+        const want = onHere() && (!!S.barButton || !!S.messageButton || !!S.messagePlayer);
         if (want && !slotEye) {
             try {
                 slotEye = new MutationObserver(() => {
@@ -4447,7 +4697,7 @@ export function setup(ctx, overrides) {
     // ---------------------------------------------------------------------------
     try {
         disposers.push(ctx.events.on('GENERATION_ENDED', (p) => {
-            if (!alive || !S.enabled || !p || p.error)
+            if (!alive || !p || p.error || !onIn(p.chatId))
                 return;
             const messageId = String(p.messageId || '');
             if (!messageId)
@@ -4481,7 +4731,7 @@ export function setup(ctx, overrides) {
     // new text, since what is heard should match what is on screen.
     try {
         disposers.push(ctx.events.on('MESSAGE_EDITED', (p) => {
-            if (!alive || !S.enabled)
+            if (!alive || !onIn(p && (p.chatId || (p.message && p.message.chat_id))))
                 return;
             const m = p && p.message;
             const id = m && m.id ? String(m.id) : '';
@@ -4539,9 +4789,11 @@ export function setup(ctx, overrides) {
     catch (_) { }
     try {
         disposers.push(ctx.events.on('MESSAGE_SENT', (p) => {
-            if (!alive || !S.enabled || !S.readOwnMessages || !S.autoplay)
+            if (!alive || !S.readOwnMessages || !S.autoplay)
                 return;
             const m = p && p.message;
+            if (!onIn(p && (p.chatId || (m && m.chat_id))))
+                return;
             if (!m || !m.is_user || !m.id)
                 return;
             perform(String(m.id));
@@ -4561,7 +4813,9 @@ export function setup(ctx, overrides) {
         lastScript = null;
         lastFailed = null;
         readChat();
-        fillSlotsSoon();
+        // The buttons follow the chat: one switched off has none.
+        syncSlots();
+        paintHead();
         if (tab === 'stage')
             renderTab();
     };
@@ -4798,8 +5052,9 @@ export function setup(ctx, overrides) {
         paintStill();
         paintColors();
         paintLook();
-        pill.dataset.on = S.enabled ? 'true' : 'false';
-        pill.textContent = S.enabled ? 'On' : 'Off';
+        const here = onHere();
+        pill.dataset.on = here ? 'true' : 'false';
+        pill.textContent = here ? 'On' : S.enabled ? 'Off here' : 'Off';
         root.querySelectorAll('.af-tab').forEach((b) => b.setAttribute('aria-selected', b.dataset.tab === tab ? 'true' : 'false'));
         paintChat();
     }
@@ -4823,6 +5078,9 @@ export function setup(ctx, overrides) {
                             : chatInfo.title
                                 ? 'Chat: ' + chatInfo.title + '.'
                                 : 'A chat is open.';
+        if (k !== 'none' && S.enabled && chatIsOff(chatInfo.id))
+            words.textContent += ' Auto Foley is switched off here.';
+        chatRowPaint();
     }
     // ---- the "?" beside a setting ----
     // A mouse opens it on hover, a keyboard on focus, a finger on a tap. Which
@@ -5611,6 +5869,52 @@ export function setup(ctx, overrides) {
         const b = el('<button type="button" class="af-btn ' + (cls || '') + '">' + (icon || '') + '<span>' + esc(label) + '</span></button>');
         b.addEventListener('click', onClick);
         return b;
+    }
+    // All and None over a list of switches, the same as Auto Refine's: a count
+    // of the ones on, and two buttons that turn every one on or off. Each is
+    // grayed while it would change nothing. `count` reads how many are on.
+    // `setAll` saves the change and gives back the switches that have to move.
+    // Each moving switch gets the press a finger gives it, so its knob stretches
+    // toward where it is going, then lets go and springs into place. With
+    // Reduce motion on there is no stretch, so the switches move at once.
+    const NUDGE_MS = 110;
+    function bulkBar(count, total, setAll) {
+        const bar = el('<div class="af-row" data-af-bulk></div>');
+        const said = el('<span class="af-note af-grow"></span>');
+        const all = button('All', () => pickAll(true));
+        all.setAttribute('data-af-pick', 'all');
+        const none = button('None', () => pickAll(false));
+        none.setAttribute('data-af-pick', 'none');
+        const paint = () => {
+            const on = count();
+            said.textContent = on + ' of ' + total + ' chosen';
+            all.disabled = on === total;
+            none.disabled = on === 0;
+        };
+        function pickAll(on) {
+            const moving = setAll(on);
+            const flip = () => {
+                for (const box of moving) {
+                    box.checked = on;
+                    box.classList.remove('af-nudge');
+                }
+                paint();
+            };
+            if (!moving.length || calm())
+                return flip();
+            for (const box of moving)
+                box.classList.add('af-nudge');
+            const t = setTimeout(() => {
+                timers.delete(t);
+                flip();
+            }, NUDGE_MS);
+            timers.add(t);
+        }
+        paint();
+        bar.appendChild(said);
+        bar.appendChild(all);
+        bar.appendChild(none);
+        return { el: bar, paint };
     }
     // A part that opens and closes on a tap, for detail most people skip.
     function fold(title, build) {
@@ -6950,6 +7254,138 @@ export function setup(ctx, overrides) {
         });
         extras.clear();
     });
+    // Videos and downloads: what a video shows, the picture behind it, and a
+    // preview of one frame drawn with these choices.
+    function videoCard() {
+        const c = card('Videos and downloads', 'What a video made with Make a video shows. Turn off names and pictures to share a video without them.');
+        const preview = document.createElement('canvas');
+        preview.width = VIDEO_W;
+        preview.height = VIDEO_H;
+        preview.className = 'af-videopreview';
+        preview.setAttribute('role', 'img');
+        preview.setAttribute('aria-label', 'A preview of one frame of a video');
+        preview.setAttribute('data-af-videopreview', '');
+        let drawing = 0;
+        const paintPreview = async () => {
+            const ask = ++drawing;
+            // A made-up line, said by someone in the cast with a picture where
+            // there is one, so the picture and name switches can be seen working.
+            const cast = (S.cast || []).filter((m) => m.kind !== 'narrator');
+            const who = cast.find((m) => !!m.picture) || cast[0] || null;
+            const words = 'We leave before the bells ring, so pack only what you can carry.'.split(' ');
+            const part = {
+                kind: 'line',
+                narration: false,
+                words,
+                times: words.map((_, k) => k * 0.3),
+                start: 0,
+                len: words.length * 0.3,
+                who: who && /^(character|persona|npc)$/.test(who.kind) ? who.kind : 'character',
+                name: who ? shownName(who) : 'Odile Venn',
+                picture: who && who.picture ? String(who.picture) : '',
+                caption: '',
+            };
+            const stage = await videoStage([part]);
+            if (ask !== drawing)
+                return;
+            const g = preview.getContext('2d');
+            if (g)
+                videoFrame(g, VIDEO_INTRO + 1.5, [part], part.len, stage, '');
+        };
+        c.appendChild(preview);
+        c.appendChild(toggle('Show names', 'On by default. Off: no names in the video, in its title, or in the name of any file saved.', 'videoNames', () => paintPreview()));
+        c.appendChild(toggle('Show pictures', 'On by default. Each speaker’s picture from the Cast tab is shown above their line.', 'videoPics', () => paintPreview()));
+        // The picture behind the video, with how dark it is made under it.
+        const bgBox = el('<div class="af-col" data-af-row="videoBg"></div>');
+        const said = el('<p class="af-status"></p>');
+        const btnRow = el('<div class="af-row"></div>');
+        const dimBox = el('<div class="af-sub"><div class="af-under"></div></div>');
+        const dim = slider('Dim the picture', Number(S.videoDim) || 0, 0, 80, 5, (v) => v + '%', (v) => {
+            set({ videoDim: v });
+            paintPreview();
+        }, '40% by default. Darker makes the words easier to read on a bright picture.');
+        dimBox.firstElementChild.appendChild(dim);
+        const keep = async (picture) => {
+            said.textContent = picture ? 'Saving the picture' : '';
+            said.dataset.kind = '';
+            let r = null;
+            try {
+                r = await rpc({ type: 'video_bg_put', picture }, 60000);
+            }
+            catch (_) { }
+            if (!r || r.ok === false) {
+                said.textContent = (r && r.error) || 'The picture could not be saved: the backend did not answer.';
+                said.dataset.kind = 'bad';
+                return;
+            }
+            videoBg = r.picture || '';
+            videoBgAsked = Promise.resolve();
+            said.textContent = '';
+            paintBg();
+            paintPreview();
+        };
+        const choose = button('Choose a background picture', async () => {
+            let files = [];
+            try {
+                files = await ctx.uploads.pickFile({ accept: ['image/*', '.png', '.jpg', '.jpeg', '.webp'], multiple: false, maxSizeBytes: 20 * 1024 * 1024 });
+            }
+            catch (e) {
+                said.textContent = 'The file picker could not open: ' + String((e && e.message) || e).slice(0, 200);
+                said.dataset.kind = 'bad';
+                return;
+            }
+            const f = files && files[0];
+            if (!f)
+                return;
+            const url = URL.createObjectURL(new Blob([f.bytes], { type: f.mimeType || 'image/png' }));
+            const im = await loadImage(url);
+            URL.revokeObjectURL(url);
+            if (!im || !im.width) {
+                said.textContent = 'That file is not a picture Auto Foley can read. Use PNG, JPEG or WebP.';
+                said.dataset.kind = 'bad';
+                return;
+            }
+            // Cut to the video's shape from the middle, at the video's size, so
+            // it is kept at full quality and never larger than it needs to be.
+            const cv = document.createElement('canvas');
+            cv.width = VIDEO_W;
+            cv.height = VIDEO_H;
+            const g = cv.getContext('2d');
+            if (!g)
+                return;
+            const sc = Math.max(VIDEO_W / im.width, VIDEO_H / im.height);
+            g.drawImage(im, (VIDEO_W - im.width * sc) / 2, (VIDEO_H - im.height * sc) / 2, im.width * sc, im.height * sc);
+            let data = cv.toDataURL('image/jpeg', 0.92);
+            if (data.length > 2900000)
+                data = cv.toDataURL('image/jpeg', 0.8);
+            await keep(data);
+        });
+        choose.setAttribute('data-af-videobg', 'choose');
+        const drop = button('Take it out', () => keep(''));
+        drop.setAttribute('data-af-videobg', 'drop');
+        btnRow.appendChild(choose);
+        btnRow.appendChild(drop);
+        bgBox.appendChild(labelRow('Background picture', 'None by default, which is a dark background. The picture is cut to the video’s shape from the middle.'));
+        bgBox.appendChild(btnRow);
+        bgBox.appendChild(dimBox);
+        bgBox.appendChild(said);
+        const paintBg = () => {
+            drop.disabled = !videoBg;
+            reveal(dimBox, !!videoBg);
+        };
+        dimBox.hidden = true;
+        c.appendChild(bgBox);
+        c.appendChild(hint('Downloaded audio is a 48 kHz WAV file. For the best sound, pick a higher quality output format on your TTS connection in Lumiverse.'));
+        loadVideoBg().then(() => {
+            if (!c.isConnected)
+                return;
+            paintBg();
+            paintPreview();
+        });
+        paintBg();
+        paintPreview();
+        return c;
+    }
     function lookCard() {
         const c = card('Look', 'How the panel looks. Your theme colors everything.');
         // A color for each kind of part, behind a fold, since most people keep
@@ -7130,10 +7566,22 @@ export function setup(ctx, overrides) {
         const logBox = el('<div class="af-log" aria-live="polite"></div>');
         lg.appendChild(logBox);
         lg.appendChild(fold('What the Log shows', (body) => {
+            const boxes = [];
+            const shown = (id) => !S.logShow || S.logShow[id] !== false;
+            const bar = bulkBar(() => LOG_KINDS.filter((k) => shown(k.id)).length, LOG_KINDS.length, (on) => {
+                const next = {};
+                if (!on)
+                    for (const k of LOG_KINDS)
+                        next[k.id] = false;
+                set({ logShow: next });
+                paintLog();
+                return boxes.filter((b) => b.box.checked !== on).map((b) => b.box);
+            });
+            body.appendChild(bar.el);
             for (const k of LOG_KINDS) {
                 const id = rid('lk');
                 const box = el('<input type="checkbox" class="af-box" role="switch" id="' + id + '">');
-                box.checked = !S.logShow || S.logShow[k.id] !== false;
+                box.checked = shown(k.id);
                 const row = labelRow(k.label, '', undefined, box);
                 box.setAttribute('aria-label', k.label);
                 row.setAttribute('data-af-logkind', k.id);
@@ -7145,7 +7593,9 @@ export function setup(ctx, overrides) {
                         next[k.id] = false;
                     set({ logShow: next });
                     paintLog();
+                    bar.paint();
                 });
+                boxes.push({ id: k.id, box });
                 body.appendChild(row);
             }
             body.appendChild(hint('Every kind is shown by default. Copy copies every line, shown or not.'));
@@ -9533,6 +9983,88 @@ export function setup(ctx, overrides) {
         return r;
     }
     // ---------- Settings ----------
+    function setChatOff(id, off) {
+        if (!id)
+            return;
+        if (chatInfo.id === id && chatInfo.kind === 'temporary') {
+            if (off)
+                tempOff.add(id);
+            else
+                tempOff.delete(id);
+        }
+        else {
+            const list = (Array.isArray(S.chatsOff) ? S.chatsOff : []).filter((x) => x !== id);
+            if (off)
+                list.push(id);
+            set({ chatsOff: list.slice(-CHATS_OFF_CAP) });
+        }
+        if (off && id === activeChatId()) {
+            if (busyMessage)
+                stopDirecting();
+            if (show && show.chatId === id)
+                stop('Stopped, because Auto Foley was switched off in this chat');
+        }
+        log(off ? 'Switched off in this chat.' : 'Switched on in this chat again.', '', 'setting');
+        syncSlots();
+        paintHead();
+        if (tab === 'stage')
+            renderTab();
+    }
+    // This chat: one button that switches Auto Foley off or on in the chat on
+    // screen, the same as Auto Retry and Auto Refine. The line under it says
+    // what that does.
+    function chatSwitchRow() {
+        const wrap = el('<div class="af-col" data-af-row="thisChat"></div>');
+        const top = el('<div class="af-between"><span class="af-lab af-grow"></span></div>');
+        const label = top.firstElementChild;
+        const act = button('Turn off here', () => {
+            const id = activeChatId();
+            setChatOff(id, !chatIsOff(id));
+        });
+        act.setAttribute('data-af-chatswitch', '');
+        top.appendChild(act);
+        const note = el('<p class="af-note"></p>');
+        const many = el('<div class="af-row" data-af-chatsoff></div>');
+        const count = el('<span class="af-note af-grow"></span>');
+        const back = button('Turn them all back on', () => {
+            tempOff.clear();
+            set({ chatsOff: [] });
+            log('Switched on in every chat again.', '', 'setting');
+            syncSlots();
+            paintHead();
+        });
+        many.appendChild(count);
+        many.appendChild(back);
+        wrap.appendChild(top);
+        wrap.appendChild(note);
+        wrap.appendChild(many);
+        const paint = () => {
+            const id = activeChatId();
+            const off = chatIsOff(id);
+            const temp = !!id && chatInfo.id === id && chatInfo.kind === 'temporary';
+            label.textContent = id && chatInfo.id === id && chatInfo.name ? 'This chat, with ' + chatInfo.name : 'This chat';
+            act.lastElementChild.textContent = off ? 'Turn on here' : 'Turn off here';
+            act.disabled = !id;
+            note.textContent = !id
+                ? 'No chat is open, so there is nothing to switch off here. Open a chat and this is ready.'
+                : temp
+                    ? off
+                        ? 'Auto Foley is off in this temporary chat. Every other chat carries on as it is. This lasts while the chat is open and is not remembered, since the chat itself is not kept.'
+                        : 'Switch Auto Foley off for this temporary chat. This lasts while the chat is open and is not remembered, since the chat itself is not kept.'
+                    : off
+                        ? 'Auto Foley is switched off in this chat. Nothing plays here, and its messages have no buttons. Every other chat carries on as it is. This is remembered on your account.'
+                        : 'Switch Auto Foley off in this chat alone. Nothing plays here, and its messages get no buttons. Every other chat carries on as it is.';
+            const n = (Array.isArray(S.chatsOff) ? S.chatsOff.length : 0) + tempOff.size;
+            count.textContent = n + (n === 1 ? ' chat switched off' : ' chats switched off');
+            many.hidden = !n;
+        };
+        paint();
+        chatRowPaint = () => {
+            if (wrap.isConnected)
+                paint();
+        };
+        return wrap;
+    }
     let setupChecked = 0;
     function renderSettings() {
         const a = card('Auto Foley', 'Auto Foley speaks through a TTS connection in Lumiverse, so the key for it stays in Lumiverse. It works with models that act: ElevenLabs, Fish Audio, Gemini, Chatterbox-Turbo, OmniVoice and Cartesia.');
@@ -9541,6 +10073,7 @@ export function setup(ctx, overrides) {
                 stop();
             syncSlots();
         }));
+        a.appendChild(chatSwitchRow());
         const connBox = el('<div></div>');
         const drawConn = () => {
             connBox.innerHTML = '';
@@ -9704,6 +10237,7 @@ export function setup(ctx, overrides) {
         page.appendChild(p);
         page.appendChild(audienceCard());
         page.appendChild(lookCard());
+        page.appendChild(videoCard());
         const r = card('Reading messages', 'Thinking a model writes in a message, such as a <think> block, is never read aloud. Neither is anything in square brackets, HTML or code.');
         r.appendChild(select('How speech is marked', [
             { id: 'auto', label: 'Quote marks (Auto)' },
@@ -9866,6 +10400,7 @@ export function setup(ctx, overrides) {
         { id: 'settings', label: 'Settings' },
         { id: 'prompt', label: 'The Director’s prompt and notes' },
         { id: 'cast', label: 'The cast and their voices' },
+        { id: 'chats', label: 'Chats you switched off' },
     ];
     const RESETS = TRANSFER.concat([
         { id: 'sounds', label: 'The sound library' },
@@ -9874,7 +10409,7 @@ export function setup(ctx, overrides) {
     ]);
     // The setting keys each part covers. Which parts are ticked are settings
     // too, but they are never carried in a file or put back by a reset.
-    const NOT_SETTINGS = ['cast', 'groups', 'prompt', 'promptRole', 'engineNoteRole', 'askNoteRole', 'askNotes', 'engineNotes', 'decisionQuestions', 'exportParts', 'importParts', 'resetParts', 'guideSeen', 'builtInSeen', 'movedSeen'];
+    const NOT_SETTINGS = ['cast', 'groups', 'prompt', 'promptRole', 'engineNoteRole', 'askNoteRole', 'askNotes', 'engineNotes', 'decisionQuestions', 'exportParts', 'importParts', 'resetParts', 'guideSeen', 'builtInSeen', 'movedSeen', 'chatsOff'];
     const settingKeys = () => Object.keys(DEFAULTS).filter((k) => NOT_SETTINGS.indexOf(k) < 0);
     let transferSaid = '';
     let transferKind = '';
@@ -9932,6 +10467,8 @@ export function setup(ctx, overrides) {
                 body.cast = JSON.parse(JSON.stringify(S.cast || []));
                 body.groups = JSON.parse(JSON.stringify(S.groups || []));
             }
+            if (parts.indexOf('chats') >= 0)
+                body.chatsOff = (S.chatsOff || []).slice();
             let ok = false;
             try {
                 const blob = new Blob([JSON.stringify(body, null, 2)], { type: 'application/json' });
@@ -10067,6 +10604,18 @@ export function setup(ctx, overrides) {
             S.cast = body.cast;
             S.groups = Array.isArray(body.groups) ? body.groups : [];
             took.push('the cast');
+        }
+        // Added to the chats already switched off, never put in their place, so
+        // a file from another device cannot switch one back on.
+        if (want.indexOf('chats') >= 0 && Array.isArray(body.chatsOff)) {
+            const list = (S.chatsOff || []).slice();
+            for (const x of body.chatsOff) {
+                const id = String(x == null ? '' : x).trim().slice(0, 200);
+                if (id && list.indexOf(id) < 0)
+                    list.push(id);
+            }
+            S.chatsOff = list.slice(-CHATS_OFF_CAP);
+            took.push('the chats switched off');
         }
         if (!took.length) {
             transferKind = 'bad';
@@ -10433,6 +10982,11 @@ export function setup(ctx, overrides) {
             // Kept audio and scripts gone means no message has a player.
             if (r && r.ok && chosen.indexOf('audio') >= 0)
                 playerIds.clear();
+            // The picture behind videos goes with the settings.
+            if (r && r.ok && chosen.indexOf('settings') >= 0) {
+                videoBg = '';
+                videoBgAsked = null;
+            }
             resetSaid = r && r.ok ? 'Put back: ' + names + '.' + sameNote : (r && r.error) || 'The reset did not finish.';
             log(resetSaid, r && r.ok ? '' : 'bad', 'setting');
         }
@@ -10506,7 +11060,7 @@ export function setup(ctx, overrides) {
         catch (_) { }
         lines.push('secure page: ' + (secure ? 'yes' : 'no (plain http)'));
         lines.push('settings loaded from the account: ' + (accountAnswered ? 'yes' : 'no, using the copy in this browser'));
-        lines.push('auto foley: ' + (S.enabled ? 'on' : 'off') + ', director ' + (S.directorOn ? 'on' : 'off') + ', decision model ' + (S.decisionsOn ? 'on' : 'off') +
+        lines.push('off in this chat: ' + (chatIsOff(activeChatId()) ? 'yes' : 'no') + ', chats switched off: ' + ((S.chatsOff || []).length + tempOff.size), 'auto foley: ' + (S.enabled ? 'on' : 'off') + ', director ' + (S.directorOn ? 'on' : 'off') + ', decision model ' + (S.decisionsOn ? 'on' : 'off') +
             ', sounds ' + (S.soundsOn ? S.soundStyle : 'off') + ', narration ' + S.narration + ', autoplay ' + (S.autoplay ? 'on' : 'off'));
         if (debugPicked.settings) {
             const keys = Object.keys(DEFAULTS).filter((k) => k !== 'cast' && k !== 'prompt');

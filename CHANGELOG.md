@@ -6,6 +6,28 @@ Versions follow [Semantic Versioning](https://semver.org). A new major version m
 
 ---
 
+## 1.8.0
+
+_2026-11-25_
+
+### Added
+
+- **Auto Foley can be switched off in one chat**, the same as Auto Retry and Auto Refine. In the Settings tab, under **Auto Foley is on**, the **This chat** row has **Turn off here**. In that chat nothing plays or is prepared on its own, and its messages have no button and no player. Every other chat carries on. The pill at the top of the panel says **Off here**. The chats switched off are kept on your account, and **Turn them all back on** switches it on again everywhere. A temporary chat is switched off only while it is open.
+- **Chats you switched off** is a new part of your setup file and of **Start again**. It is chosen for a new install. If you set up Auto Foley before 1.8.0, tick it under each list to include it.
+- **All and None over the switches in What the Log shows**, the same as Auto Refine. All turns every kind of line on, and None turns every one off. A line beside them says how many are on.
+- **Videos and downloads**, a new card in the Settings tab, sets what a video shows. A preview draws one frame with your choices.
+  - **Show names**: off leaves names out of the video, its title, and the name of every file saved.
+  - **Show pictures**: off leaves out the pictures from the Cast tab.
+  - **Background picture**: one of your own pictures behind the words, kept on your account at full size, with **Dim the picture** under it.
+
+### Changed
+
+- **Make a video looks like a story being read.** It opens with the chat's title and fades to black at the end. Each line is large in the middle of the screen, with the words lighting up as they are said. Speech is in quotation marks, with the speaker's picture and name above it, and a sound is a caption in square brackets. The On air light, the stripe and the strip of parts are gone.
+- **Videos are 1920 by 1080, at a higher quality.** They were 1280 by 720. A browser that can make MP4, such as a recent Chrome or Safari, now saves MP4, which phones and sharing sites play. Other browsers save WebM.
+- **Download audio is a 48 kHz, 24-bit WAV file.** It was 44.1 kHz and 16-bit. Each line fades in and out over 3 thousandths of a second, so two lines never meet with a click.
+
+---
+
 ## 1.7.1
 
 _2026-11-25_

@@ -112,6 +112,29 @@ A message edited after it was directed is directed again. If it was playing, it 
 
 Your browser may block sound until you tap the page. Auto Foley then waits, and the Stage tab says so. Press Play, or the button on the message, to start.
 
+## Turning it off in one chat
+
+Use this for a chat you want to read in silence while every other chat carries on.
+
+1. Open the chat.
+2. Open the **Settings** tab.
+3. Under **Auto Foley is on**, find the **This chat** row.
+4. Press **Turn off here**.
+
+In that chat:
+
+- Nothing plays or is prepared on its own.
+- Its messages have no button and no player.
+- The pill at the top of the panel says **Off here**, and the line under the title says Auto Foley is switched off here.
+- A press of the floating player or an Extras entry does nothing. The Stage tab says why, or a notification does while the panel is closed.
+
+The button changes to **Turn on here**. Press it to switch Auto Foley back on in that chat.
+
+- The chats switched off are kept on your account, so they follow you to other devices.
+- A temporary chat is switched off only while it is open, since the chat itself is not kept.
+- **Turn them all back on** switches it on again in every chat. It shows while at least one chat is switched off.
+- **Chats you switched off** is a part of your setup file and of **Start again**. A file adds its chats to the ones already switched off. It never switches one back on.
+
 ## The floating player
 
 Turn on **A floating player** in the Settings tab, under **Look**. A round button with the Auto Foley symbol sits over the chat.
@@ -234,18 +257,42 @@ The colors are saved with your settings, under your account.
 Three buttons under **Now playing**, on the Stage tab, keep what you heard. None of them spends anything.
 
 - **Download audio** saves the last performance as one WAV file: every line and sound you heard, in order. Parts you skipped are not in it.
-- **Download this part** saves the part playing now, as the voice service made it.
-- **Make a video** saves a video of the script page: who is speaking, the words lighting up as they are said, the **On air** light, and the strip of parts.
+- **Download this part** saves the part playing now, exactly as the voice service sent it.
+- **Make a video** saves a video of the last performance, with the words lighting up as they are said.
 
-About the video:
+### The audio
+
+- **Download audio** is a 48 kHz, 24-bit WAV file. WAV keeps the sound exactly as the browser read it. An MP3 would be squeezed a second time and lose some quality.
+- Each line fades in and out over 3 thousandths of a second, too short to hear, so two lines never meet with a click.
+- The sound can only be as good as what the voice service sends. Each TTS connection in Lumiverse has an **output format**. Pick a higher one there for better sound, such as MP3 at 192 kbps or PCM at 44.1 kHz on ElevenLabs, or WAV on Fish Audio. Some formats need a paid plan with the service.
+- A line kept in **Keep made audio** is played as it was first made. Press **Clear kept audio** to make lines again in a new format.
+
+### The video
 
 1. Press **Make a video** after a message has played.
-2. The video is made from the audio you heard, as it plays, so it takes as long as the performance. You do not hear it while it is made.
+2. The video is made from the audio you heard, as it plays, so it takes as long as the performance and a few seconds more. You do not hear it while it is made.
 3. The line under the buttons counts the time. If you go to another tab or app, the video pauses, and it goes on when you come back.
 4. The video is saved when it ends. **Stop the video** stops it and saves nothing.
 
-- The video is 1280 by 720, in your theme's colors. Most browsers save it as WebM, and Safari saves it as MP4.
-- A browser that cannot make videos says so, and nothing is saved.
+What it shows:
+
+- The chat's title for the first two seconds. It fades to black at the end.
+- Each line large in the middle of the screen. Words not said yet are dimmer.
+- Speech in quotation marks, with the speaker's picture and name above it. Narration has no picture or name.
+- A sound as a caption in square brackets, such as [thunder].
+
+It is 1920 by 1080. A browser that can make MP4, such as a recent Chrome or Safari, saves MP4, which phones and sharing sites play. Any other browser saves WebM. A browser that cannot make videos says so, and nothing is saved.
+
+### Videos and downloads, in the Settings tab
+
+This card sets what a video shows. A preview at the top draws one frame with your choices.
+
+- **Show names**: on by default. Off, no names are in the video, in its title, or in the name of any file saved, audio included.
+- **Show pictures**: on by default. Off, no pictures from the Cast tab are in the video.
+- **Background picture**: none by default, which is a dark background. **Choose a background picture** puts one of yours behind the words, cut to the video's shape from the middle. It is kept on your account at the video's full size. **Take it out** removes it.
+- **Dim the picture**, under it: 40% by default. Darker makes the words easier to read on a bright picture.
+
+Names are still said aloud when a line says them. **Show names** only changes what is written on the screen and in file names.
 
 ## What it costs
 
@@ -259,6 +306,7 @@ About the video:
 The Log on the Stage tab says what happened, newest last. Anything that went wrong says why.
 
 - **What the Log shows**, under it, has a switch for each kind of line: playing, what the Director did, voices given and people added, sounds made, settings, and problems. Every kind is shown by default.
+- **All** turns every one of those switches on, and **None** turns every one off. The line beside them says how many are on.
 - **Copy** copies every line, shown or not. **Clear the log** empties it.
 
 ## Even voice levels

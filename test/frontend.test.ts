@@ -359,19 +359,27 @@ describe("Even out voice levels", () => {
 
 describe("Download audio", () => {
   const { wavBlob } = __testing as any;
-  test("a WAV file has the right header and length", async () => {
+  test("a WAV file has the right header and length, in 24 bits", async () => {
     const left = new Float32Array([0, 0.5, -0.5, 1]);
     const right = new Float32Array([0, -0.25, 0.25, -1]);
-    const b = wavBlob([left, right], 8000);
+    const b = wavBlob([left, right], 48000);
     const v = new DataView(await b.arrayBuffer());
     const tag = (o: number) => String.fromCharCode(v.getUint8(o), v.getUint8(o + 1), v.getUint8(o + 2), v.getUint8(o + 3));
+    const s24 = (o: number) => {
+      const u = v.getUint8(o) | (v.getUint8(o + 1) << 8) | (v.getUint8(o + 2) << 16);
+      return u & 0x800000 ? u - 0x1000000 : u;
+    };
     expect(tag(0)).toBe("RIFF");
     expect(tag(8)).toBe("WAVE");
     expect(v.getUint16(22, true)).toBe(2);
-    expect(v.getUint32(24, true)).toBe(8000);
-    expect(v.getUint32(40, true)).toBe(4 * 2 * 2);
-    expect(v.getInt16(44 + 4, true)).toBe(16383);
-    expect(v.getInt16(44 + 14, true)).toBe(-32768);
+    expect(v.getUint32(24, true)).toBe(48000);
+    expect(v.getUint16(34, true)).toBe(24);
+    expect(v.getUint32(28, true)).toBe(48000 * 2 * 3);
+    expect(v.getUint32(40, true)).toBe(4 * 2 * 3);
+    expect(s24(44 + 6)).toBe(4194304);
+    expect(s24(44 + 21)).toBe(-8388608);
+    expect(s24(44 + 9)).toBe(-2097152);
+    expect(s24(44 + 12)).toBe(-4194304);
     expect(b.type).toBe("audio/wav");
   });
 });

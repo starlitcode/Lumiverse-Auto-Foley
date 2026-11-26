@@ -33,7 +33,7 @@ Once a message has been performed, a small player sits under its text, with Back
 - Nothing plays by itself unless you turn on **Autoplay new replies**. It is off by default.
 - Saved audio plays again with nothing spent. **Saved audio**, on the Stage tab, lists it, and **Delete** removes it.
 - Every built-in prompt, note and pattern can be read and changed in the panel, with a way back to the built-in one.
-- **Auto Foley is on**, in the Settings tab, switches it off everywhere.
+- **Auto Foley is on**, in the Settings tab, switches it off everywhere. **Turn off here**, under it, switches it off in one chat.
 
 ## Documentation
 

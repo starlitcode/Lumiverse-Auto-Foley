@@ -15,7 +15,7 @@ declare const spindle: any;
 declare function setTimeout(fn: () => void, ms: number): any;
 declare function clearTimeout(handle: any): void;
 
-const VERSION = '1.7.1';
+const VERSION = '1.8.0';
 
 // ---------------------------------------------------------------------------
 // Settings
@@ -146,6 +146,12 @@ interface Settings {
   applauseVolume: number;
   // Entries in the Extras menu of the message box.
   extrasMenu: boolean;
+  // What a video shows: each speaker's picture, and names, which also go in
+  // the title and in the name of every file saved. How dark the background
+  // picture is made, in per cent.
+  videoPics: boolean;
+  videoNames: boolean;
+  videoDim: number;
   // The word being spoken is lit in the message in the chat.
   chatHighlight: boolean;
   // The color of the lit word, as #rrggbb, and how strong it is, from 10 to
@@ -185,6 +191,9 @@ interface Settings {
   exportParts: string[];
   importParts: string[];
   resetParts: string[];
+  // The chats Auto Foley is switched off in, by chat id. A temporary chat is
+  // never kept here, since its id is never seen again.
+  chatsOff: string[];
   // Seconds to wait before a new reply plays by itself.
   autoplayDelay: number;
   // More tag names that hold thinking, one per entry, such as "musing".
@@ -307,6 +316,9 @@ const DEFAULT_SETTINGS: Settings = {
   applauseSeconds: 5,
   applauseVolume: 0.6,
   extrasMenu: false,
+  videoPics: true,
+  videoNames: true,
+  videoDim: 40,
   chatHighlight: true,
   wordColor: '',
   colorNarrator: '',
@@ -330,9 +342,10 @@ const DEFAULT_SETTINGS: Settings = {
   messageButton: false,
   barButton: false,
   guideSeen: false,
-  exportParts: ['settings', 'prompt', 'cast'],
-  importParts: ['settings', 'prompt', 'cast'],
-  resetParts: ['settings', 'prompt', 'cast', 'sounds', 'audio', 'key'],
+  exportParts: ['settings', 'prompt', 'cast', 'chats'],
+  importParts: ['settings', 'prompt', 'cast', 'chats'],
+  resetParts: ['settings', 'prompt', 'cast', 'chats', 'sounds', 'audio', 'key'],
+  chatsOff: [],
   cast: [],
   groups: [],
   castSort: 'kind',
@@ -498,7 +511,7 @@ function cleanMember(m: any): CastMember | null {
 // The parts a file can carry, and the parts Start again can put back. A file
 // never carries the sound library or the key: the library is made of audio
 // files, and a key belongs in Lumiverse's secure storage, not in a file.
-const TRANSFER_PARTS = ['settings', 'prompt', 'cast'];
+const TRANSFER_PARTS = ['settings', 'prompt', 'cast', 'chats'];
 
 // How much thinking the Director asks for. "inherit" sends nothing, so the
 // connection's own setting is used.
@@ -538,7 +551,7 @@ function cleanSamplerInput(raw: any): Record<string, number | ''> {
   }
   return out;
 }
-const RESET_PARTS = ['settings', 'prompt', 'cast', 'sounds', 'audio', 'key'];
+const RESET_PARTS = ['settings', 'prompt', 'cast', 'chats', 'sounds', 'audio', 'key'];
 const KEEP_AUDIO_CHOICES = [0, 50, 100, 250, 500];
 
 function cleanNotes(v: any): Record<string, string> {
@@ -591,6 +604,19 @@ function cleanEngineNotes(v: any): Record<string, string> {
   if (!v || typeof v !== 'object' || Array.isArray(v)) return out;
   for (const k of ENGINE_IDS) if (typeof v[k] === 'string') out[k] = v[k].slice(0, 2000);
   return out;
+}
+
+// At most 500 chats switched off, the newest kept, the same cap as Auto Retry
+// and Auto Refine.
+const CHATS_OFF_CAP = 500;
+function cleanChatsOff(v: any): string[] {
+  if (!Array.isArray(v)) return [];
+  const out: string[] = [];
+  for (const x of v) {
+    const id = str(x, 200).trim();
+    if (id && out.indexOf(id) < 0) out.push(id);
+  }
+  return out.slice(-CHATS_OFF_CAP);
 }
 
 function partList(v: any, allowed: string[], dflt: string[]): string[] {
@@ -693,6 +719,9 @@ function cleanSettings(raw: any): Settings {
     applauseSeconds: num(r.applauseSeconds, 1, 15, d.applauseSeconds),
     applauseVolume: num(r.applauseVolume, 0, 1, d.applauseVolume),
     extrasMenu: bool(r.extrasMenu, d.extrasMenu),
+    videoPics: bool(r.videoPics, d.videoPics),
+    videoNames: bool(r.videoNames, d.videoNames),
+    videoDim: Math.round(num(r.videoDim, 0, 80, d.videoDim)),
     chatHighlight: bool(r.chatHighlight, d.chatHighlight),
     wordColor: hexColor(r.wordColor),
     colorNarrator: hexColor(r.colorNarrator),
@@ -721,6 +750,7 @@ function cleanSettings(raw: any): Settings {
     exportParts: partList(r.exportParts, TRANSFER_PARTS, d.exportParts),
     importParts: partList(r.importParts, TRANSFER_PARTS, d.importParts),
     resetParts: partList(r.resetParts, RESET_PARTS, d.resetParts),
+    chatsOff: cleanChatsOff(r.chatsOff),
     cast: cast,
     groups: groups,
     // castSorted is the name 1.5.0 saved this under: false was a cast moved
@@ -3243,6 +3273,15 @@ async function writeJson(path: string, value: any, userId: string | undefined): 
   }
 }
 
+// The picture behind a video, as a data URL, in a file of its own. It is
+// made on the reader's device, at most 1920 by 1080.
+const VIDEO_BG_FILE = 'video-background.json';
+const VIDEO_BG_MAX = 3000000;
+function cleanVideoBg(v: any): string {
+  const t = typeof v === 'string' ? v : '';
+  return t.length <= VIDEO_BG_MAX && /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/.test(t) ? t : '';
+}
+
 async function loadSettings(userId: string | undefined): Promise<Settings> {
   return cleanSettings(await readJson(SETTINGS_FILE, userId));
 }
@@ -4146,6 +4185,16 @@ async function onPanel(p: any, userId: string | undefined) {
         }
         return answer({ type: 'kept_dropped', ok: true, clips: gone.length });
       }
+      case 'video_bg_get': {
+        const v = await readJson(VIDEO_BG_FILE, userId);
+        return answer({ type: 'video_bg', picture: cleanVideoBg(v && v.picture) });
+      }
+      case 'video_bg_put': {
+        const picture = cleanVideoBg(p.picture);
+        if (p.picture && !picture) return answer({ type: 'video_bg', ok: false, picture: '', error: 'That picture could not be kept. Pick a JPEG, PNG or WebP picture.' });
+        const ok = await writeJson(VIDEO_BG_FILE, { picture }, userId);
+        return answer({ type: 'video_bg', ok, picture: ok ? picture : '', error: ok ? '' : 'The picture could not be saved to your account.' });
+      }
       case 'clips_state': {
         const list = await loadClips(userId);
         return answer({ type: 'clips_state', count: list.length, bytes: list.reduce((n, x) => n + x.bytes, 0) });
@@ -4341,7 +4390,7 @@ async function onPanel(p: any, userId: string | undefined) {
         const parts: string[] = Array.isArray(p.parts) ? p.parts.filter((x: any) => RESET_PARTS.indexOf(x) >= 0) : [];
         const s = await loadSettings(userId);
         const fresh = cleanSettings({});
-        const NOT = ['cast', 'groups', 'prompt', 'promptRole', 'engineNoteRole', 'askNoteRole', 'askNotes', 'engineNotes', 'decisionQuestions', 'exportParts', 'importParts', 'resetParts', 'guideSeen', 'builtInSeen', 'movedSeen'];
+        const NOT = ['cast', 'groups', 'prompt', 'promptRole', 'engineNoteRole', 'askNoteRole', 'askNotes', 'engineNotes', 'decisionQuestions', 'exportParts', 'importParts', 'resetParts', 'guideSeen', 'builtInSeen', 'movedSeen', 'chatsOff'];
         const strip = (x: any) => {
           const o: any = {};
           for (const k of Object.keys(x).sort()) if (NOT.indexOf(k) < 0) o[k] = x[k];
@@ -4351,11 +4400,15 @@ async function onPanel(p: any, userId: string | undefined) {
         const already: string[] = [];
         for (const part of parts) {
           let same = false;
-          if (part === 'settings') same = strip(s) === strip(fresh);
+          if (part === 'settings') {
+            const bg = await readJson(VIDEO_BG_FILE, userId);
+            same = strip(s) === strip(fresh) && !(bg && bg.picture);
+          }
           else if (part === 'prompt')
             same = !s.prompt && empty(s.askNotes) && empty(s.engineNotes) && empty(s.decisionQuestions) &&
               s.promptRole === fresh.promptRole && s.engineNoteRole === fresh.engineNoteRole && s.askNoteRole === fresh.askNoteRole;
           else if (part === 'cast') same = JSON.stringify(s.cast) === JSON.stringify(fresh.cast) && !(s.groups || []).length;
+          else if (part === 'chats') same = !(s.chatsOff || []).length;
           else if (part === 'sounds') same = !(await loadSounds(userId)).length;
           else if (part === 'audio') {
             const kept = await readJson(SCRIPTS_FILE, userId);
@@ -4373,7 +4426,7 @@ async function onPanel(p: any, userId: string | undefined) {
         const s = await loadSettings(userId);
         const fresh = cleanSettings({});
         if (parts.indexOf('settings') >= 0) {
-          const keep = { cast: s.cast, groups: s.groups, prompt: s.prompt, promptRole: s.promptRole, engineNoteRole: s.engineNoteRole, askNoteRole: s.askNoteRole, askNotes: s.askNotes, engineNotes: s.engineNotes, decisionQuestions: s.decisionQuestions, exportParts: s.exportParts, importParts: s.importParts, resetParts: s.resetParts, builtInSeen: s.builtInSeen, movedSeen: s.movedSeen };
+          const keep = { cast: s.cast, groups: s.groups, prompt: s.prompt, promptRole: s.promptRole, engineNoteRole: s.engineNoteRole, askNoteRole: s.askNoteRole, askNotes: s.askNotes, engineNotes: s.engineNotes, decisionQuestions: s.decisionQuestions, exportParts: s.exportParts, importParts: s.importParts, resetParts: s.resetParts, builtInSeen: s.builtInSeen, movedSeen: s.movedSeen, chatsOff: s.chatsOff };
           Object.assign(s, fresh, keep);
         }
         if (parts.indexOf('prompt') >= 0) {
@@ -4389,7 +4442,13 @@ async function onPanel(p: any, userId: string | undefined) {
           s.cast = fresh.cast;
           s.groups = [];
         }
+        if (parts.indexOf('chats') >= 0) s.chatsOff = [];
         let ok = await saveSettings(userId, s);
+        // The picture behind videos is a setting, kept in a file of its own.
+        if (parts.indexOf('settings') >= 0) {
+          const had = await readJson(VIDEO_BG_FILE, userId);
+          if (had && had.picture) ok = (await writeJson(VIDEO_BG_FILE, { picture: '' }, userId)) && ok;
+        }
         if (parts.indexOf('sounds') >= 0) {
           const list = await loadSounds(userId);
           for (const e of list) {
