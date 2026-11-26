@@ -6,6 +6,18 @@ Versions follow [Semantic Versioning](https://semver.org). A new major version m
 
 ---
 
+## 1.8.2
+
+_2026-11-26_
+
+### Fixed
+
+- **Make a video could not go on after you left the tab.** On some phones, the sound does not start again by itself, so the video stayed stuck when you came back. It now goes on by itself where it can. Where it cannot, **Play the preview** becomes **Go on with the video**, and one press carries it on.
+- **The preview could get stuck after you left the tab.** It now stops where it is, and **Play the preview** goes on from there.
+- **A person's label did not follow Who they are.** In the Cast tab, changing **Who they are**, such as from NPC to Character, left the old label beside their name until the tab was drawn again. It now changes at once.
+
+---
+
 ## 1.8.1
 
 _2026-11-26_
@@ -18,8 +30,6 @@ _2026-11-26_
 - **Exaggeration and CFG weight said they work on Chatterbox-Turbo.** Resemble AI's Turbo code ignores both. Their hints now say they work only on the original Chatterbox model.
 - **The Voice hint said designed or cloned voices always act better.** ElevenLabs says a designed voice may be less expressive on Eleven v4. The hint now says to compare voices with **Hear a sample**.
 - **Drama 3 on Fish Audio played S2.1 Pro instead.** Lumiverse asks Fish for `drama-3-preview`, a name Fish does not know, and Fish then uses S2.1 Pro without an error. Auto Foley now asks for `drama-3`, the name in Fish's docs, and puts **Fish Audio direction** at the start of each line, since Lumiverse does not add it for that name. Lines kept from before were made with S2.1 Pro, so they are made again once.
-- **Make a video could not go on after you left the tab.** On some phones, the sound does not start again by itself, so the video stayed stuck when you came back. It now goes on by itself where it can. Where it cannot, **Play the preview** becomes **Go on with the video**, and one press carries it on.
-- **The preview could get stuck after you left the tab.** It now stops where it is, and **Play the preview** goes on from there.
 - **Cartesia's hint named an older model.** It now names `sonic-3.6`, Cartesia's current model.
 
 ### Changed

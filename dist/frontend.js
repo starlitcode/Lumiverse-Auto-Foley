@@ -10,7 +10,7 @@
 // The key for speech stays in Lumiverse. Lines are spoken through
 // Lumiverse's own TTS route, as the signed-in reader, so this file never sees
 // that key.
-const VERSION = '1.8.1';
+const VERSION = '1.8.2';
 // The marks Lumiverse puts on another extension's part of the page. Nothing
 // inside one is read, written or pressed.
 const OTHER_UI = '[data-spindle-extension-root],[data-spindle-ext],[data-spindle-modal]';
@@ -4120,7 +4120,14 @@ export function setup(ctx, overrides) {
         // sound again only after a press, so when it does not start by itself,
         // the video waits, and Go on with the video carries on.
         let paused = false;
+        // Each pause has a number, so a carry-on still waiting from an earlier
+        // return to the tab does nothing once the tab was left again.
+        let pauseN = 0;
+        // A browser can finish an earlier start of the sound after a later stop,
+        // so the sound is stopped again once that start has settled.
+        let resuming = Promise.resolve();
         const pause = () => {
+            const n = ++pauseN;
             paused = true;
             if (videoRun)
                 videoRun.paused = true;
@@ -4133,19 +4140,34 @@ export function setup(ctx, overrides) {
                 actx.suspend();
             }
             catch (_) { }
+            Promise.race([resuming, new Promise((r) => setTimeout(r, 600))]).then(() => {
+                if (paused && n === pauseN && !ended) {
+                    try {
+                        actx.suspend();
+                    }
+                    catch (_) { }
+                }
+            });
         };
         const goOn = async (pressed) => {
-            if (ended || !paused)
+            if (ended)
                 return;
+            if (!paused) {
+                if (!raf && document.visibilityState !== 'hidden')
+                    raf = requestAnimationFrame(tick);
+                return;
+            }
+            const n = pauseN;
             let tried = null;
             try {
                 tried = actx.resume();
             }
             catch (_) { }
+            resuming = Promise.resolve(tried).catch(() => { });
             // A resume the browser holds back never settles, so it is given a
             // moment and then the state is read.
             await Promise.race([Promise.resolve(tried).catch(() => { }), new Promise((r) => setTimeout(r, 600))]);
-            if (ended || !paused || document.visibilityState === 'hidden')
+            if (ended || !paused || n !== pauseN || document.visibilityState === 'hidden')
                 return;
             if (actx.state !== 'running') {
                 keepSaid(pressed ? 'The browser would not start the sound again. Press Go on with the video once more, or stop it.' : 'The video is paused. Press Go on with the video to carry on.');
@@ -4242,6 +4264,9 @@ export function setup(ctx, overrides) {
             finish(false);
             return keepSaid('The video could not start: ' + String((e && e.message) || e).slice(0, 160));
         }
+        // The tab may have been left while the video got ready.
+        if (document.visibilityState === 'hidden')
+            pause();
         tick();
         paintStage();
         paintStudio();
@@ -10167,6 +10192,11 @@ export function setup(ctx, overrides) {
             c.querySelector('.af-person-head .af-avatar').innerHTML = faceHtml(m, name);
             const pick = pickOf(m, connOf(m));
             c.querySelector('.af-person-name span').textContent = m.muted ? 'Not voiced' : pick.voiceName || pick.voice || 'The connection’s voice';
+            // The label beside the name follows Who they are as it changes.
+            c.setAttribute('data-kind', m.kind);
+            const badgeNow = c.querySelector('.af-person-head .af-badge');
+            if (badgeNow && !ADDED_LABEL[m.addedBy])
+                badgeNow.textContent = KIND_LABEL[m.kind] || m.kind;
         };
         paintName();
         let built = false;
@@ -10595,6 +10625,7 @@ export function setup(ctx, overrides) {
             ], m.kind, (v) => {
                 m.kind = v;
                 save();
+                paintName();
             }, 'Persona is a character you play. NPC is a side character. It changes nothing about how they sound.'));
             g1.appendChild(select('Voice type', [
                 { id: 'unknown', label: 'Any' },

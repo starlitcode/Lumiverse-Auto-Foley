@@ -3443,6 +3443,29 @@ if (section("switch rows")) {
   await context.close();
 }
 
+if (section("new person")) {
+  console.log("A person added with Add someone shows each change in their header as it is made");
+  for (const size of SIZES) {
+    const { context, page, errors } = await open(THEMES[0], size);
+    await page.click('.af-tab[data-tab="cast"]');
+    await page.waitForTimeout(300);
+    await page.getByRole("button", { name: "Add someone" }).click();
+    await page.waitForTimeout(500);
+    const card = page.locator('.af-person[data-open="true"]').last();
+    const kind = card.locator("select").filter({ has: page.locator('option[value="persona"]') }).first();
+    await kind.selectOption("character");
+    await page.waitForTimeout(200);
+    const got = await card.evaluate((c) => ({ badge: c.querySelector(".af-person-head .af-badge").textContent, kind: c.getAttribute("data-kind") }));
+    check(got.badge === "Character" && got.kind === "character", size.name + ": changing Who they are changes the label in their header at once (" + got.badge + ")");
+    const name = card.locator('input[type="text"]').first();
+    await name.fill("Wrenna Quill");
+    await page.waitForTimeout(200);
+    check(((await card.locator(".af-person-name b").textContent()) || "") === "Wrenna Quill", size.name + ": typing a name changes the header as it is typed");
+    check(!errors.length, size.name + ": no page errors. " + errors.slice(0, 2).join(" | "));
+    await context.close();
+  }
+}
+
 if (section("person close")) {
   console.log("A person in the Cast tab opens and closes over several frames, with CSS transitions");
   const { context, page, errors } = await open(THEMES[0], SIZES[0]);
@@ -4009,6 +4032,8 @@ if (section("downloads")) {
       return { still: a === b, said: b, label: btn.textContent, off: btn.disabled };
     });
     check(waits.still && /Go on with the video/.test(waits.label) && !waits.off && /paused/.test(waits.said), where + ": back on the tab, if the sound cannot start by itself, the video waits with Go on with the video (" + waits.label + "; " + waits.said + ")");
+    const mw = await page.evaluate(MEASURE, size.touch);
+    check(!mw.overflow.length && !mw.small.length, where + ": with Go on with the video showing, the buttons fit. " + mw.overflow.concat(mw.small).slice(0, 3).join("; "));
     await page.click('[data-af-studio="play"]');
     await page.waitForTimeout(1600);
     const goes = await page.evaluate(() => ({ said: document.querySelector('[data-af-studio="said"]').textContent, label: document.querySelector('[data-af-studio="play"]').textContent }));
