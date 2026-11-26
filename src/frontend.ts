@@ -1190,7 +1190,10 @@ const PANEL_CSS = `
   display: inline-flex; align-items: center; justify-content: center; font-family: inherit;
   transition: border-color var(--af-fast);
 }
-.af-q:hover, .af-q[aria-expanded="true"] { border-color: var(--af-accent); color: var(--af-accent-text); }
+.af-q[aria-expanded="true"] { border-color: var(--af-accent); color: var(--af-accent-text); }
+/* A phone keeps a hover color on the last thing tapped, so it stays lit after
+   a tap. Hover colors are only for a device that really hovers. */
+@media (hover: hover) { .af-q:hover { border-color: var(--af-accent); color: var(--af-accent-text); } }
 .af-q:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--af-accent-soft); }
 .af-hint {
   position: fixed; z-index: 2147483300; box-sizing: border-box; padding: 8px 10px; border-radius: var(--lumiverse-radius, 8px);
@@ -1269,13 +1272,13 @@ textarea.af-tall { min-height: 260px; }
   transition: background-color var(--af-fast);
 }
 .af-btn svg { width: 14px; height: 14px; flex: none; }
-.af-btn:hover:not(:disabled) { background: var(--af-second-hover); }
+@media (hover: hover) { .af-btn:hover:not(:disabled) { background: var(--af-second-hover); } }
 .af-btn.af-primary { background: var(--af-accent-soft); border-color: var(--af-accent-line); color: var(--af-text); font-weight: 600; }
-.af-btn.af-primary:hover:not(:disabled) { background: var(--af-accent-line); }
+@media (hover: hover) { .af-btn.af-primary:hover:not(:disabled) { background: var(--af-accent-line); } }
 .af-btn.af-danger { border-color: var(--af-bad); color: var(--af-text); background: rgba(239,68,68,.12); }
 .af-btn.af-danger { border-color: color-mix(in srgb, var(--af-bad) 45%, transparent); background: color-mix(in srgb, var(--af-bad) 12%, transparent); }
-.af-btn.af-danger:hover:not(:disabled) { background: rgba(239,68,68,.22); }
-.af-btn.af-danger:hover:not(:disabled) { background: color-mix(in srgb, var(--af-bad) 22%, transparent); }
+@media (hover: hover) { .af-btn.af-danger:hover:not(:disabled) { background: rgba(239,68,68,.22); } }
+@media (hover: hover) { .af-btn.af-danger:hover:not(:disabled) { background: color-mix(in srgb, var(--af-bad) 22%, transparent); } }
 .af-btn:disabled { opacity: .5; cursor: not-allowed; }
 .af-btn:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--af-accent-soft), 0 0 8px 0 var(--af-accent-soft); }
 
@@ -1284,7 +1287,7 @@ textarea.af-tall { min-height: 260px; }
   border-radius: var(--af-r-sm); border: 1px solid var(--af-line); background: var(--af-fill-subtle); color: var(--af-text);
   font: 12.5px var(--lumiverse-font-family, system-ui); transition: background-color var(--af-fast);
 }
-.af-fold:hover { background: var(--af-second); }
+@media (hover: hover) { .af-fold:hover { background: var(--af-second); } }
 .af-fold:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--af-accent-soft); }
 .af-caret { flex: none; font-size: 9px; width: 9px; color: var(--af-muted); transition: transform .2s ease; }
 .af-fold[aria-expanded="true"] .af-caret { transform: rotate(90deg); }
@@ -1329,12 +1332,12 @@ textarea.af-tall { min-height: 260px; }
 /* The Stage */
 .af-transport { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .af-play { display: grid; place-items: center; width: 46px; height: 46px; flex: none; border: 1px solid var(--af-accent-line); border-radius: 50%; background: var(--af-accent-soft); color: var(--af-accent-text); cursor: pointer; transition: background-color var(--af-fast); }
-.af-play:hover:not(:disabled) { background: var(--af-accent-line); }
+@media (hover: hover) { .af-play:hover:not(:disabled) { background: var(--af-accent-line); } }
 .af-play svg { width: 20px; height: 20px; }
 .af-play:disabled { opacity: .45; cursor: not-allowed; }
 .af-round { display: grid; place-items: center; width: 36px; height: 36px; flex: none; border: 1px solid transparent; border-radius: 50%; background: var(--af-second); color: var(--af-text); cursor: pointer; transition: background-color var(--af-fast); }
 .af-round svg { width: 15px; height: 15px; }
-.af-round:hover:not(:disabled) { background: var(--af-second-hover); }
+@media (hover: hover) { .af-round:hover:not(:disabled) { background: var(--af-second-hover); } }
 .af-round:disabled { opacity: .45; cursor: not-allowed; }
 .af-play:focus-visible, .af-round:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--af-accent-soft), 0 0 8px 0 var(--af-accent-soft); }
 .af-now-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1 1 140px; }
@@ -1504,7 +1507,7 @@ textarea.af-bigta { flex: 1; min-height: 0; resize: none; }
 /* The button on each message and in the chat's row. It wears the host
    button's class where there is one beside it, and this look where not. */
 .af-slot { display: inline-flex; align-items: center; justify-content: center; background: none; border: 0; margin: 0; padding: 5px; border-radius: 8px; line-height: 0; cursor: pointer; -webkit-tap-highlight-color: transparent; color: var(--lumiverse-text-muted, rgba(255,255,255,.62)); transition: color .15s ease, opacity .15s ease; }
-.af-slot:hover { color: var(--lumiverse-text, rgba(255,255,255,.92)); }
+@media (hover: hover) { .af-slot:hover { color: var(--lumiverse-text, rgba(255,255,255,.92)); } }
 .af-slot:focus-visible { outline: 2px solid var(--lumiverse-primary, #8b5cf6); outline-offset: 2px; }
 .af-slot svg { display: block; width: 14px; height: 14px; }
 [data-af-slot][aria-busy="true"] { color: var(--lumiverse-primary, #8b5cf6); }
@@ -6750,7 +6753,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     'background-image:linear-gradient(var(--lumiverse-bg-elevated,rgba(35,30,48,.9)),var(--lumiverse-bg-elevated,rgba(35,30,48,.9)));color:var(--lumiverse-text,rgba(255,255,255,.9));' +
     'box-shadow:var(--lumiverse-shadow-md,0 8px 24px rgba(0,0,0,.4));' +
     'transition:color 260ms cubic-bezier(.2,.7,.3,1),border-color 260ms cubic-bezier(.2,.7,.3,1),background-image 260ms cubic-bezier(.2,.7,.3,1),box-shadow 260ms cubic-bezier(.2,.7,.3,1),opacity 260ms cubic-bezier(.2,.7,.3,1),transform 260ms cubic-bezier(.2,.7,.3,1)}' +
-    '.af-float:hover{border-color:var(--lumiverse-primary-050,rgba(147,112,219,.5))}' +
+    '@media (hover:hover){.af-float:hover{border-color:var(--lumiverse-primary-050,rgba(147,112,219,.5))}}' +
     // No chat open: the edge goes quiet. The symbol keeps its color.
     '.af-float.af-idle{border-color:var(--lumiverse-border,rgba(147,112,219,.12))}' +
     // Playing: the accent goes on the fill and the edge.
@@ -6785,7 +6788,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     // The open player is drawn with the panel's own parts: its switches,
     // sliders, Play button, two-way choice and fold, so it looks like the
     // rest of Auto Foley. It carries the panel's class for their colors.
-    '.af.af-pl{max-width:none;margin:0;width:100%;gap:10px;padding:12px;overflow-x:hidden;overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin;border:1px solid var(--af-line-hover);border-radius:var(--lumiverse-radius-lg,16px);' +
+    '.af.af-pl{max-width:none;margin:0;width:100%;gap:10px;padding:12px;overflow-x:hidden;overflow-y:auto;overscroll-behavior:contain;scrollbar-width:none;border:1px solid var(--af-line-hover);border-radius:var(--lumiverse-radius-lg,16px);' +
     'background-color:var(--lumiverse-card-bg-solid,#1a1526);background-image:linear-gradient(var(--lumiverse-bg-elevated,#1f1a2e),var(--lumiverse-bg-elevated,#1f1a2e));' +
     'box-shadow:var(--lumiverse-shadow-lg,0 18px 48px rgba(0,0,0,.5));transform-origin:var(--af-from,22px 22px)}' +
     // The top bar is where the open player is dragged from. touch-action keeps
@@ -6823,7 +6826,9 @@ export function setup(ctx: Ctx, overrides?: any) {
     '.af-pl-mix b{font-weight:500;font-variant-numeric:tabular-nums}' +
     '.af-pl-sw{display:grid;grid-template-columns:1fr 1fr;gap:6px 14px}' +
     '.af-pl-sw>div{display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:32px;font-size:13px}' +
-    '.af-pl-cast{display:flex;flex-direction:column;gap:2px;max-height:210px;overflow:auto;overscroll-behavior:contain;scrollbar-width:thin}' +
+    // The list grows with the player rather than scrolling in a box of its
+    // own, so there is one place to scroll and no second scroll bar.
+    '.af-pl-cast{display:flex;flex-direction:column;gap:2px}' +
     // Who is voiced, drawn like a voice call. The person speaking has a ring
     // and a soft glow in the theme's good color, which fades in and stays
     // for the whole line, so it never flickers with the words. Someone not
@@ -6848,6 +6853,9 @@ export function setup(ctx: Ctx, overrides?: any) {
     '.af-pl-ch[data-off="true"] .af-pl-state{color:var(--af-bad)}' +
     '.af-pl-ch .af-round{width:32px;height:32px;color:var(--af-muted)}' +
     '.af-pl-more{margin-top:4px;flex:none}' +
+    // The open player scrolls when it is taller than the screen, with no
+    // scroll bar drawn, as in the drawer.
+    '.af.af-pl::-webkit-scrollbar{display:none;width:0;height:0}' +
     '.af-pl-rest{display:flex;flex-direction:column;gap:2px;padding-top:2px}' +
     '.af-pl-ch[data-off="true"] .af-round{color:var(--af-bad)}' +
     '@media (pointer:coarse){.af-pl .af-round{width:40px;height:40px}.af-pl-tr .af-pl-side{width:40px;height:40px}.af-pl-tr{padding:0 46px}.af-pl-tr .af-play{width:54px;height:54px}.af-pl-sw>div{min-height:40px}.af-pl-ch .af-round{width:36px;height:36px}}' +
@@ -7647,11 +7655,11 @@ export function setup(ctx: Ctx, overrides?: any) {
     const rest = ids.length ? all.filter((m) => ids.indexOf(m.id) < 0) : [];
     for (const m of here) box.appendChild(castRow(m));
     if (!rest.length) return;
-    const more = el('<button type="button" class="af-fold af-pl-more" data-p="more"><span class="af-caret"></span><span></span></button>') as HTMLButtonElement;
-    const caret = more.firstElementChild as HTMLElement;
+    // The arrow is turned by the fold's own style when it is open, as on
+    // every other fold.
+    const more = el('<button type="button" class="af-fold af-pl-more" data-p="more"><span class="af-caret">▶</span><span></span></button>') as HTMLButtonElement;
     const paintMore = () => {
       more.setAttribute('aria-expanded', everyoneOpen ? 'true' : 'false');
-      caret.textContent = everyoneOpen ? '▼' : '▶';
     };
     paintMore();
     (more.lastElementChild as HTMLElement).textContent = 'Everyone else (' + rest.length + ')';

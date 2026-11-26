@@ -618,6 +618,48 @@ if (section("perform")) {
 }
 
 
+if (section("no stuck hover")) {
+  console.log("On a phone, a button tapped off is not left lit");
+  const size = SIZES[0];
+  const { context, page, errors } = await open(THEMES[0], size);
+  await page.click('.af-tab[data-tab="settings"]');
+  await page.waitForTimeout(200);
+  await page.evaluate(() => document.querySelector('[data-af-row="widgetOn"] .af-box').click());
+  await page.waitForTimeout(250);
+  await page.evaluate(() => window.__widget.querySelector(".af-float").click());
+  await page.waitForTimeout(400);
+  const prep = page.locator('[data-p="prep"]');
+  const look = () => page.evaluate(() => { const b = window.__widget.querySelector('[data-p="prep"]'); const c = getComputedStyle(b); return { pressed: b.getAttribute("aria-pressed"), bg: c.backgroundColor }; });
+  const was = await look();
+  await prep.tap();
+  await page.waitForTimeout(200);
+  const on = await look();
+  await prep.tap();
+  await page.waitForTimeout(300);
+  const off = await look();
+  check(on.pressed !== was.pressed && off.pressed === was.pressed, "the button turns on and off (" + [was.pressed, on.pressed, off.pressed].join(" ") + ")");
+  check(off.bg === was.bg, "tapped off, it looks as it did before it was turned on (" + was.bg + " then " + off.bg + ")");
+  // A real phone keeps :hover on the last thing tapped, which the test
+  // browser does not copy. So the rule is read: every hover style of Auto
+  // Foley's sits inside @media (hover: hover), where a phone never uses it.
+  const loose = await page.evaluate(() => {
+    const out = [];
+    const walk = (rules, inHover) => {
+      for (const r of rules) {
+        if (r.cssRules && r.media) walk(r.cssRules, inHover || /hover:\s*hover/.test(r.media.mediaText));
+        else if (r.selectorText && /:hover/.test(r.selectorText) && /\.af-/.test(r.selectorText) && !inHover) out.push(r.selectorText);
+      }
+    };
+    for (const sh of document.styleSheets) {
+      try { walk(sh.cssRules, false); } catch (_) {}
+    }
+    return out;
+  });
+  check(!loose.length, "every hover color is only for a device that hovers (" + loose.slice(0, 4).join(" | ") + ")");
+  check(!errors.length, "no errors. " + errors.slice(0, 2).join("; "));
+  await context.close();
+}
+
 if (section("find someone")) {
   console.log("Find someone lists only the people who match, for a large cast");
   for (const size of SIZES) {
@@ -693,6 +735,15 @@ if (section("voice call")) {
     });
     check(grow[0] > 0 && grow[0] < grow[1], where + ": Everyone else opens over several frames (" + grow.map((x) => x.toFixed(1)).join(" of ") + " px)");
     check((await rows()).map((r) => r.id).join(",") === "n,a,b,c", where + ": and shows the rest of the cast");
+    const look = await page.evaluate(() => ({
+      caret: getComputedStyle(window.__widget.querySelector('[data-p="more"] .af-caret')).transform,
+      text: window.__widget.querySelector('[data-p="more"] .af-caret').textContent,
+      list: getComputedStyle(window.__widget.querySelector(".af-pl-cast")).overflowY,
+      bar: getComputedStyle(window.__widget.querySelector(".af-pl")).scrollbarWidth,
+    }));
+    // ▶ turned a quarter turn is ▼, so an open fold points down.
+    check(look.text === "▶" && /matrix\(6\.\d+e-17, 1, -1, 6\.\d+e-17|matrix\(0, 1, -1, 0/.test(look.caret), where + ": open, its arrow points down, as on every fold (" + look.caret + ")");
+    check(look.list === "visible" && look.bar === "none", where + ": the list has no scroll box of its own, and the player draws no scroll bar (" + look.list + ", " + look.bar + ")");
     await page.evaluate(() => window.__widget.querySelector('[data-p="more"]').click());
     await page.waitForTimeout(600);
     check((await rows()).map((r) => r.id).join(",") === "n,a,b", where + ": pressed again, it closes");

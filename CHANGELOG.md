@@ -35,6 +35,7 @@ _2026-11-25_
 ### Fixed
 
 - **Saved files were dated in UTC.** A file saved in the evening in the Americas was named with the next day. Files are now dated on your own clock.
+- **A button tapped on a phone stayed lit.** A phone keeps the hover color on the last thing tapped, so a button such as **Prepare replies ahead** looked on after it was turned off. Hover colors are now only used with a mouse.
 - **A player under each message turned itself back on.** Switching it off was not saved to your account, so it came back after a reload or on another device. It now stays off.
 - **A saved script and a message could play over each other.** Playing one in **Saved audio** while a message played, or the other way round, played both at once. Now one thing plays at a time: a message, a saved script, a sample, or the Studio's preview. Starting one stops the others.
 
