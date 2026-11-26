@@ -4,6 +4,8 @@
 
 - The **Studio** tab keeps a performance as audio or as a video. It is the one place to download audio.
 - It holds the last message you played, or one opened from **Saved audio** with **Open in the Studio**.
+- **Saved audio**, at the top, is a gallery of everything saved, with names, folders, find and sort. See [Saved audio](getting-started.md#saved-audio).
+- **Saved looks** keeps a video's look under a name, to use again.
 - You choose which parts go in, where it starts and ends, a pause between parts, and how loud they are.
 - **Audio** saves one WAV file, or a ZIP with a WAV for each part.
 - **Video** makes a video that looks like a story being read. You pick its shape, font, colors, background, transition between lines, title and ending, and add notes for whoever watches.
@@ -13,7 +15,7 @@
 
 ## Steps
 
-1. Play a message, on the Stage tab or with the button on a message. For an older message, press **Open in the Studio** on it under **Saved audio**, on the Stage tab, instead.
+1. Play a message, on the Stage tab or with the button on a message. For an older message, press **Open in the Studio** on it under **Saved audio**, at the top of the Studio, instead.
 2. Open the **Studio** tab. **Download or make a video**, under **Now playing** on the Stage tab, goes there too.
 3. Under **The performance**, open **Which parts go in** and switch off any part you do not want. To cut the start or the end, use **Trim**.
 4. For audio, pick **One file** or **A file for each part** under **Audio**, then press **Download audio**.
@@ -54,7 +56,7 @@ The file is saved as an MP4 or a WebM, named with the chat's name and the day.
 
 ## Older performances
 
-The Studio holds the last message you played since the page was opened. A message played before that is in **Saved audio**, on the Stage tab, while **Keep made audio** is on.
+The Studio holds the last message you played since the page was opened. A message played before that is in **Saved audio**, at the top of the Studio, while **Keep made audio** is on.
 
 1. Find the message under **Saved audio**.
 2. Press **Open in the Studio**.
@@ -65,7 +67,7 @@ The whole performance is built from what is saved, in order:
 - Each sound comes from your sound library.
 - Nothing is spoken again, found, made or directed, so nothing is spent.
 - A line with no saved audio, or a sound no longer in your library, is left out, and the Studio says how many.
-- The title and file name use the name of whoever the script belongs to, and the day it was saved.
+- The title uses the name of whoever the script belongs to. The file name uses the name you gave it in **Saved audio**, or whose script it is, and the day it was saved.
 
 Playing the message again works too. Lines played from kept audio spend nothing, but a sound not in your library may be found or made again.
 
@@ -178,9 +180,20 @@ A note is a few words for whoever watches, in a dark box at the top or the botto
 - Notes are saved to your account, so they can be used on the next video.
 - Hidden words are covered in notes too.
 
+### Saved looks
+
+**Saved looks** keeps the look of a video under a name, to use again.
+
+- **Save this look**: type a name, then press it. The look holds the shape, words, pictures, background, edges, transition and ending.
+- **Use** puts a saved look back. If it is already the look in use, it says so.
+- Type over a look's name to rename it. **Delete** asks first.
+- Notes, the title you typed, **Show names** and **Show pictures** are not part of a look, so using one never changes them.
+- A look with **A picture of your own** uses the background picture you have now. Only one background picture is kept.
+- Up to 20 looks, saved to your account.
+
 ### Put the look back
 
-**Put the look back** puts back every choice under **Video**: the shape, words, pictures, background, edges, transition and ending. Notes, **Show names** and **Show pictures** stay as they are. If nothing would change, it says so.
+**Put the look back** asks first, then puts back every choice under **Video**: the shape, words, pictures, background, edges, transition and ending. Saved looks, notes, **Show names** and **Show pictures** stay as they are. If nothing would change, it says so and asks nothing.
 
 ### Start again
 

@@ -248,18 +248,26 @@ The colors are saved with your settings, under your account.
 
 ## Saved audio
 
-**Saved audio**, on the Stage tab, lists every message with a saved script, newest first. The list shows as soon as you open the Stage tab.
+**Saved audio**, at the top of the **Studio** tab, is a gallery of every message with a saved script.
 
-- Each row says whose script it is, the day it was saved, how many lines it has, and its first line.
+- Each tile shows its name, the day it was saved, how many lines it has, its first line, and the name its files are saved under.
 - **Play** plays the saved audio of its lines, joined. Press it again to stop. Sounds and the cheer are not in it.
-- **Open in the Studio** opens the whole performance in the Studio tab, with its sounds from your library, to download or make a video of. See [Older performances](studio.md#older-performances).
-- **Delete** deletes the saved script and the saved audio of its lines. Press it, then press **Tap again to delete**. The next time the message plays, it is directed and spoken again.
+- **Open in the Studio** opens the whole performance in the Studio, with its sounds from your library, to download or make a video of. See [Older performances](studio.md#older-performances).
+- **More** opens three more things:
+  - **Name**: type your own name for it. Downloads and videos of it are saved under that name. Empty uses whose script it is.
+  - **Folder**: move it into a folder. Shown once you have a folder.
+  - **Delete**: deletes the saved script and the saved audio of its lines. Press it, then press **Tap again to delete**. The next time the message plays, it is directed and spoken again.
+- **Find a saved script** lists only the scripts whose name, file name, person or first line hold what you type.
+- **Sort**: **Newest first** by default, **Oldest first**, or **By name, A to Z**.
+- **New folder** makes a folder. Each folder opens and closes, and shows how many it holds. Type over its name to rename it. **Delete the folder** asks first, and the scripts in it stay, out of any folder.
 - Play and Open in the Studio use only audio that is saved, so they spend nothing. A line with no saved audio, such as one spoken with a voice you changed since, is left out, and it says so.
+- At most 300 scripts are kept. Past that, the oldest one with no name of yours and no folder goes first, so a script you named or filed stays.
+- Its lines are kept by **Keep made audio**, which also has a size, from 50 MB to 500 MB. Past that, the oldest lines go first, even of a named script. Pick a larger size to keep more.
 - To delete everything at once, use **Clear kept audio** in the Settings tab.
 
 ## Downloads and videos
 
-Everything to keep what you heard is in the **Studio** tab: downloading the audio, a part, or a video. **Download or make a video**, under **Now playing**, goes there. For an older message, press **Open in the Studio** on it under **Saved audio**. See [The Studio](studio.md).
+Everything to keep what you heard is in the **Studio** tab: downloading the audio, a part, or a video. **Download or make a video**, under **Now playing**, goes there. For an older message, press **Open in the Studio** on it under **Saved audio**, in the Studio. See [The Studio](studio.md).
 
 ## What it costs
 

@@ -1325,6 +1325,12 @@ textarea.af-tall { min-height: 260px; }
 .af-saved-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px 10px; min-width: 0; }
 .af-saved-head b { font-weight: 600; overflow-wrap: anywhere; }
 .af-saved-meta { color: var(--af-muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+.af-gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 250px), 1fr)); gap: 8px; }
+.af-saved-file { font-family: var(--lumiverse-font-mono, ui-monospace, monospace); font-size: 11.5px; color: var(--af-muted); overflow-wrap: anywhere; }
+.af-saved-group { margin: 4px 0 0; font-size: 11px; letter-spacing: .05em; text-transform: uppercase; color: var(--af-muted); }
+.af-saved-folder > .af-sub > .af-under { gap: 10px; }
+.af-saved-foldername { flex: 1 1 160px; min-width: 0; }
+.af-look-name { flex: 1 1 140px; min-width: 0; }
 .af-saved-first { color: var(--af-muted); font-size: 12.5px; line-height: 1.45; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .af-warn, .af-bad, .af-good { display: flex; gap: 8px; align-items: flex-start; font-size: 12px; line-height: 1.45; padding: 8px 10px; border-radius: var(--af-r-sm); border: 1px solid; color: var(--af-text); }
 .af-warn { border-color: var(--af-sound); background: var(--af-sound-soft); }
@@ -1707,6 +1713,9 @@ const DEFAULTS = {
     videoFadeOut: 1.5,
     videoCaptions: true,
     videoNotes: [],
+    savedFolders: [],
+    savedSort: 'new',
+    videoLooks: [],
     censorOn: false,
     censorWords: '',
     censorCover: 'bar',
@@ -2903,6 +2912,8 @@ export function setup(ctx, overrides) {
     }
     function showName(sh) {
         const day = fileDay(sh.startedAt);
+        if (sh.fileTitle)
+            return 'auto-foley ' + fileName(sh.fileTitle) + ' ' + day;
         return S.videoNames !== false ? 'auto-foley ' + fileName(sh.title || chatInfo.name || 'chat') + ' ' + day : 'auto-foley ' + day;
     }
     // Every clip heard, decoded at one rate and joined end to end, with when
@@ -5135,6 +5146,7 @@ export function setup(ctx, overrides) {
             chars: 0,
             toldLevel: new Set(),
             title: String(e.author || ''),
+            fileTitle: String(e.name || '').trim() || undefined,
         };
         let lines = 0;
         let sounds = 0;
@@ -5199,40 +5211,171 @@ export function setup(ctx, overrides) {
         goTo('studio');
         return '';
     }
+    // ---- Saved audio, as a gallery ----
+    // Every saved script as a tile: its name, the name its files are saved
+    // under, when it was saved and its first line. A tile can be renamed and
+    // put in a folder. Folders open and close, and the list can be searched
+    // and sorted. Play and Open in the Studio use only saved audio, so nothing
+    // is spent.
+    let savedFind = '';
+    let savedMoreOpen = '';
+    const savedShown = {};
+    // The name a saved script is shown by: the reader's own, or whose script
+    // it is.
+    function savedTitle(e) {
+        return String(e.name || '').trim() || (e.author || 'Someone') + '\u2019s script';
+    }
+    // The name its files are saved under, the same as Download audio uses.
+    function savedFileName(e) {
+        const day = e.keptAt ? ' ' + fileDay(e.keptAt) : '';
+        const own = String(e.name || '').trim();
+        if (own)
+            return 'auto-foley ' + fileName(own) + day;
+        return S.videoNames !== false ? 'auto-foley ' + fileName(e.author || 'script') + day : 'auto-foley' + day;
+    }
+    function savedFolders() {
+        return Array.isArray(S.savedFolders) ? S.savedFolders : [];
+    }
+    // Changes a saved script's name or folder on the account, and in the list
+    // on screen.
+    async function editSaved(e, patch) {
+        try {
+            const r = await rpc(Object.assign({ type: 'kept_edit', key: e.key }, patch), 15000);
+            if (!r || !r.ok)
+                return (r && r.error) || 'It could not be changed: the backend did not answer.';
+            e.name = r.name || '';
+            e.folder = r.folder || '';
+            return '';
+        }
+        catch (_) {
+            return 'It could not be changed: the backend did not answer.';
+        }
+    }
     function savedCard() {
-        const c = card('Saved audio', 'Every message with a saved script, newest first. Play and Open in the Studio use only saved audio, so nothing is spent.');
+        const c = card('Saved audio', 'Every message with a saved script. Play and Open in the Studio use only saved audio, so nothing is spent. Give one a name or put it in a folder to keep it past the 300 newest.');
         c.setAttribute('data-af-saved', '');
-        // Shown at once, with no fold to open, so the list is in plain sight.
-        const list = el('<div class="af-col" data-af="savedlist"></div>');
         const said = el('<div class="af-hint" data-af="savedsaid" aria-live="polite">Reading your saved audio</div>');
-        const more = button('Show more', () => drawMore());
-        more.hidden = true;
+        // Find, sort and a new folder, above the tiles.
+        const tools = el('<div class="af-col af-saved-tools"></div>');
+        const findId = rid('sf');
+        const find = el('<input type="search" class="af-field" autocomplete="off" spellcheck="false" placeholder="Part of a name or a line">');
+        find.id = findId;
+        find.value = savedFind;
+        find.setAttribute('data-af-savedfind', '');
+        let findTimer = null;
+        find.addEventListener('input', () => {
+            if (findTimer)
+                clearTimeout(findTimer);
+            findTimer = setTimeout(() => {
+                timers.delete(findTimer);
+                savedFind = find.value;
+                drawList();
+            }, 150);
+            timers.add(findTimer);
+        });
+        const findRow = el('<div class="af-col"></div>');
+        findRow.appendChild(labelRow('Find a saved script', 'Lists the scripts whose name, file name, person or first line hold what you type.', findId));
+        findRow.appendChild(find);
+        tools.appendChild(findRow);
+        const sort = select('Sort', [
+            { id: 'new', label: 'Newest first' },
+            { id: 'old', label: 'Oldest first' },
+            { id: 'az', label: 'By name, A to Z' },
+        ], String(S.savedSort || 'new'), (v) => {
+            set({ savedSort: v });
+            drawList();
+        });
+        sort.setAttribute('data-af-savedsort', '');
+        tools.appendChild(sort);
+        const folderRow = el('<div class="af-row"></div>');
+        const newFolder = button('New folder', () => {
+            const name = 'Folder ' + (savedFolders().length + 1);
+            set({ savedFolders: savedFolders().concat([{ id: rid('fd'), name, open: true }]) });
+            drawList();
+        });
+        newFolder.setAttribute('data-af-newfolder', '');
+        folderRow.appendChild(newFolder);
+        tools.appendChild(folderRow);
+        c.appendChild(tools);
         c.appendChild(said);
+        const list = el('<div class="af-col" data-af="savedlist"></div>');
         c.appendChild(list);
-        c.appendChild(more);
-        let all = [];
-        let shown = 0;
-        const drawMore = () => {
-            for (const e of all.slice(shown, shown + 20))
-                list.appendChild(savedRow(e, said));
-            shown = Math.min(all.length, shown + 20);
-            more.hidden = shown >= all.length;
+        const matches = (e) => {
+            const q = savedFind.trim().toLowerCase();
+            if (!q)
+                return true;
+            return [savedTitle(e), savedFileName(e), e.author, e.first].some((t) => String(t || '').toLowerCase().includes(q));
         };
-        const draw = (got) => {
-            all = got;
-            shown = 0;
+        const sorted = (got) => {
+            const out = got.slice();
+            const by = String(S.savedSort || 'new');
+            if (by === 'old')
+                out.sort((a, b) => (a.keptAt || 0) - (b.keptAt || 0));
+            else if (by === 'az')
+                out.sort((a, b) => savedTitle(a).localeCompare(savedTitle(b), undefined, { sensitivity: 'base' }));
+            else
+                out.sort((a, b) => (b.keptAt || 0) - (a.keptAt || 0));
+            return out;
+        };
+        // Tiles in a grid, twenty at a time.
+        const tilesInto = (box, items, key) => {
+            const grid = el('<div class="af-gallery"></div>');
+            box.appendChild(grid);
+            const more = button('Show more', () => {
+                savedShown[key] = (savedShown[key] || 20) + 20;
+                fill();
+            });
+            more.setAttribute('data-af-savedmore', '');
+            const fill = () => {
+                grid.replaceChildren();
+                const n = savedShown[key] || 20;
+                for (const e of items.slice(0, n))
+                    grid.appendChild(savedRow(e, said));
+                more.hidden = items.length <= n;
+            };
+            fill();
+            box.appendChild(more);
+        };
+        const drawList = () => {
             list.replaceChildren();
-            setText(said, all.length ? all.length + (all.length === 1 ? ' saved script.' : ' saved scripts.') : 'Nothing is saved yet. A message is saved after it plays, with Keep made audio on.');
-            drawMore();
+            const all = savedList || [];
+            if (!savedList)
+                return;
+            const shown = sorted(all.filter(matches));
+            setText(said, !all.length
+                ? 'Nothing is saved yet. A message is saved after it plays, with Keep made audio on.'
+                : savedFind.trim()
+                    ? shown.length + ' of ' + all.length + ' match.' + (shown.length ? '' : ' Clear the box to see them all.')
+                    : all.length + (all.length === 1 ? ' saved script.' : ' saved scripts.'));
+            const folders = savedFolders();
+            const known = new Set(folders.map((f) => f.id));
+            for (const f of folders) {
+                const inside = shown.filter((e) => e.folder === f.id);
+                if (savedFind.trim() && !inside.length)
+                    continue;
+                list.appendChild(folderSection(f, inside, drawList, tilesInto));
+            }
+            const loose = shown.filter((e) => !e.folder || !known.has(e.folder));
+            if (loose.length || !folders.length) {
+                const box = el('<div class="af-col" data-af-savedloose></div>');
+                if (folders.length)
+                    box.appendChild(el('<p class="af-saved-group">Not in a folder</p>'));
+                tilesInto(box, loose, '');
+                list.appendChild(box);
+            }
+        };
+        savedDraw = () => {
+            if (c.isConnected)
+                drawList();
         };
         if (savedList)
-            draw(savedList);
+            drawList();
         const read = () => rpc({ type: 'kept_list' }, 15000).then((r) => {
             const got = (r && Array.isArray(r.list) ? r.list : []).filter((e) => e && e.lines > 0);
             const same = !!savedList && JSON.stringify(savedList) === JSON.stringify(got);
             savedList = got;
             if (!same && c.isConnected)
-                draw(got);
+                drawList();
         }, () => {
             if (!savedList)
                 setText(said, 'Your saved audio could not be read: the backend did not answer.');
@@ -5244,27 +5387,86 @@ export function setup(ctx, overrides) {
         read();
         return c;
     }
+    // Draws the gallery again, while it is on screen.
+    let savedDraw = () => { };
+    // A folder: its name and how many it holds, opening and closing like the
+    // folds, with its tiles inside. Rename and Delete are in its own row.
+    function folderSection(f, items, redraw, tilesInto) {
+        const wrap = el('<div class="af-col af-saved-folder" data-af-savedfolder></div>');
+        wrap.setAttribute('data-af-folderid', f.id);
+        const open = f.open !== false || !!savedFind.trim();
+        const head = el('<button type="button" class="af-fold" aria-expanded="' + (open ? 'true' : 'false') + '"><span class="af-caret">▶</span><span></span></button>');
+        head.lastElementChild.textContent = f.name + ' (' + items.length + ')';
+        const body = el('<div class="af-sub"><div class="af-col af-under"></div></div>');
+        const inner = body.firstElementChild;
+        body.hidden = !open;
+        head.addEventListener('click', () => {
+            const now = head.getAttribute('aria-expanded') !== 'true';
+            head.setAttribute('aria-expanded', now ? 'true' : 'false');
+            set({ savedFolders: savedFolders().map((x) => (x.id === f.id ? { ...x, open: now } : x)) });
+            reveal(body, now);
+        });
+        // Its name, typed in place, and Delete, which moves what it holds out.
+        const tools = el('<div class="af-row"></div>');
+        const nameId = rid('fn');
+        const name = el('<input type="text" class="af-field af-saved-foldername" maxlength="60" autocomplete="off">');
+        name.id = nameId;
+        name.value = f.name;
+        name.setAttribute('aria-label', 'Name of the folder');
+        name.addEventListener('change', () => {
+            const v = name.value.trim();
+            if (!v) {
+                name.value = f.name;
+                return;
+            }
+            set({ savedFolders: savedFolders().map((x) => (x.id === f.id ? { ...x, name: v } : x)) });
+            head.lastElementChild.textContent = v + ' (' + items.length + ')';
+        });
+        const del = button('Delete the folder', async () => {
+            if (!(await askSure('Delete the folder', 'The folder ' + f.name + ' is deleted. The ' + items.length + ' saved ' + (items.length === 1 ? 'script in it stays' : 'scripts in it stay') + ', out of any folder.', 'Delete the folder', true)))
+                return;
+            for (const e of (savedList || []).filter((x) => x.folder === f.id))
+                await editSaved(e, { folder: '' });
+            set({ savedFolders: savedFolders().filter((x) => x.id !== f.id) });
+            redraw();
+        }, 'af-danger');
+        tools.appendChild(name);
+        tools.appendChild(del);
+        inner.appendChild(tools);
+        if (items.length)
+            tilesInto(inner, items, f.id);
+        else
+            inner.appendChild(el('<p class="af-note">Nothing is in this folder yet. Move a saved script here with its More button.</p>'));
+        wrap.appendChild(head);
+        wrap.appendChild(body);
+        return wrap;
+    }
     function savedRow(e, said) {
         const row = el('<div class="af-saved" data-af-saved-row></div>');
         row.setAttribute('data-af-key', String(e.key || ''));
         const when = e.keptAt ? new Date(e.keptAt).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) : '';
         const head = el('<div class="af-saved-head"></div>');
-        head.appendChild(el('<b></b>'));
-        setText(head.firstElementChild, (e.author || 'Someone') + '’s script');
+        head.appendChild(el('<b data-af-savedname></b>'));
+        setText(head.firstElementChild, savedTitle(e));
         const meta = el('<span class="af-saved-meta"></span>');
         // How it was made: directed, or read as written.
         const how = e.how === 'fallback' ? 'read as written, the Director could not direct it' : e.how === 'off' ? 'read as written, Director off' : '';
         setText(meta, [when, e.lines + (e.lines === 1 ? ' line' : ' lines'), how].filter(Boolean).join(' · '));
         head.appendChild(meta);
         row.appendChild(head);
+        // The name its files are saved under, so it can be found again after a
+        // download.
+        const file = el('<div class="af-saved-file" data-af-savedfile></div>');
+        setText(file, savedFileName(e) + '.wav');
+        row.appendChild(file);
         const first = el('<div class="af-saved-first"></div>');
         setText(first, String(e.first || ''));
         row.appendChild(first);
         const note = el('<div class="af-hint" aria-live="polite"></div>');
         note.hidden = true;
-        // The row on screen now. Stopping a message draws the Stage tab again,
-        // so the row a press started in can be replaced by a new one for the
-        // same script while its audio gets ready.
+        // The row on screen now. Stopping a message draws the tab again, so the
+        // row a press started in can be replaced by a new one for the same
+        // script while its audio gets ready.
         const live = () => {
             try {
                 const k = String(e.key || '').replace(/["\\]/g, '');
@@ -5275,7 +5477,7 @@ export function setup(ctx, overrides) {
             }
         };
         const say = (t) => {
-            const n = live().querySelector('.af-hint') || note;
+            const n = live().querySelector(':scope > .af-hint') || note;
             setText(n, t);
             n.hidden = !t;
         };
@@ -5325,6 +5527,48 @@ export function setup(ctx, overrides) {
             say(why);
         }, '', ICON_VIDEO);
         down.setAttribute('data-af-saved-open', '');
+        // More: rename, move to a folder, and delete, out of the way until
+        // wanted.
+        const moreBtn = button('More', () => {
+            const now = moreBox.hidden;
+            savedMoreOpen = now ? String(e.key) : '';
+            moreBtn.setAttribute('aria-expanded', now ? 'true' : 'false');
+            reveal(moreBox, now);
+        });
+        moreBtn.setAttribute('data-af-savedmore-btn', '');
+        moreBtn.setAttribute('aria-expanded', savedMoreOpen === e.key ? 'true' : 'false');
+        const moreBox = el('<div class="af-sub"><div class="af-col af-under"></div></div>');
+        const moreIn = moreBox.firstElementChild;
+        moreBox.hidden = savedMoreOpen !== e.key;
+        const nameId = rid('sn');
+        const name = el('<input type="text" class="af-field" maxlength="80" autocomplete="off">');
+        name.id = nameId;
+        name.value = String(e.name || '');
+        name.placeholder = (e.author || 'Someone') + '\u2019s script';
+        name.setAttribute('data-af-savedrename', '');
+        name.addEventListener('change', async () => {
+            const why = await editSaved(e, { name: name.value.trim() });
+            if (why)
+                return say(why);
+            say('');
+            setText(live().querySelector('[data-af-savedname]'), savedTitle(e));
+            setText(live().querySelector('[data-af-savedfile]'), savedFileName(e) + '.wav');
+        });
+        const nameRow = el('<div class="af-col"></div>');
+        nameRow.appendChild(labelRow('Name', 'Empty uses whose script it is. Downloads and videos of it are saved under this name.', nameId));
+        nameRow.appendChild(name);
+        moreIn.appendChild(nameRow);
+        const folders = savedFolders();
+        if (folders.length) {
+            const move = select('Folder', [{ id: '', label: 'Not in a folder' }].concat(folders.map((f) => ({ id: f.id, label: f.name }))), String(e.folder || ''), async (v) => {
+                const why = await editSaved(e, { folder: v });
+                if (why)
+                    return say(why);
+                savedDraw();
+            });
+            move.setAttribute('data-af-savedmove', '');
+            moreIn.appendChild(move);
+        }
         // Delete asks once more on the same button before it deletes.
         let armed = 0;
         const del = button('Delete', async () => {
@@ -5356,7 +5600,7 @@ export function setup(ctx, overrides) {
                 if (savedList)
                     savedList = savedList.filter((x) => x.key !== e.key);
                 fillPlayers();
-                row.remove();
+                savedDraw();
                 log('A saved script and its saved audio were deleted.', '', 'setting');
             }
             catch (_) {
@@ -5364,10 +5608,14 @@ export function setup(ctx, overrides) {
                 say('It could not be deleted: the backend did not answer.');
             }
         }, 'af-danger');
+        const delRow = el('<div class="af-row"></div>');
+        delRow.appendChild(del);
+        moreIn.appendChild(delRow);
         btns.appendChild(play);
         btns.appendChild(down);
-        btns.appendChild(del);
+        btns.appendChild(moreBtn);
         row.appendChild(btns);
+        row.appendChild(moreBox);
         row.appendChild(note);
         return row;
     }
@@ -6332,7 +6580,32 @@ export function setup(ctx, overrides) {
     // Web Animations API. The styles set here are taken off once it has
     // settled, and a second change while one runs starts from where the first
     // one is.
-    const MOVE_STYLES = ['transition', 'height', 'opacity', 'transform', 'overflow'];
+    const MOVE_STYLES = ['transition', 'height', 'opacity', 'transform', 'overflow', 'marginTop', 'marginBottom'];
+    // The gap a flex or grid parent puts beside a part. While the part opens
+    // or closes, a margin of the same size, taken away, moves with its height,
+    // so the gap comes and goes over the same frames rather than at once.
+    function gapBeside(box) {
+        const parent = box.parentElement;
+        if (!parent)
+            return null;
+        let px = 0;
+        try {
+            const c = getComputedStyle(parent);
+            if (!/flex|grid/.test(c.display))
+                return null;
+            px = parseFloat(c.rowGap) || 0;
+        }
+        catch (_) {
+            return null;
+        }
+        if (!px)
+            return null;
+        // The gap sits above it, unless it is the first thing shown.
+        let prev = box.previousElementSibling;
+        while (prev && prev.hidden)
+            prev = prev.previousElementSibling;
+        return { side: prev ? 'marginTop' : 'marginBottom', px };
+    }
     function reveal(box, open) {
         const anyBox = box;
         const run = (anyBox._afRun = (anyBox._afRun || 0) + 1);
@@ -6361,21 +6634,30 @@ export function setup(ctx, overrides) {
         box.style.opacity = String(open && wasHidden ? 0 : fromO);
         if (open && wasHidden)
             box.style.transform = 'translateY(-4px)';
+        const gap = gapBeside(box);
+        // Opening from hidden, the gap starts taken away. Closing, it goes as
+        // the height does.
+        if (gap && open && wasHidden)
+            box.style[gap.side] = -gap.px + 'px';
         // Read the layout between the two, or there is nothing to travel between.
         void box.offsetWidth;
         if (open) {
             const ease = '240ms cubic-bezier(.2,.8,.28,1)';
-            box.style.transition = 'height ' + ease + ',transform ' + ease + ',opacity 200ms ease-out 60ms';
+            box.style.transition = 'height ' + ease + ',transform ' + ease + ',opacity 200ms ease-out 60ms' + (gap ? ',margin ' + ease : '');
             box.style.height = goal + 'px';
             box.style.opacity = '1';
             box.style.transform = 'none';
+            if (gap)
+                box.style[gap.side] = '0px';
         }
         else {
             const ease = '220ms ease-out';
-            box.style.transition = 'height ' + ease + ',opacity ' + ease + ',transform ' + ease;
+            box.style.transition = 'height ' + ease + ',opacity ' + ease + ',transform ' + ease + (gap ? ',margin ' + ease : '');
             box.style.height = '0px';
             box.style.opacity = '0';
             box.style.transform = 'translateY(-4px)';
+            if (gap)
+                box.style[gap.side] = -gap.px + 'px';
         }
         let ended = false;
         const end = (e) => {
@@ -7093,6 +7375,9 @@ export function setup(ctx, overrides) {
         // The open player scrolls when it is taller than the screen, with no
         // scroll bar drawn, as in the drawer.
         '.af.af-pl::-webkit-scrollbar{display:none;width:0;height:0}' +
+        // Nothing in the open player is squeezed to fit. Taller than the screen,
+        // the player scrolls, and each part keeps its own height.
+        '.af.af-pl>*{flex-shrink:0}' +
         '.af-pl-rest{display:flex;flex-direction:column;gap:2px;padding-top:2px}' +
         '.af-pl-ch[data-off="true"] .af-round{color:var(--af-bad)}' +
         '@media (pointer:coarse){.af-pl .af-round{width:40px;height:40px}.af-pl-tr .af-pl-side{width:40px;height:40px}.af-pl-tr{padding:0 46px}.af-pl-tr .af-play{width:54px;height:54px}.af-pl-sw>div{min-height:40px}.af-pl-ch .af-round{width:36px;height:36px}}' +
@@ -8497,7 +8782,6 @@ export function setup(ctx, overrides) {
         }));
         mix.appendChild(mixRow);
         page.appendChild(mix);
-        page.appendChild(savedCard());
         const lg = card('Log', 'What happened, newest last. Anything that went wrong says why here.', '<button type="button" class="af-btn" data-af="copy">Copy</button><button type="button" class="af-btn af-danger" data-af="clear">Clear the log</button>');
         lg.querySelector('[data-af="clear"]').addEventListener('click', () => {
             logLines.length = 0;
@@ -11270,6 +11554,94 @@ export function setup(ctx, overrides) {
         tick();
         paintStudio();
     }
+    // ---- saved looks ----
+    // The settings a look holds: how a video looks, not what it says or who it
+    // names. Names, pictures and notes stay as they are when a look is used.
+    const LOOK_KEYS = [
+        'videoShape', 'videoFont', 'videoSize', 'videoInk', 'videoWords', 'videoPlace', 'videoQuotes', 'videoPicShape', 'videoPicSize',
+        'videoNameColor', 'videoBack', 'videoBackColor', 'videoDim', 'videoBlur', 'videoEdges', 'videoEdgeColor', 'videoMove', 'videoMoveSecs',
+        'videoTitleOn', 'videoFadeOut', 'videoCaptions',
+    ];
+    const LOOKS_MAX = 20;
+    function lookNow() {
+        const out = {};
+        for (const k of LOOK_KEYS)
+            out[k] = JSON.parse(JSON.stringify(S[k] === undefined ? DEFAULTS[k] : S[k]));
+        return out;
+    }
+    // Each saved look: its name, which can be typed over, Use and Delete. Save
+    // this look, under them, keeps the look now under a new name.
+    function drawLooks(box) {
+        box.replaceChildren();
+        const looks = Array.isArray(S.videoLooks) ? S.videoLooks : [];
+        const said = el('<p class="af-note" role="status" data-af-lookssaid></p>');
+        for (const l of looks) {
+            const row = el('<div class="af-row af-look" data-af-look></div>');
+            const name = el('<input type="text" class="af-field af-look-name" maxlength="60" autocomplete="off">');
+            name.value = l.name;
+            name.setAttribute('aria-label', 'Name of the look');
+            name.addEventListener('change', () => {
+                const v = name.value.trim();
+                if (!v) {
+                    name.value = l.name;
+                    return;
+                }
+                set({ videoLooks: looks.map((x) => (x.id === l.id ? { ...x, name: v } : x)) });
+            });
+            const use = button('Use', () => {
+                const same = LOOK_KEYS.every((k) => JSON.stringify(S[k]) === JSON.stringify(l.look[k]));
+                if (same) {
+                    setText(said, 'This look is already the one in use. Nothing changed.');
+                    return;
+                }
+                const patch = {};
+                for (const k of LOOK_KEYS)
+                    if (k in l.look)
+                        patch[k] = JSON.parse(JSON.stringify(l.look[k]));
+                set(patch);
+                renderTab();
+            }, 'af-primary');
+            use.setAttribute('data-af-lookuse', '');
+            const del = button('Delete', async () => {
+                if (!(await askSure('Delete the look', 'The saved look ' + l.name + ' is deleted. The look in use now stays as it is.', 'Delete', true)))
+                    return;
+                set({ videoLooks: looks.filter((x) => x.id !== l.id) });
+                drawLooks(box);
+            }, 'af-danger');
+            row.appendChild(name);
+            row.appendChild(use);
+            row.appendChild(del);
+            box.appendChild(row);
+        }
+        if (!looks.length)
+            box.appendChild(el('<p class="af-note">No looks are saved yet.</p>'));
+        const newId = rid('lk');
+        const newName = el('<input type="text" class="af-field af-look-name" maxlength="60" autocomplete="off" placeholder="A name for this look">');
+        newName.id = newId;
+        newName.setAttribute('data-af-lookname', '');
+        const save = button('Save this look', () => {
+            const n = newName.value.trim();
+            if (!n) {
+                setText(said, 'Type a name for the look first.');
+                return;
+            }
+            if (looks.length >= LOOKS_MAX) {
+                setText(said, 'Twenty looks is the most that can be saved. Delete one first.');
+                return;
+            }
+            set({ videoLooks: looks.concat([{ id: rid('lk'), name: n, look: lookNow() }]) });
+            drawLooks(box);
+        });
+        save.setAttribute('data-af-looksave', '');
+        const addRow = el('<div class="af-col"></div>');
+        addRow.appendChild(labelRow('Save this look', 'Keeps the shape, words, pictures, background, edges, transition and ending under a name. Notes, Show names and Show pictures are not part of a look.', newId));
+        const line = el('<div class="af-row"></div>');
+        line.appendChild(newName);
+        line.appendChild(save);
+        addRow.appendChild(line);
+        box.appendChild(addRow);
+        box.appendChild(said);
+    }
     // The notes, each with its words, when it shows and where. Saved to the
     // account, so a note can be used again on the next video.
     function drawNoteEditors(box, changed) {
@@ -11356,6 +11728,8 @@ export function setup(ctx, overrides) {
         const sh = keptShow();
         studioFor = sh;
         studioForN = sh ? sh.played.length : 0;
+        // The gallery of saved scripts first: each one can be opened here.
+        page.appendChild(savedCard());
         // ---- the performance ----
         const pc = card('The performance', sh ? 'The last message played. Choose what goes into the audio and the video.' : 'Play a message first. Its audio and a video of it can then be kept here.');
         pc.setAttribute('data-af-card', 'studio-show');
@@ -11723,14 +12097,19 @@ export function setup(ctx, overrides) {
             b.appendChild(toggle('Show sounds as captions', 'On by default. A sound shows as a caption in square brackets, such as [thunder]. Off: the background only.', 'videoCaptions', look));
         }));
         vc.appendChild(fold('Notes', (b) => drawNoteEditors(b, look)));
+        vc.appendChild(fold('Saved looks', (b) => drawLooks(b)));
         const lookRow = el('<div class="af-row"></div>');
-        const lookBack = button('Put the look back', () => {
-            const keys = Object.keys(DEFAULTS).filter((k) => /^video/.test(k) && k !== 'videoNames' && k !== 'videoPics' && k !== 'videoNotes');
+        const lookBack = button('Put the look back', async () => {
+            const keys = LOOK_KEYS;
             if (keys.every((k) => JSON.stringify(S[k]) === JSON.stringify(DEFAULTS[k]))) {
                 keepSaid('The look is already the built-in one. Nothing changed.');
                 paintStudio();
                 return;
             }
+            // Asked first, since it puts back every choice of the look at once.
+            // A look saved under Saved looks is kept, and can be used again.
+            if (!(await askSure('Put the look back', 'The shape, words, pictures, background, edges, transition and ending go back to the built-in look. Saved looks, notes, Show names and Show pictures stay as they are.', 'Put it back', true)))
+                return;
             const patch = {};
             for (const k of keys)
                 patch[k] = JSON.parse(JSON.stringify(DEFAULTS[k]));
@@ -11741,7 +12120,7 @@ export function setup(ctx, overrides) {
         lookBack.setAttribute('data-af-studio', 'lookback');
         lookRow.appendChild(lookBack);
         vc.appendChild(lookRow);
-        vc.appendChild(hint('Put the look back puts back the shape, words, background, transition and ending. Notes, Show names and Show pictures stay as they are.'));
+        vc.appendChild(hint('Put the look back asks first, then puts back the shape, words, pictures, background, edges, transition and ending. Saved looks and notes stay.'));
         page.appendChild(vc);
         // ---- censor ----
         const cc = card('Hide and bleep words', 'Covers words on screen and bleeps them in the audio, such as a name you do not want to share.');
@@ -12909,6 +13288,8 @@ export function setup(ctx, overrides) {
                 videoNotes: (v) => (Array.isArray(v) ? v.length : 0) + ' notes',
                 groups: (v) => (Array.isArray(v) ? v.length : 0) + ' groups',
                 chatsOff: (v) => (Array.isArray(v) ? v.length : 0) + ' chats',
+                savedFolders: (v) => (Array.isArray(v) ? v.length : 0) + ' folders',
+                videoLooks: (v) => (Array.isArray(v) ? v.length : 0) + ' looks',
             };
             for (const k of changed)
                 lines.push('  ' + k + ': ' + (PRIVATE[k] ? PRIVATE[k](S[k]) : shown(S[k]) + ', default ' + shown(DEFAULTS[k])));

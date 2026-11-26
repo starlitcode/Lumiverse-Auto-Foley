@@ -185,6 +185,12 @@ interface Settings {
   videoCaptions: boolean;
   // Notes shown over the video: the words, when they show, and where.
   videoNotes: { text: string; when: 'all' | 'start' | 'end' | 'from'; from: number; secs: number; place: 'top' | 'bottom' }[];
+  // Folders in Saved audio, and how it is sorted.
+  savedFolders: { id: string; name: string; open: boolean }[];
+  savedSort: 'new' | 'old' | 'az';
+  // Video looks saved under a name in the Studio, each the video settings
+  // it holds.
+  videoLooks: { id: string; name: string; look: Record<string, any> }[];
   // Words hidden in kept video and audio: covered on screen, and bleeped.
   censorOn: boolean;
   censorWords: string;
@@ -386,6 +392,9 @@ const DEFAULT_SETTINGS: Settings = {
   videoFadeOut: 1.5,
   videoCaptions: true,
   videoNotes: [],
+  savedFolders: [],
+  savedSort: 'new',
+  videoLooks: [],
   censorOn: false,
   censorWords: '',
   censorCover: 'bar',
@@ -704,6 +713,42 @@ function cleanNotesList(v: any): Settings['videoNotes'] {
   }));
 }
 
+// At most 50 folders, each with a name of at most 60 characters.
+function cleanSavedFolders(v: any): Settings['savedFolders'] {
+  if (!Array.isArray(v)) return [];
+  const out: Settings['savedFolders'] = [];
+  for (const f of v.slice(0, 50)) {
+    const id = str(f && f.id, 40).replace(/[^a-z0-9_-]/gi, '');
+    const name = str(f && f.name, 60).trim();
+    if (id && name && !out.some((x) => x.id === id)) out.push({ id, name, open: !(f && f.open === false) });
+  }
+  return out;
+}
+
+// The settings a video look holds: how a video looks, not what it says or
+// who it names. Names, pictures and notes stay as they are when a look is
+// used.
+const LOOK_KEYS = [
+  'videoShape', 'videoFont', 'videoSize', 'videoInk', 'videoWords', 'videoPlace', 'videoQuotes', 'videoPicShape', 'videoPicSize',
+  'videoNameColor', 'videoBack', 'videoBackColor', 'videoDim', 'videoBlur', 'videoEdges', 'videoEdgeColor', 'videoMove', 'videoMoveSecs',
+  'videoTitleOn', 'videoFadeOut', 'videoCaptions',
+];
+// At most 20 looks, each cleaned the same way the settings are.
+function cleanLooks(v: any): Settings['videoLooks'] {
+  if (!Array.isArray(v)) return [];
+  const out: Settings['videoLooks'] = [];
+  for (const l of v.slice(0, 20)) {
+    const id = str(l && l.id, 40).replace(/[^a-z0-9_-]/gi, '');
+    const name = str(l && l.name, 60).trim();
+    if (!id || !name || out.some((x) => x.id === id) || !l.look || typeof l.look !== 'object') continue;
+    const clean: any = cleanSettings(Object.assign({}, l.look, { videoLooks: [] }));
+    const look: Record<string, any> = {};
+    for (const k of LOOK_KEYS) look[k] = clean[k];
+    out.push({ id, name, look });
+  }
+  return out;
+}
+
 function partList(v: any, allowed: string[], dflt: string[]): string[] {
   if (!Array.isArray(v)) return dflt.slice();
   return allowed.filter((p) => v.indexOf(p) >= 0);
@@ -834,6 +879,9 @@ function cleanSettings(raw: any): Settings {
     videoFadeOut: Math.round(num(r.videoFadeOut, 0, 5, d.videoFadeOut) * 10) / 10,
     videoCaptions: bool(r.videoCaptions, d.videoCaptions),
     videoNotes: cleanNotesList(r.videoNotes),
+    savedFolders: cleanSavedFolders(r.savedFolders),
+    savedSort: pick(r.savedSort, ['new', 'old', 'az'] as const, 'new'),
+    videoLooks: cleanLooks(r.videoLooks),
     censorOn: bool(r.censorOn, d.censorOn),
     censorWords: str(r.censorWords, 4000),
     censorCover: pick(r.censorCover, ['bar', 'blur', 'pixels'] as const, d.censorCover),
@@ -2731,15 +2779,36 @@ async function askDecisions(
 // A script is a few KB, so this many is a small file, and enough for a long
 // chat to be played again without asking the Director.
 const SCRIPTS_KEPT = 300;
-const scripts: Record<string, { key: string; script: Script }[]> = {};
+// A saved script can have a name and a folder, given in Saved audio. Both stay
+// with it when the message is played and kept again.
+interface KeptEntry {
+  key: string;
+  script: Script;
+  name?: string;
+  folder?: string;
+}
+const scripts: Record<string, KeptEntry[]> = {};
+
+// Past the limit, the oldest script with no name and no folder goes first,
+// so one the reader named or filed stays.
+function trimKept(list: KeptEntry[]) {
+  while (list.length > SCRIPTS_KEPT) {
+    const plain = list.findIndex((x) => !x.name && !x.folder);
+    list.splice(plain >= 0 ? plain : 0, 1);
+  }
+}
 
 function keepScript(userId: string, script: Script) {
   if (!script.keptAt) script = Object.assign({}, script, { keptAt: Date.now() });
   const list = scripts[userId] || (scripts[userId] = []);
   const at = list.findIndex((x) => x.key === script.key);
+  const was = at >= 0 ? list[at] : null;
   if (at >= 0) list.splice(at, 1);
-  list.push({ key: script.key, script });
-  while (list.length > SCRIPTS_KEPT) list.shift();
+  const entry: KeptEntry = { key: script.key, script };
+  if (was && was.name) entry.name = was.name;
+  if (was && was.folder) entry.folder = was.folder;
+  list.push(entry);
+  trimKept(list);
   void saveKeptScripts(userId);
 }
 
@@ -2754,8 +2823,19 @@ async function readKeptScripts(userId: string, s: Settings): Promise<void> {
   const saved = await readJson(SCRIPTS_FILE, userId || undefined);
   if (!Array.isArray(saved)) return;
   const mine = scripts[userId] || [];
-  const old = saved.filter((x: any) => x && typeof x.key === 'string' && x.script && Array.isArray(x.script.lines) && !mine.some((m) => m.key === x.key));
-  scripts[userId] = old.concat(mine).slice(-SCRIPTS_KEPT);
+  const old: KeptEntry[] = saved
+    .filter((x: any) => x && typeof x.key === 'string' && x.script && Array.isArray(x.script.lines) && !mine.some((m) => m.key === x.key))
+    .map((x: any) => {
+      const e: KeptEntry = { key: x.key, script: x.script };
+      const name = str(x.name, 80).trim();
+      const folder = str(x.folder, 40).replace(/[^a-z0-9_-]/gi, '');
+      if (name) e.name = name;
+      if (folder) e.folder = folder;
+      return e;
+    });
+  const all = old.concat(mine);
+  trimKept(all);
+  scripts[userId] = all;
 }
 async function saveKeptScripts(userId: string): Promise<void> {
   try {
@@ -4282,9 +4362,31 @@ async function onPanel(p: any, userId: string | undefined) {
         const list = (scripts[userId || ''] || []).slice().reverse().map((x) => {
           const sc = x.script;
           const voice = sc.lines.filter((l) => l.kind === 'speech' || l.kind === 'narration');
-          return { key: x.key, messageId: sc.messageId, chatId: sc.chatId || '', author: sc.author, keptAt: sc.keptAt || 0, lines: voice.length, first: str(voice.length ? voice[0].plain : '', 160), how: sc.directed ? 'directed' : sc.fallback ? 'fallback' : 'off' };
+          return { key: x.key, messageId: sc.messageId, chatId: sc.chatId || '', author: sc.author, keptAt: sc.keptAt || 0, lines: voice.length, first: str(voice.length ? voice[0].plain : '', 160), how: sc.directed ? 'directed' : sc.fallback ? 'fallback' : 'off', name: x.name || '', folder: x.folder || '' };
         });
         return answer({ type: 'kept_list', list });
+      }
+      case 'kept_edit': {
+        // A saved script's name or folder, from Saved audio. An empty name
+        // goes back to the one made from whose script it is.
+        const key = str(p.key, 80);
+        const uid = userId || '';
+        const s = await loadSettings(userId);
+        await readKeptScripts(uid, s);
+        const hit = (scripts[uid] || []).find((x) => x.key === key);
+        if (!hit) return answer({ type: 'kept_edited', ok: false, error: 'This script is no longer saved.' });
+        if (typeof p.name === 'string') {
+          const name = str(p.name, 80).trim();
+          if (name) hit.name = name;
+          else delete hit.name;
+        }
+        if (typeof p.folder === 'string') {
+          const folder = str(p.folder, 40).replace(/[^a-z0-9_-]/gi, '');
+          if (folder) hit.folder = folder;
+          else delete hit.folder;
+        }
+        await saveKeptScripts(uid);
+        return answer({ type: 'kept_edited', ok: true, name: hit.name || '', folder: hit.folder || '' });
       }
       case 'kept_script': {
         const key = str(p.key, 80);

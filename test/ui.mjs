@@ -163,6 +163,7 @@ function answer(msg) {
     case 'clips_state': { const c = window.__clips || {}; return reply({ type: 'clips_state', count: Object.keys(c).length, bytes: Object.values(c).reduce((n, x) => n + x.base64.length * 0.75, 0) }); }
     case 'clips_clear': window.__clips = {}; return reply({ type: 'clips_state', ok: true, count: 0, bytes: 0 });
     case 'kept_list': return reply({ type: 'kept_list', list: window.__keptList || [] });
+    case 'kept_edit': { const e = (window.__keptList || []).find((x) => x.key === msg.key); if (!e) return reply({ type: 'kept_edited', ok: false }); if (typeof msg.name === 'string') e.name = msg.name; if (typeof msg.folder === 'string') e.folder = msg.folder; return reply({ type: 'kept_edited', ok: true, name: e.name || '', folder: e.folder || '' }); }
     case 'sound_kept': return reply({ type: 'sound', missing: true });
     case 'video_bg_get': return reply({ type: 'video_bg', picture: window.__videoBg || '' });
     case 'video_bg_put': window.__videoBg = msg.picture || ''; return reply({ type: 'video_bg', ok: true, picture: window.__videoBg });
@@ -701,6 +702,80 @@ if (section("lumiverse pictures")) {
   }
 }
 
+if (section("saved looks")) {
+  console.log("A video look can be saved under a name, used, renamed and deleted");
+  for (const size of SIZES) {
+    const { context, page, errors } = await open(THEMES[0], size);
+    const where = size.name;
+    await page.click('.af-tab[data-tab="studio"]');
+    await page.waitForTimeout(500);
+    await page.locator(".af-fold", { hasText: /^▶?\s*Saved looks$/ }).click();
+    await page.waitForTimeout(300);
+    // A look of its own: Typewriter, tall.
+    await page.evaluate(() => { window.__settings.videoFont = "type"; });
+    await page.evaluate(() => {});
+    await page.locator(".af-fold", { hasText: /^▶?\s*Shape and words$/ }).click();
+    await page.waitForTimeout(300);
+    await page.selectOption('[data-af-card="studio-video"] select >> nth=0', "tall");
+    await page.waitForTimeout(300);
+    await page.fill("[data-af-lookname]", "Noir");
+    await page.click("[data-af-looksave]");
+    await page.waitForTimeout(300);
+    const saved = await page.evaluate(() => window.__settings.videoLooks);
+    check(saved.length === 1 && saved[0].name === "Noir" && saved[0].look.videoShape === "tall", where + ": Save this look keeps the look under its name (" + JSON.stringify(saved.map((l) => [l.name, l.look.videoShape])) + ")");
+    check(!("videoNames" in saved[0].look) && !("videoNotes" in saved[0].look), where + ": names and notes are not part of a look");
+    // Change the shape, then use the look again.
+    await page.selectOption('[data-af-card="studio-video"] select >> nth=0', "square");
+    await page.waitForTimeout(300);
+    await page.click("[data-af-lookuse]");
+    await page.waitForTimeout(600);
+    check(await page.evaluate(() => window.__settings.videoShape === "tall"), where + ": Use puts the look back");
+    // Put the look back asks first, then puts the built-in look back. The
+    // saved look stays.
+    const asked = await page.evaluate(() => window.__asked || 0);
+    await page.click('[data-af-studio="lookback"]');
+    await page.waitForTimeout(600);
+    check((await page.evaluate(() => window.__asked || 0)) === asked + 1, where + ": Put the look back asks first");
+    check(await page.evaluate(() => window.__settings.videoShape === "wide" && window.__settings.videoLooks.length === 1), where + ": then puts the built-in look back, and the saved look stays");
+    const m = await page.evaluate(MEASURE, size.touch);
+    check(!m.overflow.length && !m.small.length, where + ": the saved looks fit. " + m.overflow.concat(m.small).slice(0, 2).join("; "));
+    check(!errors.length, where + ": no errors. " + errors.slice(0, 2).join("; "));
+    await context.close();
+  }
+}
+
+if (section("smooth close")) {
+  console.log("Who is voiced closes to the end with no jump in the last frame");
+  for (const size of SIZES) {
+    const { context, page, errors } = await open(THEMES[0], size);
+    await page.click('.af-tab[data-tab="settings"]');
+    await page.waitForTimeout(200);
+    await page.evaluate(() => document.querySelector('[data-af-row="widgetOn"] .af-box').click());
+    await page.waitForTimeout(250);
+    await page.evaluate(() => window.__widget.querySelector(".af-float").click());
+    await page.waitForTimeout(500);
+    await page.evaluate(() => window.__widget.querySelector('[data-p="fold"]').click());
+    await page.waitForTimeout(800);
+    // The player's height on every frame as it closes. The gap above the
+    // list goes with it, so the last step is as small as the ones before.
+    const steps = await page.evaluate(async () => {
+      const card = window.__widget.querySelector(".af-pl");
+      const hs = [];
+      window.__widget.querySelector('[data-p="fold"]').click();
+      const t0 = performance.now();
+      while (performance.now() - t0 < 500) {
+        await new Promise((r) => requestAnimationFrame(r));
+        hs.push(card.getBoundingClientRect().height);
+      }
+      return hs.slice(1).map((h, i) => hs[i] - h).filter((d) => Math.abs(d) > 0.5);
+    });
+    const last = steps.length ? steps[steps.length - 1] : 0;
+    check(steps.length > 4 && last <= 6, size.name + ": it closes over several frames, and the last step is a small one (" + steps.map((x) => x.toFixed(0)).join(",") + ")");
+    check(!errors.length, size.name + ": no errors. " + errors.slice(0, 2).join("; "));
+    await context.close();
+  }
+}
+
 if (section("find someone")) {
   console.log("Find someone lists only the people who match, for a large cast");
   for (const size of SIZES) {
@@ -802,6 +877,12 @@ if (section("voice call")) {
     // ▶ turned a quarter turn is ▼, so an open fold points down.
     check(look.text === "▶" && /matrix\(6\.\d+e-17, 1, -1, 6\.\d+e-17|matrix\(0, 1, -1, 0/.test(look.caret), where + ": open, its arrow points down, as on every fold (" + look.caret + ")");
     check(look.list === "visible" && look.bar === "none", where + ": the list has no scroll box of its own, and the player draws no scroll bar (" + look.list + ", " + look.bar + ")");
+    // With the whole cast open the player is taller than the screen. Nothing
+    // in it is squeezed: each part is as tall as what it holds.
+    const squeezed = await page.evaluate(() => [...window.__widget.querySelectorAll(".af-pl > *")].filter((n) => !n.hidden && getComputedStyle(n).display !== "none" && n.scrollHeight > n.clientHeight + 2 && getComputedStyle(n).overflowY !== "visible").map((n) => n.className + " " + n.clientHeight + "/" + n.scrollHeight));
+    check(!squeezed.length, where + ": no part of the player is squeezed to fit (" + squeezed.join(" | ") + ")");
+    const seg = await page.evaluate(() => { const b = window.__widget.querySelector('.af-pl .af-seg .af-segbtn'); return b.scrollHeight <= b.clientHeight + 1 && b.getBoundingClientRect().height >= 28; });
+    check(seg, where + ": Latest reply and My latest message keep their full height");
     await page.evaluate(() => window.__widget.querySelector('[data-p="more"]').click());
     await page.waitForTimeout(600);
     check((await rows()).map((r) => r.id).join(",") === "n,a,b", where + ": pressed again, it closes");
@@ -1450,7 +1531,7 @@ if (section("message player contrast")) {
 }
 
 if (section("saved audio")) {
-  console.log("Saved audio lists every saved script, and plays, downloads and deletes them");
+  console.log("Saved audio, in the Studio, lists every saved script, and plays, opens and deletes them");
   for (const size of SIZES) {
     const { context, page, errors } = await open(THEMES[0], size);
     // A message is played once, so its lines are saved. The backend then
@@ -1464,7 +1545,7 @@ if (section("saved audio")) {
     await page.waitForFunction(() => document.querySelector('#mount [data-af-slot="message"]').getAttribute("aria-busy") === null && (window.__synth || []).length > 0, null, { timeout: 10000 });
     await page.waitForTimeout(400);
     const made = await page.evaluate(() => (window.__synth || []).length);
-    await page.click('.af-tab[data-tab="stage"]');
+    await page.click('.af-tab[data-tab="studio"]');
     await page.waitForTimeout(200);
     // The list shows with no fold to open.
     await page.waitForTimeout(400);
@@ -1483,7 +1564,7 @@ if (section("saved audio")) {
     await page.click('[data-af-studio="dlall"]');
     const file = await dl;
     check(!!file && /^auto-foley Ysolde 2026-11-20\.wav$/.test(file.suggestedFilename()), size.name + ": its audio downloads, named for whose script it is and the day it was saved (" + (file && file.suggestedFilename()) + ")");
-    await page.click('.af-tab[data-tab="stage"]');
+    await page.click('.af-tab[data-tab="studio"]');
     await page.waitForTimeout(400);
     await page.evaluate(() => { window.__clipMs = 4000; });
     await row.locator("[data-af-saved-play]").click();
@@ -1492,7 +1573,8 @@ if (section("saved audio")) {
     check((await page.evaluate(() => (window.__synth || []).length)) === made, size.name + ": playing and opening it in the Studio make nothing new");
     // One thing plays at a time. A message started while a saved script
     // plays stops the saved script, and the other way round.
-    const playLabel = () => page.evaluate(() => document.querySelector('[data-af="play"]').getAttribute("aria-label"));
+    // The message's own button says Stop Auto Foley while it plays.
+    const playLabel = () => page.evaluate(() => (document.querySelector('#mount [data-af-slot="message"]').getAttribute("aria-label") === "Stop Auto Foley" ? "Pause" : "not playing"));
     await page.click('#mount [data-af-slot="message"]');
     await page.waitForTimeout(700);
     check(((await row.locator("[data-af-saved-play]").textContent()) || "") === "Play", size.name + ": starting a message stops the saved script");
@@ -1505,6 +1587,41 @@ if (section("saved audio")) {
     await page.waitForTimeout(200);
     const m = await page.evaluate(MEASURE, size.touch);
     check(!m.overflow.length && !m.small.length, size.name + ": the list fits. " + m.overflow.concat(m.small).slice(0, 2).join("; "));
+    // Its file name shows, and it can be renamed, which changes the file
+    // name too.
+    check(/^auto-foley Ysolde 2026-11-20\.wav$/.test(((await row.locator("[data-af-savedfile]").textContent()) || "").trim()), size.name + ": the tile shows the name its files are saved under");
+    await row.locator("[data-af-savedmore-btn]").click();
+    await page.waitForTimeout(450);
+    await row.locator("[data-af-savedrename]").fill("The ferry at dawn");
+    await row.locator("[data-af-savedrename]").dispatchEvent("change");
+    await page.waitForTimeout(400);
+    check(((await row.locator("[data-af-savedname]").textContent()) || "") === "The ferry at dawn" && /^auto-foley The ferry at dawn 2026-11-20\.wav$/.test(((await row.locator("[data-af-savedfile]").textContent()) || "").trim()), size.name + ": renamed, its name and file name change");
+    check(await page.evaluate(() => window.__keptList[0].name === "The ferry at dawn"), size.name + ": and the name is saved");
+    // Folders: a new one, and the script moved into it.
+    await page.click("[data-af-newfolder]");
+    await page.waitForTimeout(400);
+    check(await page.evaluate(() => (window.__settings.savedFolders || []).length === 1), size.name + ": New folder makes a folder, saved to the account");
+    await row.locator("[data-af-savedmore-btn]").click().catch(() => {});
+    await page.waitForTimeout(450);
+    const moreOpen = await row.locator("[data-af-savedmove] select").isVisible().catch(() => false);
+    if (!moreOpen) { await row.locator("[data-af-savedmore-btn]").click(); await page.waitForTimeout(450); }
+    const fid = await page.evaluate(() => window.__settings.savedFolders[0].id);
+    await row.locator("[data-af-savedmove] select").selectOption(fid);
+    await page.waitForTimeout(500);
+    check(await page.evaluate((fid) => !!document.querySelector('[data-af-folderid="' + fid + '"] [data-af-saved-row]') && window.__keptList[0].folder === fid, fid), size.name + ": Folder moves the script into the folder");
+    // Find.
+    await page.fill("[data-af-savedfind]", "nothing like it");
+    await page.waitForTimeout(400);
+    check((await row.count()) === 0 && /0 of 1 match/.test(await page.locator('[data-af="savedsaid"]').textContent()), size.name + ": Find lists only what matches");
+    await page.fill("[data-af-savedfind]", "dawn");
+    await page.waitForTimeout(400);
+    check((await row.count()) === 1, size.name + ": and finds it by its new name");
+    await page.fill("[data-af-savedfind]", "");
+    await page.waitForTimeout(400);
+    const mg = await page.evaluate(MEASURE, size.touch);
+    check(!mg.overflow.length && !mg.small.length, size.name + ": the gallery fits. " + mg.overflow.concat(mg.small).slice(0, 2).join("; "));
+    if (shots) await page.locator("[data-af-saved]").screenshot({ path: shots + "/gallery-" + size.name + ".png" });
+    if (!(await row.locator(".af-btn", { hasText: "Delete" }).isVisible())) { await row.locator("[data-af-savedmore-btn]").click(); await page.waitForTimeout(450); }
     await row.locator(".af-btn", { hasText: "Delete" }).click();
     await page.waitForTimeout(150);
     check((await row.count()) === 1 && ((await row.textContent()) || "").includes("Tap again to delete"), size.name + ": Delete asks once more first");
