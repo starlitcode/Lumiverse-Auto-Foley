@@ -125,6 +125,7 @@ A browser that can make MP4, such as a recent Chrome or Safari, saves MP4, which
 - **How the words show**: **Light up as they are said** by default, with words not said yet dimmer. **Appear as they are said** shows each word only once it is said. **Fade in as they are said** fades each word in as it is said. **Blur in as they are said** fades each word in from a blur. **All at once** shows the whole line.
 - **Where the words sit**: **Middle** by default, or **Lower third**, which leaves the picture behind them clear.
 - **Quotation marks around speech**: on by default. Narration never has them.
+- **A shadow behind the words**: on by default, the soft dark shadow the words always had. Sound captions have it too. Under it: **Color of the shadow**, black by default, and **How dark** (65%), **How soft** (18) and **How far below** (2), set by eye on the preview. Sizes are in pixels of a 1080-pixel frame.
 
 When each word is said is worked out from where the voice is in the clip, so it is close, not exact.
 
@@ -133,10 +134,13 @@ When each word is said is worked out from where the voice is in the clip, so it 
 - **Show names**: on by default. Off, no names are in the video, in its title, or in the name of any file saved, audio included. Names are still said aloud. To take a name out of the sound too, use **Hide and bleep words**. Under it:
   - **Font of the names**: **The same as the words** by default. Any font, your own included.
   - **Size of the names, in percent**: 100 by default, from 60 to 160. It is set apart from the size of the words and the size of the pictures.
+  - **A shadow behind the names**: on by default, the same as the words' shadow, with its own color, darkness, softness and distance.
 - **Show pictures**: on by default. Each speaker's picture from the Cast tab is shown above their line. Narration has none. Under it:
   - **Shape of the pictures**: a circle or a rounded square.
   - **Size of the pictures**: 150 by default, in pixels of a 1080-pixel frame.
   - **A ring around each picture**: on by default, in the color of the name. Off shows the picture with no ring.
+  - **Two speakers on screen**: on by default. See [Two speakers and mood pictures](#two-speakers-and-mood-pictures).
+  - **A picture for each mood**: on by default. See [Two speakers and mood pictures](#two-speakers-and-mood-pictures).
 - **Color of the names**: **Each kind's color** by default, the colors set under **Colors for each kind of part** in the Settings tab. **The words' color** uses one color for every name.
 
 ### Background
@@ -144,6 +148,7 @@ When each word is said is worked out from where the voice is in the clip, so it 
 - **Dark** by default, lit a little in your theme's accent.
 - **A color of your own**, picked under it.
 - **A picture of your own**. **Choose a picture** keeps it on your account. It is cut to the video's shape from the middle. **Dim the picture**, 40% by default, makes the words easier to read. **Blur the picture**, off by default, makes a busy picture easier to read words over.
+  - **A slow move on the picture**: on by default. In each scene the picture makes one slow move, easing in and out: it zooms in, moves right, zooms out or moves left, in turn. It moves 1% of the frame a second on average, and never more than 2%, so it looks still at a glance. With Reduce motion on, in the panel or on your device, it holds still in the preview and full screen. A saved video keeps the move unless this is off.
 - **A design of your own**: shapes you place yourself, over a color. See [A design of your own](#a-design-of-your-own).
 
 **Darken the edges**, under any background, makes the edges of the frame darker than the middle. It is 50% by default. **Off** leaves the edges as bright as the middle.
@@ -212,14 +217,15 @@ Every choice in the Studio is a setting, kept on your account. **Start again** i
 ## Your own fonts
 
 - **Add a font**, under **Font** or **Font of the names**, adds a font file from your device: TTF, OTF, WOFF or WOFF2.
+- Use a font you own, or a free one. Free fonts are on font sites, which say what each font allows.
+- Check the font's license. It has to allow use in videos you post, such as on a sharing site. Some free fonts allow personal use only.
+- Once it is added, its name is in the list, and a line of words under it is drawn in it, so you can see it worked.
 - It is kept on your account, so it is there on every device you sign in on.
 - It is named from its file. `Harbor_Script.woff2` is listed as **Harbor Script**, under **Your fonts**.
 - A font can be up to 3 MB, since it travels through the extension. A WOFF2 file is the smallest kind.
 - You can keep up to 8 fonts.
 - **Take this font out** shows while one of your fonts is picked. It asks first. A video that used it is drawn in **Book**.
 - If a font cannot be read, the video is drawn in **Book**, and the Log says why.
-
-Only use a font you are allowed to use. Many fonts are free for videos. Some are not.
 
 ## A design of your own
 
@@ -338,6 +344,45 @@ She picks **Dock** for the first scene too. Now the whole video is blue, and reo
 ### How backgrounds are kept
 
 Your backgrounds are kept as a list, each with an id, a name and its own settings. One is picked for every scene nothing else is for. A picture for a background is kept in a file of its own, named by the background's id.
+
+## Two speakers and mood pictures
+
+### In short
+
+- **Two speakers on screen**: when two people take turns speaking in a scene, both pictures show side by side. The one speaking is at full strength, and the other is a little dimmer.
+- **A picture for each mood**: a person can have a picture for each of eight feelings, on the Cast tab. A line is shown with the picture for its feeling.
+- Both are in **Speakers**, under **Show pictures**, and on by default.
+- Neither asks a model anything, so neither costs anything.
+- With no mood pictures, and one person speaking at a time, the video looks the same as before.
+
+### Steps
+
+1. On the Cast tab, open a person and open **Pictures for moods**, under **Picture**.
+2. Press **Choose** beside a feeling, and crop the picture the same way as the main one.
+3. Play a message. In the Studio, each line of theirs shows the picture for its feeling.
+
+### What it sends
+
+Nothing. The feeling is worked out on your device, from the line. The pictures are kept on your account. See [Pictures for moods](cast.md#pictures-for-moods) for the words each feeling is read from.
+
+### An example
+
+Brisa and Tollan are made-up characters, in one scene. Both have a picture, and Tollan has an **Angry** picture.
+
+1. Brisa speaks. One picture shows: Brisa's.
+2. Tollan answers: "[angrily] Give the map back." Both pictures now show, side by side, fading in. Tollan's is at full strength, and it is his **Angry** picture, since the tag says angrily. Brisa's is a little dimmer.
+3. A line of narration. Both stay, a little dimmer.
+4. Brisa speaks again. Her picture is at full strength, and Tollan's is dimmer.
+5. Marek speaks, a third person. It goes back to one picture: Marek's.
+
+### Details
+
+- Two people are shown when they are the last two to speak in the scene, and both have a picture. A new scene starts again from one.
+- The first of the two to speak is on the left.
+- Names show under each picture, cut short with an ellipsis if there is no room.
+- When there is no room for two pictures side by side, such as a tall video with large pictures, one picture shows.
+- The change between one picture and two fades over a moment and moves 4 pixels. With Reduce motion on, it changes at once on screen.
+- A line's feeling comes from its voice tags and its note on how it is said. With none, it is the scene's mood. With no mood either, the main picture is used.
 
 ## Hide and bleep words
 

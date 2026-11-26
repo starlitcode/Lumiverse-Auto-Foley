@@ -20,6 +20,7 @@ Someone the AI added has no voice picked. The first time they speak, Auto Foley 
 ## A card
 
 - **Picture.** Optional. **Choose a picture** picks one from your device, then a crop box opens. Drag the picture to move it, and use **Zoom**, or the mouse wheel, to zoom in. The circle shows what the round picture shows. **Use this** saves it, made small, with the cast. **Cancel** keeps the picture you had. With none, the first letter of the name is shown. **Take it out** asks first.
+- **Pictures for moods**, under it. Optional. A picture for each of eight feelings, for the Studio's videos. See [Pictures for moods](#pictures-for-moods).
   - **Use their Lumiverse picture** takes the picture of the character or persona in Lumiverse with the same name, display name or other name, cut to a square from the middle. If there is none, the card says so.
   - **Use pictures from Lumiverse**, at the top of the Cast tab, does the same for everyone who has no picture yet. A picture already chosen is kept. It says how many it found.
   - Lumiverse's pictures are read the same way the panel reads your chat, so no permission is asked for.
@@ -47,6 +48,32 @@ Someone the AI added has no voice picked. The first time they speak, Auto Foley 
 - **Hear a sample** speaks a test line with these settings. It costs a few credits.
 - **Remove** takes them out of the cast. The narrator cannot be removed, since it reads everything outside quotes. If it were taken out, it would be added back at once. To skip narration, set **Narration** in the Settings tab to **Skip**.
 - The narrator has no **Voice type**. A voice type is only used to pick a voice for someone new, and the narrator uses the connection's voice until you pick one.
+
+## Pictures for moods
+
+Each person can have a picture for each of these feelings: happy, sad, angry, scared, calm, playful, romantic and tense.
+
+- Press **Choose** beside a feeling. The same crop box opens as for the main picture.
+- **Take it out** asks first. The main picture is used again for that feeling.
+- Each picture is kept on your account in a file of its own, so the cast stays small.
+- **A picture for each mood**, in the Studio under **Show pictures**, turns them on or off for videos.
+
+### How a line's feeling is found
+
+The words in a line's voice tags, and in its note on how it is said, are matched whole against this table. The feeling with the most matches is used. On a tie, the one higher in the table is used.
+
+| Feeling | Words |
+| --- | --- |
+| happy | happy, happily, cheerful, cheerfully, joyful, delighted, excited, excitedly, elated, laughs, laughing, laughter, chuckles, chuckling, giggles, giggling, grinning, beaming, brightly, warmly |
+| sad | sad, sadly, sorrowful, mournful, tearful, tearfully, crying, cries, sobs, sobbing, sniffles, heartbroken, grieving, choked, despairing, wistful, wistfully |
+| angry | angry, angrily, furious, furiously, enraged, shouts, shouting, yells, yelling, snaps, snapping, snarls, growls, seething, irritated, annoyed, bitter, bitterly, hostile |
+| scared | scared, afraid, frightened, terrified, fearful, fearfully, panicked, panicking, nervous, nervously, trembling, shaky, shakily, gasps, whimpers, anxious, anxiously |
+| calm | calm, calmly, gentle, gently, soothing, soothingly, steady, steadily, relaxed, peaceful, serene, softly, patient, patiently |
+| playful | playful, playfully, teasing, teasingly, teases, mischievous, mischievously, sly, slyly, cheeky, smirking, smirks, sing-song, singsong, giddy |
+| romantic | romantic, tender, tenderly, loving, lovingly, affectionate, affectionately, sultry, seductive, seductively, breathy, longing, adoring, flirtatious, flirty, intimate |
+| tense | tense, tensely, urgent, urgently, strained, cold, coldly, flat, flatly, wary, warily, guarded, clipped, curt, curtly, grim, grimly |
+
+With no match, the scene's mood is used: calm and cozy are calm, happy is happy, playful is playful, romantic is romantic, sad is sad, scary is scared, and tense, action and mysterious are tense. With no mood either, the main picture is used. A person with no picture for the feeling found is shown with their main picture.
 
 ## How much a box holds
 

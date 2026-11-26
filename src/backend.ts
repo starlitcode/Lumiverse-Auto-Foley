@@ -52,6 +52,9 @@ interface CastMember {
   // A small picture made on the reader's device, as a data address. Empty
   // shows the first letter of the name.
   picture: string;
+  // The feelings this person has a picture of their own for. Each picture
+  // is kept in a file of its own, by the person's id and the feeling.
+  moodPics: string[];
   stability: number;
   similarity: number;
   style: number;
@@ -231,6 +234,31 @@ interface Settings {
   videoNameSize: number;
   // Whether a ring is drawn around each picture.
   videoPicRing: boolean;
+  // Whether a picture background moves slowly across each scene.
+  videoPicMove: boolean;
+  // Whether two people who take turns in a scene are shown side by side.
+  videoTwo: boolean;
+  // Whether a person's picture for the mood of the line is used.
+  videoMoodPics: boolean;
+  // The shadows behind the words and behind the names in a video: on or
+  // off, a color (empty is black), how dark in percent, how soft and how
+  // far below, in pixels of a 1080-pixel frame.
+  videoWordShadow: boolean;
+  videoWordShadowInk: string;
+  videoWordShadowDark: number;
+  videoWordShadowSoft: number;
+  videoWordShadowFar: number;
+  videoNameShadow: boolean;
+  videoNameShadowInk: string;
+  videoNameShadowDark: number;
+  videoNameShadowSoft: number;
+  videoNameShadowFar: number;
+  // The floating player's shadow. Empty color and the starting darkness and
+  // softness use the theme's own shadow.
+  playerShadow: boolean;
+  playerShadowInk: string;
+  playerShadowDark: number;
+  playerShadowSoft: number;
   // The backgrounds, each with an id, and the id of the one used for the
   // whole video. The panel edits one, the one picked.
   videoBacks: VideoBack[];
@@ -462,6 +490,23 @@ const DEFAULT_SETTINGS: Settings = {
   videoNameFont: '',
   videoNameSize: 100,
   videoPicRing: true,
+  videoPicMove: true,
+  videoTwo: true,
+  videoMoodPics: true,
+  videoWordShadow: true,
+  videoWordShadowInk: '',
+  videoWordShadowDark: 65,
+  videoWordShadowSoft: 18,
+  videoWordShadowFar: 2,
+  videoNameShadow: true,
+  videoNameShadowInk: '',
+  videoNameShadowDark: 65,
+  videoNameShadowSoft: 18,
+  videoNameShadowFar: 2,
+  playerShadow: true,
+  playerShadowInk: '',
+  playerShadowDark: 50,
+  playerShadowSoft: 48,
   videoBacks: [{ id: 'main', name: 'Main', kind: 'dark', color: '', dim: 40, blur: 0, shapes: [], use: 'match', moods: [], places: [] }],
   videoBackPick: 'main',
   videoEdges: 50,
@@ -530,6 +575,7 @@ function narrator(): CastMember {
     voices: {},
     group: '',
     picture: '',
+    moodPics: [],
     stability: 0.5,
     similarity: 0.75,
     style: 0,
@@ -634,6 +680,11 @@ function cleanBacks(r: any): { videoBacks: VideoBack[]; videoBackPick: string } 
   return { videoBacks: list, videoBackPick: list.some((x) => x.id === want) ? want : list[0].id };
 }
 
+// The feelings a person can have a picture for, in the Studio's videos.
+const FEELINGS = ['happy', 'sad', 'angry', 'scared', 'calm', 'playful', 'romantic', 'tense'];
+const moodPicFile = (member: string, feeling: string) => 'cast-moods/' + member + '-' + feeling + '.json';
+const memberId = (v: any) => str(v, 64).replace(/[^a-z0-9_-]/gi, '');
+
 const MAX_CAST = 80;
 const MAX_GROUPS = 30;
 
@@ -723,6 +774,7 @@ function cleanMember(m: any): CastMember | null {
     voices: cleanVoices(m.voices),
     group: str(m.group, 64),
     picture: cleanPicture(m.picture),
+    moodPics: Array.isArray(m.moodPics) ? FEELINGS.filter((f) => m.moodPics.indexOf(f) >= 0) : [],
     stability: num(m.stability, 0, 1, base.stability),
     similarity: num(m.similarity, 0, 1, base.similarity),
     style: num(m.style, 0, 1, base.style),
@@ -880,7 +932,9 @@ function cleanSavedFolders(v: any): Settings['savedFolders'] {
 // used.
 const LOOK_KEYS = [
   'videoShape', 'videoFont', 'videoSize', 'videoInk', 'videoCaptionInk', 'videoWords', 'videoPlace', 'videoQuotes', 'videoPicShape', 'videoPicSize',
-  'videoNameColor', 'videoNameFont', 'videoNameSize', 'videoPicRing', 'videoBacks', 'videoBackPick', 'videoEdges', 'videoEdgeColor', 'videoMove', 'videoMoveSecs',
+  'videoNameColor', 'videoNameFont', 'videoNameSize', 'videoPicRing', 'videoPicMove', 'videoTwo', 'videoMoodPics',
+  'videoWordShadow', 'videoWordShadowInk', 'videoWordShadowDark', 'videoWordShadowSoft', 'videoWordShadowFar',
+  'videoNameShadow', 'videoNameShadowInk', 'videoNameShadowDark', 'videoNameShadowSoft', 'videoNameShadowFar', 'videoBacks', 'videoBackPick', 'videoEdges', 'videoEdgeColor', 'videoMove', 'videoMoveSecs',
   'videoTitleOn', 'videoFadeOut', 'videoCaptions',
 ];
 // At most 20 looks, each cleaned the same way the settings are.
@@ -1031,6 +1085,23 @@ function cleanSettings(raw: any): Settings {
     videoNameFont: r.videoNameFont === '' ? '' : fontChoice(r.videoNameFont, ''),
     videoNameSize: Math.round(num(r.videoNameSize, 60, 160, d.videoNameSize)),
     videoPicRing: bool(r.videoPicRing, d.videoPicRing),
+    videoPicMove: bool(r.videoPicMove, d.videoPicMove),
+    videoTwo: bool(r.videoTwo, d.videoTwo),
+    videoMoodPics: bool(r.videoMoodPics, d.videoMoodPics),
+    videoWordShadow: bool(r.videoWordShadow, d.videoWordShadow),
+    videoWordShadowInk: hexColor(r.videoWordShadowInk),
+    videoWordShadowDark: Math.round(num(r.videoWordShadowDark, 0, 100, d.videoWordShadowDark)),
+    videoWordShadowSoft: Math.round(num(r.videoWordShadowSoft, 0, 40, d.videoWordShadowSoft)),
+    videoWordShadowFar: Math.round(num(r.videoWordShadowFar, 0, 20, d.videoWordShadowFar)),
+    videoNameShadow: bool(r.videoNameShadow, d.videoNameShadow),
+    videoNameShadowInk: hexColor(r.videoNameShadowInk),
+    videoNameShadowDark: Math.round(num(r.videoNameShadowDark, 0, 100, d.videoNameShadowDark)),
+    videoNameShadowSoft: Math.round(num(r.videoNameShadowSoft, 0, 40, d.videoNameShadowSoft)),
+    videoNameShadowFar: Math.round(num(r.videoNameShadowFar, 0, 20, d.videoNameShadowFar)),
+    playerShadow: bool(r.playerShadow, d.playerShadow),
+    playerShadowInk: hexColor(r.playerShadowInk),
+    playerShadowDark: Math.round(num(r.playerShadowDark, 0, 100, d.playerShadowDark)),
+    playerShadowSoft: Math.round(num(r.playerShadowSoft, 0, 80, d.playerShadowSoft)),
     ...cleanBacks(r),
     videoEdges: Math.round(num(r.videoEdges, 0, 100, d.videoEdges)),
     videoEdgeColor: hexColor(r.videoEdgeColor),
@@ -4951,6 +5022,22 @@ async function onPanel(p: any, userId: string | undefined) {
         }
         return answer({ type: 'video_bg', id, ok, picture: ok ? picture : '', error: ok ? '' : 'The picture could not be saved to your account.' });
       }
+      case 'mood_pic_get': {
+        const member = memberId(p.member);
+        const feeling = FEELINGS.indexOf(p.feeling) >= 0 ? String(p.feeling) : '';
+        if (!member || !feeling) return answer({ type: 'mood_pic', member, feeling, picture: '' });
+        const v = await readJson(moodPicFile(member, feeling), userId);
+        return answer({ type: 'mood_pic', member, feeling, picture: cleanPicture(v && v.picture) });
+      }
+      case 'mood_pic_put': {
+        const member = memberId(p.member);
+        const feeling = FEELINGS.indexOf(p.feeling) >= 0 ? String(p.feeling) : '';
+        if (!member || !feeling) return answer({ type: 'mood_pic', ok: false, error: 'That is not a person and a feeling Auto Foley knows.' });
+        const picture = cleanPicture(p.picture);
+        if (p.picture && !picture) return answer({ type: 'mood_pic', ok: false, member, feeling, error: 'That picture is too large to keep. Pick a smaller one.' });
+        const ok = await writeJson(moodPicFile(member, feeling), { picture }, userId);
+        return answer({ type: 'mood_pic', ok, member, feeling, picture: ok ? picture : '', error: ok ? '' : 'The picture could not be saved to your account.' });
+      }
       case 'font_list':
         return answer({ type: 'fonts', ok: true, list: await loadFonts(userId) });
       case 'font_upload': {
@@ -5266,6 +5353,13 @@ async function onPanel(p: any, userId: string | undefined) {
           s.askNoteRole = 'user';
         }
         if (parts.indexOf('cast') >= 0) {
+          // Each mood picture is a file of its own, found from the cast.
+          for (const m of s.cast || [])
+            for (const f of m.moodPics || []) {
+              try {
+                await spindle.userStorage.delete(moodPicFile(memberId(m.id), f), userId);
+              } catch (_) {}
+            }
           s.cast = fresh.cast;
           s.groups = [];
         }

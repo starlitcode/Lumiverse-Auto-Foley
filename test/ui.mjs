@@ -177,6 +177,9 @@ function answer(msg) {
     // Each background's picture, by its id, as the backend keeps them.
     case 'video_bg_get': return reply({ type: 'video_bg', id: msg.id || 'main', picture: (window.__videoBgs || {})[msg.id || 'main'] || ((msg.id || 'main') === 'main' ? window.__videoBg || '' : '') });
     case 'video_bg_put': window.__videoBgs = Object.assign(window.__videoBgs || {}, { [msg.id || 'main']: msg.picture || '' }); if ((msg.id || 'main') === 'main') window.__videoBg = msg.picture || ''; return reply({ type: 'video_bg', id: msg.id || 'main', ok: true, picture: msg.picture || '' });
+    // Mood pictures, by person and feeling.
+    case 'mood_pic_get': return reply({ type: 'mood_pic', member: msg.member, feeling: msg.feeling, picture: (window.__moodPics || {})[msg.member + ':' + msg.feeling] || '' });
+    case 'mood_pic_put': window.__moodPics = Object.assign(window.__moodPics || {}, { [msg.member + ':' + msg.feeling]: msg.picture || '' }); return reply({ type: 'mood_pic', ok: true, member: msg.member, feeling: msg.feeling, picture: msg.picture || '' });
     // Fonts of your own: a list, and each font's bytes by id.
     case 'font_list': return reply({ type: 'fonts', ok: true, list: window.__fonts || [] });
     case 'font_upload': {
@@ -295,6 +298,19 @@ window.__ctx = {
         return [{ name: window.__fontFile.name, mimeType: 'font/ttf', bytes }];
       }
       if (!o || !(o.accept || []).some((x) => /image/.test(x))) return [];
+      // Narrow stripes, for a check that needs to see a picture move.
+      if (window.__stripes) {
+        const c = document.createElement('canvas');
+        c.width = 400;
+        c.height = 200;
+        const g = c.getContext('2d');
+        for (let x = 0; x < 400; x += 8) {
+          g.fillStyle = (x / 8) % 2 ? '#f0f0f0' : '#101010';
+          g.fillRect(x, 0, 8, 200);
+        }
+        const b = await new Promise((r) => c.toBlob(r, 'image/png'));
+        return [{ name: 'stripes.png', mimeType: 'image/png', bytes: new Uint8Array(await b.arrayBuffer()) }];
+      }
       const c = document.createElement('canvas');
       // Red on the left, blue on the right, so a crop that moves can be told
       // from one that does not.
@@ -3770,6 +3786,216 @@ if (section("full screen")) {
   }
 }
 
+if (section("studio extras")) {
+  console.log("A slow move on pictures, two speakers, mood pictures, shadows and the player's shadow");
+  const dot = (color) => { const c = document.createElement("canvas"); c.width = 40; c.height = 40; const g = c.getContext("2d"); g.fillStyle = color; g.fillRect(0, 0, 40, 40); return c.toDataURL("image/png"); };
+  // Brisa is green and Tollan orange, and Tollan's angry picture is pink.
+  // Marek, purple, speaks last.
+  const pre = (dotSrc) => {
+    const dot = new Function("return " + dotSrc)();
+    const one = (id, name, color, extra) => Object.assign({ id, name, kind: "npc", addedBy: "you", aliases: [], voice: "", voiceName: "", model: "", stability: 0.5, similarity: 0.75, style: 0, speed: 1, note: "", gender: "unknown", muted: false, picture: dot(color) }, extra || {});
+    window.__settings.cast = (window.__settings.cast || []).filter((m) => m.kind === "narrator").concat([
+      one("pb", "Brisa", "#20c040"),
+      one("pt", "Tollan", "#f08010", { moodPics: ["angry"] }),
+      one("pm", "Marek", "#8030e0"),
+    ]);
+    window.__moodPics = { "pt:angry": dot("#ff3090") };
+    window.__settings.videoEdges = 0;
+    window.__script = { key: "k", messageId: "m1", author: "Brisa", directed: true, added: [], sent: 1, back: 1, counted: true, log: [], lines: [
+      { i: 0, kind: "speech", speaker: "Brisa", text: "You took it from the desk this morning.", plain: "", tags: [], inSounds: [], big: false, before: "", after: "", note: "" },
+      { i: 1, kind: "speech", speaker: "Tollan", text: "[angrily] Give the map back.", plain: "", tags: ["angrily"], inSounds: [], big: false, before: "", after: "", note: "" },
+      { i: 2, kind: "narration", speaker: "Narrator", text: "Neither of them moved for a long while.", plain: "", tags: [], inSounds: [], big: false, before: "", after: "", note: "" },
+      { i: 3, kind: "speech", speaker: "Brisa", text: "Then come and take it from me.", plain: "", tags: [], inSounds: [], big: false, before: "", after: "", note: "" },
+      { i: 4, kind: "speech", speaker: "Marek", text: "Both of you, stop, the boat is leaving now.", plain: "", tags: [], inSounds: [], big: false, before: "", after: "", note: "" },
+    ] };
+  };
+  const play = async (page) => {
+    await page.evaluate(() => { window.__wav = [0.1, 1.4]; window.__clipMs = 300; });
+    await page.click('#mount [data-af-slot="message"]');
+    await page.waitForFunction(() => document.querySelector('#mount [data-af-slot="message"]').getAttribute("aria-busy") === null && (window.__synth || []).length >= 5, null, { timeout: 30000 });
+    await page.waitForTimeout(7000);
+    await page.click('.af-tab[data-tab="studio"]');
+    await page.waitForTimeout(1500);
+  };
+  // For each frame, every tenth of a second: how many pixels of each
+  // picture's color are on it.
+  const faces = (page) => page.evaluate(async () => {
+    const r = document.querySelector("[data-af-scrub] input");
+    const c = document.querySelector("[data-af-videopreview]");
+    const g = c.getContext("2d");
+    const near = (d, i, rr, gg, bb) => Math.abs(d[i] - rr) < 40 && Math.abs(d[i + 1] - gg) < 40 && Math.abs(d[i + 2] - bb) < 40;
+    const out = [];
+    for (let t = 0.8; t <= Number(r.max); t += 0.1) {
+      r.value = String(t);
+      r.dispatchEvent(new Event("input", { bubbles: true }));
+      await new Promise((x) => requestAnimationFrame(x));
+      const d = g.getImageData(0, 0, c.width, c.height).data;
+      const n = { green: 0, orange: 0, pink: 0, purple: 0 };
+      for (let i = 0; i < d.length; i += 4 * 3) {
+        if (near(d, i, 0x20, 0xc0, 0x40)) n.green++;
+        if (near(d, i, 0xf0, 0x80, 0x10)) n.orange++;
+        if (near(d, i, 0xff, 0x30, 0x90)) n.pink++;
+        if (near(d, i, 0x80, 0x30, 0xe0)) n.purple++;
+      }
+      out.push(n);
+    }
+    return out;
+  });
+  for (const size of SIZES) {
+    const { context, page, errors } = await open(THEMES[0], size, 1, new Function("(" + pre.toString() + ")(" + JSON.stringify(dot.toString()) + ")"));
+    await play(page);
+    const f1 = await faces(page);
+    if (process.env.UI_DEBUG) console.log("faces", JSON.stringify(f1));
+    const big = 60;
+    const both = f1.filter((x) => x.green > big && (x.orange > big || x.pink > big)).length;
+    const pinkPair = f1.filter((x) => x.green > big && x.pink > big).length;
+    const marekAlone = f1.filter((x) => x.purple > big && x.green < 5 && x.orange < 5 && x.pink < 5).length;
+    const orange = f1.filter((x) => x.orange > big).length;
+    check(both >= 5 && marekAlone >= 3, size.name + ": two people taking turns show side by side, and a third goes back to one (" + both + " frames with two, " + marekAlone + " with Marek alone)");
+    check(pinkPair >= 3 && orange === 0, size.name + ": Tollan's angry line shows his angry picture (" + pinkPair + " pink frames, " + orange + " orange)");
+    await page.locator(".af-fold", { hasText: "Speakers" }).first().click();
+    await page.waitForTimeout(400);
+    await page.locator('[data-af-row="videoMoodPics"] input[type=checkbox]').click();
+    await page.waitForTimeout(900);
+    const f2 = await faces(page);
+    check(f2.filter((x) => x.pink > big).length === 0 && f2.filter((x) => x.orange > big).length >= 3, size.name + ": with A picture for each mood off, the main picture is used");
+    await page.locator('[data-af-row="videoTwo"] input[type=checkbox]').click();
+    await page.waitForTimeout(900);
+    const f3 = await faces(page);
+    check(f3.filter((x) => x.green > big && x.orange > big).length === 0, size.name + ": with Two speakers on screen off, one picture shows at a time");
+    // The shadows: off draws a different frame, and is saved.
+    const sum = () => page.evaluate(async () => {
+      const c = document.querySelector("[data-af-videopreview]");
+      await new Promise((x) => requestAnimationFrame(() => requestAnimationFrame(x)));
+      const d = c.getContext("2d").getImageData(0, 0, c.width, c.height).data;
+      let n = 0;
+      for (let i = 0; i < d.length; i += 4 * 5) n += d[i] + d[i + 1] * 3 + d[i + 2] * 5;
+      return n;
+    });
+    await page.evaluate(() => { const r = document.querySelector("[data-af-scrub] input"); r.value = String(Number(r.max) * 0.3); r.dispatchEvent(new Event("input", { bubbles: true })); });
+    await page.locator(".af-fold", { hasText: "Shape and words" }).first().click();
+    await page.waitForTimeout(400);
+    const s0 = await sum();
+    await page.locator('[data-af-row="videoWordShadow"] input[type=checkbox]').first().click();
+    await page.waitForTimeout(700);
+    const s1 = await sum();
+    await page.locator('[data-af-row="videoNameShadow"] input[type=checkbox]').first().click();
+    await page.waitForTimeout(700);
+    const saved = await page.evaluate(() => [window.__settings.videoWordShadow, window.__settings.videoNameShadow]);
+    check(s1 !== s0 && saved[0] === false && saved[1] === false, size.name + ": the shadows behind the words and the names can be turned off, and are saved (" + JSON.stringify(saved) + ")");
+    const m = await page.evaluate(MEASURE, size.touch);
+    check(!m.overflow.length && !m.small.length, size.name + ": the Studio fits with the new rows open. " + m.overflow.concat(m.small).slice(0, 2).join("; "));
+    check(!errors.length, size.name + ": no page errors. " + errors.slice(0, 2).join(" | "));
+    await context.close();
+  }
+}
+
+if (section("slow move")) {
+  console.log("A picture background moves slowly, and holds still when asked");
+  // Two moments in one scene differ along a strip at the top of a striped
+  // picture, and match with the switch off or Reduce motion on.
+  for (const how of ["on", "off", "calm"]) {
+    const { context, page, errors } = await open(THEMES[0], SIZES[1] || SIZES[0], 1, how === "calm" ? () => { window.__settings.reduceMotion = true; } : null);
+    await page.evaluate(() => { window.__stripes = true; window.__wav = [0.1, 0.3]; window.__clipMs = 300; });
+    await page.click('#mount [data-af-slot="message"]');
+    await page.waitForFunction(() => document.querySelector('#mount [data-af-slot="message"]').getAttribute("aria-busy") === null && (window.__synth || []).length > 0, null, { timeout: 15000 });
+    await page.waitForTimeout(2500);
+    await page.click('.af-tab[data-tab="studio"]');
+    await page.waitForTimeout(1200);
+    await page.locator(".af-fold", { hasText: "Background" }).first().click();
+    await page.waitForTimeout(400);
+    await page.selectOption('[data-af-row="videoBack"] select', "picture");
+    await page.waitForTimeout(400);
+    await page.click('[data-af-videobg="choose"]');
+    await page.waitForTimeout(1200);
+    if (how === "off") {
+      await page.locator('[data-af-row="videoPicMove"] input[type=checkbox]').click();
+      await page.waitForTimeout(800);
+    }
+    // Closed again, so the preview shows the video's own scenes.
+    await page.locator(".af-fold", { hasText: "Background" }).first().click();
+    await page.waitForTimeout(900);
+    const strips = await page.evaluate(async () => {
+      const r = document.querySelector("[data-af-scrub] input");
+      const c = document.querySelector("[data-af-videopreview]");
+      const g = c.getContext("2d");
+      const at = async (t) => {
+        r.value = String(t);
+        r.dispatchEvent(new Event("input", { bubbles: true }));
+        await new Promise((x) => requestAnimationFrame(x));
+        return Array.from(g.getImageData(0, Math.round(c.height * 0.06), c.width, 1).data).filter((_, i) => i % 4 === 0);
+      };
+      const a = await at(1.2);
+      const b = await at(Math.max(1.6, Number(r.max) - 1.8));
+      let diff = 0;
+      for (let i = 0; i < a.length; i++) if (Math.abs(a[i] - b[i]) > 40) diff++;
+      return { diff, n: a.length };
+    });
+    if (how === "on") check(strips.diff > strips.n * 0.05, "a picture background moves slowly across the scene (" + strips.diff + " of " + strips.n + " pixels changed)");
+    else check(strips.diff === 0, (how === "off" ? "with the switch off" : "with Reduce motion on") + ", the picture holds still in the preview (" + strips.diff + " changed)");
+    check(!errors.length, "slow move, " + how + ": no page errors. " + errors.slice(0, 2).join(" | "));
+    await context.close();
+  }
+}
+
+if (section("player shadow")) {
+  console.log("The floating player has a shadow of its own");
+  // The theme's by default, none when off, and the color picked, at once.
+  for (const size of SIZES) {
+    const { context, page, errors } = await open(THEMES[0], size);
+    await page.click('.af-tab[data-tab="settings"]');
+    await page.waitForTimeout(300);
+    await page.evaluate(() => document.querySelector('[data-af-row="widgetOn"] .af-box').click());
+    await page.waitForTimeout(500);
+    await page.evaluate(() => window.__widget.querySelector(".af-float").click());
+    await page.waitForTimeout(700);
+    const shadow = () => page.evaluate(() => getComputedStyle(window.__widget.querySelector(".af-pl")).boxShadow);
+    const theme = await shadow();
+    await page.evaluate(() => document.querySelector('[data-af-row="playerShadow"] .af-box').click());
+    await page.waitForTimeout(300);
+    const none = await shadow();
+    await page.evaluate(() => document.querySelector('[data-af-row="playerShadow"] .af-box').click());
+    await page.waitForTimeout(300);
+    // Pressed from the page, since the open player can sit over the row.
+    await page.evaluate(() => document.querySelector('[data-af-colorswatch="playerShadowInk"]').click());
+    await page.waitForTimeout(300);
+    await page.evaluate(() => {
+      const box = document.querySelector('[data-af-colorcode="playerShadowInk"]');
+      box.value = "#ff0000";
+      box.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    await page.waitForTimeout(300);
+    const red = await shadow();
+    check(theme !== "none" && none === "none" && /255, 0, 0/.test(red), size.name + ": the player's shadow is the theme's, none when off, and the color picked at once (" + [theme, none, red].join(" | ") + ")");
+    const m = await page.evaluate(MEASURE, size.touch);
+    check(!m.overflow.length && !m.small.length, size.name + ": the Settings tab fits with the shadow rows open. " + m.overflow.concat(m.small).slice(0, 2).join("; "));
+    check(!errors.length, size.name + ": no page errors. " + errors.slice(0, 2).join(" | "));
+    await context.close();
+  }
+}
+
+if (section("mood pictures")) {
+  console.log("A picture for each mood, on the Cast tab");
+  // A mood picture chosen on the Cast tab is kept in a file of its own.
+  {
+    const { context, page, errors } = await open(THEMES[0], SIZES[0]);
+    await showTab(page, "cast");
+    const person = page.locator(".af-person").filter({ hasText: "Ferryman" }).first();
+    await person.locator(".af-fold", { hasText: "Pictures for moods" }).click();
+    await page.waitForTimeout(400);
+    await person.locator('[data-af-moodchoose="calm"]').click();
+    await page.waitForTimeout(800);
+    await person.locator(".af-btn", { hasText: "Use this" }).click();
+    await page.waitForTimeout(800);
+    const kept = await page.evaluate(() => ({ list: (window.__settings.cast.find((m) => m.name === "Ferryman") || {}).moodPics, file: Object.keys(window.__moodPics || {}).filter((k) => /:calm$/.test(k) && window.__moodPics[k]).length, thumb: !!document.querySelector('[data-af-moodpic="calm"] img') }));
+    check(JSON.stringify(kept.list) === '["calm"]' && kept.file === 1 && kept.thumb, "a picture for a mood is cropped, kept in a file of its own, and shown (" + JSON.stringify(kept) + ")");
+    const m = await page.evaluate(MEASURE, true);
+    check(!m.overflow.length && !m.small.length, "phone: the Cast tab fits with the mood pictures open. " + m.overflow.concat(m.small).slice(0, 2).join("; "));
+    check(!errors.length, "mood pictures: no page errors. " + errors.slice(0, 2).join(" | "));
+    await context.close();
+  }
+}
+
 if (section("scene backgrounds")) {
   console.log("Each scene can have its own background, with a crossfade between them");
   // Red for every other scene, and blue for calm scenes. The script opens
@@ -3823,7 +4049,7 @@ if (section("scene backgrounds")) {
     check(fold === 1, size.name + ": with two backgrounds, the performance has a Scenes fold");
     await page.locator(".af-fold", { hasText: "Scenes" }).first().click();
     await page.waitForTimeout(400);
-    const list = await page.evaluate(() => Array.from(document.querySelectorAll("[data-af-scene]")).map((x) => ({ head: x.querySelector(".af-scene-head").textContent, auto: x.querySelector("select option").textContent })));
+    const list = await page.evaluate(() => Array.from(document.querySelectorAll("[data-af-scene]")).map((x) => ({ head: x.querySelector(".af-scenebox-head").textContent, auto: x.querySelector("select option").textContent })));
     check(list.length === 2 && /ferry/.test(list[1].head) && /Dock/.test(list[1].auto) && /Hall/.test(list[0].auto), size.name + ": the two scenes are listed, the calm one on Dock (" + JSON.stringify(list) + ")");
     const run = await colors();
     const live = run.filter((x) => x.red + x.blue > 40);
@@ -3962,6 +4188,13 @@ if (section("studio design")) {
     const withFont = await frame();
     check(!!fontB64 && /^own:/.test(own.pick) && own.shown === own.pick && own.label === "Plain Mono", size.name + ": an uploaded font is picked, named from its file (" + JSON.stringify(own) + ")");
     check(own.loaded && withFont !== plain, size.name + ": the font is loaded and the preview is drawn in it");
+    const help = await page.evaluate(() => {
+      const row = document.querySelector('[data-af-row="videoFont"]');
+      const sample = row.querySelector("[data-af-fontsample]");
+      return { hint: row.textContent, sample: sample && !sample.hidden, family: sample ? sample.style.fontFamily : "", said: (row.querySelector(".af-status") || {}).textContent };
+    });
+    check(/TTF, OTF, WOFF or WOFF2/.test(help.hint) && /3 MB/.test(help.hint) && /license/.test(help.hint), size.name + ": the font row says which files work, the largest size, and the license");
+    check(help.sample && /af-font-/.test(help.family) && /Added Plain Mono/.test(help.said), size.name + ": after a font is added, its name is said and a line is drawn in it (" + JSON.stringify(help) + ")");
     await page.click('[data-af-font-drop="videoFont"]');
     await settle();
     const dropped = await page.evaluate(() => ({ asked: window.__asked || 0, pick: window.__settings.videoFont, left: (window.__fonts || []).length }));

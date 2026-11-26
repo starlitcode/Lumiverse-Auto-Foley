@@ -509,3 +509,25 @@ describe("Download audio, odd lengths", () => {
     expect(v.getUint8(47)).toBe(0);
   });
 });
+
+describe("the feeling of a line, for a mood picture", () => {
+  const { feelingOf, FEELINGS, FEELING_WORDS } = __testing;
+  test("the feeling its tags and note name most is used", () => {
+    expect(feelingOf({ tags: ["angrily"], text: "[angrily] Give the map back." }, "calm")).toBe("angry");
+    expect(feelingOf({ tags: [], style: "teasing, with a grin" }, "")).toBe("playful");
+    // A tie goes to the feeling first in the list.
+    expect(feelingOf({ tags: ["softly", "tearfully"], text: "[softly] [tearfully] Stay." }, "")).toBe("sad");
+  });
+  test("with no feeling word, the scene's mood is read as the nearest feeling", () => {
+    expect(feelingOf({ tags: [], text: "The rain had stopped." }, "scary")).toBe("scared");
+    expect(feelingOf({ tags: [], text: "The rain had stopped." }, "cozy")).toBe("calm");
+    expect(feelingOf({ tags: [], text: "The rain had stopped." }, "")).toBe("");
+  });
+  test("words are matched whole", () => {
+    expect(feelingOf({ tags: ["flatter"], text: "" }, "")).toBe("");
+    expect(feelingOf({ tags: ["flatly"], text: "" }, "")).toBe("tense");
+  });
+  test("every feeling has words", () => {
+    for (const f of FEELINGS) expect(FEELING_WORDS[f].length).toBeGreaterThan(5);
+  });
+});

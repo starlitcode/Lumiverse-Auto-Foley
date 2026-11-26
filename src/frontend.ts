@@ -1236,9 +1236,13 @@ const PANEL_CSS = `
 .af-shape-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; }
 .af-shape-grid > * { min-width: 0; }
 .af-moods { gap: 6px; }
-.af-scene { gap: 6px; padding: 10px 0; border-top: 1px solid var(--af-line); }
-.af-scene:first-of-type { border-top: 0; }
-.af-scene-head { margin: 0; font-weight: 600; overflow-wrap: anywhere; }
+.af-moodpic .af-row { flex-wrap: wrap; }
+.af-moodthumb { width: 36px; height: 36px; flex: none; overflow: hidden; }
+.af-moodthumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.af-scenebox { gap: 6px; padding: 10px 0; border-top: 1px solid var(--af-line); }
+.af-scenebox:first-of-type { border-top: 0; }
+.af-scenebox-head { margin: 0; font-weight: 600; overflow-wrap: anywhere; }
+.af-fontsample { margin: 0; font-size: 20px; line-height: 1.3; overflow-wrap: anywhere; color: var(--af-text); }
 
 /* The switch. It bounces a little when flipped, the same as Auto Refine's. */
 .af-box {
@@ -1575,6 +1579,39 @@ html[data-af-still] [class^="af-"], html[data-af-still] [class*=" af-"], html[da
 // again before saving, so this only needs the defaults for a first render.
 // ---------------------------------------------------------------------------
 
+// The feelings a person can have a picture for, and the words that point
+// to each in a line's voice tags and its note on how it is said. The words
+// are matched whole, so "flat" does not match "flatter".
+const FEELINGS = ['happy', 'sad', 'angry', 'scared', 'calm', 'playful', 'romantic', 'tense'];
+const FEELING_WORDS: Record<string, string[]> = {
+  happy: ['happy', 'happily', 'cheerful', 'cheerfully', 'joyful', 'delighted', 'excited', 'excitedly', 'elated', 'laughs', 'laughing', 'laughter', 'chuckles', 'chuckling', 'giggles', 'giggling', 'grinning', 'beaming', 'brightly', 'warmly'],
+  sad: ['sad', 'sadly', 'sorrowful', 'mournful', 'tearful', 'tearfully', 'crying', 'cries', 'sobs', 'sobbing', 'sniffles', 'heartbroken', 'grieving', 'choked', 'despairing', 'wistful', 'wistfully'],
+  angry: ['angry', 'angrily', 'furious', 'furiously', 'enraged', 'shouts', 'shouting', 'yells', 'yelling', 'snaps', 'snapping', 'snarls', 'growls', 'seething', 'irritated', 'annoyed', 'bitter', 'bitterly', 'hostile'],
+  scared: ['scared', 'afraid', 'frightened', 'terrified', 'fearful', 'fearfully', 'panicked', 'panicking', 'nervous', 'nervously', 'trembling', 'shaky', 'shakily', 'gasps', 'whimpers', 'anxious', 'anxiously'],
+  calm: ['calm', 'calmly', 'gentle', 'gently', 'soothing', 'soothingly', 'steady', 'steadily', 'relaxed', 'peaceful', 'serene', 'softly', 'patient', 'patiently'],
+  playful: ['playful', 'playfully', 'teasing', 'teasingly', 'teases', 'mischievous', 'mischievously', 'sly', 'slyly', 'cheeky', 'smirking', 'smirks', 'sing-song', 'singsong', 'giddy'],
+  romantic: ['romantic', 'tender', 'tenderly', 'loving', 'lovingly', 'affectionate', 'affectionately', 'sultry', 'seductive', 'seductively', 'breathy', 'longing', 'adoring', 'flirtatious', 'flirty', 'intimate'],
+  tense: ['tense', 'tensely', 'urgent', 'urgently', 'strained', 'cold', 'coldly', 'flat', 'flatly', 'wary', 'warily', 'guarded', 'clipped', 'curt', 'curtly', 'grim', 'grimly'],
+};
+// Scene music's moods, read as the nearest feeling.
+const MOOD_FEELING: Record<string, string> = { calm: 'calm', cozy: 'calm', happy: 'happy', playful: 'playful', romantic: 'romantic', sad: 'sad', tense: 'tense', scary: 'scared', action: 'tense', mysterious: 'tense' };
+// The feeling of a line: the one its tags and note name most, the first in
+// the list on a tie, or else the scene's mood, or else none.
+function feelingOf(line: { tags?: string[]; style?: string; text?: string }, sceneMood: string): string {
+  const said = ((line.tags || []).join(' ') + ' ' + String(line.style || '') + ' ' + (String(line.text || '').match(/\[[^\]]*\]/g) || []).join(' ')).toLowerCase();
+  const words = said.split(/[^a-z-]+/).filter(Boolean);
+  let best = '';
+  let most = 0;
+  for (const f of FEELINGS) {
+    const n = words.filter((w) => FEELING_WORDS[f].indexOf(w) >= 0).length;
+    if (n > most) {
+      most = n;
+      best = f;
+    }
+  }
+  return best || MOOD_FEELING[sceneMood] || '';
+}
+
 interface Member {
   // The name the panel and the players show. The Director keeps using the
   // name, which is how lines are matched to people.
@@ -1598,6 +1635,9 @@ interface Member {
   group?: string;
   // A small picture, as a data address. Empty shows the first letter.
   picture?: string;
+  // The feelings this person has a picture of their own for. Each picture
+  // is kept on the account in a file of its own.
+  moodPics?: string[];
   stability: number;
   similarity: number;
   style: number;
@@ -1822,6 +1862,23 @@ const DEFAULTS: any = {
   videoNameFont: '',
   videoNameSize: 100,
   videoPicRing: true,
+  videoPicMove: true,
+  videoTwo: true,
+  videoMoodPics: true,
+  videoWordShadow: true,
+  videoWordShadowInk: '',
+  videoWordShadowDark: 65,
+  videoWordShadowSoft: 18,
+  videoWordShadowFar: 2,
+  videoNameShadow: true,
+  videoNameShadowInk: '',
+  videoNameShadowDark: 65,
+  videoNameShadowSoft: 18,
+  videoNameShadowFar: 2,
+  playerShadow: true,
+  playerShadowInk: '',
+  playerShadowDark: 50,
+  playerShadowSoft: 48,
   videoBacks: [{ id: 'main', name: 'Main', kind: 'dark', color: '', dim: 40, blur: 0, shapes: [], use: 'match', moods: [], places: [] }],
   videoBackPick: 'main',
   videoEdges: 50,
@@ -3644,9 +3701,23 @@ export function setup(ctx: Ctx, overrides?: any) {
 
   // The parts in a video: what each one is, when it starts, how long it is,
   // and when each of its words is said.
+  // Who is shown above a part: one person, or two who take turns in a
+  // scene, with which of them is speaking. -1 is narration between them.
+  interface Face { name: string; who: string; picture: string }
+  type Head = { kind: 'one'; face: Face } | { kind: 'pair'; a: Face; b: Face; speaking: number };
   interface VideoPart {
     // Which part of the performance it is, by its place in the items.
     k: number;
+    // Two people on screen, set by the stage while Two speakers on screen
+    // is on.
+    pair?: { a: Face; b: Face; speaking: number } | null;
+    // The head of the part before, when it showed a different number of
+    // people in the same scene, so the change can fade.
+    swapFrom?: Head | null;
+    // Who says it, by their id in the cast, and the feeling of the line,
+    // for a picture of that feeling.
+    member?: string;
+    feeling?: string;
     kind: 'line' | 'sound';
     narration: boolean;
     words: string[];
@@ -3828,6 +3899,8 @@ export function setup(ctx: Ctx, overrides?: any) {
         name: speakerName(line),
         picture: mem && mem.picture ? String(mem.picture) : '',
         caption: '',
+        member: mem ? String(mem.id) : '',
+        feeling: line.kind === 'narration' ? '' : feelingOf(line, moodAt(sh, p.k)),
       };
     });
   }
@@ -3846,6 +3919,18 @@ export function setup(ctx: Ctx, overrides?: any) {
     // When each scene starts, in seconds of the audio, and its background.
     // One entry is one scene, the whole video.
     scenes: { t: number; id: string }[];
+    // A picture background that moves slowly, by its id: the picture drawn
+    // a little larger than the frame, dimmed and blurred, and the darker
+    // edges on their own, drawn over it.
+    moves: Map<string, any>;
+    edges: any;
+    // Where the video starts and ends, in seconds of the audio, which the
+    // first and last scenes run to.
+    from: number;
+    to: number;
+    // True while drawn on screen with Reduce motion on: nothing moves on
+    // its own. A saved video is never still.
+    still: boolean;
     pics: Map<string, HTMLImageElement>;
     a: any;
     b: any;
@@ -3889,31 +3974,12 @@ export function setup(ctx: Ctx, overrides?: any) {
       b.restore();
     };
     if (wall && wall.width && wall.height) {
-      const sc = Math.max(W / wall.width, H / wall.height);
-      const dw = wall.width * sc;
-      const dh = wall.height * sc;
-      const blur = Math.min(20, Math.max(0, Number(bk.blur) || 0));
-      if (blur && 'filter' in b) {
-        // Drawn a little larger, so the soft edge of the blur stays off
-        // the frame.
-        const m = blur * 3;
-        b.filter = 'blur(' + blur + 'px)';
-        b.drawImage(wall, (W - dw) / 2 - m, (H - dh) / 2 - m, dw + m * 2, dh + m * 2);
-        b.filter = 'none';
-      } else if (blur) {
-        // No blur filter on this browser: drawn small and stretched back,
-        // which softens it the same way.
-        const f = 1 / (1 + blur / 2);
-        const t = canvasOf(Math.max(1, Math.round(W * f)), Math.max(1, Math.round(H * f)));
-        const tg = t.getContext('2d');
-        tg.imageSmoothingQuality = 'high';
-        tg.drawImage(wall, ((W - dw) / 2) * f, ((H - dh) / 2) * f, dw * f, dh * f);
-        b.imageSmoothingQuality = 'high';
-        b.drawImage(t, 0, 0, W, H);
-      } else b.drawImage(wall, (W - dw) / 2, (H - dh) / 2, dw, dh);
-      const dim = Math.min(80, Math.max(0, Number(bk.dim) || 0)) / 100;
-      b.fillStyle = 'rgba(0,0,0,' + dim + ')';
-      b.fillRect(0, 0, W, H);
+      drawWall(b, wall, W, H, bk);
+      if (S.videoPicMove !== false) {
+        const base = canvasOf(Math.round(W * MOVE_ROOM), Math.round(H * MOVE_ROOM));
+        drawWall(base.getContext('2d') as CanvasRenderingContext2D, wall, base.width, base.height, bk);
+        st.moves.set(bk.id, base);
+      } else st.moves.delete(bk.id);
     } else if (bk.kind === 'color' || bk.kind === 'design') {
       // A design starts from its own color, the same box as A color of your
       // own, and its shapes go over it.
@@ -3921,9 +3987,46 @@ export function setup(ctx: Ctx, overrides?: any) {
       b.fillRect(0, 0, W, H);
       if (bk.kind === 'design') drawShapes(b, W, H, bk.shapes || [], st.font);
     } else dark();
-    // Darker at the edges, as much as Darken the edges asks, so the words in
-    // the middle stand out. 0 leaves the edges as they are.
-    // The edges are black unless Color of the edges picks another color.
+    drawEdges(b, W, H);
+    b.restore();
+  }
+
+  // How much larger than the frame a moving picture is drawn, so it can
+  // move without an edge coming into view.
+  const MOVE_ROOM = 1.12;
+  // A picture background cut to the frame from the middle, blurred and
+  // dimmed as its settings say.
+  function drawWall(b: CanvasRenderingContext2D, wall: HTMLImageElement, W: number, H: number, bk: VideoBack) {
+    const sc = Math.max(W / wall.width, H / wall.height);
+    const dw = wall.width * sc;
+    const dh = wall.height * sc;
+    const blur = Math.min(20, Math.max(0, Number(bk.blur) || 0));
+    if (blur && 'filter' in b) {
+      // Drawn a little larger, so the soft edge of the blur stays off
+      // the frame.
+      const m = blur * 3;
+      b.filter = 'blur(' + blur + 'px)';
+      b.drawImage(wall, (W - dw) / 2 - m, (H - dh) / 2 - m, dw + m * 2, dh + m * 2);
+      b.filter = 'none';
+    } else if (blur) {
+      // No blur filter on this browser: drawn small and stretched back,
+      // which softens it the same way.
+      const f = 1 / (1 + blur / 2);
+      const t = canvasOf(Math.max(1, Math.round(W * f)), Math.max(1, Math.round(H * f)));
+      const tg = t.getContext('2d');
+      tg.imageSmoothingQuality = 'high';
+      tg.drawImage(wall, ((W - dw) / 2) * f, ((H - dh) / 2) * f, dw * f, dh * f);
+      b.imageSmoothingQuality = 'high';
+      b.drawImage(t, 0, 0, W, H);
+    } else b.drawImage(wall, (W - dw) / 2, (H - dh) / 2, dw, dh);
+    const dim = Math.min(80, Math.max(0, Number(bk.dim) || 0)) / 100;
+    b.fillStyle = 'rgba(0,0,0,' + dim + ')';
+    b.fillRect(0, 0, W, H);
+  }
+  // Darker at the edges, as much as Darken the edges asks, so the words in
+  // the middle stand out. 0 leaves the edges as they are.
+  // The edges are black unless Color of the edges picks another color.
+  function drawEdges(b: CanvasRenderingContext2D, W: number, H: number) {
     const edges = Math.min(100, Math.max(0, numOr(S.videoEdges, 50))) / 100;
     if (edges > 0) {
       const n = parseInt(hexOr(S.videoEdgeColor, '#000000').slice(1), 16);
@@ -3934,7 +4037,6 @@ export function setup(ctx: Ctx, overrides?: any) {
       b.fillStyle = edge;
       b.fillRect(0, 0, W, H);
     }
-    b.restore();
   }
 
   // The outline of one shape, around its middle, before it is turned.
@@ -3993,6 +4095,25 @@ export function setup(ctx: Ctx, overrides?: any) {
     }
   }
 
+  // Each mood picture, by person and feeling, fetched from the account the
+  // first time a video uses it.
+  const moodPics = new Map<string, Promise<string>>();
+  function moodPicture(member: string, feeling: string): Promise<string> {
+    const key = member + ':' + feeling;
+    let ask = moodPics.get(key);
+    if (!ask) {
+      ask = rpc({ type: 'mood_pic_get', member, feeling }, 15000).then(
+        (r: any) => (r && typeof r.picture === 'string' ? r.picture : ''),
+        () => {
+          moodPics.delete(key);
+          return '';
+        },
+      );
+      moodPics.set(key, ask);
+    }
+    return ask;
+  }
+
   // How long one scene's background takes to give way to the next.
   const SCENE_FADE_S = 1;
   // only, when set, draws that one background behind the whole video, for
@@ -4028,11 +4149,23 @@ export function setup(ctx: Ctx, overrides?: any) {
       }
     const layers = new Map<string, any>();
     for (const bk of backs) layers.set(bk.id, canvasOf(W, H));
+    const edges = canvasOf(W, H);
+    drawEdges(edges.getContext('2d') as CanvasRenderingContext2D, W, H);
     const st: VideoStage = {
-      w: W, h: H, back: layers.get(times[0].id), walls, layers, scenes: times, pics: new Map(), a: canvasOf(W, H), b: canvasOf(W, H),
+      w: W, h: H, back: layers.get(times[0].id), walls, layers, scenes: times, moves: new Map(), edges, from: 0, to: 0, still: calm(),
+      pics: new Map(), a: canvasOf(W, H), b: canvasOf(W, H),
       small: canvasOf(Math.round(W / 4), Math.round(H / 4)), font: videoFont(), nameFont: fontStack(nameFontChoice()),
     };
     for (const bk of backs) paintBack(st, bk, layers.get(bk.id));
+    // A picture for the feeling of each line, for a person who has one.
+    if (S.videoPics !== false && S.videoMoodPics !== false)
+      for (const p of parts) {
+        const mem = p.member ? (S.cast || []).find((m: Member) => String(m.id) === p.member) : null;
+        if (mem && p.feeling && (mem.moodPics || []).indexOf(p.feeling) >= 0) {
+          const pic = await moodPicture(String(mem.id), p.feeling);
+          if (pic) p.picture = pic;
+        }
+      }
     const pics = st.pics;
     if (S.videoPics !== false)
       for (const p of parts)
@@ -4040,7 +4173,42 @@ export function setup(ctx: Ctx, overrides?: any) {
           const im = await loadImage(p.picture);
           if (im) pics.set(p.picture, im);
         }
+    pairUp(st, parts);
     return st;
+  }
+
+  // Two speakers on screen. Within a scene, the people who speak are kept in
+  // the order they first spoke. While there are two, both are shown. A
+  // third person, or a new scene, starts again from the one speaking.
+  function pairUp(st: VideoStage, parts: VideoPart[]) {
+    let recent: Face[] = [];
+    let scene = -1;
+    let before: Head | null = null;
+    let beforeScene = -1;
+    for (const p of parts) {
+      let si = 0;
+      while (si + 1 < st.scenes.length && p.start >= st.scenes[si + 1].t) si++;
+      if (si !== scene) {
+        recent = [];
+        scene = si;
+      }
+      if (p.kind === 'line' && !p.narration) {
+        const at = recent.findIndex((f) => f.name === p.name);
+        if (at >= 0) recent[at] = { name: p.name, who: p.who, picture: p.picture };
+        else {
+          if (recent.length >= 2) recent = [];
+          recent.push({ name: p.name, who: p.who, picture: p.picture });
+        }
+      }
+      const both = S.videoTwo !== false && S.videoPics !== false && recent.length === 2 && recent.every((f) => !!f.picture && st.pics.has(f.picture));
+      p.pair = both && (p.kind === 'line') ? { a: recent[0], b: recent[1], speaking: p.narration ? -1 : recent.findIndex((f) => f.name === p.name) } : null;
+      const head: Head | null = p.kind !== 'line' ? null : p.pair ? { kind: 'pair', ...p.pair } : { kind: 'one', face: { name: p.name, who: p.who, picture: p.narration ? '' : p.picture } };
+      p.swapFrom = head && before && beforeScene === si && before.kind !== head.kind ? before : null;
+      if (head) {
+        before = head;
+        beforeScene = si;
+      }
+    }
   }
 
   // Text cut to a width, with an ellipsis.
@@ -4101,6 +4269,22 @@ export function setup(ctx: Ctx, overrides?: any) {
 
   // One part: who says it and the words, drawn on g with the alpha given.
   // dx and dy move it, for a transition.
+  // The shadow behind the words, sound captions included, or behind the
+  // names. Each has its own switch, color, darkness, softness and distance,
+  // in pixels of a 1080-pixel frame. Off draws no shadow.
+  function setShadow(g: CanvasRenderingContext2D, which: 'Word' | 'Name', u: number) {
+    if (S['video' + which + 'Shadow'] === false) {
+      g.shadowColor = 'transparent';
+      return;
+    }
+    const n = parseInt(hexOr(S['video' + which + 'ShadowInk'], '#000000').slice(1), 16);
+    const dark = Math.min(100, Math.max(0, numOr(S['video' + which + 'ShadowDark'], 65))) / 100;
+    g.shadowColor = 'rgba(' + ((n >> 16) & 255) + ',' + ((n >> 8) & 255) + ',' + (n & 255) + ',' + dark + ')';
+    g.shadowBlur = Math.min(40, Math.max(0, numOr(S['video' + which + 'ShadowSoft'], 18))) * u;
+    g.shadowOffsetX = 0;
+    g.shadowOffsetY = Math.min(20, Math.max(0, numOr(S['video' + which + 'ShadowFar'], 2))) * u;
+  }
+
   function drawPart(g: CanvasRenderingContext2D, st: VideoStage, p: VideoPart, local: number, alpha: number, dx: number, dy: number) {
     const W = st.w;
     const H = st.h;
@@ -4109,9 +4293,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     const font = st.font;
     g.save();
     g.textBaseline = 'alphabetic';
-    g.shadowColor = 'rgba(0,0,0,0.65)';
-    g.shadowBlur = 18 * u;
-    g.shadowOffsetY = 2 * u;
+    setShadow(g, 'Word', u);
     const MAX_W = Math.round((W > H ? 1500 : W - 160) * (W > H ? u : 1));
     const scale = Math.min(160, Math.max(60, Number(S.videoSize) || 100)) / 100;
     const lower = S.videoPlace === 'lower';
@@ -4187,69 +4369,111 @@ export function setup(ctx: Ctx, overrides?: any) {
       firstRow = Math.min(rows.length - ROWS, Math.floor(at / ROWS) * ROWS);
     }
     const shown = rows.slice(firstRow, firstRow + ROWS);
-    const pic = S.videoPics !== false && !p.narration && p.picture ? st.pics.get(p.picture) : undefined;
-    const name = S.videoNames !== false && !p.narration ? p.name : '';
     const PIC = Math.round(Math.min(300, Math.max(60, Number(S.videoPicSize) || 150)) * u);
     const nameScale = Math.min(160, Math.max(60, numOr(S.videoNameSize, 100))) / 100;
     const nameSize = Math.round(28 * u * nameScale);
-    const head = (pic ? PIC + 28 * u : 0) + (name ? nameSize + 24 * u : 0);
+    const names = S.videoNames !== false;
+    // Two people side by side need room for both pictures and a gap. With
+    // too little, as in a narrow video with large pictures, one is shown.
+    const PAIR_GAP = Math.round(90 * u);
+    const pairFits = 2 * PIC + PAIR_GAP <= MAX_W;
+    const headOf = (h: Head | null | undefined): Head => (h && h.kind === 'pair' && pairFits ? h : h && h.kind === 'one' ? h : { kind: 'one', face: { name: p.name, who: p.who, picture: p.narration ? '' : p.picture } });
+    const now = headOf(p.pair ? { kind: 'pair', ...p.pair } : null);
+    const heightOf = (h: Head) => {
+      const pic = h.kind === 'pair' || (S.videoPics !== false && !!h.face.picture && st.pics.has(h.face.picture));
+      const named = names && (h.kind === 'pair' || (!p.narration && !!h.face.name));
+      return (pic ? PIC + 28 * u : 0) + (named ? nameSize + 24 * u : 0);
+    };
+    const head = heightOf(now);
     const block = head + shown.length * lineH;
     const mid = lower ? H * 0.72 : H * 0.52;
     let y = Math.max(90 * u, Math.min(H - 60 * u - block, Math.round(mid - block / 2))) + dy;
     const cx = W / 2 + dx;
-    const ring = S.videoNameColor === 'words' ? ink : kindHex(p.who);
-    if (pic) {
-      const top = y;
-      g.save();
-      g.globalAlpha = alpha;
-      g.beginPath();
-      const round = S.videoPicShape === 'rounded';
-      const pathPic = () => {
-        g.beginPath();
-        if (round && (g as any).roundRect) (g as any).roundRect(cx - PIC / 2, top, PIC, PIC, PIC * 0.16);
-        else g.arc(cx, top + PIC / 2, PIC / 2, 0, Math.PI * 2);
-      };
-      pathPic();
-      g.fillStyle = '#000';
-      g.fill();
-      g.shadowColor = 'transparent';
-      g.clip();
-      const s = Math.max(PIC / pic.width, PIC / pic.height);
-      g.drawImage(pic, cx - (pic.width * s) / 2, top + PIC / 2 - (pic.height * s) / 2, pic.width * s, pic.height * s);
-      g.restore();
-      if (S.videoPicRing !== false) {
+    // One face: its picture, and its name under it.
+    const drawFace = (f: Face, x: number, top: number, a: number, maxName: number, named: boolean) => {
+      const ring = S.videoNameColor === 'words' ? ink : kindHex(f.who);
+      const pic = S.videoPics !== false && f.picture ? st.pics.get(f.picture) : undefined;
+      let at = top;
+      if (pic) {
         g.save();
-        g.shadowColor = 'transparent';
-        g.globalAlpha = alpha * 0.9;
-        g.lineWidth = 3 * u;
-        g.strokeStyle = ring;
+        g.globalAlpha = a;
+        // The picture keeps the soft dark shadow it always had.
+        g.shadowColor = 'rgba(0,0,0,0.65)';
+        g.shadowBlur = 18 * u;
+        g.shadowOffsetX = 0;
+        g.shadowOffsetY = 2 * u;
+        const round = S.videoPicShape === 'rounded';
+        const pathPic = () => {
+          g.beginPath();
+          if (round && (g as any).roundRect) (g as any).roundRect(x - PIC / 2, top, PIC, PIC, PIC * 0.16);
+          else g.arc(x, top + PIC / 2, PIC / 2, 0, Math.PI * 2);
+        };
         pathPic();
-        g.stroke();
+        g.fillStyle = '#000';
+        g.fill();
+        g.shadowColor = 'transparent';
+        g.clip();
+        const sc = Math.max(PIC / pic.width, PIC / pic.height);
+        g.drawImage(pic, x - (pic.width * sc) / 2, top + PIC / 2 - (pic.height * sc) / 2, pic.width * sc, pic.height * sc);
+        g.restore();
+        if (S.videoPicRing !== false) {
+          g.save();
+          g.shadowColor = 'transparent';
+          g.globalAlpha = a * 0.9;
+          g.lineWidth = 3 * u;
+          g.strokeStyle = ring;
+          pathPic();
+          g.stroke();
+          g.restore();
+        }
+        at += PIC + 28 * u;
+      }
+      if (named && f.name) {
+        g.save();
+        setShadow(g, 'Name', u);
+        g.font = '600 ' + nameSize + 'px ' + (st.nameFont || font);
+        g.fillStyle = ring;
+        g.globalAlpha = a;
+        const label = fitText(g, f.name.toUpperCase(), maxName);
+        const gap = 4 * u;
+        const chars = Array.from(label);
+        const widths = chars.map((ch) => g.measureText(ch).width);
+        const full = widths.reduce((q, w) => q + w, 0) + gap * (chars.length - 1);
+        let nx = x - full / 2;
+        const base = at + nameSize;
+        // A name with a hidden word in it is covered whole.
+        // Checked on the whole name, since a long one is cut short to fit.
+        if (hiddenWords(f.name.split(/\s+/), hiddenList()).some(Boolean)) coverWord(g, label, nx, base, nameSize, ring, a);
+        else
+          chars.forEach((ch, n) => {
+            g.fillText(ch, nx, base);
+            nx += widths[n] + gap;
+          });
         g.restore();
       }
-      y += PIC + 28 * u;
-    }
-    if (name) {
-      g.font = '600 ' + nameSize + 'px ' + (st.nameFont || font);
-      g.fillStyle = ring;
-      g.globalAlpha = alpha;
-      const label = fitText(g, name.toUpperCase(), MAX_W);
-      const gap = 4 * u;
-      const chars = Array.from(label);
-      const widths = chars.map((ch) => g.measureText(ch).width);
-      const full = widths.reduce((a, b) => a + b, 0) + gap * (chars.length - 1);
-      let x = cx - full / 2;
-      const base = y + nameSize;
-      // A name with a hidden word in it is covered whole.
-      // Checked on the whole name, since a long one is cut short to fit.
-      if (hiddenWords(name.split(/\s+/), hiddenList()).some(Boolean)) coverWord(g, label, x, base, nameSize, ring, alpha);
-      else
-        chars.forEach((ch, k) => {
-          g.fillText(ch, x, base);
-          x += widths[k] + gap;
-        });
-      y += nameSize + 24 * u;
-    }
+    };
+    // The faces above the words. In a pair, the one speaking is at full
+    // strength, the other a little dimmer, and both are a little dimmer
+    // during narration between their lines.
+    const drawHead = (h: Head, top: number, a: number) => {
+      if (h.kind === 'pair') {
+        const off = PIC / 2 + PAIR_GAP / 2;
+        const maxName = PIC + PAIR_GAP - 12 * u;
+        const dimOf = (n: number) => (h.speaking === n ? 1 : h.speaking < 0 ? 0.8 : 0.55);
+        drawFace(h.a, cx - off, top, a * dimOf(0), maxName, names);
+        drawFace(h.b, cx + off, top, a * dimOf(1), maxName, names);
+      } else drawFace(h.face, cx, top, a, MAX_W, names && !p.narration);
+    };
+    // Going from one person to two, or back, in a scene: the old faces fade
+    // out and the new fade in, each moving 4 pixels, over a moment.
+    const SWAP_S = 0.45;
+    const from = p.swapFrom ? headOf(p.swapFrom) : null;
+    if (from && from.kind !== now.kind && local < SWAP_S && !st.still) {
+      const k = ease(Math.max(0, local) / SWAP_S);
+      drawHead(from, y + 4 * u * k, alpha * (1 - k));
+      drawHead(now, y - 4 * u * (1 - k), alpha * k);
+    } else drawHead(now, y, alpha);
+    y += head;
     g.font = '400 ' + size + 'px ' + font;
     const sp = space();
     const mode = S.videoWords || 'light';
@@ -4430,6 +4654,8 @@ export function setup(ctx: Ctx, overrides?: any) {
     const fadeOut = Math.min(5, Math.max(0, numOr(S.videoFadeOut, 1.5)));
     g.save();
     g.globalAlpha = 1;
+    st.from = -intro;
+    st.to = total + fadeOut;
     drawBackAt(g, st, t - intro);
     const audioT = t - intro;
     if (audioT < 0) {
@@ -4494,15 +4720,48 @@ export function setup(ctx: Ctx, overrides?: any) {
     const sc = st.scenes;
     let i = 0;
     while (i + 1 < sc.length && at >= sc[i + 1].t) i++;
-    const cur = st.layers.get(sc[i].id) || st.back;
     const since = at - sc[i].t;
-    const prev = i > 0 && sc[i - 1].id !== sc[i].id ? st.layers.get(sc[i - 1].id) : null;
-    if (prev && since < SCENE_FADE_S) {
-      g.drawImage(prev, 0, 0);
+    const fading = i > 0 && sc[i - 1].id !== sc[i].id && since < SCENE_FADE_S;
+    if (fading) {
+      drawLayer(g, st, i - 1, at);
       g.globalAlpha = ease(Math.max(0, since) / SCENE_FADE_S);
-      g.drawImage(cur, 0, 0);
+      drawLayer(g, st, i, at);
       g.globalAlpha = 1;
-    } else g.drawImage(cur, 0, 0);
+    } else drawLayer(g, st, i, at);
+  }
+  // One scene's background. A picture moves once across its scene, with an
+  // ease in and out: in turn it zooms in, moves right, zooms out and moves
+  // left. It moves at most 1% of the frame a second on average, and 2% at
+  // its fastest, so it reads as still at a glance.
+  function drawLayer(g: CanvasRenderingContext2D, st: VideoStage, i: number, at: number) {
+    const sc = st.scenes;
+    const id = sc[i].id;
+    const base = st.moves.get(id);
+    const was = g.globalAlpha;
+    if (!base || st.still) {
+      g.drawImage(st.layers.get(id) || st.back, 0, 0);
+      return;
+    }
+    const W = st.w;
+    const H = st.h;
+    const from = i === 0 ? st.from : sc[i].t;
+    const to = i + 1 < sc.length ? sc[i + 1].t : st.to;
+    const D = Math.max(1, to - from);
+    const k = ease(Math.min(1, Math.max(0, (at - from) / D)));
+    const way = i % 4;
+    let f = 1;
+    let dx = 0;
+    if (way === 0 || way === 2) {
+      const dz = Math.min(0.08, 0.008 * D);
+      f = way === 0 ? 1 + dz * k : 1 + dz * (1 - k);
+    } else {
+      const travel = Math.min((MOVE_ROOM - 1) * 0.8 * W, 0.01 * W * D);
+      f = 1 + travel / W + 0.005;
+      dx = (way === 1 ? k - 0.5 : 0.5 - k) * travel;
+    }
+    g.drawImage(base, W / 2 + dx - (W * f) / 2, H / 2 - (H * f) / 2, W * f, H * f);
+    g.globalAlpha = was;
+    g.drawImage(st.edges, 0, 0);
   }
 
   // The last part giving way to the next. k runs from 0 to 1, eased.
@@ -7928,7 +8187,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     // rest of Auto Foley. It carries the panel's class for their colors.
     '.af.af-pl{max-width:none;margin:0;width:100%;gap:10px;padding:12px;overflow-x:hidden;overflow-y:auto;overscroll-behavior:contain;touch-action:pan-y;scrollbar-width:none;border:1px solid var(--af-line-hover);border-radius:var(--lumiverse-radius-lg,16px);' +
     'background-color:var(--lumiverse-card-bg-solid,#1a1526);background-image:linear-gradient(var(--lumiverse-bg-elevated,#1f1a2e),var(--lumiverse-bg-elevated,#1f1a2e));' +
-    'box-shadow:var(--lumiverse-shadow-lg,0 18px 48px rgba(0,0,0,.5));transform-origin:var(--af-from,22px 22px)}' +
+    'box-shadow:var(--af-pl-shadow,var(--lumiverse-shadow-lg,0 18px 48px rgba(0,0,0,.5)));transform-origin:var(--af-from,22px 22px)}' +
     // The top bar is where the open player is dragged from. touch-action keeps
     // a phone from taking the press as a scroll and canceling the drag.
     '.af-pl-top{display:flex;align-items:center;gap:9px;min-width:0;margin:-2px -2px 0 0;cursor:grab;user-select:none;-webkit-user-select:none;touch-action:none}' +
@@ -9064,6 +9323,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       box.style.cssText = 'width:100%;display:flex;align-items:flex-start;justify-content:center';
       wroot.appendChild(box);
       floatBox = box;
+      paintPlayerShadow();
       drawFloat();
       // The card's height changes as the levels open, so the widget follows.
       try {
@@ -9250,6 +9510,27 @@ export function setup(ctx: Ctx, overrides?: any) {
           set({ widgetSize: v });
           syncWidget();
         }, 'How wide the button is, in pixels. 44 is about a comfortable thumb. Larger is easier to hit on a phone, smaller keeps it out of the way.'),
+        toggle('A shadow behind the player', 'On by default, your theme\u2019s own shadow. It sets the open player apart from the chat.', 'playerShadow', () => paintPlayerShadow(), () => [
+          colorRow('playerShadowInk', 'Color of the shadow', 'Your theme\u2019s shadow by default.', '--af-none', '#000000', 'Use the theme\u2019s shadow', paintPlayerShadow),
+          (() => {
+            const r = slider('How dark', numOr(S.playerShadowDark, 50), 0, 100, 5, (v) => (v ? v + '%' : 'None'), (v) => {
+              set({ playerShadowDark: v });
+              paintPlayerShadow();
+            }, '50% by default.');
+            r.setAttribute('data-af-byeye', '');
+            r.setAttribute('data-af-row', 'playerShadowDark');
+            return r;
+          })(),
+          (() => {
+            const r = slider('How soft', numOr(S.playerShadowSoft, 48), 0, 80, 2, (v) => (v ? v + ' px' : 'Sharp'), (v) => {
+              set({ playerShadowSoft: v });
+              paintPlayerShadow();
+            }, '48 by default.');
+            r.setAttribute('data-af-byeye', '');
+            r.setAttribute('data-af-row', 'playerShadowSoft');
+            return r;
+          })(),
+        ]),
       ]),
     );
     if (S.widgetOn && widgetFailed) c.appendChild(notice('warn', 'The floating player could not be added. Check that Auto Foley has the UI panels permission, in Lumiverse under Extensions.'));
@@ -10859,8 +11140,98 @@ export function setup(ctx: Ctx, overrides?: any) {
     box.appendChild(take);
     row.appendChild(box);
     row.appendChild(said);
+    row.appendChild(moodPicsFold(m));
     paint();
     return row;
+  }
+
+  // A picture for each feeling, for the Studio's videos. Each is cropped
+  // like the main picture and kept in a file of its own on the account.
+  function moodPicsFold(m: Member): HTMLElement {
+    return fold('Pictures for moods', (body) => {
+      body.appendChild(hint('Optional. A video shows the one that fits the line, from its voice tags, or else the mood of the scene.'));
+      for (const f of FEELINGS) {
+        const label = f.charAt(0).toUpperCase() + f.slice(1);
+        const line = el('<div class="af-col af-moodpic"></div>');
+        line.setAttribute('data-af-moodpic', f);
+        const top = el('<div class="af-row"><span class="af-avatar af-moodthumb" aria-hidden="true"></span><span class="af-lab"></span></div>');
+        (top.lastElementChild as HTMLElement).textContent = label;
+        const thumb = top.firstElementChild as HTMLElement;
+        const said = el('<p class="af-status"></p>');
+        const has = () => (m.moodPics || []).indexOf(f) >= 0;
+        const show = (pic: string) => {
+          thumb.innerHTML = '';
+          if (pic) {
+            const img = document.createElement('img');
+            img.src = pic;
+            img.alt = '';
+            thumb.appendChild(img);
+          }
+          drop.disabled = !has();
+        };
+        const keep = async (pic: string) => {
+          let r: any = null;
+          try {
+            r = await rpc({ type: 'mood_pic_put', member: String(m.id), feeling: f, picture: pic }, 30000);
+          } catch (_) {}
+          if (!r || !r.ok) {
+            said.textContent = (r && r.error) || 'The picture could not be saved: the backend did not answer.';
+            said.dataset.kind = 'bad';
+            return;
+          }
+          said.textContent = '';
+          moodPics.set(String(m.id) + ':' + f, Promise.resolve(pic));
+          const list = (m.moodPics || []).filter((x) => x !== f);
+          if (pic) list.push(f);
+          m.moodPics = FEELINGS.filter((x) => list.indexOf(x) >= 0);
+          save();
+          show(pic);
+        };
+        const choose = button('Choose', async () => {
+          let files: any[] = [];
+          try {
+            files = await ctx.uploads.pickFile({ accept: ['image/*', '.png', '.jpg', '.jpeg', '.webp'], multiple: false, maxSizeBytes: 8 * 1024 * 1024 });
+          } catch (e: any) {
+            said.textContent = 'The file picker could not open: ' + String((e && e.message) || e).slice(0, 200);
+            said.dataset.kind = 'bad';
+            return;
+          }
+          const file = files && files[0];
+          if (!file) return;
+          const url = URL.createObjectURL(new Blob([file.bytes as any], { type: file.mimeType || 'image/png' }));
+          const img = await loadImage(url);
+          if (!img || !img.naturalWidth) {
+            URL.revokeObjectURL(url);
+            said.textContent = 'That file is not a picture Auto Foley can read. Use PNG, JPEG or WebP.';
+            said.dataset.kind = 'bad';
+            return;
+          }
+          const old = line.querySelector('[data-af-crop]');
+          if (old) old.remove();
+          const crop = cropPicture(url, img.naturalWidth, img.naturalHeight, (pic) => {
+            crop.remove();
+            URL.revokeObjectURL(url);
+            if (pic) void keep(pic);
+          });
+          line.insertBefore(crop, said);
+        });
+        choose.setAttribute('aria-label', 'Choose a picture for ' + label);
+        choose.setAttribute('data-af-moodchoose', f);
+        const drop = button('Take it out', async () => {
+          if (!(await askSure('Take out the ' + f + ' picture', 'The ' + f + ' picture of ' + m.name + ' is taken out. The main picture is used instead.', 'Take it out', true))) return;
+          await keep('');
+        });
+        drop.setAttribute('aria-label', 'Take out the picture for ' + label);
+        drop.setAttribute('data-af-moodtake', f);
+        top.appendChild(choose);
+        top.appendChild(drop);
+        line.appendChild(top);
+        line.appendChild(said);
+        body.appendChild(line);
+        show('');
+        if (has()) void moodPicture(String(m.id), f).then((pic) => show(pic));
+      }
+    });
   }
 
   // What to write in Acting notes, for the engine a person speaks through.
@@ -11309,6 +11680,11 @@ export function setup(ctx: Ctx, overrides?: any) {
           S.cast = S.cast.filter((x: Member) => x.id !== m.id);
           openPeople.delete(m.id);
           save();
+          // Their mood pictures are files of their own, so they go too.
+          for (const f of m.moodPics || []) {
+            moodPics.delete(String(m.id) + ':' + f);
+            rpc({ type: 'mood_pic_put', member: String(m.id), feeling: f, picture: '' }, 15000).catch(() => {});
+          }
           renderTab();
         }, 'af-danger'),
       );
@@ -12328,6 +12704,46 @@ export function setup(ctx: Ctx, overrides?: any) {
     return wrap;
   }
 
+  // A shadow's switch, with its color and the three sliders under it, set
+  // by eye on the preview.
+  function shadowRows(which: 'Word' | 'Name', label: string, onChange: () => void): HTMLElement {
+    const k = 'video' + which + 'Shadow';
+    const bye = (row: HTMLElement) => {
+      row.setAttribute('data-af-byeye', '');
+      return row;
+    };
+    return toggle(label, 'On by default, soft and dark, as it always was.', k, onChange, () => [
+      colorRow(k + 'Ink', 'Color of the shadow', 'Black by default.', '--af-none', '#000000', 'Use the built-in color', onChange),
+      bye(slider('How dark', numOr(S[k + 'Dark'], 65), 0, 100, 5, (v) => (v ? v + '%' : 'None'), (v) => {
+        set({ [k + 'Dark']: v });
+        onChange();
+      }, '65% by default.')),
+      bye(slider('How soft', numOr(S[k + 'Soft'], 18), 0, 40, 1, (v) => (v ? v + ' px' : 'Sharp'), (v) => {
+        set({ [k + 'Soft']: v });
+        onChange();
+      }, '18 by default, in pixels of a 1080-pixel frame.')),
+      bye(slider('How far below', numOr(S[k + 'Far'], 2), 0, 20, 1, (v) => (v ? v + ' px' : 'Right behind'), (v) => {
+        set({ [k + 'Far']: v });
+        onChange();
+      }, '2 by default.')),
+    ]);
+  }
+
+  // The floating player's shadow. With no color picked and the sliders
+  // where they start, it is the theme's own large shadow, as it always was.
+  function paintPlayerShadow() {
+    if (!floatBox) return;
+    const own = /^#[0-9a-f]{6}$/i.test(String(S.playerShadowInk || ''));
+    const dark = Math.min(100, Math.max(0, numOr(S.playerShadowDark, 50)));
+    const soft = Math.min(80, Math.max(0, numOr(S.playerShadowSoft, 48)));
+    if (S.playerShadow === false) floatBox.style.setProperty('--af-pl-shadow', 'none');
+    else if (!own && dark === 50 && soft === 48) floatBox.style.removeProperty('--af-pl-shadow');
+    else {
+      const n = parseInt(hexOr(S.playerShadowInk, '#000000').slice(1), 16);
+      floatBox.style.setProperty('--af-pl-shadow', '0 ' + Math.round(soft * 0.375) + 'px ' + soft + 'px rgba(' + ((n >> 16) & 255) + ',' + ((n >> 8) & 255) + ',' + (n & 255) + ',' + dark / 100 + ')');
+    }
+  }
+
   // A font choice for the video: the built-in fonts, then your own, with a
   // way to add one and to take the picked one out. sameOk adds The same as
   // the words, for the names.
@@ -12379,9 +12795,9 @@ export function setup(ctx: Ctx, overrides?: any) {
         refill();
         return;
       }
-      setSaid('', false);
       if (id) set({ [key]: 'own:' + id });
       for (const f2 of fontPickers) f2();
+      setSaid('Added ' + ((r.font && r.font.name) || 'the font') + '. The words above are drawn in it.', false);
       onChange();
     });
     upload.setAttribute('data-af-font-add', key);
@@ -12413,13 +12829,28 @@ export function setup(ctx: Ctx, overrides?: any) {
     tools.appendChild(upload);
     tools.appendChild(drop);
     wrap.appendChild(tools);
+    wrap.appendChild(hint('A TTF, OTF, WOFF or WOFF2 file, up to 3 MB: one you own, or a free one whose license lets you post videos with it. <a href="https://github.com/starlitcode/Lumiverse-Auto-Foley/blob/stable/docs/studio.md#your-own-fonts" target="_blank" rel="noopener">More on fonts</a>.'));
+    // A few words in the font picked, so a font that loaded can be seen.
+    const sample = el('<p class="af-fontsample" data-af-fontsample hidden></p>');
+    sample.textContent = 'Wren packed the lantern and left at dawn.';
+    wrap.appendChild(sample);
     wrap.appendChild(said);
     function setSaid(text: string, bad: boolean) {
       said.textContent = text;
       said.dataset.kind = bad ? 'bad' : '';
     }
     function paintTools() {
-      drop.hidden = !/^own:/.test(String(S[key] || ''));
+      const own = /^own:(.+)$/.exec(String(S[key] || ''));
+      drop.hidden = !own;
+      sample.hidden = !own;
+      if (!own) return;
+      const id = own[1];
+      sample.style.fontFamily = fontStack(String(S[key]));
+      void ensureFont(String(S[key])).then((ok) => {
+        if (!wrap.isConnected || String(S[key]) !== 'own:' + id) return;
+        sample.style.fontFamily = fontStack(String(S[key]));
+        if (!ok) setSaid('This font could not be read, so videos are drawn in Book. The Log says why.', true);
+      });
     }
     function refill() {
       if (!wrap.isConnected && built) {
@@ -12979,7 +13410,9 @@ export function setup(ctx: Ctx, overrides?: any) {
   // names. Names, pictures and notes stay as they are when a look is used.
   const LOOK_KEYS = [
     'videoShape', 'videoFont', 'videoSize', 'videoInk', 'videoCaptionInk', 'videoWords', 'videoPlace', 'videoQuotes', 'videoPicShape', 'videoPicSize',
-    'videoNameColor', 'videoNameFont', 'videoNameSize', 'videoPicRing', 'videoBacks', 'videoBackPick', 'videoEdges', 'videoEdgeColor', 'videoMove', 'videoMoveSecs',
+    'videoNameColor', 'videoNameFont', 'videoNameSize', 'videoPicRing', 'videoPicMove', 'videoTwo', 'videoMoodPics',
+    'videoWordShadow', 'videoWordShadowInk', 'videoWordShadowDark', 'videoWordShadowSoft', 'videoWordShadowFar',
+    'videoNameShadow', 'videoNameShadowInk', 'videoNameShadowDark', 'videoNameShadowSoft', 'videoNameShadowFar', 'videoBacks', 'videoBackPick', 'videoEdges', 'videoEdgeColor', 'videoMove', 'videoMoveSecs',
     'videoTitleOn', 'videoFadeOut', 'videoCaptions',
   ];
   const LOOKS_MAX = 20;
@@ -13213,9 +13646,9 @@ export function setup(ctx: Ctx, overrides?: any) {
               const name = (id: string) => (backList().find((b) => b.id === id) || backDefault()).name;
               body.appendChild(hint(scenes.length > 1 ? 'Each scene has the background it is for. Pick another for one scene below.' : 'One scene. The Director starts a new one where the place or the time changes, or start one yourself below.'));
               scenes.forEach((sc, n) => {
-                const box = el('<div class="af-col af-scene" data-af-scene></div>');
+                const box = el('<div class="af-col af-scenebox" data-af-scene></div>');
                 box.setAttribute('data-af-scene', String(sc.i));
-                const head = el('<p class="af-scene-head"></p>');
+                const head = el('<p class="af-scenebox-head"></p>');
                 head.textContent = 'Scene ' + (n + 1) + ': ' + (sc.words || 'a sound');
                 box.appendChild(head);
                 if (sc.place || sc.mood) {
@@ -13450,6 +13883,7 @@ export function setup(ctx: Ctx, overrides?: any) {
           look();
         }, 'Middle by default. Lower third leaves the picture behind them clear.'));
         b.appendChild(toggle('Quotation marks around speech', 'On by default, as in a book. Narration never has them.', 'videoQuotes', look));
+        b.appendChild(shadowRows('Word', 'A shadow behind the words', look));
       }),
     );
     vc.appendChild(
@@ -13460,6 +13894,7 @@ export function setup(ctx: Ctx, overrides?: any) {
             set({ videoNameSize: v });
             look();
           }, '100 by default. Apart from the size of the words.'),
+          shadowRows('Name', 'A shadow behind the names', look),
         ]));
         b.appendChild(
           toggle('Show pictures', 'On by default. Each speaker’s picture from the Cast tab is shown above their line. Narration has none.', 'videoPics', look, () => [
@@ -13475,6 +13910,8 @@ export function setup(ctx: Ctx, overrides?: any) {
               look();
             }, '150 by default, in pixels of a 1080-pixel frame.'),
             toggle('A ring around each picture', 'On by default, in the color of the name.', 'videoPicRing', look),
+            toggle('Two speakers on screen', 'On by default. Two people who take turns in a scene are shown side by side.', 'videoTwo', look),
+            toggle('A picture for each mood', 'On by default. A person with mood pictures on the Cast tab is shown with the one that fits the line.', 'videoMoodPics', look),
           ]),
         );
         b.appendChild(segmented('Color of the names', [
@@ -13576,6 +14013,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         }, 'Off by default. A little blur makes a busy picture easier to read words over.');
         blur.setAttribute('data-af-byeye', '');
         picIn.appendChild(blur);
+        picIn.appendChild(toggle('A slow move on the picture', 'On by default. It moves very slowly across each scene. Reduce motion holds it still on screen.', 'videoPicMove', look));
         const designBox = el('<div class="af-sub"><div class="af-under"></div></div>');
         designBox.setAttribute('data-af-row', 'videoDesign');
         const designIn = designBox.firstElementChild as HTMLElement;
@@ -15100,7 +15538,7 @@ export function setup(ctx: Ctx, overrides?: any) {
   };
 }
 
-export const __testing = { plainWord, hideList, hiddenWords, geminiStyle, sortCast, CAST_SORTS, keyCombo, PAUSE_KEY_DEFAULT, wavBlob, noConnectionWhy, perSentence, clipLevel, levelGain, voiceGender, describeWords, markText, movedFor, movedRowMark, MOVED_DEFAULTS, looksLikeDate, voicedFrames, wordWeight, partTimes, engineOf, noTagsWhy, openRouterVoices, colorCode, hexHsl, hslHex, computedHex, fitTag, tagSound, textFor, styleFor, stripTags, stabilityFor, ENGINES };
+export const __testing = { feelingOf, FEELINGS, FEELING_WORDS, plainWord, hideList, hiddenWords, geminiStyle, sortCast, CAST_SORTS, keyCombo, PAUSE_KEY_DEFAULT, wavBlob, noConnectionWhy, perSentence, clipLevel, levelGain, voiceGender, describeWords, markText, movedFor, movedRowMark, MOVED_DEFAULTS, looksLikeDate, voicedFrames, wordWeight, partTimes, engineOf, noTagsWhy, openRouterVoices, colorCode, hexHsl, hslHex, computedHex, fitTag, tagSound, textFor, styleFor, stripTags, stabilityFor, ENGINES };
 
 // The built-in cheer: "Cheering and clapping crowd 1" by freesound_community,
 // a free sound from Pixabay (pixabay.com/sound-effects/people-cheering-and-clapping-crowd-1-5995/),
