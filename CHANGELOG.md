@@ -41,6 +41,7 @@ _2026-11-25_
 - **A button tapped on a phone stayed lit.** A phone keeps the hover color on the last thing tapped, so a button such as **Prepare replies ahead** looked on after it was turned off. Hover colors are now only used with a mouse.
 - **A player under each message turned itself back on.** Switching it off was not saved to your account, so it came back after a reload or on another device. It now stays off.
 - **A saved script and a message could play over each other.** Playing one in **Saved audio** while a message played, or the other way round, played both at once. Now one thing plays at a time: a message, a saved script, a sample, or the Studio's preview. Starting one stops the others.
+- **Play on a saved script could play it twice.** Play said nothing while it read the saved lines, so a second tap started it again, and both played over each other. Play now says **Getting ready** until it plays, and a tap while it gets ready stops it. The saved lines are read four at a time, so an older script with many lines is ready sooner.
 
 ---
 

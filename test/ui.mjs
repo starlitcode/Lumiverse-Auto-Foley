@@ -158,7 +158,16 @@ function answer(msg) {
     // The kept audio, as the backend keeps it: by fingerprint.
     case 'sound_link': window.__sounds = window.__sounds.concat([{ id: 'l9', name: msg.name || 'a linked sound', triggers: [], source: 'link', url: msg.url, mime: 'audio/mpeg', bytes: 0, added: 9, uses: 0 }]); reply({ type: 'uploaded', ok: true }); return reply({ type: 'sounds', sounds: window.__sounds });
     case 'skip_check': return reply({ type: 'skip_check', bad: /\(a\+\)\+/.test(msg.text) ? ['(a+)+ (a repeat inside a repeat)'] : [], count: 2 });
-    case 'clip_get': { const c = (window.__clips || {})[msg.sig]; return reply(c ? { type: 'clip', found: true, base64: c.base64, mime: c.mime } : { type: 'clip', found: false }); }
+    case 'clip_get': {
+      const c = (window.__clips || {})[msg.sig];
+      const r = c ? { type: 'clip', found: true, base64: c.base64, mime: c.mime } : { type: 'clip', found: false };
+      // A slow account, for the checks on Getting ready. The most read at
+      // once is kept, to see the lines are read side by side.
+      if (!window.__clipGetMs) return reply(r);
+      window.__clipGetNow = (window.__clipGetNow || 0) + 1;
+      window.__clipGetMost = Math.max(window.__clipGetMost || 0, window.__clipGetNow);
+      return setTimeout(() => { window.__clipGetNow--; reply(r); }, window.__clipGetMs);
+    }
     case 'clip_put': window.__clips = Object.assign(window.__clips || {}, { [msg.sig]: { base64: msg.base64, mime: msg.mime } }); return reply({ type: 'clip_kept', ok: true });
     case 'clips_state': { const c = window.__clips || {}; return reply({ type: 'clips_state', count: Object.keys(c).length, bytes: Object.values(c).reduce((n, x) => n + x.base64.length * 0.75, 0) }); }
     case 'clips_clear': window.__clips = {}; return reply({ type: 'clips_state', ok: true, count: 0, bytes: 0 });
@@ -1571,6 +1580,33 @@ if (section("saved audio")) {
     await page.waitForTimeout(500);
     check(((await row.locator("[data-af-saved-play]").textContent()) || "") === "Stop", size.name + ": Play plays it, and the button turns to Stop");
     check((await page.evaluate(() => (window.__synth || []).length)) === made, size.name + ": playing and opening it in the Studio make nothing new");
+    // With a slow account, Play says Getting ready while the lines are
+    // read, and a second press lets it go, so nothing plays twice.
+    await row.locator("[data-af-saved-play]").click();
+    await page.waitForTimeout(200);
+    await page.evaluate(() => { window.__clipGetMs = 500; window.__clipGetMost = 0; window.__played = 0; });
+    await row.locator("[data-af-saved-play]").click();
+    await page.waitForTimeout(100);
+    check(((await row.locator("[data-af-saved-play]").textContent()) || "") === "Getting ready" && ((await row.textContent()) || "").includes("Reading the saved audio"), size.name + ": while the saved lines are read, Play says Getting ready (" + (await row.locator("[data-af-saved-play]").textContent()) + ")");
+    await page.click('.af-tab[data-tab="stage"]');
+    await page.click('.af-tab[data-tab="studio"]');
+    await page.waitForTimeout(100);
+    check(((await row.locator("[data-af-saved-play]").textContent()) || "") === "Getting ready", size.name + ": and still says so when the tab is drawn again");
+    await row.locator("[data-af-saved-play]").click();
+    await page.waitForTimeout(1800);
+    check((await page.evaluate(() => window.__played || 0)) === 0 && ((await row.locator("[data-af-saved-play]").textContent()) || "") === "Play", size.name + ": a second press while it gets ready lets it go, and nothing plays (" + (await page.evaluate(() => window.__played || 0)) + ")");
+    await row.locator("[data-af-saved-play]").click();
+    await row.locator("[data-af-saved-play]").click();
+    await row.locator("[data-af-saved-play]").click();
+    await page.waitForTimeout(1800);
+    check((await page.evaluate(() => window.__played || 0)) === 1 && ((await row.locator("[data-af-saved-play]").textContent()) || "") === "Stop", size.name + ": three quick presses play it once (" + (await page.evaluate(() => window.__played || 0)) + " times)");
+    await row.locator("[data-af-saved-play]").click();
+    await page.waitForTimeout(200);
+    await page.evaluate(() => { window.__clipGetMost = 0; });
+    await row.locator("[data-af-saved-play]").click();
+    await page.waitForTimeout(1800);
+    check((await page.evaluate(() => window.__clipGetMost || 0)) > 1, size.name + ": one press reads the saved lines side by side (" + (await page.evaluate(() => window.__clipGetMost || 0)) + " at once)");
+    await page.evaluate(() => { window.__clipGetMs = 0; });
     // One thing plays at a time. A message started while a saved script
     // plays stops the saved script, and the other way round.
     // The message's own button says Stop Auto Foley while it plays.

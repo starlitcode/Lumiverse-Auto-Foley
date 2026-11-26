@@ -5039,11 +5039,24 @@ export function setup(ctx, overrides) {
         }
         savedAudio = null;
         savedPlaying = '';
+        // A script still getting ready is let go too, so it never starts later
+        // over something else.
+        savedRun++;
+        savedJoining = '';
         try {
             document.querySelectorAll('[data-af-saved-row] [data-af-saved-play]').forEach((b) => (b.textContent = 'Play'));
         }
         catch (_) { }
     }
+    // Each press of Play is one run. A run that was let go, by Stop, another
+    // Play or anything else starting, is not played when its audio is ready.
+    let savedRun = 0;
+    // The saved script getting ready to play, and the one opening in the
+    // Studio. Their buttons say so, even when the tab is drawn again.
+    let savedJoining = '';
+    let savedOpening = '';
+    // What each tile last said, kept so a tile drawn again says it too.
+    const savedNotes = {};
     disposers.push(stopSavedPlay);
     // One thing plays at a time: a message, a saved script, a sample from
     // the Cast or Sounds tab, or the Studio's preview. Starting one stops the
@@ -5067,27 +5080,42 @@ export function setup(ctx, overrides) {
     }
     // The saved audio of a script's spoken lines, in order, and the
     // fingerprint of every line, saved or not.
+    // Runs fn on every item, four at a time, and gives the answers back in
+    // the order of the items. Saved lines are read from the account this way,
+    // so a long script is ready in a fraction of the time one by one takes.
+    async function fourAtATime(items, fn) {
+        const out = new Array(items.length);
+        let next = 0;
+        const worker = async () => {
+            while (next < items.length) {
+                const i = next++;
+                out[i] = await fn(items[i], i);
+            }
+        };
+        await Promise.all([worker(), worker(), worker(), worker()]);
+        return out;
+    }
     async function savedClipsOf(sc) {
         const lines = (sc.lines || []).filter((l) => l.kind === 'speech' || l.kind === 'narration');
-        const sigs = [];
-        for (const l of lines) {
+        const sigs = (await fourAtATime(lines, async (l) => {
             try {
                 const r = await voiceRequest(l);
-                if (r && r.sig)
-                    sigs.push(r.sig);
+                return r && r.sig ? r.sig : '';
             }
-            catch (_) { }
-        }
-        const blobs = [];
-        for (const sig of sigs) {
+            catch (_) {
+                return '';
+            }
+        })).filter(Boolean);
+        const got = await fourAtATime(sigs, async (sig) => {
             try {
                 const r = await rpc({ type: 'clip_get', sig }, 15000);
-                if (r && r.found && r.base64)
-                    blobs.push(base64ToBlob(r.base64, r.mime || 'audio/mpeg'));
+                return r && r.found && r.base64 ? base64ToBlob(r.base64, r.mime || 'audio/mpeg') : null;
             }
-            catch (_) { }
-        }
-        return { blobs, sigs, lines: lines.length };
+            catch (_) {
+                return null;
+            }
+        });
+        return { blobs: got.filter((b) => !!b), sigs, lines: lines.length };
     }
     async function joinedSaved(key) {
         let sc = null;
@@ -5463,7 +5491,8 @@ export function setup(ctx, overrides) {
         setText(first, String(e.first || ''));
         row.appendChild(first);
         const note = el('<div class="af-hint" aria-live="polite"></div>');
-        note.hidden = true;
+        note.textContent = savedNotes[e.key] || '';
+        note.hidden = !note.textContent;
         // The row on screen now. Stopping a message draws the tab again, so the
         // row a press started in can be replaced by a new one for the same
         // script while its audio gets ready.
@@ -5477,6 +5506,10 @@ export function setup(ctx, overrides) {
             }
         };
         const say = (t) => {
+            if (t)
+                savedNotes[e.key] = t;
+            else
+                delete savedNotes[e.key];
             const n = live().querySelector(':scope > .af-hint') || note;
             setText(n, t);
             n.hidden = !t;
@@ -5487,18 +5520,31 @@ export function setup(ctx, overrides) {
                 b.textContent = t;
         };
         const btns = el('<div class="af-row"></div>');
-        const play = button(savedPlaying === e.key ? 'Stop' : 'Play', async () => {
-            if (savedPlaying === e.key) {
+        // Play, Getting ready while the saved lines are read, then Stop. A press
+        // while it gets ready lets it go, so one press never plays it twice.
+        const play = button(savedPlaying === e.key ? 'Stop' : savedJoining === e.key ? 'Getting ready' : 'Play', async () => {
+            if (savedPlaying === e.key || savedJoining === e.key) {
                 stopSavedPlay();
+                say('');
                 return;
             }
+            // Anything else saved that plays or gets ready stops first.
+            stopSavedPlay();
             hush('saved');
-            say('Joining the saved audio');
+            const run = ++savedRun;
+            savedJoining = e.key;
+            label('Getting ready');
+            say('Reading the saved audio');
             const j = await joinedSaved(e.key);
-            if (!j.wav)
+            if (run !== savedRun)
+                return;
+            savedJoining = '';
+            if (!j.wav) {
+                label('Play');
                 return say(j.why || '');
+            }
             say(j.missing ? j.missing + (j.missing === 1 ? ' line has' : ' lines have') + ' no saved audio, so ' + (j.missing === 1 ? 'it is' : 'they are') + ' left out.' : '');
-            // Something else may have started while the audio was joined.
+            // Something else may have started while the audio was read.
             hush('saved');
             try {
                 const a = new AudioCtor();
@@ -5521,9 +5567,27 @@ export function setup(ctx, overrides) {
         play.setAttribute('data-af-saved-play', '');
         // The whole performance, built from saved audio, in the Studio tab,
         // where it can be downloaded or made into a video.
-        const down = button('Open in the Studio', async () => {
-            say('Getting the saved audio');
-            const why = await openSaved(e);
+        // One opening at a time. A press while it opens is ignored, and the
+        // button says it is opening.
+        const down = button(savedOpening === e.key ? 'Opening' : 'Open in the Studio', async () => {
+            if (savedOpening)
+                return;
+            savedOpening = e.key;
+            const mark = (t) => {
+                const b = live().querySelector('[data-af-saved-open] span:last-child');
+                if (b)
+                    b.textContent = t;
+            };
+            mark('Opening');
+            say('Reading the saved audio');
+            let why = '';
+            try {
+                why = await openSaved(e);
+            }
+            finally {
+                savedOpening = '';
+                mark('Open in the Studio');
+            }
             say(why);
         }, '', ICON_VIDEO);
         down.setAttribute('data-af-saved-open', '');
