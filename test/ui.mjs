@@ -179,6 +179,13 @@ window.__fetch = async (url, init) => {
   if (u.includes('/models')) return json({ models: [{ id: 's2.1-pro', label: 'Fish S2.1 Pro' }, { id: 'drama-3-preview', label: 'Drama 3 (Preview)' }], provider: 'fish_audio' });
   if (u.includes('/voices')) return json({ voices: [{ id: 'v1', name: 'Hollow Bell', gender: 'female' }, { id: 'v2', name: 'Grit', gender: 'male' }, { id: 'v3', name: 'Lark', gender: 'female' }], provider: 'elevenlabs' });
   if (u.includes('/chats/chat1?messages=false')) return json({ id: 'chat1', name: 'Mar 3, 2026, 4:12:09 PM', character_id: 'c', metadata: {} });
+  // A picture for the character and for one persona, drawn in one color
+  // each, so a check can tell which it got.
+  const pic = async (color) => { const c = document.createElement('canvas'); c.width = 40; c.height = 40; const g = c.getContext('2d'); g.fillStyle = color; g.fillRect(0, 0, 40, 40); return new Response(await new Promise((r) => c.toBlob(r, 'image/png')), { status: 200, headers: { 'Content-Type': 'image/png' } }); };
+  if (u.includes('/characters/c/avatar')) return pic('#2060e0');
+  if (u.includes('/personas/p1/avatar')) return pic('#30c060');
+  if (u.includes('/characters/summary')) return json({ data: /ysolde/i.test(decodeURIComponent(u)) ? [{ id: 'c', name: 'Ysolde Marrow-Kestrel of the Lower Quays' }] : [], total: 0 });
+  if (u.includes('/personas?')) return json({ data: [{ id: 'p1', name: 'Wyn' }], total: 1 });
   if (u.includes('/characters/c')) return json({ id: 'c', name: 'Ysolde Marrow-Kestrel of the Lower Quays' });
   if (u.includes('/settings/voiceSettings')) return json({ key: 'voiceSettings', value: { ttsEnabled: true, ttsAutoPlay: true, ttsConnectionId: 't1' } });
   if (u.includes('/messages')) return json({ data: [{ id: 'm1', name: 'Ysolde Marrow-Kestrel of the Lower Quays', is_user: false, content: 'text', swipe_id: 0 }].concat(window.__moreMessages || []), total: 1 + (window.__moreMessages || []).length });
@@ -658,6 +665,40 @@ if (section("no stuck hover")) {
   check(!loose.length, "every hover color is only for a device that hovers (" + loose.slice(0, 4).join(" | ") + ")");
   check(!errors.length, "no errors. " + errors.slice(0, 2).join("; "));
   await context.close();
+}
+
+if (section("lumiverse pictures")) {
+  console.log("Pictures for the cast from their characters and personas in Lumiverse");
+  for (const size of SIZES) {
+    const { context, page, errors } = await open(THEMES[0], size);
+    const where = size.name;
+    await page.click('.af-tab[data-tab="cast"]');
+    await page.waitForTimeout(300);
+    await page.click("[data-af-lvpics]");
+    await page.waitForTimeout(1200);
+    const said = await page.locator("[data-af-lvpicsaid]").textContent().catch(() => "");
+    check(/Pictures added for 2 of 3/.test(said), where + ": it fills the people Lumiverse has, and says who it could not (" + said + ")");
+    const colors = await page.evaluate(async () => {
+      const at = async (url) => { if (!url) return ""; const i = new Image(); await new Promise((r) => { i.onload = r; i.src = url; }); const c = document.createElement("canvas"); c.width = 4; c.height = 4; c.getContext("2d").drawImage(i, 0, 0, 4, 4); const d = c.getContext("2d").getImageData(2, 2, 1, 1).data; return d[2] > 150 && d[1] < 140 ? "blue" : d[1] > 150 ? "green" : "other"; };
+      const cast = window.__settings.cast;
+      return { a: await at(cast[1].picture), b: cast[2].picture ? "some" : "", c: await at(cast[3].picture) };
+    });
+    check(colors.a === "blue" && colors.c === "green" && colors.b === "", where + ": the character gets the character's picture, the persona the persona's, and nobody else one (" + JSON.stringify(colors) + ")");
+    await page.click("[data-af-lvpics]");
+    await page.waitForTimeout(800);
+    check(/Pictures added for 0 of 1/.test(await page.locator("[data-af-lvpicsaid]").textContent()), where + ": a picture already there is kept, and only the one without is tried again");
+    // One person, from their card.
+    const card = page.locator('.af-person[data-person="b"]');
+    await card.locator(".af-person-head").click();
+    await page.waitForTimeout(400);
+    await card.locator("[data-af-lvpic]").click();
+    await page.waitForTimeout(800);
+    check(/No character or persona in Lumiverse has this name/.test(await card.textContent()), where + ": someone with no picture in Lumiverse is told so on their card");
+    const m = await page.evaluate(MEASURE, size.touch);
+    check(!m.overflow.length && !m.small.length, where + ": the buttons fit. " + m.overflow.concat(m.small).slice(0, 2).join("; "));
+    check(!errors.length, where + ": no errors. " + errors.slice(0, 2).join("; "));
+    await context.close();
+  }
 }
 
 if (section("find someone")) {

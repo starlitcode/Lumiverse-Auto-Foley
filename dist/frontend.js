@@ -9372,6 +9372,29 @@ export function setup(ctx, overrides) {
             renderTab();
         }, 'af-primary'));
         row.appendChild(button('New group', () => editGroup(null)));
+        // Pictures for everyone who has none, from their character or persona
+        // in Lumiverse. A picture already chosen is kept.
+        const lvAll = button('Use pictures from Lumiverse', async () => {
+            lvAll.disabled = true;
+            const need = S.cast.filter((m) => m.kind !== 'narrator' && !m.picture);
+            let got = 0;
+            for (const m of need) {
+                const pic = await lumiversePicture(m);
+                if (pic) {
+                    m.picture = pic;
+                    got++;
+                }
+            }
+            if (got)
+                save();
+            lvPicSaid = !need.length
+                ? 'Everyone in the cast already has a picture.'
+                : got === need.length
+                    ? 'Pictures added for ' + got + (got === 1 ? ' person.' : ' people.')
+                    : 'Pictures added for ' + got + ' of ' + need.length + '. The others have no character or persona with their name in Lumiverse, or it has no picture.';
+            renderTab();
+        });
+        lvAll.setAttribute('data-af-lvpics', '');
         // Turns picking on and off. Leaving it clears what was picked.
         const selectBtn = button(castSelecting ? 'Done' : 'Select', () => {
             castPicked.clear();
@@ -9394,7 +9417,12 @@ export function setup(ctx, overrides) {
         selectBtn.setAttribute('data-af-select', '');
         selectBtn.setAttribute('aria-pressed', castSelecting ? 'true' : 'false');
         row.appendChild(selectBtn);
+        row.appendChild(lvAll);
         top.appendChild(row);
+        if (lvPicSaid) {
+            top.appendChild(el('<p class="af-note" data-af-lvpicsaid role="status">' + esc(lvPicSaid) + '</p>'));
+            lvPicSaid = '';
+        }
         if (castSelecting) {
             const bar = pickBar();
             top.appendChild(bar);
@@ -9472,6 +9500,8 @@ export function setup(ctx, overrides) {
     }
     // What Find someone holds, for this page only.
     let castFind = '';
+    // What Use pictures from Lumiverse found, said once under the buttons.
+    let lvPicSaid = '';
     // The cast in the order the tab shows it, as Sort the cast says.
     function castInOrder() {
         return sortCast(S.cast, String(S.castSort || 'kind'));
@@ -9761,6 +9791,73 @@ export function setup(ctx, overrides) {
     // stays light: 96 pixels square, cut from the middle.
     // A square crop of a picture. Drag the picture to move it, and use Zoom, or
     // the mouse wheel, to zoom in. The circle shows what a round picture shows.
+    // ---- pictures from Lumiverse ----
+    // A person's own picture in Lumiverse: the character or persona with the
+    // same name, display name or other name. Read as the reader, through
+    // Lumiverse's own pages, so no permission is asked for. Cut to a square
+    // from the middle, at the size the Cast tab keeps. Null when there is none.
+    async function lumiversePicture(m) {
+        const names = [m.name, m.display, ...(m.aliases || [])].map((n) => String(n || '').trim().toLowerCase()).filter(Boolean);
+        if (!names.length)
+            return null;
+        const pick = (list) => list.find((x) => x && x.id && names.indexOf(String(x.name || '').trim().toLowerCase()) >= 0);
+        const read = async (path) => {
+            try {
+                const r = await api(path);
+                if (!r.ok)
+                    return [];
+                const j = await r.json();
+                return Array.isArray(j) ? j : Array.isArray(j && j.data) ? j.data : [];
+            }
+            catch (_) {
+                return [];
+            }
+        };
+        let src = '';
+        // A persona is looked for among personas first, anyone else among
+        // characters first, and then the other list.
+        const personas = async () => {
+            const hit = pick(await read('/personas?limit=200'));
+            return hit ? '/personas/' + encodeURIComponent(hit.id) + '/avatar' : '';
+        };
+        const characters = async () => {
+            for (const n of names) {
+                const hit = pick(await read('/characters/summary?limit=20&search=' + encodeURIComponent(n)));
+                if (hit)
+                    return '/characters/' + encodeURIComponent(hit.id) + '/avatar';
+            }
+            return '';
+        };
+        src = m.kind === 'persona' ? (await personas()) || (await characters()) : (await characters()) || (await personas());
+        if (!src)
+            return null;
+        try {
+            const r = await api(src, { headers: { Accept: 'image/*' } });
+            if (!r.ok)
+                return null;
+            const blob = await r.blob();
+            if (!/^image\//.test(blob.type || ''))
+                return null;
+            const url = URL.createObjectURL(blob);
+            const im = await loadImage(url);
+            URL.revokeObjectURL(url);
+            if (!im || !im.width)
+                return null;
+            const c = document.createElement('canvas');
+            c.width = PIC_SIDE;
+            c.height = PIC_SIDE;
+            const g = c.getContext('2d');
+            if (!g)
+                return null;
+            const side = Math.min(im.width, im.height);
+            g.imageSmoothingQuality = 'high';
+            g.drawImage(im, (im.width - side) / 2, (im.height - side) / 2, side, side, 0, 0, PIC_SIDE, PIC_SIDE);
+            return c.toDataURL('image/jpeg', 0.85);
+        }
+        catch (_) {
+            return null;
+        }
+    }
     // done gets the crop as a small JPEG, or null when it is canceled.
     const PIC_SIDE = 128;
     function cropPicture(src, w, h, done) {
@@ -9918,7 +10015,26 @@ export function setup(ctx, overrides) {
             paint();
             paintName();
         }, 'af-danger');
+        const fromLumiverse = button('Use their Lumiverse picture', async () => {
+            fromLumiverse.disabled = true;
+            said.textContent = 'Looking in Lumiverse';
+            said.dataset.kind = '';
+            const pic = await lumiversePicture(m);
+            fromLumiverse.disabled = false;
+            if (!pic) {
+                said.textContent = 'No character or persona in Lumiverse has this name, or it has no picture.';
+                said.dataset.kind = 'bad';
+                return;
+            }
+            said.textContent = '';
+            m.picture = pic;
+            save();
+            paint();
+            paintName();
+        });
+        fromLumiverse.setAttribute('data-af-lvpic', '');
         box.appendChild(choose);
+        box.appendChild(fromLumiverse);
         box.appendChild(take);
         row.appendChild(box);
         row.appendChild(said);
