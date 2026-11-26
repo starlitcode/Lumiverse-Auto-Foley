@@ -13,7 +13,7 @@
 
 type Ctx = any;
 
-const VERSION = '1.8.0';
+const VERSION = '1.8.1';
 // The marks Lumiverse puts on another extension's part of the page. Nothing
 // inside one is read, written or pressed.
 const OTHER_UI = '[data-spindle-extension-root],[data-spindle-ext],[data-spindle-modal]';
@@ -332,7 +332,7 @@ function noTagsWhy(conn: any, model?: string): string {
   if (provider === 'openrouter_tts') return what + (m || 'This OpenRouter model') + ' does not. Through OpenRouter, pick elevenlabs/eleven-v4, elevenlabs/eleven-v3, fish-audio/s2.1-pro or google/gemini-3.8-flash-tts, on the connection or for this person in the Cast tab.';
   if (provider === 'google_tts' || provider === 'google_vertex_tts') return what + (m || 'This Gemini model') + ' does not. Pick Gemini 3.8 Flash TTS or Gemini 3.8 Flash-Lite TTS.';
   if (provider === 'openvox_tts') return what + 'Of the models OpenVox runs, only OmniVoice and Chatterbox Turbo do. Load one of them in OpenVox, and pick it on the connection.';
-  if (provider === 'cartesia') return what + 'Cartesia models older than Sonic 3 do not. Pick sonic-3.5 or sonic-3 on the connection.';
+  if (provider === 'cartesia') return what + 'Cartesia models older than Sonic 3 do not. Pick a Sonic 3 model, such as sonic-3.6, on the connection.';
   if (provider === 'chatterbox_direct') return what + 'Your Chatterbox server runs the ' + (m || 'unknown') + ' model, which takes no tags. Load Chatterbox-Turbo on it, on its own web page or with model.repo_id set to chatterbox-turbo in its config.yaml.';
   if (provider === 'openai_tts' && /multilingual|\bmtl\b/.test(hay)) return what + 'Chatterbox-Multilingual does not. Run Chatterbox-Turbo on your server.';
   if (provider === 'openai_tts') return what + 'This connection is not a Chatterbox-Turbo server. If it is one, pick Chatterbox-Turbo under What this connection runs, in the Settings tab.';
@@ -10001,8 +10001,8 @@ export function setup(ctx: Ctx, overrides?: any) {
     if (eng.id === 'fish') return 'On Fish Audio: describe how they act, such as calm, sharp when angry. The Director turns it into tags like [shouting]. How they always sound goes in Fish Audio direction, under More settings.';
     if (eng.id === 'gemini') return 'On Gemini 3.8: describe how they act, such as hushed when scared. The Director writes a note for each line. How they always sound goes in Gemini style, under More settings.';
     if (eng.id === 'omnivoice') return 'On OmniVoice: say when they laugh, sigh or make a questioning sound. It marks only sounds like those, so how they speak comes from the voice and the punctuation.';
-    if (eng.id === 'cartesia') return 'On Cartesia: describe their usual feeling in a word or two, such as calm or anxious. The Director gives a line one feeling from Cartesia\u2019s list, such as [sarcastic].';
-    return 'On Chatterbox: say when they laugh, sigh or gasp. It marks only sounds like those, so how they speak comes from the voice and the punctuation. With a Chatterbox server reached directly, Exaggeration under More settings makes the voice stronger.';
+    if (eng.id === 'cartesia') return 'On Cartesia: describe their usual feeling in a word or two, such as calm or anxious. The Director gives a line one feeling from Cartesia\u2019s list, such as [sarcastic]. Cartesia\u2019s Emotive voices show it best.';
+    return 'On Chatterbox: say when they laugh, sigh or gasp. It marks only sounds like those, so how they speak comes from the voice and the punctuation.';
   }
 
   // A switch for one person's setting, built like every other switch: only
@@ -10074,8 +10074,8 @@ export function setup(ctx: Ctx, overrides?: any) {
       out.push(words('lang', 'Language', 'en-US', 'Empty lets Gemini tell from the text. A code such as en-US or fr-FR sets the language and accent.'));
     }
     if (prov === 'chatterbox_direct') {
-      out.push(num('exaggeration', 'Exaggeration', 0.25, 2, 0.05, 0.5, 'How strong the feeling is. 0.50 by default. Higher is more dramatic and a little faster.'));
-      out.push(num('cfg_weight', 'CFG weight', 0, 1, 0.05, 0.5, 'How closely it follows the voice\u2019s pace. 0.50 by default. Lower is slower.'));
+      out.push(num('exaggeration', 'Exaggeration', 0.25, 2, 0.05, 0.5, 'How strong the feeling is, on the original Chatterbox model. Turbo ignores it. 0.50 by default.'));
+      out.push(num('cfg_weight', 'CFG weight', 0, 1, 0.05, 0.5, 'How closely it follows the voice\u2019s pace, on the original Chatterbox model. Turbo ignores it.'));
       out.push(num('temperature', 'Temperature', 0.05, 2, 0.05, 0.8, 'How much each take varies. 0.80 by default.'));
       out.push(wholeBox('seed', 'Seed', 0, 2147483647, 0, '0 by default, a new take each time. Any other number gives the same take for the same line.'));
     }
@@ -10191,7 +10191,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       }
       const vid = rid('vc');
       const voiceField = el('<div class="af-col"></div>');
-      voiceField.appendChild(labelRow('Voice', 'Their voice on this connection. Designed or cloned voices act better than the stock voices.', vid));
+      voiceField.appendChild(labelRow('Voice', 'Their voice on this connection. Compare voices with Hear a sample before you pick.', vid));
       // The box shows the voice picked from the first frame, and the rest of
       // the list is added under it when it arrives, so what it says never
       // changes while it loads. The picked voice keeps the same words in the
@@ -12043,7 +12043,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     // A Chatterbox-TTS-Server Auto Foley talks to itself.
     a.appendChild(
       fold('A Chatterbox server, without a Lumiverse connection', (body) => {
-        body.appendChild(hint('Auto Foley talks to the server itself, so its own settings, such as exaggeration, can be set for each person in the Cast tab. It needs the CORS proxy permission.'));
+        body.appendChild(hint('Auto Foley talks to the server itself, so its own settings, such as temperature and seed, can be set for each person in the Cast tab. It needs the CORS proxy permission.'));
         const field = text('Chatterbox server address', S.chatterboxUrl || '', () => {}, 'http://localhost:8004', 'The address of a Chatterbox-TTS-Server, the same one its web page opens at. Run Chatterbox-Turbo on it for tags.');
         const box = field.querySelector('input') as HTMLInputElement;
         box.setAttribute('inputmode', 'url');

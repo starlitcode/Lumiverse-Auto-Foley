@@ -11,7 +11,7 @@
 // One backend process can serve every account on a server, so everything that
 // belongs to a person is kept per user id, in spindle.userStorage, and every
 // reply goes back addressed to that user.
-const VERSION = '1.8.0';
+const VERSION = '1.8.1';
 const DEFAULT_SETTINGS = {
     enabled: true,
     ttsConnection: '',
@@ -1214,12 +1214,12 @@ function cleanEngine(v) {
 // The note sent with each engine, saying how it reads tags. Shown in the
 // Director tab, where it can be changed, with a way back to this text.
 const ENGINE_NOTES = {
-    eleven_v3: 'ElevenLabs v3 acts out any short tag in square brackets. A tag shapes the words right after it, so it goes just before them. It can also perform a [sound of ...] tag inside the line.',
-    fish: 'Fish Audio acts out free tags in square brackets, like [barely holding it together] or [whispering]. Put a tag at the start of the sentence it shapes. A tag keeps going until the next one, so when a whisper ends, mark where the voice comes back up. One feeling per sentence works best. Fish can\'t make the sounds of the world, so sounds go in "before" and "after".',
+    eleven_v3: 'ElevenLabs v3 and v4 act out any short tag in square brackets. A tag shapes the words right after it, so it goes just before them. It can also perform a [sound of ...] tag inside the line.',
+    fish: 'Fish Audio acts out free tags in square brackets, like [barely holding it together] or [whispering]. Put a tag at the start of the sentence it shapes. Each sentence of a line is read with the last feeling tagged before it, so when a whisper ends, mark where the voice comes back up with a new tag. One feeling per sentence works best, and never two that pull against each other. Fish makes almost none of the sounds of the world, so sounds go in "before" and "after".',
     gemini: 'Gemini 3.8 knows only the tags in "tag_list", and they\'re all sounds a voice makes or pauses. Use them as written, in square brackets, right where the sound happens, even mid-sentence. How a line is said goes in its "style": a few plain words like "hushed and nervous" or "fast, out of breath". Most lines need no style at all, since Gemini reads the punctuation and the words around them. Leave age, accent and who they are out of it, since the voice already carries those.',
     chatterbox_turbo: 'Chatterbox knows only the nine tags in "tag_list", and they\'re all sounds a voice makes. Use them as written, in square brackets, and rarely: one in a line at most, and most lines get none. It can\'t take a delivery tag like [quietly], so the punctuation carries the delivery.',
     omnivoice: 'OmniVoice knows only the tags in "tag_list", and they\'re all small sounds a voice makes: a laugh, a sigh, a questioning hum, an agreeing one, a surprised gasp, an unhappy grunt. Use them as written, in square brackets, right where the sound happens. Keep them rare, one in a line at most. It can\'t take a delivery tag like [quietly], so the words and the punctuation carry the rest.',
-    cartesia: 'Cartesia reads one feeling for a whole line, and [laughter] where someone laughs. The feelings are the other words in "tag_list". When a line needs one, put it in square brackets at the very start, like [anxious] or [sarcastic], and only one per line. The first six on the list, neutral to scared, come out the most reliably. Most lines need none, since Cartesia hears the feeling in the words.',
+    cartesia: 'Cartesia reads one feeling for a whole line, and [laughter] where someone laughs. The feelings are the other words in "tag_list". When a line needs one, put it in square brackets at the very start, like [anxious] or [sarcastic], and only one per line. Six come out the most reliably: neutral, calm, angry, content, sad and scared. Only pick a feeling the words already carry, since Cartesia doesn\'t act one that fights them. Most lines need none, since Cartesia hears the feeling in the words.',
 };
 function engineNote(s, id) {
     const own = s.engineNotes && typeof s.engineNotes[id] === 'string' ? s.engineNotes[id].trim() : '';

@@ -33,12 +33,12 @@ Someone the AI added has no voice picked. The first time they speak, Auto Foley 
   - **Neutral** picks a voice the provider marks neutral. When there is none, it avoids voices marked female or male. Some providers, such as Gemini, mark every voice female or male, so there Neutral picks the same way as Any.
   - The Director sets **Neutral** for someone new only when the story says they are nonbinary, such as "they" for one person.
 - **Connection.** Shown when you have more than one TTS connection. Empty uses Auto Foley's. See [Mixing engines](engines.md#mixing-engines).
-- **Voice.** From that connection. Empty uses the connection's own voice. Designed or cloned voices act much better than the stock ones. Each connection keeps its own voice for this person.
+- **Voice.** From that connection. Empty uses the connection's own voice. Press **Hear a sample** to compare voices. Each connection keeps its own voice for this person.
 - **Or type a voice name or ID.** For a voice the list does not show, such as one you made or cloned, a Gemini voice name, or a voice file on a Chatterbox server. A name or ID that matches a voice in the list picks that voice. Anything else is sent as you typed it. It is saved when you leave the box.
 - **Model.** Empty uses the connection's model. The line under it names the engine and what it can do. See [Voice engines](engines.md).
 - **Stability.** ElevenLabs only. Lower is more expressive. On Eleven v3 it has three settings: Creative, Natural and Robust.
-- **Similarity.** Eleven v4 only. Eleven v3 does not take it.
-- **Speed.** Fish Audio and Chatterbox only. ElevenLabs' docs say Eleven v3 and v4 take no speed, and Gemini has none either.
+- **Similarity.** Eleven v4 only. Auto Foley does not send it to Eleven v3.
+- **Speed.** Fish Audio, Chatterbox, OmniVoice and Cartesia. ElevenLabs' docs say Eleven v4 takes no speed, and Auto Foley sends none to Eleven v3. Gemini has none either.
 - **More settings.** A fold under the voice, with only the settings their engine takes. **Back to defaults** clears them.
 - **Acting notes.** A note for the Director, such as "soft-spoken and dry, rarely raises their voice". It holds up to 1000 characters. See [How much a box holds](#how-much-a-box-holds), and [Writing for each voice engine](writing.md) for what helps on each engine.
 - **Do not voice.** Their lines are skipped.

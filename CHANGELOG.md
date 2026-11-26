@@ -6,6 +6,26 @@ Versions follow [Semantic Versioning](https://semver.org). A new major version m
 
 ---
 
+## 1.8.1
+
+_2026-11-26_
+
+### Fixed
+
+- **The Director was pointed at the wrong Cartesia feelings.** Its note said the first six feelings on Cartesia's list work best, but that list starts with laughter, neutral, happy, excited, enthusiastic and elated. It now names the six Cartesia's docs say work best: neutral, calm, angry, content, sad and scared. It also picks only a feeling the words already carry, as Cartesia's docs advise.
+- **The Director's note for Fish Audio said something Fish's docs do not.** It said a Fish tag keeps going until the next one. It now says how Auto Foley sends each sentence: with the last feeling tagged before it. It also says never to put two feelings that pull against each other in one sentence, as Fish's docs advise.
+- **The Director's note for ElevenLabs named only v3.** The same note is used for Eleven v4, and now says so.
+- **Exaggeration and CFG weight said they work on Chatterbox-Turbo.** Resemble AI's Turbo code ignores both. Their hints now say they work only on the original Chatterbox model.
+- **The Voice hint said designed or cloned voices always act better.** ElevenLabs says a designed voice may be less expressive on Eleven v4. The hint now says to compare voices with **Hear a sample**.
+- **Cartesia's hint named an older model.** It now names `sonic-3.6`, Cartesia's current model.
+
+### Changed
+
+- **The writing guide on GitHub covers every engine more closely.** It explains how to write a Gemini Voice Design description, what ElevenLabs says about custom voices, and how long a clip to clone from should be on Fish Audio, Chatterbox-Turbo, OmniVoice and OpenVox. It also says where Lumiverse puts **Fish Audio direction**.
+- **The docs on GitHub list the right settings for each engine.** ElevenLabs is sent stability, and similarity on Eleven v4. Speed works on Fish Audio, Chatterbox, OmniVoice and Cartesia.
+
+---
+
 ## 1.8.0
 
 _2026-11-25_

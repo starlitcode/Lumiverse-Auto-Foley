@@ -26,7 +26,7 @@ The Director's own prompt can be changed too, in the Director tab. See [The prom
 
 ## Steps
 
-1. Pick the person's voice first, in the Cast tab. Press **Hear a sample** to compare voices. Designed or cloned voices act better than stock ones.
+1. Pick the person's voice first, in the Cast tab. Press **Hear a sample** to compare voices. A designed or cloned voice can fit the person better, but test it. See [With a custom voice](#with-a-custom-voice).
 2. Write **Acting notes** in plain words: how they act, and what changes when they feel something. For example: "gruff and short with people, sighs before bad news".
 3. On Gemini 3.8 or Fish Audio, write how they always sound in **Gemini style** or **Fish Audio direction**, under **More settings**.
 4. Play a message and listen.
@@ -38,7 +38,7 @@ The Director's own prompt can be changed too, in the Director tab. See [The prom
 - **Acting notes** is put in the Director's request, with the name of each person in the cast. It is never sent to the voice service. It holds up to 1000 characters.
 - The Director writes tags into the line, and a note on how it is said where the engine takes one.
 - **Gemini style** and the line's own note go to Gemini together: the style first, then "This line:" and the note.
-- **Fish Audio direction** goes to Fish Audio with every line, beside the line's own tags.
+- **Fish Audio direction** goes to Fish Audio with every line. Lumiverse puts it at the start of the line, as one more tag before the line's own tags. Keep it to how they usually speak, so it does not pull against a line's tag, such as "calm" against `[shouting]`.
 - Before a line is sent, it is fitted to the engine. A tag the engine cannot read is taken out, so it is never read aloud. See [What it sends](engines.md#what-it-sends).
 
 ## An example
@@ -87,6 +87,24 @@ A voice you designed or cloned already carries its sound: the pitch, the texture
 - Write only how they speak, such as "measured and restrained, a little tired". Leave out what the voice already does.
 - Add the accent only if the voice loses it on some lines.
 - To check, play the same message with the box filled and with it empty, and listen.
+
+Some voice services say a custom voice may act less on their newest models:
+
+- ElevenLabs says a Voice Design voice may be less expressive on Eleven v4 than on earlier models.
+- ElevenLabs says Professional Voice Clones are not fully tuned for Eleven v3.
+
+Compare the custom voice with a stock one using **Hear a sample** before you choose.
+
+### Recording a voice to clone
+
+Each service gives its own advice for the clip you clone from:
+
+| Service | Clip length | Other advice |
+| --- | --- | --- |
+| Fish Audio | At least 10 seconds. Best is 2 or 3 clips of 15 to 20 seconds each. | Keep one tone and feeling. Avoid big changes in volume or feeling. |
+| Chatterbox-Turbo | Longer than 5 seconds. Only the first 10 seconds are used. | |
+| OmniVoice | 3 to 10 seconds. | Without a clip, it may not make very short lines well. |
+| OpenVox | 10 to 20 seconds. | |
 
 ### Designing a Gemini voice
 
@@ -176,7 +194,7 @@ Dace is a guard who hates his job.
 ### Chatterbox-Turbo
 
 - It knows nine sound tags, such as `[sigh]`, `[laugh]` and `[gasp]`, and reads English only.
-- How strong the feeling is comes from **Exaggeration**, in a person's **More settings**, when Auto Foley talks to the server itself. See [Chatterbox](engines.md#chatterbox).
+- **Exaggeration** and **CFG weight**, in a person's **More settings**, show when Auto Foley talks to the server itself. They work only on the original Chatterbox model. Resemble AI's Turbo code ignores them. See [Chatterbox](engines.md#chatterbox).
 - In **Acting notes**, mention the sounds they make: "laughs a lot, clears their throat before speaking".
 
 ### OmniVoice

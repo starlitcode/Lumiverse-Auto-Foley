@@ -39,9 +39,9 @@ Each line goes to Lumiverse's own TTS route, with:
 
 - The line, with only the tags its engine can read.
 - The person's voice and model on that connection.
-- For ElevenLabs: stability, similarity, style and speed from the Cast tab.
+- For ElevenLabs: stability from the Cast tab, and on Eleven v4 similarity too.
 - For Gemini 3.8: the line's note, as the speech style.
-- For Fish Audio and Chatterbox: the speed, when it is not 1.
+- For Fish Audio, Chatterbox, OmniVoice and Cartesia: the speed, when it is not 1.
 
 A line with no note uses the speech style saved on the connection in Lumiverse.
 
@@ -158,12 +158,13 @@ Of the models OpenVox runs, two act:
 
 ### Cartesia
 
-Cartesia is a voice service with its own key. In Lumiverse, add a TTS connection with the **Cartesia** provider, and pick a Sonic 3 model, such as `sonic-3.5`.
+Cartesia is a voice service with its own key. In Lumiverse, add a TTS connection with the **Cartesia** provider, and pick a Sonic 3 model, such as `sonic-3.6`.
 
 - Cartesia reads one tag in the text, `[laughter]`.
 - It takes one feeling for a whole line, from a list of 58, such as `calm`, `anxious` or `sarcastic`. The Director writes it as a tag at the start of a line. Auto Foley takes it out of the text and sends it beside the line.
 - A tag that means one of the feelings is fitted to it: `[nervously]` becomes `anxious`, and `[terrified]` becomes `panicked`.
 - Cartesia's docs say six feelings work the best: `neutral`, `calm`, `angry`, `content`, `sad` and `scared`. Feelings work best with the voices Cartesia marks **Emotive**, and in English. They are in beta at Cartesia.
+- Cartesia's docs say a feeling works only when it fits the words. The Director is told to pick only a feeling the line already carries.
 - Speed goes from 0.6 to 1.5.
 - Models older than Sonic 3 take no tags, so Auto Foley does not use them.
 
