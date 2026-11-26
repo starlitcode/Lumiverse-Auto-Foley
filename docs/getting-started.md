@@ -81,20 +81,27 @@ Thinking a model writes in the message is never read aloud. The same nine format
 
 ## Quoted, asterisked and undecorated text
 
-Auto Foley sorts the text of a message into three kinds. Each kind has a choice under **Reading messages** in the Settings tab. They are the same choices as **Speech detection** in Lumiverse's own Voice settings, but Auto Foley keeps its own, so the two can differ.
+Auto Foley sorts the text of a message into four kinds. Each kind has a choice under **Reading messages** in the Settings tab. Three of them are the same choices as **Speech detection** in Lumiverse's own Voice settings, but Auto Foley keeps its own, so the two can differ. **Text in parentheses** is Auto Foley's own.
 
 | Setting | Which text | Choices |
 | --- | --- | --- |
 | **Asterisked text** | Text such as `*she shrugs*` | **Skip**, **Read as narration** (the default), or **Read as thoughts (character voice)** |
+| **Text in parentheses** | Text such as `(not that she meant it)` | **Skip**, **Read as narration** (the default), or **Read as thoughts (character voice)** |
 | **Quoted text** | Text in quote marks, or after a dash at the start of a line | **Read as speech** (the default), **Read as narration**, or **Skip** |
 | **Undecorated text** | Text with no marks around it | **Read as narration** (the default), **Read as speech**, or **Skip** |
 
 - **Read as speech** and **Read as thoughts** use the speaker's own voice. The Director picks who the speaker is.
 - **Read as narration** uses the Narrator's voice, and **Narration** says how it is played.
 - **Skip** leaves the text out. The Director does not see it either.
-- Asterisks inside quote marks only stress a word, as in `"I *mean* it."`. They stay part of what is said.
+- Asterisks and parentheses inside quote marks stay part of what is said, as in `"I *mean* it."`.
+- `((Double parentheses))` are always left out. See [What is not read aloud](#what-is-not-read-aloud).
 - Text between asterisks read as narration joins the narration beside it, so `She waited. *checks the latch* Nothing moved.` is one line.
 - For a story written as `*waves* Hello there.`, set **Undecorated text** to **Read as speech**.
+- For a character who says one thing and thinks another, as in `"Sure, I would love to." (Absolutely not.)`, set **Text in parentheses** to **Read as thoughts**. Both lines are then in their voice.
+
+### Emojis
+
+**Send emojis to the voice** is off by default, so emojis in a line are left out. Some voice services read an emoji out by its name. Turn it on if yours acts them well. A music note, such as 🎵, still marks a line as sung either way.
 
 ### How speech is marked
 

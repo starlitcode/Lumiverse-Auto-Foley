@@ -16,6 +16,8 @@ _2026-11-26_
   - **Asterisked text** can be **Read as thoughts (character voice)**, in the speaker's own voice.
   - **Quoted text** can be **Read as narration**, in the Narrator's voice.
   - **Undecorated text** can be **Read as speech**, or skipped.
+- **Text in parentheses**, under **Reading messages**: **Skip**, **Read as narration**, the default, or **Read as thoughts (character voice)**. Thoughts suit a character who says one thing and thinks another. `((Double parentheses))` are still always left out.
+- **Send emojis to the voice**, under **Reading messages**. Off by default. On, emojis in a line are sent to the voice service, for one that acts them well.
 
 ### Changed
 
@@ -25,6 +27,7 @@ _2026-11-26_
 
 ### Fixed
 
+- **Emojis in a line were sent to the voice.** Only a line that starts with an emoji was left out, so an emoji in the middle of a line went to the voice service, which could read it out by its name. Emojis are now left out, unless **Send emojis to the voice** is on.
 - **A person put in a folded group seemed to close.** Picking a group for someone on the Cast tab moved their card into that group at once, and a folded group hid it. The group now opens, and the card fades out and back in at its new place, still open, with the panel scrolled to it.
 
 ---

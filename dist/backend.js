@@ -58,9 +58,11 @@ const DEFAULT_SETTINGS = {
     decisionQuestions: {},
     soundCheck: true,
     skipOn: true,
+    emojisOn: false,
     skipPatterns: '',
     speechMarks: 'auto',
     asterisks: 'narration',
+    parens: 'narration',
     quotedText: 'speech',
     plainText: 'narration',
     thinkingMode: 'off',
@@ -557,9 +559,11 @@ function cleanSettings(raw) {
         decisionQuestions: cleanQuestions(r.decisionQuestions),
         soundCheck: bool(r.soundCheck, d.soundCheck),
         skipOn: bool(r.skipOn, d.skipOn),
+        emojisOn: bool(r.emojisOn, d.emojisOn),
         skipPatterns: str(r.skipPatterns, 8000),
         speechMarks: pick(r.speechMarks, ['auto', 'single'], 'auto'),
         asterisks: pick(r.asterisks, ['narration', 'thought', 'skip'], 'narration'),
+        parens: pick(r.parens, ['narration', 'thought', 'skip'], 'narration'),
         // speechRead and speechMarks "plain" are the old names of these choices,
         // read once to move a saved choice to Quoted text and Undecorated text.
         quotedText: pick(r.quotedText !== undefined ? r.quotedText : r.speechRead === 'skip' ? 'skip' : undefined, ['speech', 'narration', 'skip'], 'speech'),
@@ -872,6 +876,11 @@ function splitLong(text) {
 }
 const MUSIC_NOTE = /[\u266A\u266B\u266C\u{1F3B5}\u{1F3B6}]/u;
 const MUSIC_NOTES = /[\u266A\u266B\u266C\u{1F3B5}\u{1F3B6}]/gu;
+// Emojis, with the marks that build them: skin tones, the joiner, the
+// emoji style mark, keycaps and the letters of a flag. A voice service may
+// read one out by its name, so they are left out unless Send emojis to the
+// voice is on. Music notes are read first, to mark a line as sung.
+const EMOJI = /[\p{Extended_Pictographic}\u{1F3FB}-\u{1F3FF}\u{1F1E6}-\u{1F1FF}\u200D\uFE0F\u20E3]/gu;
 // Splits a message into lines in the order they are read. Text in straight
 // or curly double quotes is speech. Everything else is narration, including
 // *asterisk actions*. A paragraph break ends a narration line.
@@ -1043,30 +1052,41 @@ const LETTER = /[\p{L}\p{N}]/u;
 // characters no story uses, so they cannot be taken for anything else.
 const STAR_OPEN = '\uE000';
 const STAR_CLOSE = '\uE001';
+const PAREN_OPEN = '\uE002';
+const PAREN_CLOSE = '\uE003';
 // Splits a message into lines in the order they are read. The text is first
-// sorted into three kinds: text in quote marks (or after a dash at the start
-// of a line), text between *asterisks*, and undecorated text. Each kind is
+// sorted into four kinds: text in quote marks (or after a dash at the start
+// of a line), text between *asterisks*, text in (parentheses), and
+// undecorated text. ((Double parentheses)) are already gone by then. Each kind is
 // then read as speech, narration or thoughts, or left out, as the settings
 // say. Thoughts are read in the speaker's own voice, so they are speech
-// lines. A paragraph break ends a narration line. Asterisks inside quote
-// marks only stress a word, so they stay part of what is said.
+// lines. A paragraph break ends a narration line. Asterisks and
+// parentheses inside quote marks stay part of what is said.
 function splitSegments(raw, extra, bound) {
     const o = Array.isArray(extra) || extra === undefined ? { extra: extra, bound } : extra;
     let t = cleanForVoice(raw, o.extra, o.bound, o.skips);
     // A span stays on one line, so a stray asterisk cannot take a whole reply.
     t = t.replace(/\*([^*\n]{1,600})\*/g, STAR_OPEN + '$1' + STAR_CLOSE);
+    t = t.replace(/\(([^()\n]{1,600})\)/g, PAREN_OPEN + '$1' + PAREN_CLOSE);
     const marks = o.marks === 'single' ? 'single' : 'auto';
     const found = [];
     let buf = '';
     let para = 0;
     const flush = (kind) => {
-        const text = buf.replace(/[*\uE000\uE001]/g, ' ').replace(/[ \t]+/g, ' ').trim();
+        const text = buf.replace(/[*\uE000-\uE003]/g, ' ').replace(/[ \t]+/g, ' ').trim();
         buf = '';
-        if (text && /[\p{L}\p{N}]/u.test(text))
+        if (!text)
+            return;
+        if (/[\p{L}\p{N}]/u.test(text))
             found.push({ kind, text, para });
+        // Punctuation left after a span, such as the period in "She waited
+        // (for hours).", stays with the text before it.
+        else if (kind === 'plain' && found.length && found[found.length - 1].para === para)
+            found[found.length - 1].text += text;
     };
     {
         let inStar = false;
+        let inParen = false;
         const openers = marks === 'single' ? Object.assign({}, OPENERS, SINGLE_OPENERS) : OPENERS;
         let closers = '';
         let dashLine = false;
@@ -1078,7 +1098,7 @@ function splitSegments(raw, extra, bound) {
             // Asterisks outside quote marks start and end their own kind of text.
             // Inside quote marks or a dash line they are left in what is said.
             if (ch === STAR_OPEN || ch === STAR_CLOSE) {
-                if (closers || dashLine)
+                if (closers || dashLine || inParen)
                     continue;
                 if (ch === STAR_OPEN && !inStar) {
                     flush('plain');
@@ -1090,7 +1110,21 @@ function splitSegments(raw, extra, bound) {
                 }
                 continue;
             }
-            if (inStar) {
+            // Parentheses work the same way, as their own kind of text.
+            if (ch === PAREN_OPEN || ch === PAREN_CLOSE) {
+                if (closers || dashLine || inStar)
+                    continue;
+                if (ch === PAREN_OPEN && !inParen) {
+                    flush('plain');
+                    inParen = true;
+                }
+                else if (ch === PAREN_CLOSE && inParen) {
+                    flush('parens');
+                    inParen = false;
+                }
+                continue;
+            }
+            if (inStar || inParen) {
                 buf += ch;
                 continue;
             }
@@ -1165,6 +1199,7 @@ function splitSegments(raw, extra, bound) {
         quoted: o.quoted || 'speech',
         plain: o.plain || (o.marks === 'plain' ? 'speech' : 'narration'),
         asterisked: o.asterisks || 'narration',
+        parens: o.parens || 'narration',
     };
     const parts = [];
     for (const x of found) {
@@ -1184,7 +1219,8 @@ function splitSegments(raw, extra, bound) {
     for (const p of parts) {
         // A music note marks a line as sung. The note itself is not read.
         const sung = MUSIC_NOTE.test(p.text);
-        const text = sung ? p.text.replace(MUSIC_NOTES, ' ').replace(/[ \t]+/g, ' ').trim() : p.text;
+        const bare = p.text.replace(MUSIC_NOTES, ' ');
+        const text = (o.emojis ? bare : bare.replace(EMOJI, ' ')).replace(/[ \t]+/g, ' ').replace(/ ([.,!?;:])/g, '$1').trim();
         if (!/[\p{L}\p{N}]/u.test(text))
             continue;
         for (const piece of splitLong(text)) {
@@ -2969,7 +3005,7 @@ async function direct(userId, p) {
     }
     await readKeptScripts(uid, s);
     const skip = s.skipOn ? skipsFor(s.skipPatterns) : { list: [], bad: [] };
-    const segs = splitSegments(text, { extra: s.extraThinkTags, bound: await boundPairs(userId), skips: skip.list, marks: s.speechMarks, asterisks: s.asterisks, quoted: s.quotedText, plain: s.plainText });
+    const segs = splitSegments(text, { extra: s.extraThinkTags, bound: await boundPairs(userId), skips: skip.list, marks: s.speechMarks, asterisks: s.asterisks, parens: s.parens, quoted: s.quotedText, plain: s.plainText, emojis: s.emojisOn });
     if (!p.fresh) {
         const kept = keptScript(uid, key, messageId, segs.map((g) => g.text).join('\n'), engine.id);
         if (kept) {

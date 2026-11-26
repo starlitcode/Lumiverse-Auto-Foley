@@ -267,6 +267,28 @@ describe("writing styles and text not meant to be heard", () => {
     expect(split('Tova nodded. "Fine."', { plain: "skip" })).toEqual(["s:Fine."]);
   });
 
+  test("Text in parentheses can be read as thoughts, narration, or skipped", () => {
+    expect(split('"Sure, I would love to." (Absolutely not.)', { parens: "thought" })).toEqual(["s:Sure, I would love to.", "s:Absolutely not."]);
+    expect(split('"Sure, I would love to." (Absolutely not.)', { parens: "skip" })).toEqual(["s:Sure, I would love to."]);
+    // Read as narration, the default, it joins the sentence, which keeps its period.
+    expect(split("Tova waited (for hours) by the gate.")).toEqual(["n:Tova waited for hours by the gate."]);
+    expect(split("Tova waited (for hours).")).toEqual(["n:Tova waited for hours."]);
+    // Inside quote marks, parentheses stay part of what is said.
+    expect(split('"I will be there (probably) by noon."', { parens: "skip" })).toEqual(["s:I will be there probably by noon."]);
+    // Double parentheses are still left out.
+    expect(split("Tova left. ((brb, dinner))", { parens: "thought" })).toEqual(["n:Tova left."]);
+  });
+
+  test("emojis in a line are not sent to the voice", () => {
+    expect(split('Tova grinned 😏 and waved. "See you later! 👋❤️"')).toEqual(["n:Tova grinned and waved.", "s:See you later!"]);
+    expect(split('"Fine 🙄." She left. ✨💫 👍🏽 🇺🇸')).toEqual(["s:Fine.", "n:She left."]);
+    // With Send emojis to the voice on, they stay.
+    expect(split("Tova grinned 😏 and waved.", { emojis: true })).toEqual(["n:Tova grinned 😏 and waved."]);
+    expect([h.box.cleanSettings({}).emojisOn, h.box.cleanSettings({ emojisOn: true }).emojisOn]).toEqual([false, true]);
+    // A music note still marks a line as sung.
+    expect(h.box.splitSegments('"🎵 Over the hills 🎶"').map((g: any) => [g.text, !!g.sung])).toEqual([["Over the hills", true]]);
+  });
+
   test("text between asterisks read as narration joins the narration beside it", () => {
     expect(split("Tova waited. *checks the latch* Nothing moved.")).toEqual(["n:Tova waited. checks the latch Nothing moved."]);
   });
@@ -362,6 +384,7 @@ describe("how the cast is sorted is saved", () => {
     expect([plain.plainText, plain.speechMarks]).toEqual(["speech", "auto"]);
     expect(h.box.cleanSettings({ speechRead: "skip", quotedText: "narration" }).quotedText).toBe("narration");
     expect(h.box.cleanSettings({ asterisks: "thought" }).asterisks).toBe("thought");
+    expect([d.parens, h.box.cleanSettings({ parens: "skip" }).parens, h.box.cleanSettings({ parens: "speech" }).parens]).toEqual(["narration", "skip", "narration"]);
     expect("speechRead" in h.box.cleanSettings({ speechRead: "skip" })).toBe(false);
   });
 

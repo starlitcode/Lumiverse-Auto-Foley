@@ -3524,7 +3524,7 @@ if (section("speech detection")) {
     await page.waitForTimeout(400);
     const rows = await page.evaluate(() => {
       const out = {};
-      for (const name of ["Asterisked text", "Quoted text", "Undecorated text", "How speech is marked"]) {
+      for (const name of ["Asterisked text", "Text in parentheses", "Quoted text", "Undecorated text", "How speech is marked"]) {
         const lab = Array.from(document.querySelectorAll(".af-page label, .af-page .af-label")).find((l) => l.textContent.trim().startsWith(name));
         const row = lab && lab.closest(".af-col, .af-field-row, .af-row, div");
         const sel = row && (row.querySelector("select") || (lab.htmlFor && document.getElementById(lab.htmlFor)));
@@ -3533,7 +3533,13 @@ if (section("speech detection")) {
       return out;
     });
     check(JSON.stringify(rows["Asterisked text"]) === JSON.stringify(["Skip", "Read as narration", "Read as thoughts (character voice)"]), size.name + ": Asterisked text has Skip, narration and thoughts (" + JSON.stringify(rows["Asterisked text"]) + ")");
+    check(JSON.stringify(rows["Text in parentheses"]) === JSON.stringify(["Skip", "Read as narration", "Read as thoughts (character voice)"]), size.name + ": Text in parentheses has Skip, narration and thoughts");
     check(JSON.stringify(rows["Quoted text"]) === JSON.stringify(["Read as speech", "Read as narration", "Skip"]), size.name + ": Quoted text has speech, narration and Skip");
+    const emo = page.locator('[data-af-row="emojisOn"]');
+    check((await emo.count()) === 1 && (await page.evaluate(() => !window.__settings.emojisOn)), size.name + ": Send emojis to the voice is there, and off");
+    await emo.locator(".af-box").first().click();
+    await page.waitForTimeout(300);
+    check(await page.evaluate(() => window.__settings.emojisOn === true), size.name + ": switching it on is saved");
     check(JSON.stringify(rows["Undecorated text"]) === JSON.stringify(["Read as narration", "Read as speech", "Skip"]), size.name + ": Undecorated text has narration, speech and Skip");
     check(!!rows["How speech is marked"] && rows["How speech is marked"].length === 2, size.name + ": How speech is marked keeps only which quote marks count");
     const sel = page.locator("select").filter({ has: page.locator('option[value="thought"]') }).first();

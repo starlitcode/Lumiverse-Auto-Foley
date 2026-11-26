@@ -1640,8 +1640,10 @@ const DEFAULTS = {
     skipPatterns: '',
     speechMarks: 'auto',
     asterisks: 'narration',
+    parens: 'narration',
     quotedText: 'speech',
     plainText: 'narration',
+    emojisOn: false,
     keepAudio: 100,
     applauseSound: '',
     applauseSeconds: 5,
@@ -12642,6 +12644,11 @@ export function setup(ctx, overrides) {
             { id: 'narration', label: 'Read as narration' },
             { id: 'thought', label: 'Read as thoughts (character voice)' },
         ], S.asterisks || 'narration', (v) => set({ asterisks: v }), 'Text such as *she shrugs*. Read as narration is the default. Thoughts are read in the speaker’s own voice.'));
+        r.appendChild(select('Text in parentheses', [
+            { id: 'skip', label: 'Skip' },
+            { id: 'narration', label: 'Read as narration' },
+            { id: 'thought', label: 'Read as thoughts (character voice)' },
+        ], S.parens || 'narration', (v) => set({ parens: v }), 'Text such as (not that she meant it). Read as narration is the default. ((Double parentheses)) are always left out.'));
         r.appendChild(select('Quoted text', [
             { id: 'speech', label: 'Read as speech' },
             { id: 'narration', label: 'Read as narration' },
@@ -12657,6 +12664,7 @@ export function setup(ctx, overrides) {
             { id: 'sounds', label: 'Sounds only' },
             { id: 'skip', label: 'Skip' },
         ], S.narration, (v) => set({ narration: v }), 'How text read as narration is played. Read aloud uses the Narrator’s voice, and is the default. Sounds only plays the sounds of what happens with no narrator. Skip leaves narration out.'));
+        r.appendChild(toggle('Send emojis to the voice', 'Off by default, so emojis are left out. Some voice services read an emoji out by its name. Turn it on if yours acts them well.', 'emojisOn'));
         r.appendChild(toggle('Leave out trackers and status blocks', 'On by default. Tables, status lines such as Time: 9:40 PM, lines that start with an emoji, folded blocks, and bars are not read. The patterns are below.', 'skipOn', undefined, () => {
             const cur = S.skipPatterns || builtInSkips;
             const said = el('<div class="af-col"></div>');
