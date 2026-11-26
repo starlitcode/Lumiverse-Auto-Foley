@@ -256,6 +256,7 @@ With **Keep made audio** on, in the Settings tab:
 The player under a message and the lit word use your theme's colors. You can pick your own in the Settings tab:
 
 - Under **A player under each message**: **Player accent** (the ring around Play and the line that fills), **Player background**, and **Player text and icons**. A small player under them shows the colors as you pick.
+- **A shadow behind it**, under the same switch, is on by default. It is your theme's own small shadow. Pick a **Color of the shadow**, and set **How dark** and **How soft**, to change it. Off shows the player with no shadow.
 - Under **Light up words in the chat**: **Color of the lit word**, and **How strong it is**, from 10% to 80%. It is 20% by default.
 - Under **Colors for each kind of part**, in the **Look** card: a color for the narrator, characters, personas, NPCs, sounds and voice tags. Each kind shows on pictures, on the Stage tab and in the players. **Use the built-in color** goes back to the one Auto Foley starts with. Sounds start with your theme's warning color.
 

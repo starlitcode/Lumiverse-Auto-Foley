@@ -32,6 +32,7 @@ _2026-11-26_
 - **Pictures for moods**, on the Cast tab, and **A picture for each mood** in the Studio. A person can have a picture for each of eight feelings, and a video shows the one that fits the line, from its voice tags, or else the mood of the scene. No model is asked. See [Pictures for moods](docs/cast.md#pictures-for-moods).
 - **A shadow behind the words** and **A shadow behind the names** in the Studio, each with its own color, darkness, softness and distance. Both start as the shadow the words always had.
 - **A shadow behind the player**, under **A floating player** in the Settings tab. On by default, your theme's own shadow, with a color, darkness and softness of your own.
+- **A shadow behind the player under each message**, as **A shadow behind it** under **A player under each message**. On by default, your theme's own small shadow, with a color, darkness and softness of your own. The shadow is no longer cut off at the player's edge.
 
 ### Changed
 

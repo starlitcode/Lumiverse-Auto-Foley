@@ -259,6 +259,10 @@ interface Settings {
   playerShadowInk: string;
   playerShadowDark: number;
   playerShadowSoft: number;
+  mpShadow: boolean;
+  mpShadowInk: string;
+  mpShadowDark: number;
+  mpShadowSoft: number;
   // The backgrounds, each with an id, and the id of the one used for the
   // whole video. The panel edits one, the one picked.
   videoBacks: VideoBack[];
@@ -507,6 +511,10 @@ const DEFAULT_SETTINGS: Settings = {
   playerShadowInk: '',
   playerShadowDark: 50,
   playerShadowSoft: 48,
+  mpShadow: true,
+  mpShadowInk: '',
+  mpShadowDark: 25,
+  mpShadowSoft: 8,
   videoBacks: [{ id: 'main', name: 'Main', kind: 'dark', color: '', dim: 40, blur: 0, shapes: [], use: 'match', moods: [], places: [] }],
   videoBackPick: 'main',
   videoEdges: 50,
@@ -1102,6 +1110,10 @@ function cleanSettings(raw: any): Settings {
     playerShadowInk: hexColor(r.playerShadowInk),
     playerShadowDark: Math.round(num(r.playerShadowDark, 0, 100, d.playerShadowDark)),
     playerShadowSoft: Math.round(num(r.playerShadowSoft, 0, 80, d.playerShadowSoft)),
+    mpShadow: bool(r.mpShadow, d.mpShadow),
+    mpShadowInk: hexColor(r.mpShadowInk),
+    mpShadowDark: Math.round(num(r.mpShadowDark, 0, 100, d.mpShadowDark)),
+    mpShadowSoft: Math.round(num(r.mpShadowSoft, 0, 40, d.mpShadowSoft)),
     ...cleanBacks(r),
     videoEdges: Math.round(num(r.videoEdges, 0, 100, d.videoEdges)),
     videoEdgeColor: hexColor(r.videoEdgeColor),

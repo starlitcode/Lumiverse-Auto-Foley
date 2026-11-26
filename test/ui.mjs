@@ -1381,6 +1381,84 @@ if (section("script status")) {
   await context.close();
 }
 
+if (section("message player shadow")) {
+  console.log("The player under each message has a shadow of its own, and it is not cut off");
+  for (const size of SIZES) {
+    const { context, page, errors } = await open(THEMES[0], size);
+    await page.evaluate(() => {
+      const msg = document.querySelector('[data-message-id="m1"]');
+      const p = msg.querySelector("p");
+      const content = document.createElement("div");
+      content.setAttribute("data-component", "MessageContent");
+      p.replaceWith(content);
+      content.appendChild(p);
+      // Room around the message, so a shadow that is drawn can be seen.
+      msg.style.padding = "0 40px";
+      const mount = document.createElement("span");
+      mount.setAttribute("data-spindle-mount", "message_body_after");
+      mount.setAttribute("data-spindle-scope", "message:m1:minimal:body-after");
+      mount.style.display = "contents";
+      content.after(mount);
+      window.__clipMs = 4000;
+      window.__wav = [0.05, 0.5];
+    });
+    await page.click('#mount [data-af-slot="message"]');
+    await page.waitForTimeout(2200);
+    await page.click('.af-tab[data-tab="settings"]');
+    await page.waitForTimeout(400);
+    const shadow = () => page.evaluate(() => getComputedStyle(document.querySelector("[data-af-player] .af-mp-box")).boxShadow);
+    const theme = await shadow();
+    // A strong red shadow, then the pixels just left of the player.
+    await page.evaluate(() => document.querySelector('[data-af-colorswatch="mpShadowInk"]').click());
+    await page.waitForTimeout(300);
+    await page.evaluate(() => {
+      const box = document.querySelector('[data-af-colorcode="mpShadowInk"]');
+      box.value = "#ff0000";
+      box.dispatchEvent(new Event("change", { bubbles: true }));
+      for (const [key, v] of [["mpShadowDark", 100], ["mpShadowSoft", 16]]) {
+        const r = document.querySelector('[data-af-row="' + key + '"] input[type=range]');
+        r.value = String(v);
+        r.dispatchEvent(new Event("input", { bubbles: true }));
+        r.dispatchEvent(new Event("change", { bubbles: true }));
+      }
+    });
+    await page.waitForTimeout(400);
+    const red = await shadow();
+    await page.evaluate(() => document.querySelector("[data-af-player]").scrollIntoView({ block: "center" }));
+    await page.waitForTimeout(300);
+    const pill = await page.evaluate(() => {
+      const r = document.querySelector("[data-af-player] .af-mp-box").getBoundingClientRect();
+      return { x: r.left, y: r.top, w: r.width, h: r.height };
+    });
+    // The six pixels just left of the player, where a soft shadow is
+    // strongest. Cut off at the edge, they are the page's own color.
+    const shot = await page.screenshot({ clip: { x: Math.max(0, pill.x - 7), y: pill.y + pill.h / 2 - 2, width: 6, height: 4 } });
+    const reds = await page.evaluate(async (b64) => {
+      const im = new Image();
+      im.src = "data:image/png;base64," + b64;
+      await im.decode();
+      const c = document.createElement("canvas");
+      c.width = im.width;
+      c.height = im.height;
+      const g = c.getContext("2d");
+      g.drawImage(im, 0, 0);
+      const d = g.getImageData(0, 0, c.width, c.height).data;
+      let n = 0;
+      for (let i = 0; i < d.length; i += 4) if (d[i] > 70 && d[i] > d[i + 1] * 2 && d[i] > d[i + 2] * 1.6) n++;
+      return n;
+    }, shot.toString("base64"));
+    check(theme !== "none" && /255, 0, 0/.test(red), size.name + ": it is the theme's shadow by default, and the color picked at once (" + [theme, red].join(" | ") + ")");
+    check(reds > 4, size.name + ": the shadow shows past the player's edge, not cut off (" + reds + " red pixels left of it)");
+    await page.evaluate(() => document.querySelector('[data-af-row="mpShadow"] .af-box').click());
+    await page.waitForTimeout(300);
+    check((await shadow()) === "none", size.name + ": off, the player has no shadow");
+    const m = await page.evaluate(MEASURE, size.touch);
+    check(!m.overflow.length && !m.small.length, size.name + ": the Settings tab fits with the shadow rows open. " + m.overflow.concat(m.small).slice(0, 2).join("; "));
+    check(!errors.length, size.name + ": no page errors. " + errors.slice(0, 2).join(" | "));
+    await context.close();
+  }
+}
+
 if (section("message player")) {
   console.log("A performed message gets a player under its text, lined up with it, in both chat modes");
   for (const mode of ["bubble", "minimal"]) for (const size of SIZES) {

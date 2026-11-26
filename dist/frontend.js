@@ -1802,6 +1802,10 @@ const DEFAULTS = {
     playerShadowInk: '',
     playerShadowDark: 50,
     playerShadowSoft: 48,
+    mpShadow: true,
+    mpShadowInk: '',
+    mpShadowDark: 25,
+    mpShadowSoft: 8,
     videoBacks: [{ id: 'main', name: 'Main', kind: 'dark', color: '', dim: 40, blur: 0, shapes: [], use: 'match', moods: [], places: [] }],
     videoBackPick: 'main',
     videoEdges: 50,
@@ -7345,6 +7349,25 @@ export function setup(ctx, overrides) {
             put('--af-mp-accent', hex(S.playerAccent));
             put('--af-mp-back', hex(S.playerBack));
             put('--af-mp-ink', hex(S.playerInk));
+            // The shadow behind the player under each message. With no color
+            // picked and the sliders where they start, it is the theme's own small
+            // shadow. The room is how far the shadow reaches past the player, so
+            // it is not cut off at the player's edge.
+            {
+                const own = hex(S.mpShadowInk);
+                const dark = Math.min(100, Math.max(0, numOr(S.mpShadowDark, 25)));
+                const soft = Math.min(40, Math.max(0, numOr(S.mpShadowSoft, 8)));
+                const drop = Math.round(soft * 0.25);
+                if (S.mpShadow === false)
+                    put('--af-mp-shadow', 'none');
+                else if (!own && dark === 25 && soft === 8)
+                    put('--af-mp-shadow', '');
+                else {
+                    const n = parseInt((own || '#000000').slice(1), 16);
+                    put('--af-mp-shadow', '0 ' + drop + 'px ' + soft + 'px rgba(' + ((n >> 16) & 255) + ',' + ((n >> 8) & 255) + ',' + (n & 255) + ',' + dark / 100 + ')');
+                }
+                put('--af-mp-room', S.mpShadow === false ? '0px' : soft + drop + 'px');
+            }
             // A color of the reader's own for each kind of part, with a soft tint
             // of it for the fills behind pictures and chips.
             for (const k of KIND_COLORS) {
@@ -7372,7 +7395,7 @@ export function setup(ctx, overrides) {
     }
     disposers.push(() => {
         try {
-            for (const name of ['--af-mp-accent', '--af-mp-back', '--af-mp-ink', '--af-word'])
+            for (const name of ['--af-mp-accent', '--af-mp-back', '--af-mp-ink', '--af-mp-shadow', '--af-mp-room', '--af-word'])
                 document.documentElement.style.removeProperty(name);
             for (const k of ['narrator', 'character', 'persona', 'npc', 'sound', 'tag']) {
                 document.documentElement.style.removeProperty('--af-kc-' + k);
@@ -8540,7 +8563,9 @@ export function setup(ctx, overrides) {
         // the theme's own fill, border and rounding.
         '.af-mp{display:grid;grid-template-rows:0fr;opacity:0;transform:translateY(4px);transition:grid-template-rows .28s ease-out,opacity .22s ease-out,transform .22s ease-out}' +
         '.af-mp[data-open]{grid-template-rows:1fr;opacity:1;transform:none}' +
-        '.af-mp-in{overflow:hidden;min-height:0;display:flex;min-width:0}' +
+        // Clipped for the open and close, with room around it for the shadow.
+        // A browser with no clip margin cuts the shadow at the edge instead.
+        '.af-mp-in{overflow:hidden;overflow:clip;overflow-clip-margin:var(--af-mp-room,10px);min-height:0;display:flex;min-width:0}' +
         // A grid, so every button keeps its column and the pill is never
         // narrower than what is in it, whatever a theme does to buttons. Only the
         // words shrink, and only when there is no room left.
@@ -8551,7 +8576,7 @@ export function setup(ctx, overrides) {
         // color, so a light theme is light all the way through.
         'border:1px solid var(--lumiverse-border,rgba(147,112,219,.2));background-color:var(--af-mp-back,var(--lumiverse-card-bg-solid,var(--lumiverse-bg,rgb(24,20,34))));' +
         'background-image:linear-gradient(var(--af-mp-back,var(--lumiverse-bg-elevated,rgba(35,30,48,.98))),var(--af-mp-back,var(--lumiverse-bg-elevated,rgba(35,30,48,.98))));' +
-        'color:var(--af-mp-ink,var(--lumiverse-text,rgba(255,255,255,.92)));font:inherit;font-size:.85em;line-height:1.3;box-shadow:var(--lumiverse-shadow-sm,0 2px 8px rgba(0,0,0,.25))}' +
+        'color:var(--af-mp-ink,var(--lumiverse-text,rgba(255,255,255,.92)));font:inherit;font-size:.85em;line-height:1.3;box-shadow:var(--af-mp-shadow,var(--lumiverse-shadow-sm,0 2px 8px rgba(0,0,0,.25)))}' +
         '.af-mp .af-mp-box > *, .af-mp .af-mp-run > *{margin:0;min-width:0;box-sizing:border-box}' +
         // The line gives up its room before the words do, so the words are cut
         // short only when the line is already at its smallest. Flex shares a
@@ -14914,6 +14939,27 @@ export function setup(ctx, overrides) {
                 colorRow('playerAccent', 'Player accent', 'The ring around Play and the line that fills. Empty uses your theme\u2019s accent.', '--lumiverse-primary', '#9370db'),
                 colorRow('playerBack', 'Player background', 'Empty uses your theme\u2019s card color.', '--lumiverse-bg-elevated', '#231e30'),
                 colorRow('playerInk', 'Player text and icons', 'Empty uses your theme\u2019s text color.', '--lumiverse-text', '#eeeeee'),
+                toggle('A shadow behind it', 'On by default, your theme\u2019s own small shadow.', 'mpShadow', () => paintColors(), () => [
+                    colorRow('mpShadowInk', 'Color of the shadow', 'Your theme\u2019s shadow by default.', '--af-none', '#000000', 'Use the theme\u2019s shadow', paintColors),
+                    (() => {
+                        const r = slider('How dark', numOr(S.mpShadowDark, 25), 0, 100, 5, (v) => (v ? v + '%' : 'None'), (v) => {
+                            set({ mpShadowDark: v });
+                            paintColors();
+                        }, '25% by default.');
+                        r.setAttribute('data-af-byeye', '');
+                        r.setAttribute('data-af-row', 'mpShadowDark');
+                        return r;
+                    })(),
+                    (() => {
+                        const r = slider('How soft', numOr(S.mpShadowSoft, 8), 0, 40, 1, (v) => (v ? v + ' px' : 'Sharp'), (v) => {
+                            set({ mpShadowSoft: v });
+                            paintColors();
+                        }, '8 by default.');
+                        r.setAttribute('data-af-byeye', '');
+                        r.setAttribute('data-af-row', 'mpShadowSoft');
+                        return r;
+                    })(),
+                ]),
                 sample,
             ];
         }));
