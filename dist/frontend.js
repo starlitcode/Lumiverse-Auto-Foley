@@ -4319,7 +4319,9 @@ export function setup(ctx, overrides) {
         const scale = Math.min(160, Math.max(60, Number(S.videoSize) || 100)) / 100;
         const lower = S.videoPlace === 'lower';
         if (p.kind === 'sound') {
-            if (S.videoCaptions === false) {
+            // A sound has no pictures, so asked only where they go, it draws
+            // nothing. Its caption is drawn with the words, by the transition.
+            if (S.videoCaptions === false || what === 'faces') {
                 g.restore();
                 return [];
             }

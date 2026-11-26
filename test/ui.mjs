@@ -4487,15 +4487,99 @@ if (section("example faces")) {
         await new Promise((x) => requestAnimationFrame(() => requestAnimationFrame(x)));
         const c = document.querySelector("[data-af-videopreview]");
         const d = c.getContext("2d").getImageData(0, 0, c.width, c.height).data;
+        // All the light in the frame, so two parts each at half strength
+        // add up to what one at full strength gives.
         let n = 0;
-        for (let i = 0; i < d.length; i += 4 * 3) if (d[i] + d[i + 1] + d[i + 2] > 300) n++;
-        return n;
+        for (let i = 0; i < d.length; i += 4 * 3) n += d[i] + d[i + 1] + d[i + 2];
+        return Math.round(n / 1000);
       }, t));
     }
     // No frame in the change is much darker than the frames either side.
     const ends = Math.min(light[0], light[light.length - 1]);
     check(Math.min(...light) >= ends * 0.8, size.name + ": Fade and rise from one part to the next has no dark frame between them (" + Math.min(...light) + ", the ends " + light[0] + " and " + light[light.length - 1] + ")");
     check(!errors.length, size.name + ": no page errors. " + errors.slice(0, 2).join(" | "));
+    await context.close();
+  }
+}
+
+if (section("caption transitions")) {
+  console.log("A sound caption leaves with the transition, the same as a line of words");
+  // The caption is yellow, so its pixels can be told from everything else.
+  // Juniper's line starts at 7.4 seconds, after "[thunder rolling]".
+  for (const move of ["rise", "fade", "dissolve", "black", "slide", "wipe", "focus", "zoom", "cut"]) {
+    const size = SIZES[1] || SIZES[0];
+    const { context, page, errors } = await open(THEMES[0], size, 1, () => {
+      Object.assign(window.__settings, { videoCaptionInk: "#ffd400", videoEdges: 0, videoMoveSecs: 0.8 });
+      window.__settings.videoBacks = [{ id: "main", name: "Main", kind: "color", color: "#000000", fill: "solid", stops: ["#2a1f3d"], dir: "down", dim: 40, blur: 0, shapes: [], use: "match", moods: [], places: [] }];
+      window.__settings.videoBackPick = "main";
+    });
+    await page.evaluate((move) => { window.__moveNow = move; }, move);
+    await page.click('.af-tab[data-tab="studio"]');
+    await page.waitForTimeout(800);
+    await page.locator(".af-fold", { hasText: "Moving between lines" }).first().click();
+    await page.waitForTimeout(300);
+    await page.selectOption('[data-af-row="videoMove"] select', move);
+    await page.waitForTimeout(900);
+    const frames = await page.evaluate(async () => {
+      const r = document.querySelector("[data-af-scrub] input");
+      const c = document.querySelector("[data-af-videopreview]");
+      const g = c.getContext("2d");
+      const out = [];
+      for (let t = 7.2; t <= 8.4; t += 0.05) {
+        r.value = String(t);
+        r.dispatchEvent(new Event("input", { bubbles: true }));
+        await new Promise((x) => requestAnimationFrame(x));
+        const d = g.getImageData(0, 0, c.width, c.height).data;
+        let yellow = 0, face = 0;
+        for (let i = 0; i < d.length; i += 4 * 2) {
+          const [rr, gg, bb] = [d[i], d[i + 1], d[i + 2]];
+          // How yellow it is, so a caption blurred by Soft focus still counts.
+          if (rr > bb + 20 && gg > bb + 14) yellow += Math.min(rr, gg) - bb;
+          // Juniper's picture, a darker violet.
+          if (Math.max(rr, gg, bb) > 25 && bb > rr + 8 && bb > gg + 14 && Math.max(rr, gg, bb) < 150) face++;
+        }
+        out.push({ t: Math.round(t * 100) / 100, yellow: Math.round(yellow), face });
+      }
+      return out;
+    });
+    const full = frames[0].yellow;
+    const during = frames.filter((f) => f.t > 7.42 && f.t < 8.18);
+    const both = during.filter((f) => f.yellow > full * 0.9 && f.face > 30).length;
+    check(both === 0, move + ": no frame has the caption at full strength with the next picture partly drawn (" + both + " frames)");
+    if (move !== "cut") {
+      // Falling over the change: each step at most a little higher than the
+      // one before, and gone by the end.
+      let rises = 0;
+      for (let n = 1; n < during.length; n++) if (during[n].yellow > during[n - 1].yellow * 1.15 + 200) rises++;
+      const end = frames[frames.length - 1].yellow;
+      check(rises === 0 && end < full * 0.1 && during.some((f) => f.yellow > full * 0.15 && f.yellow < full * 0.85), move + ": the caption fades out over the change (" + during.map((f) => Math.round((f.yellow / Math.max(1, full)) * 100)).join(" ") + ")");
+    }
+    // The other way: the narration gives way to the caption at 5.8
+    // seconds. The caption comes in with the transition, and is not at
+    // full strength at the start of it.
+    const coming = await page.evaluate(async () => {
+      const r = document.querySelector("[data-af-scrub] input");
+      const c = document.querySelector("[data-af-videopreview]");
+      const g = c.getContext("2d");
+      const out = [];
+      for (let t = 5.7; t <= 6.8; t += 0.05) {
+        r.value = String(t);
+        r.dispatchEvent(new Event("input", { bubbles: true }));
+        await new Promise((x) => requestAnimationFrame(x));
+        const d = g.getImageData(0, 0, c.width, c.height).data;
+        let yellow = 0;
+        for (let i = 0; i < d.length; i += 4 * 2) {
+          const [rr, gg, bb] = [d[i], d[i + 1], d[i + 2]];
+          if (rr > bb + 20 && gg > bb + 14) yellow += Math.min(rr, gg) - bb;
+        }
+        out.push({ t: Math.round(t * 100) / 100, yellow });
+      }
+      return out;
+    });
+    const top = Math.max(...coming.map((f) => f.yellow));
+    const startUp = coming.filter((f) => f.t > 5.82 && f.t < 5.95);
+    if (move !== "cut") check(top > 0 && startUp.every((f) => f.yellow < top * 0.7), move + ": a caption coming in after a line comes in with the transition (" + coming.map((f) => Math.round((f.yellow / Math.max(1, top)) * 100)).join(" ") + ")");
+    check(!errors.length, move + ": no page errors. " + errors.slice(0, 2).join(" | "));
     await context.close();
   }
 }
