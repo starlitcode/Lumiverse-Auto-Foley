@@ -18,6 +18,7 @@ _2026-11-26_
 - **Music**, under **The performance** in the Studio. On by default. The audio and the video keep the scene music that played, with the same fades. Suggested by a Discord user.
 
 - **Full screen**, beside **Play the preview** in the Studio. The preview fills the screen in its own shape, with its own play button, bar and close button. Escape closes it.
+- **A link to an audio converter**, in the Studio's **Audio** card, for turning the WAV into an MP3. It opens in a new tab.
 - **Color of the captions**, under **Show sounds as captions** in the Studio. Sound captions can have a color of their own, such as yellow. It is the color of the words until one is picked, and it is part of a saved look.
 
 ### Changed

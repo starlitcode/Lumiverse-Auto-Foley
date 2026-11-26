@@ -92,7 +92,7 @@ The audio is a 48 kHz, 24-bit WAV file. WAV keeps the sound exactly as it was. E
 
 ### Getting an MP3
 
-Any audio converter can save the WAV as an MP3. The free [audio converter from Wave](https://wave.co/tools/audio-converter) works in the browser. Its page says the file is not uploaded.
+Any audio converter can save the WAV as an MP3. The free [audio converter from Wave](https://wave.co/tools/audio-converter) works in the browser. Its page says the file is not uploaded. The **Audio** card in the Studio links it too.
 
 ### Better sound from the start
 

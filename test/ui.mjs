@@ -3691,6 +3691,9 @@ if (section("full screen")) {
       const back = await page.evaluate(() => ({ gone: !document.querySelector("[data-af-theater]"), home: !!document.querySelector('[data-af-card="studio-video"] canvas[data-af-videopreview]'), drawer: !!document.querySelector('.af-tab[data-tab="studio"]') }));
       check(back.gone && back.home && back.drawer, size.name + ", " + shape + ": Escape closes it, the preview is back in the Studio, and the drawer stays open");
     }
+    // The Audio card links the converter, which opens in a new tab.
+    const conv = await page.evaluate(() => { const a = document.querySelector("a[data-af-converter]"); return a ? { href: a.href, target: a.target, rel: a.rel, text: a.textContent } : null; });
+    check(!!conv && conv.href === "https://wave.co/tools/audio-converter" && conv.target === "_blank" && /noopener/.test(conv.rel), size.name + ": the Audio card links the audio converter in a new tab (" + JSON.stringify(conv) + ")");
     // The close button works too, and Play plays from full screen.
     await page.click('[data-af-studio="full"]');
     await page.waitForTimeout(400);

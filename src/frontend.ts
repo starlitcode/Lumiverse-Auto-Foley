@@ -12100,6 +12100,10 @@ export function setup(ctx: Ctx, overrides?: any) {
         { id: 'parts', label: 'A file for each part' },
       ], S.audioSplit === 'parts' ? 'parts' : 'one', (v) => set({ audioSplit: v }), 'One file by default. A file for each part comes in a ZIP, numbered in order, for editing in another program.'),
     );
+    // A WAV keeps the sound exactly, and the converter turns it into an MP3
+    // for anyone who needs one. Its page says the file stays in the browser.
+    const mp3 = hint('For an MP3, open the free <a href="https://wave.co/tools/audio-converter" target="_blank" rel="noopener noreferrer" data-af-converter>audio converter from Wave</a> and give it the WAV. It works in your browser.');
+    ac.appendChild(mp3);
     const aRow = el('<div class="af-row"></div>');
     const dlall = button('Download audio', () => downloadPerformance(), '', ICON_DOWNLOAD);
     dlall.setAttribute('data-af-studio', 'dlall');
