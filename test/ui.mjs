@@ -675,6 +675,23 @@ if (section("find someone")) {
     check(got.join() === "b", where + ": typing part of a name lists only who matches, in any case (" + got.join() + ")");
     check(/1 of 4 people match/.test(await page.locator("[data-af-castfound]").textContent()), where + ": and says how many match");
     check(await page.evaluate(() => document.activeElement && document.activeElement.hasAttribute("data-af-castfind")), where + ": the box keeps the typing");
+    const box = await page.evaluate(() => {
+      const f = document.querySelector("[data-af-castfind]");
+      const c = getComputedStyle(f);
+      // The x is drawn by a rule the test browser does not report on the
+      // element, so the rule itself is looked for.
+      let x = "";
+      for (const sh of document.styleSheets) {
+        try {
+          for (const r of sh.cssRules) if (r.selectorText && /search-cancel-button/.test(r.selectorText) && /\.af-field/.test(r.selectorText) && r.style) x = r.style.webkitMaskImage || r.style.maskImage || x;
+        } catch (_) {}
+      }
+      return { shadow: c.boxShadow, border: c.borderColor, x };
+    });
+    const quiet = await page.evaluate(() => { const f = document.createElement("input"); f.className = "af-field"; document.querySelector(".af").appendChild(f); const b = getComputedStyle(f).borderColor; f.remove(); return b; });
+    check(box.shadow === "none" && box.border === quiet, where + ": focused, the box has no highlight (" + box.shadow + ", " + box.border + " vs " + quiet + ")");
+    check(/svg/.test(box.x), where + ": it has the same x as Auto Retry and Auto Refine to clear it");
+    if (shots) await page.locator("[data-af-castfind]").screenshot({ path: shots + "/castfind-" + where + ".png" });
     check(await page.evaluate(() => [...document.querySelectorAll(".af-grip")].every((g) => getComputedStyle(g).display === "none")), where + ": people cannot be moved while it lists them");
     await page.fill("[data-af-castfind]", "zzz");
     await page.waitForTimeout(500);

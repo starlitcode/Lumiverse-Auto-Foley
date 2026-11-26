@@ -1251,6 +1251,21 @@ select.af-field { cursor: pointer; }
 /* A pressed dropdown keeps its plain edge, as in Auto Retry and Auto Refine:
    the list opening is what shows it was pressed. */
 select.af-field:focus, select.af-field:focus-visible { outline: none; box-shadow: none; border-color: var(--af-line); }
+/* A search box takes no mark when it is focused, the same as in Auto Retry
+   and Auto Refine: it is focused whenever it is used, so a mark would be lit
+   most of the time. */
+input.af-field[type=search]:focus, input.af-field[type=search]:focus-visible { outline: none; box-shadow: none; border-color: var(--af-line); }
+/* The x that clears it, drawn in the box's own text color, the same as in the
+   other two. The browser's own is drawn from the page's color scheme and can
+   be a white cross on a light box. Chrome and Safari draw one; Firefox draws
+   none. */
+input.af-field[type=search]::-webkit-search-cancel-button {
+  -webkit-appearance: none; appearance: none; width: 14px; height: 14px; cursor: pointer;
+  background-color: currentColor; opacity: .6;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M19 6.4 17.6 5 12 10.6 6.4 5 5 6.4 10.6 12 5 17.6 6.4 19 12 13.4 17.6 19 19 17.6 13.4 12z'/%3E%3C/svg%3E") center/contain no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M19 6.4 17.6 5 12 10.6 6.4 5 5 6.4 10.6 12 5 17.6 6.4 19 12 13.4 17.6 19 19 17.6 13.4 12z'/%3E%3C/svg%3E") center/contain no-repeat;
+}
+@media (hover: hover) { input.af-field[type=search]::-webkit-search-cancel-button:hover { opacity: 1; } }
 textarea.af-field { resize: vertical; min-height: 64px; }
 textarea.af-mono, .af-mono { font-family: var(--lumiverse-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace); font-size: 12px; }
 textarea.af-tall { min-height: 260px; }
