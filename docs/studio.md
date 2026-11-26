@@ -103,12 +103,13 @@ The sound can only be as good as what the voice service sends.
 
 ## Video
 
-The preview at the top draws the video with your choices. **Where** moves through it. **Play the preview** plays it with its sound, from where the bar is.
+The preview at the top draws the video with your choices. **Where** moves through it. **Play the preview** plays it with its sound, from where the bar is. On another tab or app, the preview stops where it is, and **Play the preview** goes on from there.
 
 **Make a video** records it as it plays, silently, so it takes as long as the performance and a few seconds more.
 
 - The line under the buttons counts the time.
 - On another tab or app, the video pauses, and it goes on when you come back.
+- Some phones start the sound again only after a press. Then the video waits, and **Play the preview** becomes **Go on with the video**. Press it to carry on.
 - **Stop the video** stops it and saves nothing.
 
 A browser that can make MP4, such as a recent Chrome or Safari, saves MP4, which phones and sharing sites play. Any other browser saves WebM. The video is made at a high quality.

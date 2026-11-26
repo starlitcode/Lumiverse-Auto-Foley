@@ -3983,6 +3983,37 @@ if (section("downloads")) {
       return a === b;
     });
     check(paused, where + ": away from the tab, the video pauses");
+    // A phone that starts sound again only after a press: back on the tab,
+    // the video waits, and Go on with the video carries it on.
+    const waits = await page.evaluate(async () => {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      const real = AC.prototype.resume;
+      window.__realResume = real;
+      // A press counts for a second here, which is stricter than Chrome.
+      window.__pressAt = 0;
+      document.addEventListener("pointerdown", () => (window.__pressAt = Date.now()), true);
+      AC.prototype.resume = function () {
+        return Date.now() - window.__pressAt < 1000 ? real.call(this) : new Promise(() => {});
+      };
+      let state = "hidden";
+      Object.defineProperty(document, "visibilityState", { configurable: true, get: () => state });
+      document.dispatchEvent(new Event("visibilitychange"));
+      await new Promise((r) => setTimeout(r, 300));
+      state = "visible";
+      document.dispatchEvent(new Event("visibilitychange"));
+      await new Promise((r) => setTimeout(r, 900));
+      const a = document.querySelector('[data-af-studio="said"]').textContent;
+      await new Promise((r) => setTimeout(r, 1400));
+      const b = document.querySelector('[data-af-studio="said"]').textContent;
+      const btn = document.querySelector('[data-af-studio="play"]');
+      return { still: a === b, said: b, label: btn.textContent, off: btn.disabled };
+    });
+    check(waits.still && /Go on with the video/.test(waits.label) && !waits.off && /paused/.test(waits.said), where + ": back on the tab, if the sound cannot start by itself, the video waits with Go on with the video (" + waits.label + "; " + waits.said + ")");
+    await page.click('[data-af-studio="play"]');
+    await page.waitForTimeout(1600);
+    const goes = await page.evaluate(() => ({ said: document.querySelector('[data-af-studio="said"]').textContent, label: document.querySelector('[data-af-studio="play"]').textContent }));
+    check(/Making the video/.test(goes.said) && /Play the preview/.test(goes.label), where + ": a press on Go on with the video carries the video on (" + goes.said + ")");
+    await page.evaluate(() => { const AC = window.AudioContext || window.webkitAudioContext; AC.prototype.resume = window.__realResume; });
     const p3 = await vid;
     let size3 = 0;
     if (p3) { const fs = await import("node:fs"); size3 = fs.statSync(await p3.path()).size; if (process.env.UI_VIDEO) await p3.saveAs(process.env.UI_VIDEO + "-" + size.name + ".webm"); }
@@ -4121,6 +4152,28 @@ if (section("studio")) {
     await page.click('[data-af-studio="play"]');
     await page.waitForTimeout(200);
     check(/Play the preview/.test(await page.evaluate(() => document.querySelector('[data-af-studio="play"]').textContent)), where + ": pressed again, it stops");
+    // Leaving the tab stops the preview where it is, and Play the preview
+    // goes on from there.
+    await page.click('[data-af-studio="play"]');
+    await page.waitForTimeout(500);
+    const left = await page.evaluate(async () => {
+      let state = "hidden";
+      Object.defineProperty(document, "visibilityState", { configurable: true, get: () => state });
+      document.dispatchEvent(new Event("visibilitychange"));
+      await new Promise((r) => setTimeout(r, 300));
+      const at = Number(document.querySelector("[data-af-scrub] input").value);
+      const label = document.querySelector('[data-af-studio="play"]').textContent;
+      state = "visible";
+      document.dispatchEvent(new Event("visibilitychange"));
+      return { at, label };
+    });
+    check(/Play the preview/.test(left.label) && left.at > 0, where + ": leaving the tab stops the preview where it is (" + left.label + ", " + left.at + ")");
+    await page.click('[data-af-studio="play"]');
+    await page.waitForTimeout(400);
+    const again = await page.evaluate(() => Number(document.querySelector("[data-af-scrub] input").value));
+    check(again > left.at, where + ": Play the preview goes on from there (" + left.at + " to " + again + ")");
+    await page.click('[data-af-studio="play"]');
+    await page.waitForTimeout(200);
 
     // Every fold opened, nothing runs off the side.
     await page.evaluate(() => document.querySelectorAll('.af-page .af-fold[aria-expanded="false"]').forEach((b) => b.click()));

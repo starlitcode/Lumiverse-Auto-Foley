@@ -2886,6 +2886,9 @@ export function setup(ctx, overrides) {
     }
     // The last performance, kept after it stops, and a video being made.
     let lastShow = null;
+    // The video being made. paused is set while it waits to go on after the
+    // tab was away, and goOn carries on from a press, which a phone needs
+    // before its sound can start again.
     let videoRun = null;
     function keepSaid(text) {
         keepLine = text;
@@ -4113,25 +4116,64 @@ export function setup(ctx, overrides) {
         const t0 = actx.currentTime + 0.1;
         // A phone stops drawing a tab in the background while the sound would go
         // on, so the video and its sound would come apart. The video pauses while
-        // the tab is away and goes on when it comes back.
+        // the tab is away and goes on when it comes back. Some phones start the
+        // sound again only after a press, so when it does not start by itself,
+        // the video waits, and Go on with the video carries on.
+        let paused = false;
+        const pause = () => {
+            paused = true;
+            if (videoRun)
+                videoRun.paused = true;
+            try {
+                if (rec.state === 'recording')
+                    rec.pause();
+            }
+            catch (_) { }
+            try {
+                actx.suspend();
+            }
+            catch (_) { }
+        };
+        const goOn = async (pressed) => {
+            if (ended || !paused)
+                return;
+            let tried = null;
+            try {
+                tried = actx.resume();
+            }
+            catch (_) { }
+            // A resume the browser holds back never settles, so it is given a
+            // moment and then the state is read.
+            await Promise.race([Promise.resolve(tried).catch(() => { }), new Promise((r) => setTimeout(r, 600))]);
+            if (ended || !paused || document.visibilityState === 'hidden')
+                return;
+            if (actx.state !== 'running') {
+                keepSaid(pressed ? 'The browser would not start the sound again. Press Go on with the video once more, or stop it.' : 'The video is paused. Press Go on with the video to carry on.');
+                paintStudio();
+                return;
+            }
+            try {
+                if (rec.state === 'paused')
+                    rec.resume();
+            }
+            catch (_) { }
+            paused = false;
+            if (videoRun)
+                videoRun.paused = false;
+            if (!raf)
+                raf = requestAnimationFrame(tick);
+            paintStudio();
+        };
         const away = () => {
             if (ended)
                 return;
-            try {
-                if (document.visibilityState === 'hidden') {
-                    if (rec.state === 'recording')
-                        rec.pause();
-                    actx.suspend();
-                }
-                else {
-                    actx.resume();
-                    if (rec.state === 'paused')
-                        rec.resume();
-                    if (!raf)
-                        raf = requestAnimationFrame(tick);
-                }
+            if (document.visibilityState === 'hidden') {
+                pause();
+                keepSaid('The video is paused while you are on another tab or app.');
+                paintStudio();
             }
-            catch (_) { }
+            else
+                goOn(false);
         };
         document.addEventListener('visibilitychange', away);
         const finish = (keep) => {
@@ -4175,9 +4217,10 @@ export function setup(ctx, overrides) {
                 done();
             }
         };
-        videoRun = { cancel: () => finish(false) };
+        videoRun = { cancel: () => finish(false), paused: false, goOn: () => goOn(true) };
         const tick = () => {
-            if (ended)
+            raf = 0;
+            if (ended || paused)
                 return;
             const t = Math.max(0, actx.currentTime - t0);
             videoFrame(g, Math.min(t, length), parts, total, st, title);
@@ -11551,11 +11594,13 @@ export function setup(ctx, overrides) {
         r.dlpart.disabled = !show;
         r.make.disabled = (!kept && !videoRun) || !!previewRun || videoPreparing;
         const mWords = videoRun ? 'Stop the video' : 'Make a video';
+        const goOnNow = !!(videoRun && videoRun.paused);
         const mText = r.make.querySelector('span:last-child') || r.make;
         if (mText.textContent !== mWords)
             mText.textContent = mWords;
-        r.play.disabled = !v.sh || !!videoRun || videoPreparing;
-        const pWords = previewRun ? 'Stop the preview' : 'Play the preview';
+        // While a video waits to go on, this button carries it on.
+        r.play.disabled = goOnNow ? false : !v.sh || !!videoRun || videoPreparing;
+        const pWords = goOnNow ? 'Go on with the video' : previewRun ? 'Stop the preview' : 'Play the preview';
         const pText = r.play.querySelector('span:last-child') || r.play;
         if (pText.textContent !== pWords)
             pText.textContent = pWords;
@@ -11600,6 +11645,7 @@ export function setup(ctx, overrides) {
             done = true;
             if (raf)
                 cancelAnimationFrame(raf);
+            document.removeEventListener('visibilitychange', away);
             try {
                 src.stop();
             }
@@ -11614,6 +11660,13 @@ export function setup(ctx, overrides) {
         };
         const run = { stop: end };
         previewRun = run;
+        // Away from the tab, the preview stops where it is, and Play the preview
+        // goes on from there. A phone may not start its sound again by itself.
+        const away = () => {
+            if (document.visibilityState === 'hidden')
+                end();
+        };
+        document.addEventListener('visibilitychange', away);
         const tick = () => {
             if (done)
                 return;
@@ -11965,7 +12018,7 @@ export function setup(ctx, overrides) {
         trimRow.appendChild(tClear);
         vc.appendChild(trimRow);
         const vRow = el('<div class="af-row"></div>');
-        const play = button('Play the preview', () => (previewRun ? stopPreview() : playPreview()), '', ICON_PLAY);
+        const play = button('Play the preview', () => (videoRun && videoRun.paused ? videoRun.goOn() : previewRun ? stopPreview() : playPreview()), '', ICON_PLAY);
         play.setAttribute('data-af-studio', 'play');
         const make = button('Make a video', () => (videoRun ? videoRun.cancel() : makeVideo()), 'af-primary', ICON_VIDEO);
         make.setAttribute('data-af-studio', 'video');
