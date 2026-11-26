@@ -66,6 +66,38 @@ interface CastMember {
   muted: boolean;
 }
 
+// A shape in a background of the reader's own design. x and y are where
+// its middle is, as a share of the frame's width and height, so it stays in
+// the frame in every shape of video. w and h are in pixels of a 1080-pixel
+// frame, so it keeps its own shape. rot is in degrees. clear is how
+// see-through it is, in percent. fill2, when set, makes a gradient from top
+// to bottom. text is the words of a text box.
+interface VideoShapeDef {
+  id: string;
+  kind: 'rect' | 'round' | 'ellipse' | 'tri' | 'line' | 'text';
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  rot: number;
+  fill: string;
+  fill2: string;
+  clear: number;
+  text: string;
+}
+// One background. A picture is kept in a file of its own, by the
+// background's id. dim and blur are for a picture, color for a color, and
+// shapes for a design.
+interface VideoBack {
+  id: string;
+  name: string;
+  kind: 'dark' | 'color' | 'picture' | 'design';
+  color: string;
+  dim: number;
+  blur: number;
+  shapes: VideoShapeDef[];
+}
+
 interface Settings {
   enabled: boolean;
   // The reader's TTS connection in Lumiverse. Empty uses the one picked in
@@ -173,6 +205,7 @@ interface Settings {
   // file saved. Sizes are in percent or in pixels of a 1080-pixel frame, and
   // times in seconds. Colors are #rrggbb, empty for the built-in one.
   videoShape: 'wide' | 'tall' | 'square';
+  // A built-in font, or own: and the id of a font of the reader's own.
   videoFont: string;
   videoSize: number;
   videoInk: string;
@@ -186,10 +219,16 @@ interface Settings {
   videoPicShape: 'circle' | 'rounded';
   videoPicSize: number;
   videoNameColor: 'kind' | 'words';
-  videoBack: 'dark' | 'color' | 'picture';
-  videoBackColor: string;
-  videoDim: number;
-  videoBlur: number;
+  // The font of the names: one of the fonts, or empty for the words' font.
+  videoNameFont: string;
+  // The size of the names, in percent, apart from the words' size.
+  videoNameSize: number;
+  // Whether a ring is drawn around each picture.
+  videoPicRing: boolean;
+  // The backgrounds, each with an id, and the id of the one used for the
+  // whole video. The panel edits one, the one picked.
+  videoBacks: VideoBack[];
+  videoBackPick: string;
   // How dark the edges of the frame are made, in percent. 0 is none.
   videoEdges: number;
   // Their color, as #rrggbb. Empty is black.
@@ -414,10 +453,11 @@ const DEFAULT_SETTINGS: Settings = {
   videoPicShape: 'circle',
   videoPicSize: 150,
   videoNameColor: 'kind',
-  videoBack: 'dark',
-  videoBackColor: '',
-  videoDim: 40,
-  videoBlur: 0,
+  videoNameFont: '',
+  videoNameSize: 100,
+  videoPicRing: true,
+  videoBacks: [{ id: 'main', name: 'Main', kind: 'dark', color: '', dim: 40, blur: 0, shapes: [] }],
+  videoBackPick: 'main',
   videoEdges: 50,
   videoEdgeColor: '',
   videoMove: 'rise',
@@ -517,6 +557,69 @@ function hexColor(v: any): string {
 
 function pick<T extends string>(v: any, allowed: readonly T[], dflt: T): T {
   return allowed.indexOf(v) >= 0 ? (v as T) : dflt;
+}
+
+// A font choice: a built-in one, or own: and the id of an uploaded font.
+const FONT_IDS = ['book', 'clean', 'type', 'round', 'theme'];
+function fontChoice(v: any, dflt: string): string {
+  const t = String(v == null ? '' : v);
+  return FONT_IDS.indexOf(t) >= 0 || /^own:[a-z0-9]{1,40}$/.test(t) ? t : dflt;
+}
+
+// At most 12 backgrounds, and 40 shapes in each.
+const BACKS_MAX = 12;
+const SHAPES_MAX = 40;
+const SHAPE_KINDS = ['rect', 'round', 'ellipse', 'tri', 'line', 'text'] as const;
+function cleanShape(v: any): VideoShapeDef | null {
+  if (!v || typeof v !== 'object') return null;
+  const kind = pick(v.kind, SHAPE_KINDS, 'rect');
+  const id = str(v.id, 24).replace(/[^a-z0-9]/gi, '');
+  if (!id) return null;
+  return {
+    id,
+    kind,
+    x: Math.round(num(v.x, -0.5, 1.5, 0.5) * 1000) / 1000,
+    y: Math.round(num(v.y, -0.5, 1.5, 0.5) * 1000) / 1000,
+    w: Math.round(num(v.w, 4, 4000, 400)),
+    h: Math.round(num(v.h, 2, 4000, 240)),
+    rot: Math.round(num(v.rot, -180, 180, 0)),
+    // Empty is the kind's own color, which the panel draws.
+    fill: hexColor(v.fill),
+    fill2: hexColor(v.fill2),
+    clear: Math.round(num(v.clear, 0, 95, 0)),
+    text: kind === 'text' ? str(v.text, 120) : '',
+  };
+}
+// The backgrounds and the one picked. Settings saved before there was a
+// list have one background in four settings of their own, which become the
+// first entry, with the id main.
+function cleanBacks(r: any): { videoBacks: VideoBack[]; videoBackPick: string } {
+  let raw: any[] = Array.isArray(r.videoBacks) ? r.videoBacks : [];
+  if (!raw.length)
+    raw = [{ id: 'main', name: 'Main', kind: r.videoBack, color: r.videoBackColor, dim: r.videoDim, blur: r.videoBlur, shapes: [] }];
+  const list: VideoBack[] = [];
+  for (const b of raw.slice(0, BACKS_MAX)) {
+    if (!b || typeof b !== 'object') continue;
+    const id = str(b.id, 24).replace(/[^a-z0-9]/gi, '');
+    if (!id || list.some((x) => x.id === id)) continue;
+    const shapes: VideoShapeDef[] = [];
+    for (const sh of Array.isArray(b.shapes) ? b.shapes.slice(0, SHAPES_MAX) : []) {
+      const c = cleanShape(sh);
+      if (c && !shapes.some((x) => x.id === c.id)) shapes.push(c);
+    }
+    list.push({
+      id,
+      name: str(b.name, 40).trim() || 'Background',
+      kind: pick(b.kind, ['dark', 'color', 'picture', 'design'] as const, 'dark'),
+      color: hexColor(b.color),
+      dim: Math.round(num(b.dim, 0, 80, 40)),
+      blur: Math.round(num(b.blur, 0, 20, 0)),
+      shapes,
+    });
+  }
+  if (!list.length) list.push({ id: 'main', name: 'Main', kind: 'dark', color: '', dim: 40, blur: 0, shapes: [] });
+  const want = String(r.videoBackPick == null ? '' : r.videoBackPick);
+  return { videoBacks: list, videoBackPick: list.some((x) => x.id === want) ? want : list[0].id };
 }
 
 const MAX_CAST = 80;
@@ -765,7 +868,7 @@ function cleanSavedFolders(v: any): Settings['savedFolders'] {
 // used.
 const LOOK_KEYS = [
   'videoShape', 'videoFont', 'videoSize', 'videoInk', 'videoCaptionInk', 'videoWords', 'videoPlace', 'videoQuotes', 'videoPicShape', 'videoPicSize',
-  'videoNameColor', 'videoBack', 'videoBackColor', 'videoDim', 'videoBlur', 'videoEdges', 'videoEdgeColor', 'videoMove', 'videoMoveSecs',
+  'videoNameColor', 'videoNameFont', 'videoNameSize', 'videoPicRing', 'videoBacks', 'videoBackPick', 'videoEdges', 'videoEdgeColor', 'videoMove', 'videoMoveSecs',
   'videoTitleOn', 'videoFadeOut', 'videoCaptions',
 ];
 // At most 20 looks, each cleaned the same way the settings are.
@@ -901,7 +1004,7 @@ function cleanSettings(raw: any): Settings {
     studioLoud: bool(r.studioLoud, d.studioLoud),
     audioSplit: pick(r.audioSplit, ['one', 'parts'] as const, d.audioSplit),
     videoShape: pick(r.videoShape, ['wide', 'tall', 'square'] as const, d.videoShape),
-    videoFont: pick(r.videoFont, ['book', 'clean', 'type', 'round', 'theme'] as const, 'book'),
+    videoFont: fontChoice(r.videoFont, 'book'),
     videoSize: Math.round(num(r.videoSize, 60, 160, d.videoSize)),
     videoInk: hexColor(r.videoInk),
     videoCaptionInk: hexColor(r.videoCaptionInk),
@@ -913,10 +1016,10 @@ function cleanSettings(raw: any): Settings {
     videoPicShape: pick(r.videoPicShape, ['circle', 'rounded'] as const, d.videoPicShape),
     videoPicSize: Math.round(num(r.videoPicSize, 60, 300, d.videoPicSize)),
     videoNameColor: pick(r.videoNameColor, ['kind', 'words'] as const, d.videoNameColor),
-    videoBack: pick(r.videoBack, ['dark', 'color', 'picture'] as const, d.videoBack),
-    videoBackColor: hexColor(r.videoBackColor),
-    videoDim: Math.round(num(r.videoDim, 0, 80, d.videoDim)),
-    videoBlur: Math.round(num(r.videoBlur, 0, 20, d.videoBlur)),
+    videoNameFont: r.videoNameFont === '' ? '' : fontChoice(r.videoNameFont, ''),
+    videoNameSize: Math.round(num(r.videoNameSize, 60, 160, d.videoNameSize)),
+    videoPicRing: bool(r.videoPicRing, d.videoPicRing),
+    ...cleanBacks(r),
     videoEdges: Math.round(num(r.videoEdges, 0, 100, d.videoEdges)),
     videoEdgeColor: hexColor(r.videoEdgeColor),
     videoMove: pick(r.videoMove, ['rise', 'fade', 'dissolve', 'black', 'slide', 'wipe', 'focus', 'zoom', 'cut'] as const, 'rise'),
@@ -3700,6 +3803,75 @@ function cleanVideoBg(v: any): string {
   return t.length <= VIDEO_BG_MAX && /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/.test(t) ? t : '';
 }
 
+// Each background's picture is in a file named by the background's id. The
+// one picture kept before there was a list of backgrounds is in
+// VIDEO_BG_FILE, and is read as the picture of the background main until
+// that background has one of its own.
+function backId(v: any): string {
+  const t = str(v, 24).replace(/[^a-z0-9]/gi, '');
+  return t || 'main';
+}
+const bgFile = (id: string) => 'video-backgrounds/' + id + '.json';
+async function readVideoBg(id: string, userId: string | undefined): Promise<string> {
+  const v = await readJson(bgFile(id), userId);
+  if (v && typeof v.picture === 'string') return cleanVideoBg(v.picture);
+  if (id !== 'main') return '';
+  const old = await readJson(VIDEO_BG_FILE, userId);
+  return cleanVideoBg(old && old.picture);
+}
+// Every picture kept for a background: the ids in the settings, and the
+// old single file.
+async function anyVideoBg(s: Settings, userId: string | undefined): Promise<boolean> {
+  for (const b of s.videoBacks) if (await readVideoBg(b.id, userId)) return true;
+  const old = await readJson(VIDEO_BG_FILE, userId);
+  return !!(old && old.picture);
+}
+async function dropVideoBgs(s: Settings, userId: string | undefined): Promise<boolean> {
+  let ok = true;
+  for (const b of s.videoBacks) {
+    const v = await readJson(bgFile(b.id), userId);
+    if (v && v.picture) ok = (await writeJson(bgFile(b.id), { picture: '' }, userId)) && ok;
+  }
+  const old = await readJson(VIDEO_BG_FILE, userId);
+  if (old && old.picture) ok = (await writeJson(VIDEO_BG_FILE, { picture: '' }, userId)) && ok;
+  return ok;
+}
+
+// Fonts of the reader's own, for videos. The list is a file of its own, and
+// each font is a file named by its id. A font travels through the extension
+// as text, so it is held to 3 MB, the same as an uploaded sound.
+const FONTS_FILE = 'video-fonts.json';
+const FONTS_MAX = 8;
+const MAX_FONT_BYTES = 3 * 1024 * 1024;
+interface FontEntry {
+  id: string;
+  name: string;
+  bytes: number;
+}
+async function loadFonts(userId: string | undefined): Promise<FontEntry[]> {
+  const v = await readJson(FONTS_FILE, userId);
+  if (!Array.isArray(v)) return [];
+  const out: FontEntry[] = [];
+  for (const f of v.slice(0, FONTS_MAX)) {
+    const id = str(f && f.id, 40).replace(/[^a-z0-9]/gi, '');
+    if (!id || out.some((x) => x.id === id)) continue;
+    out.push({ id, name: str(f.name, 60).trim() || 'My font', bytes: Math.max(0, Math.round(Number(f.bytes) || 0)) });
+  }
+  return out;
+}
+// What kind of font file the bytes are, from the first four bytes, or empty
+// when they are not a font a browser can draw with.
+function fontKind(b: Uint8Array): string {
+  if (b.length < 12) return '';
+  const tag = String.fromCharCode(b[0], b[1], b[2], b[3]);
+  if (b[0] === 0 && b[1] === 1 && b[2] === 0 && b[3] === 0) return 'ttf';
+  if (tag === 'true') return 'ttf';
+  if (tag === 'OTTO') return 'otf';
+  if (tag === 'wOFF') return 'woff';
+  if (tag === 'wOF2') return 'woff2';
+  return '';
+}
+
 async function loadSettings(userId: string | undefined): Promise<Settings> {
   return cleanSettings(await readJson(SETTINGS_FILE, userId));
 }
@@ -4709,14 +4881,75 @@ async function onPanel(p: any, userId: string | undefined) {
         return answer({ type: 'kept_dropped', ok: true, clips: gone.length });
       }
       case 'video_bg_get': {
-        const v = await readJson(VIDEO_BG_FILE, userId);
-        return answer({ type: 'video_bg', picture: cleanVideoBg(v && v.picture) });
+        const id = backId(p.id);
+        return answer({ type: 'video_bg', id, picture: await readVideoBg(id, userId) });
       }
       case 'video_bg_put': {
+        const id = backId(p.id);
         const picture = cleanVideoBg(p.picture);
-        if (p.picture && !picture) return answer({ type: 'video_bg', ok: false, picture: '', error: 'That picture is too large to keep. Pick a smaller one.' });
-        const ok = await writeJson(VIDEO_BG_FILE, { picture }, userId);
-        return answer({ type: 'video_bg', ok, picture: ok ? picture : '', error: ok ? '' : 'The picture could not be saved to your account.' });
+        if (p.picture && !picture) return answer({ type: 'video_bg', id, ok: false, picture: '', error: 'That picture is too large to keep. Pick a smaller one.' });
+        const ok = await writeJson(bgFile(id), { picture }, userId);
+        // The old single file goes once main has a file of its own, so it is
+        // never read again.
+        if (ok && id === 'main') {
+          const old = await readJson(VIDEO_BG_FILE, userId);
+          if (old && old.picture) await writeJson(VIDEO_BG_FILE, { picture: '' }, userId);
+        }
+        return answer({ type: 'video_bg', id, ok, picture: ok ? picture : '', error: ok ? '' : 'The picture could not be saved to your account.' });
+      }
+      case 'font_list':
+        return answer({ type: 'fonts', ok: true, list: await loadFonts(userId) });
+      case 'font_upload': {
+        const bytes = fromBase64(str(p.base64, MAX_FONT_BYTES * 2));
+        const list = await loadFonts(userId);
+        const no = (error: string) => answer({ type: 'font_saved', ok: false, list, error });
+        if (!bytes.length) return no('That file is empty.');
+        if (bytes.length > MAX_FONT_BYTES) return no('That font is larger than 3 MB, which is too large to keep. Use a smaller file, such as a WOFF2.');
+        if (!fontKind(bytes)) return no('That file is not a font Auto Foley can use. Use a TTF, OTF, WOFF or WOFF2 file.');
+        if (list.length >= FONTS_MAX) return no('You have ' + FONTS_MAX + ' fonts, which is the most there can be. Take one out first.');
+        const entry: FontEntry = {
+          id: 'f' + newId().replace(/[^a-z0-9]/gi, '').toLowerCase().slice(0, 30),
+          name: str(p.name, 120).replace(/\.(ttf|otf|woff2?)$/i, '').replace(/[_-]+/g, ' ').trim().slice(0, 60) || 'My font',
+          bytes: bytes.length,
+        };
+        try {
+          await spindle.userStorage.writeBinary('fonts/' + entry.id, bytes, userId);
+        } catch (e: any) {
+          return no('The font could not be saved to your account: ' + String((e && e.message) || e).slice(0, 160));
+        }
+        const next = list.concat([entry]);
+        const ok = await writeJson(FONTS_FILE, next, userId);
+        if (!ok) {
+          try {
+            await spindle.userStorage.delete('fonts/' + entry.id, userId);
+          } catch (_) {}
+          return no('The font could not be saved to your account.');
+        }
+        return answer({ type: 'font_saved', ok: true, font: entry, list: next });
+      }
+      case 'font_get': {
+        const id = str(p.id, 40).replace(/[^a-z0-9]/gi, '');
+        const list = await loadFonts(userId);
+        if (!list.some((x) => x.id === id)) return answer({ type: 'font_data', ok: false, id, error: 'That font is no longer kept. It may have been taken out.' });
+        try {
+          const bytes = await spindle.userStorage.readBinary('fonts/' + id, userId);
+          if (!bytes || !bytes.length) return answer({ type: 'font_data', ok: false, id, error: 'The font file is missing from your account.' });
+          return answer({ type: 'font_data', ok: true, id, base64: toBase64(bytes) });
+        } catch (e: any) {
+          return answer({ type: 'font_data', ok: false, id, error: 'The font could not be read from your account: ' + String((e && e.message) || e).slice(0, 160) });
+        }
+      }
+      case 'font_delete': {
+        const id = str(p.id, 40).replace(/[^a-z0-9]/gi, '');
+        const list = await loadFonts(userId);
+        const next = list.filter((x) => x.id !== id);
+        const ok = await writeJson(FONTS_FILE, next, userId);
+        if (ok) {
+          try {
+            await spindle.userStorage.delete('fonts/' + id, userId);
+          } catch (_) {}
+        }
+        return answer({ type: 'fonts', ok, list: ok ? next : list, error: ok ? '' : 'The font could not be taken out of your account.' });
       }
       case 'clips_state': {
         const list = await loadClips(userId);
@@ -4938,8 +5171,7 @@ async function onPanel(p: any, userId: string | undefined) {
         for (const part of parts) {
           let same = false;
           if (part === 'settings') {
-            const bg = await readJson(VIDEO_BG_FILE, userId);
-            same = strip(s) === strip(fresh) && !(bg && bg.picture);
+            same = strip(s) === strip(fresh) && !(await anyVideoBg(s, userId)) && !(await loadFonts(userId)).length;
           }
           else if (part === 'prompt')
             same = !s.prompt && empty(s.askNotes) && empty(s.engineNotes) && empty(s.decisionQuestions) &&
@@ -4962,6 +5194,10 @@ async function onPanel(p: any, userId: string | undefined) {
         const parts: string[] = Array.isArray(p.parts) ? p.parts.filter((x: any) => RESET_PARTS.indexOf(x) >= 0) : [];
         const s = await loadSettings(userId);
         const fresh = cleanSettings({});
+        // The pictures are found from the backgrounds in the settings, so
+        // they are taken out before the settings go back to their defaults.
+        let bgsOk = true;
+        if (parts.indexOf('settings') >= 0) bgsOk = await dropVideoBgs(s, userId);
         if (parts.indexOf('settings') >= 0) {
           const keep = { cast: s.cast, groups: s.groups, prompt: s.prompt, promptRole: s.promptRole, engineNoteRole: s.engineNoteRole, askNoteRole: s.askNoteRole, askNotes: s.askNotes, engineNotes: s.engineNotes, decisionQuestions: s.decisionQuestions, exportParts: s.exportParts, importParts: s.importParts, resetParts: s.resetParts, builtInSeen: s.builtInSeen, movedSeen: s.movedSeen, chatsOff: s.chatsOff };
           Object.assign(s, fresh, keep);
@@ -4981,10 +5217,17 @@ async function onPanel(p: any, userId: string | undefined) {
         }
         if (parts.indexOf('chats') >= 0) s.chatsOff = [];
         let ok = await saveSettings(userId, s);
-        // The picture behind videos is a setting, kept in a file of its own.
+        // The pictures behind videos and the fonts of your own are settings,
+        // each kept in files of their own.
         if (parts.indexOf('settings') >= 0) {
-          const had = await readJson(VIDEO_BG_FILE, userId);
-          if (had && had.picture) ok = (await writeJson(VIDEO_BG_FILE, { picture: '' }, userId)) && ok;
+          ok = bgsOk && ok;
+          const fonts = await loadFonts(userId);
+          for (const f of fonts) {
+            try {
+              await spindle.userStorage.delete('fonts/' + f.id, userId);
+            } catch (_) {}
+          }
+          if (fonts.length) ok = (await writeJson(FONTS_FILE, [], userId)) && ok;
         }
         if (parts.indexOf('sounds') >= 0) {
           const list = await loadSounds(userId);

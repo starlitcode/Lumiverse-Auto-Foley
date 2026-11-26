@@ -1241,6 +1241,13 @@ const PANEL_CSS = `
 @media (prefers-reduced-motion: reduce) { .af-fullview { transition: none; transform: none; } }
 [data-af-still] .af-fullview { transition: none; transform: none; }
 .af-videopreview { display: block; width: 100%; height: auto; aspect-ratio: 16 / 9; border-radius: var(--af-r); border: 1px solid var(--af-line); background: #0b0a0f; }
+.af-videopreview[data-af-designing] { touch-action: none; cursor: move; }
+.af-shapes { display: flex; flex-wrap: wrap; gap: 6px; }
+.af-shapes:empty { display: none; }
+.af-shape-pick { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.af-shape-pick[aria-pressed="true"] { background: var(--af-second); box-shadow: inset 0 0 0 1px var(--af-accent-line, var(--af-line)); }
+.af-shape-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; }
+.af-shape-grid > * { min-width: 0; }
 
 /* The switch. It bounces a little when flipped, the same as Auto Refine's. */
 .af-box {
@@ -1731,10 +1738,11 @@ const DEFAULTS = {
     videoPicShape: 'circle',
     videoPicSize: 150,
     videoNameColor: 'kind',
-    videoBack: 'dark',
-    videoBackColor: '',
-    videoDim: 40,
-    videoBlur: 0,
+    videoNameFont: '',
+    videoNameSize: 100,
+    videoPicRing: true,
+    videoBacks: [{ id: 'main', name: 'Main', kind: 'dark', color: '', dim: 40, blur: 0, shapes: [] }],
+    videoBackPick: 'main',
     videoEdges: 50,
     videoEdgeColor: '',
     videoMove: 'rise',
@@ -3487,8 +3495,15 @@ export function setup(ctx, overrides) {
         { id: 'round', label: 'Rounded', stack: '"Nunito", "Varela Round", "Arial Rounded MT Bold", "Trebuchet MS", system-ui, sans-serif' },
         { id: 'theme', label: 'Your theme’s font', stack: '' },
     ];
-    function videoFont() {
-        const f = VIDEO_FONTS.find((x) => x.id === S.videoFont) || VIDEO_FONTS[0];
+    // The CSS font for a font choice. A font of your own is drawn only once
+    // it has loaded, with Book behind it for any letter it does not have.
+    function fontStack(choice) {
+        const own = /^own:(.+)$/.exec(String(choice || ''));
+        if (own) {
+            const fam = fontFaces.get(own[1]);
+            return fam ? '"' + fam + '", ' + VIDEO_FONTS[0].stack : VIDEO_FONTS[0].stack;
+        }
+        const f = VIDEO_FONTS.find((x) => x.id === choice) || VIDEO_FONTS[0];
         if (f.stack)
             return f.stack;
         try {
@@ -3498,6 +3513,93 @@ export function setup(ctx, overrides) {
             return 'sans-serif';
         }
     }
+    function videoFont() {
+        return fontStack(S.videoFont);
+    }
+    // The names' font: their own choice, or the words' font.
+    const nameFontChoice = () => (S.videoNameFont ? String(S.videoNameFont) : String(S.videoFont || 'book'));
+    // ---- fonts of your own ----
+    // The list comes from the account. Each font is fetched and loaded with
+    // the FontFace API the first time a video uses it, under a family name of
+    // its own, and stays loaded for the rest of the visit.
+    let ownFonts = [];
+    let ownFontsAsked = null;
+    function loadOwnFonts() {
+        if (!ownFontsAsked)
+            ownFontsAsked = rpc({ type: 'font_list' }, 15000).then((r) => {
+                ownFonts = r && Array.isArray(r.list) ? r.list : [];
+            }, () => {
+                ownFontsAsked = null;
+            });
+        return ownFontsAsked;
+    }
+    // The family name of each font loaded, by its id.
+    const fontFaces = new Map();
+    const fontLoading = new Map();
+    // Fonts that could not load, so the Log says so once, not on every frame.
+    const fontFailed = new Set();
+    function ensureFont(choice) {
+        const own = /^own:(.+)$/.exec(String(choice || ''));
+        if (!own)
+            return Promise.resolve(true);
+        const id = own[1];
+        if (fontFaces.has(id))
+            return Promise.resolve(true);
+        const had = fontLoading.get(id);
+        if (had)
+            return had;
+        const go = (async () => {
+            const name = (ownFonts.find((f) => f.id === id) || { name: 'your font' }).name;
+            const fail = (why) => {
+                fontLoading.delete(id);
+                if (!fontFailed.has(id)) {
+                    fontFailed.add(id);
+                    log('The font ' + name + ' could not be used, so the video is drawn in Book. ' + why, 'bad', 'setting');
+                }
+                return false;
+            };
+            let r = null;
+            try {
+                r = await rpc({ type: 'font_get', id }, 30000);
+            }
+            catch (_) {
+                return fail('The backend did not answer.');
+            }
+            if (!r || !r.ok || !r.base64)
+                return fail(String((r && r.error) || 'The font file could not be read.'));
+            if (typeof FontFace !== 'function' || !document.fonts)
+                return fail('This browser cannot load fonts.');
+            try {
+                const bin = atob(String(r.base64));
+                const buf = new Uint8Array(bin.length);
+                for (let i = 0; i < bin.length; i++)
+                    buf[i] = bin.charCodeAt(i);
+                const fam = 'af-font-' + id;
+                const face = new FontFace(fam, buf.buffer);
+                await face.load();
+                document.fonts.add(face);
+                fontFaces.set(id, fam);
+                fontFailed.delete(id);
+                return true;
+            }
+            catch (e) {
+                return fail('The browser could not read it as a font' + (e && e.message ? ': ' + String(e.message).slice(0, 120) : '.'));
+            }
+        })();
+        fontLoading.set(id, go);
+        return go;
+    }
+    disposers.push(() => {
+        try {
+            for (const fam of fontFaces.values())
+                for (const f of Array.from(document.fonts))
+                    if (f.family === fam || f.family === '"' + fam + '"')
+                        document.fonts.delete(f);
+        }
+        catch (_) { }
+        fontFaces.clear();
+        fontLoading.clear();
+    });
     // How one line gives way to the next. None of them flashes: each fades,
     // slides, wipes or focuses, over the time set.
     const VIDEO_MOVES = [
@@ -3516,18 +3618,48 @@ export function setup(ctx, overrides) {
     // A number from the settings, or the fallback when it is not one. 0 is a
     // number, so a setting at 0 stays at 0.
     const numOr = (v, d) => (Number.isFinite(Number(v)) && v !== '' && v != null ? Number(v) : d);
-    // The picture behind the video, kept on the account in a file of its own,
-    // since it is too big to save with every change to the settings.
-    let videoBg = '';
-    let videoBgAsked = null;
-    function loadVideoBg() {
-        if (!videoBgAsked)
-            videoBgAsked = rpc({ type: 'video_bg_get' }, 15000).then((r) => {
-                videoBg = r && typeof r.picture === 'string' ? r.picture : '';
+    function backList() {
+        if (Array.isArray(S.videoBacks) && S.videoBacks.length)
+            return S.videoBacks;
+        const one = {
+            id: 'main',
+            name: 'Main',
+            kind: ['dark', 'color', 'picture', 'design'].indexOf(S.videoBack) >= 0 ? S.videoBack : 'dark',
+            color: hexOr(S.videoBackColor, ''),
+            dim: numOr(S.videoDim, 40),
+            blur: numOr(S.videoBlur, 0),
+            shapes: [],
+        };
+        S.videoBacks = [one];
+        return S.videoBacks;
+    }
+    function backNow() {
+        const list = backList();
+        return list.find((b) => b.id === S.videoBackPick) || list[0];
+    }
+    // Changes the picked background and saves the settings. save false keeps
+    // the change on the page only, for a drag, which is saved when it ends.
+    function putBack(patch, save = true) {
+        Object.assign(backNow(), patch);
+        if (save)
+            set({ videoBacks: backList().slice() });
+    }
+    // Each background's picture, kept on the account in a file of its own by
+    // the background's id, since it is too big to save with every change to
+    // the settings.
+    const videoBgs = new Map();
+    const videoBgAsked = new Map();
+    function loadVideoBg(id) {
+        let ask = videoBgAsked.get(id);
+        if (!ask) {
+            ask = rpc({ type: 'video_bg_get', id }, 15000).then((r) => {
+                videoBgs.set(id, r && typeof r.picture === 'string' ? r.picture : '');
             }, () => {
-                videoBgAsked = null;
+                videoBgAsked.delete(id);
             });
-        return videoBgAsked;
+            videoBgAsked.set(id, ask);
+        }
+        return ask;
     }
     function loadImage(src) {
         return new Promise((done) => {
@@ -3590,20 +3722,40 @@ export function setup(ctx, overrides) {
         c.height = h;
         return c;
     }
-    async function videoStage(parts) {
-        const { w: W, h: H } = videoSize();
-        if (S.videoBack === 'picture')
-            await loadVideoBg().catch(() => { });
-        const back = canvasOf(W, H);
-        const b = back.getContext('2d');
-        const css = getComputedStyle(root);
-        const accent = String(css.getPropertyValue('--lumiverse-primary') || '').trim() || '#9370db';
-        const wall = S.videoBack === 'picture' ? await loadImage(videoBg) : null;
+    // The background, drawn on the stage's own canvas: the picked background,
+    // then the darker edges over it.
+    function paintBack(st, bk = backNow()) {
+        const W = st.w;
+        const H = st.h;
+        const b = st.back.getContext('2d');
+        b.save();
+        b.setTransform(1, 0, 0, 1, 0, 0);
+        b.globalAlpha = 1;
+        b.clearRect(0, 0, W, H);
+        let accent = '#9370db';
+        try {
+            accent = String(getComputedStyle(root).getPropertyValue('--lumiverse-primary') || '').trim() || '#9370db';
+        }
+        catch (_) { }
+        const wall = bk.kind === 'picture' ? st.wall : null;
+        const dark = () => {
+            // A dark room lit a little in the theme's accent.
+            b.fillStyle = '#0b0a0f';
+            b.fillRect(0, 0, W, H);
+            const glow = b.createRadialGradient(W / 2, H * 0.45, 0, W / 2, H * 0.45, Math.max(W, H) * 0.6);
+            glow.addColorStop(0, accent);
+            glow.addColorStop(1, 'rgba(0,0,0,0)');
+            b.save();
+            b.globalAlpha = 0.22;
+            b.fillStyle = glow;
+            b.fillRect(0, 0, W, H);
+            b.restore();
+        };
         if (wall && wall.width && wall.height) {
-            const s = Math.max(W / wall.width, H / wall.height);
-            const dw = wall.width * s;
-            const dh = wall.height * s;
-            const blur = Math.min(20, Math.max(0, Number(S.videoBlur) || 0));
+            const sc = Math.max(W / wall.width, H / wall.height);
+            const dw = wall.width * sc;
+            const dh = wall.height * sc;
+            const blur = Math.min(20, Math.max(0, Number(bk.blur) || 0));
             if (blur && 'filter' in b) {
                 // Drawn a little larger, so the soft edge of the blur stays off
                 // the frame.
@@ -3625,27 +3777,20 @@ export function setup(ctx, overrides) {
             }
             else
                 b.drawImage(wall, (W - dw) / 2, (H - dh) / 2, dw, dh);
-            const dim = Math.min(80, Math.max(0, Number(S.videoDim) || 0)) / 100;
+            const dim = Math.min(80, Math.max(0, Number(bk.dim) || 0)) / 100;
             b.fillStyle = 'rgba(0,0,0,' + dim + ')';
             b.fillRect(0, 0, W, H);
         }
-        else if (S.videoBack === 'color') {
-            b.fillStyle = hexOr(S.videoBackColor, '#141218');
+        else if (bk.kind === 'color' || bk.kind === 'design') {
+            // A design starts from its own color, the same box as A color of your
+            // own, and its shapes go over it.
+            b.fillStyle = hexOr(bk.color, '#141218');
             b.fillRect(0, 0, W, H);
+            if (bk.kind === 'design')
+                drawShapes(b, W, H, bk.shapes || [], st.font);
         }
-        else {
-            // A dark room lit a little in the theme's accent.
-            b.fillStyle = '#0b0a0f';
-            b.fillRect(0, 0, W, H);
-            const glow = b.createRadialGradient(W / 2, H * 0.45, 0, W / 2, H * 0.45, Math.max(W, H) * 0.6);
-            glow.addColorStop(0, accent);
-            glow.addColorStop(1, 'rgba(0,0,0,0)');
-            b.save();
-            b.globalAlpha = 0.22;
-            b.fillStyle = glow;
-            b.fillRect(0, 0, W, H);
-            b.restore();
-        }
+        else
+            dark();
         // Darker at the edges, as much as Darken the edges asks, so the words in
         // the middle stand out. 0 leaves the edges as they are.
         // The edges are black unless Color of the edges picks another color.
@@ -3659,7 +3804,88 @@ export function setup(ctx, overrides) {
             b.fillStyle = edge;
             b.fillRect(0, 0, W, H);
         }
-        const pics = new Map();
+        b.restore();
+    }
+    // The outline of one shape, around its middle, before it is turned.
+    function shapePath(g, sh, w, h) {
+        g.beginPath();
+        if (sh.kind === 'ellipse')
+            g.ellipse(0, 0, w / 2, h / 2, 0, 0, Math.PI * 2);
+        else if (sh.kind === 'tri') {
+            g.moveTo(0, -h / 2);
+            g.lineTo(w / 2, h / 2);
+            g.lineTo(-w / 2, h / 2);
+            g.closePath();
+        }
+        else if ((sh.kind === 'round' || sh.kind === 'line') && g.roundRect) {
+            g.roundRect(-w / 2, -h / 2, w, h, sh.kind === 'line' ? h / 2 : Math.min(w, h) * 0.18);
+        }
+        else
+            g.rect(-w / 2, -h / 2, w, h);
+    }
+    // A shape's own color, used while its color is empty: a warm white for
+    // words, a muted purple for every other shape.
+    const shapeInk = (kind) => (kind === 'text' ? STORY_INK : '#5b4a8a');
+    // The shapes of a design, back to front. Sizes are in pixels of a
+    // 1080-pixel frame, so a shape keeps its own shape in every shape of
+    // video, and places are shares of the frame, so it stays in it.
+    function drawShapes(g, W, H, shapes, font) {
+        const u = Math.min(W, H) / 1080;
+        for (const sh of shapes) {
+            const w = Math.max(1, sh.w * u);
+            const h = Math.max(1, sh.h * u);
+            g.save();
+            g.translate(sh.x * W, sh.y * H);
+            g.rotate(((Number(sh.rot) || 0) * Math.PI) / 180);
+            g.globalAlpha = 1 - Math.min(95, Math.max(0, Number(sh.clear) || 0)) / 100;
+            const fill = hexOr(sh.fill, shapeInk(sh.kind));
+            if (/^#[0-9a-f]{6}$/i.test(String(sh.fill2 || ''))) {
+                const grad = g.createLinearGradient(0, -h / 2, 0, h / 2);
+                grad.addColorStop(0, fill);
+                grad.addColorStop(1, String(sh.fill2));
+                g.fillStyle = grad;
+            }
+            else
+                g.fillStyle = fill;
+            if (sh.kind === 'text') {
+                // The words fill the box: as large as fits its height and width.
+                const text = String(sh.text || '').trim();
+                if (text) {
+                    let size = Math.max(4, h * 0.8);
+                    g.font = '600 ' + size + 'px ' + font;
+                    const tw = g.measureText(text).width;
+                    if (tw > w)
+                        size = Math.max(4, (size * w) / tw);
+                    g.font = '600 ' + size + 'px ' + font;
+                    g.textAlign = 'center';
+                    g.textBaseline = 'middle';
+                    g.fillText(text, 0, 0);
+                }
+            }
+            else {
+                shapePath(g, sh, w, h);
+                g.fill();
+            }
+            g.restore();
+        }
+    }
+    async function videoStage(parts) {
+        const { w: W, h: H } = videoSize();
+        const bk = backNow();
+        if (bk.kind === 'picture')
+            await loadVideoBg(bk.id).catch(() => { });
+        // Only a font of your own is waited on. The built-in ones need nothing.
+        if (/^own:/.test(String(S.videoFont)) || /^own:/.test(nameFontChoice())) {
+            await loadOwnFonts().catch(() => { });
+            await Promise.all([ensureFont(S.videoFont), ensureFont(nameFontChoice())]);
+        }
+        const wall = bk.kind === 'picture' ? await loadImage(videoBgs.get(bk.id) || '') : null;
+        const st = {
+            w: W, h: H, back: canvasOf(W, H), wall, pics: new Map(), a: canvasOf(W, H), b: canvasOf(W, H),
+            small: canvasOf(Math.round(W / 4), Math.round(H / 4)), font: videoFont(), nameFont: fontStack(nameFontChoice()),
+        };
+        paintBack(st);
+        const pics = st.pics;
         if (S.videoPics !== false)
             for (const p of parts)
                 if (p.picture && !pics.has(p.picture)) {
@@ -3667,7 +3893,7 @@ export function setup(ctx, overrides) {
                     if (im)
                         pics.set(p.picture, im);
                 }
-        return { w: W, h: H, back, pics, a: canvasOf(W, H), b: canvasOf(W, H), small: canvasOf(Math.round(W / 4), Math.round(H / 4)), font: videoFont() };
+        return st;
     }
     // Text cut to a width, with an ellipsis.
     function fitText(g, text, max) {
@@ -3825,7 +4051,8 @@ export function setup(ctx, overrides) {
         const pic = S.videoPics !== false && !p.narration && p.picture ? st.pics.get(p.picture) : undefined;
         const name = S.videoNames !== false && !p.narration ? p.name : '';
         const PIC = Math.round(Math.min(300, Math.max(60, Number(S.videoPicSize) || 150)) * u);
-        const nameSize = Math.round(28 * u * scale);
+        const nameScale = Math.min(160, Math.max(60, numOr(S.videoNameSize, 100))) / 100;
+        const nameSize = Math.round(28 * u * nameScale);
         const head = (pic ? PIC + 28 * u : 0) + (name ? nameSize + 24 * u : 0);
         const block = head + shown.length * lineH;
         const mid = lower ? H * 0.72 : H * 0.52;
@@ -3853,18 +4080,20 @@ export function setup(ctx, overrides) {
             const s = Math.max(PIC / pic.width, PIC / pic.height);
             g.drawImage(pic, cx - (pic.width * s) / 2, top + PIC / 2 - (pic.height * s) / 2, pic.width * s, pic.height * s);
             g.restore();
-            g.save();
-            g.shadowColor = 'transparent';
-            g.globalAlpha = alpha * 0.9;
-            g.lineWidth = 3 * u;
-            g.strokeStyle = ring;
-            pathPic();
-            g.stroke();
-            g.restore();
+            if (S.videoPicRing !== false) {
+                g.save();
+                g.shadowColor = 'transparent';
+                g.globalAlpha = alpha * 0.9;
+                g.lineWidth = 3 * u;
+                g.strokeStyle = ring;
+                pathPic();
+                g.stroke();
+                g.restore();
+            }
             y += PIC + 28 * u;
         }
         if (name) {
-            g.font = '600 ' + nameSize + 'px ' + font;
+            g.font = '600 ' + nameSize + 'px ' + (st.nameFont || font);
             g.fillStyle = ring;
             g.globalAlpha = alpha;
             const label = fitText(g, name.toUpperCase(), MAX_W);
@@ -7316,13 +7545,20 @@ export function setup(ctx, overrides) {
     // on a phone often has no way to type a code. The swatch opens the editor
     // under the row: a box for a code such as #ff0040, and sliders for hue,
     // saturation and lightness. Use the theme's color clears it.
-    function colorRow(key, label, help, themeVar, fallback, backLabel = 'Use the theme\u2019s color', onChange) {
+    // bind, when given, reads and writes the color somewhere other than the
+    // setting named key, such as a shape in a design. key then only names the
+    // row for the page.
+    function colorRow(key, label, help, themeVar, fallback, backLabel = 'Use the theme\u2019s color', onChange, bind) {
+        const read = () => (bind ? String(bind.get() || '') : String(S[key] || ''));
         const wrap = el('<div class="af-col"></div>');
         wrap.setAttribute('data-af-row', key);
         const swatch = el('<button type="button" class="af-colorswatch" aria-expanded="false" title="Change the color"></button>');
         swatch.setAttribute('data-af-colorswatch', key);
         const back = button(backLabel, () => {
-            set({ [key]: '' });
+            if (bind)
+                bind.put('', true);
+            else
+                set({ [key]: '' });
             bad.textContent = '';
             paint();
             paintColors();
@@ -7338,8 +7574,8 @@ export function setup(ctx, overrides) {
         lab.id = rid('cl');
         swatch.setAttribute('aria-labelledby', lab.id);
         wrap.appendChild(row);
-        const own = () => /^#[0-9a-f]{6}$/i.test(String(S[key] || ''));
-        const now = () => (own() ? String(S[key]).toLowerCase() : themeHex(themeVar, fallback));
+        const own = () => /^#[0-9a-f]{6}$/i.test(read());
+        const now = () => (own() ? read().toLowerCase() : themeHex(themeVar, fallback));
         const editor = el('<div class="af-sub"><div class="af-col af-under af-coloredit"></div></div>');
         editor.hidden = true;
         const inner = editor.firstElementChild;
@@ -7399,11 +7635,14 @@ export function setup(ctx, overrides) {
         // A color from any part of the editor. Saved when the change ends, so a
         // drag is one save.
         function take(hex, save, fromSliders) {
-            S[key] = hex.toLowerCase();
+            if (bind)
+                bind.put(hex.toLowerCase(), save);
+            else
+                S[key] = hex.toLowerCase();
             bad.textContent = '';
             paint(fromSliders);
             paintColors();
-            if (save)
+            if (save && !bind)
                 set({});
             if (onChange)
                 onChange();
@@ -7698,7 +7937,7 @@ export function setup(ctx, overrides) {
         return { el: bar, paint };
     }
     // A part that opens and closes on a tap, for detail most people skip.
-    function fold(title, build) {
+    function fold(title, build, onToggle) {
         const wrap = el('<div class="af-col"></div>');
         const head = el('<button type="button" class="af-fold" aria-expanded="false"><span class="af-caret">▶</span><span></span></button>');
         head.lastElementChild.textContent = title;
@@ -7713,6 +7952,8 @@ export function setup(ctx, overrides) {
             }
             head.setAttribute('aria-expanded', open ? 'true' : 'false');
             reveal(box, open);
+            if (onToggle)
+                onToggle(open);
         });
         wrap.appendChild(head);
         wrap.appendChild(box);
@@ -7735,6 +7976,8 @@ export function setup(ctx, overrides) {
         page.classList.remove('af-finding');
         stageRefs = null;
         studioRefs = null;
+        designing = false;
+        designRefs = null;
         stopPreview();
         for (const w of permissionWarnings())
             page.appendChild(notice('bad', w));
@@ -12198,6 +12441,544 @@ export function setup(ctx, overrides) {
     }
     // Teardown takes the layer away at once, with no fade left running.
     disposers.push(() => closeTheater(true));
+    // A font choice for the video: the built-in fonts, then your own, with a
+    // way to add one and to take the picked one out. sameOk adds The same as
+    // the words, for the names.
+    const fontPickers = new Set();
+    function fontPicker(key, label, help, sameOk, onChange) {
+        const wrap = el('<div class="af-col"></div>');
+        wrap.setAttribute('data-af-row', key);
+        const sel = select(label, [], '', (v) => {
+            set({ [key]: v });
+            paintTools();
+            onChange();
+        }, help);
+        const box = sel.querySelector('select');
+        box.setAttribute('data-af-fontpick', key);
+        wrap.appendChild(sel);
+        const tools = el('<div class="af-row"></div>');
+        const said = el('<p class="af-status" role="status"></p>');
+        const upload = button('Add a font', async () => {
+            let files = [];
+            try {
+                files = await ctx.uploads.pickFile({ accept: ['.ttf', '.otf', '.woff', '.woff2', 'font/ttf', 'font/otf', 'font/woff', 'font/woff2'], multiple: false, maxSizeBytes: 20 * 1024 * 1024 });
+            }
+            catch (e) {
+                setSaid('The file picker could not open: ' + String((e && e.message) || e).slice(0, 200), true);
+                return;
+            }
+            const f = files && files[0];
+            if (!f)
+                return;
+            const bytes = f.bytes instanceof Uint8Array ? f.bytes : new Uint8Array(f.bytes || []);
+            if (bytes.length > 3 * 1024 * 1024) {
+                setSaid('That font is larger than 3 MB, which is too large to keep. Use a smaller file, such as a WOFF2.', true);
+                return;
+            }
+            setSaid('Saving the font', false);
+            let bin = '';
+            for (let i = 0; i < bytes.length; i += 0x8000)
+                bin += String.fromCharCode.apply(null, Array.from(bytes.subarray(i, i + 0x8000)));
+            let r = null;
+            try {
+                r = await rpc({ type: 'font_upload', name: String(f.name || ''), base64: btoa(bin) }, 60000);
+            }
+            catch (_) { }
+            if (!r || !r.ok) {
+                setSaid((r && r.error) || 'The font could not be saved: the backend did not answer.', true);
+                return;
+            }
+            ownFonts = Array.isArray(r.list) ? r.list : ownFonts;
+            ownFontsAsked = Promise.resolve();
+            const id = r.font && r.font.id;
+            if (id && !(await ensureFont('own:' + id))) {
+                setSaid('The font was saved, but this browser could not read it. The Log says why.', true);
+                refill();
+                return;
+            }
+            setSaid('', false);
+            if (id)
+                set({ [key]: 'own:' + id });
+            for (const f2 of fontPickers)
+                f2();
+            onChange();
+        });
+        upload.setAttribute('data-af-font-add', key);
+        const drop = button('Take this font out', async () => {
+            const own = /^own:(.+)$/.exec(String(S[key] || ''));
+            if (!own)
+                return;
+            const id = own[1];
+            const name = (ownFonts.find((x) => x.id === id) || { name: 'this font' }).name;
+            if (!(await askSure('Take out ' + name, 'Take ' + name + ' out of your fonts? Videos that use it are drawn in Book.', 'Take it out', true)))
+                return;
+            let r = null;
+            try {
+                r = await rpc({ type: 'font_delete', id }, 15000);
+            }
+            catch (_) { }
+            if (!r || !r.ok) {
+                setSaid((r && r.error) || 'The font could not be taken out: the backend did not answer.', true);
+                return;
+            }
+            ownFonts = Array.isArray(r.list) ? r.list : [];
+            fontFaces.delete(id);
+            const patch = {};
+            if (String(S.videoFont) === 'own:' + id)
+                patch.videoFont = 'book';
+            if (String(S.videoNameFont) === 'own:' + id)
+                patch.videoNameFont = '';
+            set(patch);
+            setSaid('', false);
+            for (const f2 of fontPickers)
+                f2();
+            onChange();
+        });
+        drop.setAttribute('data-af-font-drop', key);
+        tools.appendChild(upload);
+        tools.appendChild(drop);
+        wrap.appendChild(tools);
+        wrap.appendChild(said);
+        function setSaid(text, bad) {
+            said.textContent = text;
+            said.dataset.kind = bad ? 'bad' : '';
+        }
+        function paintTools() {
+            drop.hidden = !/^own:/.test(String(S[key] || ''));
+        }
+        function refill() {
+            if (!wrap.isConnected && built) {
+                fontPickers.delete(refill);
+                return;
+            }
+            const opts = [];
+            if (sameOk)
+                opts.push({ id: '', label: 'The same as the words' });
+            for (const x of VIDEO_FONTS)
+                opts.push({ id: x.id, label: x.label });
+            for (const f of ownFonts)
+                opts.push({ id: 'own:' + f.id, label: f.name, group: 'Your fonts' });
+            const now = String(S[key] == null ? (sameOk ? '' : 'book') : S[key]);
+            box.innerHTML = optionsHtml(opts, opts.some((o) => o.id === now) ? now : sameOk ? '' : 'book');
+            paintTools();
+        }
+        fontPickers.add(refill);
+        let built = false;
+        refill();
+        built = true;
+        loadOwnFonts().then(() => {
+            if (wrap.isConnected)
+                refill();
+        });
+        return wrap;
+    }
+    // ---- a design of your own ----
+    // Shapes that stay put, drawn as the background. Each is picked in the
+    // list, changed in the boxes under it, or dragged on the preview: the
+    // shape itself moves it, the dot at its corner changes its size, and the
+    // dot above it turns it.
+    const SHAPE_KINDS = [
+        { id: 'rect', label: 'Rectangle' },
+        { id: 'round', label: 'Rounded rectangle' },
+        { id: 'ellipse', label: 'Ellipse' },
+        { id: 'tri', label: 'Triangle' },
+        { id: 'line', label: 'Line' },
+        { id: 'text', label: 'Text box' },
+    ];
+    const SHAPES_MAX = 40;
+    // Whether the Background is set to a design while the Studio is drawn, so
+    // presses on the preview change shapes.
+    let designing = false;
+    let designSel = '';
+    let designRefs = null;
+    function shapesNow() {
+        const bk = backNow();
+        if (!Array.isArray(bk.shapes))
+            bk.shapes = [];
+        return bk.shapes;
+    }
+    const shapeNow = () => shapesNow().find((x) => x.id === designSel) || null;
+    const shapeName = (sh, n) => {
+        const kind = (SHAPE_KINDS.find((k) => k.id === sh.kind) || SHAPE_KINDS[0]).label;
+        const words = sh.kind === 'text' && String(sh.text || '').trim() ? ': ' + String(sh.text).trim().slice(0, 24) : '';
+        return n + 1 + '. ' + kind + words;
+    };
+    // The background drawn again with the shapes as they are now, then the
+    // preview. Once a frame at most, since a drag moves many times a frame.
+    let designFrame = 0;
+    function redrawDesign() {
+        if (designFrame)
+            return;
+        designFrame = requestAnimationFrame(() => {
+            designFrame = 0;
+            if (studioView.st)
+                paintBack(studioView.st);
+            paintPreview();
+        });
+    }
+    disposers.push(() => {
+        if (designFrame)
+            cancelAnimationFrame(designFrame);
+        designFrame = 0;
+    });
+    // Saved a moment after the last change, so typing a number or dragging
+    // is one save.
+    let designSave = null;
+    function saveDesignSoon(now) {
+        if (designSave)
+            clearTimeout(designSave);
+        designSave = null;
+        const go = () => {
+            designSave = null;
+            set({ videoBacks: backList().slice() });
+        };
+        if (now)
+            go();
+        else
+            designSave = setTimeout(go, 400);
+    }
+    disposers.push(() => {
+        if (designSave) {
+            clearTimeout(designSave);
+            designSave = null;
+            try {
+                set({ videoBacks: backList().slice() });
+            }
+            catch (_) { }
+        }
+    });
+    function newShape(kind) {
+        const n = shapesNow().length;
+        const size = { rect: [520, 300], round: [520, 300], ellipse: [360, 360], tri: [420, 360], line: [640, 14], text: [760, 120] };
+        const [w, h] = size[kind] || [400, 240];
+        return {
+            id: rid('sh').replace(/[^a-z0-9]/gi, '').slice(0, 24),
+            kind,
+            x: Math.min(0.8, 0.5 + (n % 5) * 0.04),
+            y: Math.min(0.8, 0.5 + (n % 5) * 0.04),
+            w,
+            h,
+            rot: 0,
+            fill: '',
+            fill2: '',
+            clear: 0,
+            text: kind === 'text' ? 'Your words' : '',
+        };
+    }
+    function buildDesigner(box) {
+        box.appendChild(el('<p class="af-note">Add shapes, then drag them on the preview. The dot at a corner changes the size. The dot above turns it.</p>'));
+        let addKind = 'rect';
+        box.appendChild(select('Shape to add', SHAPE_KINDS, addKind, (v) => {
+            addKind = v;
+        }));
+        const add = button('Add the shape', () => {
+            const list = shapesNow();
+            if (list.length >= SHAPES_MAX)
+                return;
+            const sh = newShape(addKind);
+            list.push(sh);
+            designSel = sh.id;
+            saveDesignSoon(true);
+            drawDesign();
+            redrawDesign();
+        });
+        add.setAttribute('data-af-shape-add', '');
+        const addRow = el('<div class="af-row"></div>');
+        addRow.appendChild(add);
+        box.appendChild(addRow);
+        const said = el('<p class="af-note" role="status" data-af-shapes-said></p>');
+        box.appendChild(said);
+        const list = el('<div class="af-col af-shapes" data-af-shapes role="group" aria-label="The shapes, from the back to the front"></div>');
+        box.appendChild(list);
+        const editor = el('<div class="af-col" data-af-shape-edit></div>');
+        box.appendChild(editor);
+        designRefs = { list, editor, said, add };
+        drawDesign();
+    }
+    // The list of shapes, and the boxes for the one picked.
+    function drawDesign() {
+        const r = designRefs;
+        if (!r)
+            return;
+        const list = shapesNow();
+        if (designSel && !list.some((x) => x.id === designSel))
+            designSel = '';
+        r.add.disabled = list.length >= SHAPES_MAX;
+        r.said.textContent = !list.length
+            ? 'No shapes yet. The background is the color above.'
+            : list.length >= SHAPES_MAX
+                ? 'This design has ' + SHAPES_MAX + ' shapes, which is the most there can be.'
+                : 'From the back to the front. Pick one to change it.';
+        r.list.replaceChildren();
+        list.forEach((sh, n) => {
+            const b = button(shapeName(sh, n), () => {
+                designSel = designSel === sh.id ? '' : sh.id;
+                drawDesign();
+                redrawDesign();
+            });
+            b.classList.add('af-shape-pick');
+            b.setAttribute('data-af-shape', sh.id);
+            b.setAttribute('aria-pressed', sh.id === designSel ? 'true' : 'false');
+            r.list.appendChild(b);
+        });
+        r.editor.replaceChildren();
+        const sh = shapeNow();
+        if (!sh)
+            return;
+        const changed = () => {
+            saveDesignSoon();
+            redrawDesign();
+            const pick = r.list.querySelector('[data-af-shape="' + sh.id + '"]');
+            if (pick)
+                pick.textContent = shapeName(sh, shapesNow().indexOf(sh));
+        };
+        if (sh.kind === 'text') {
+            const id = rid('tx');
+            const wrap = el('<div class="af-col"></div>');
+            wrap.appendChild(labelRow('Words', 'Up to 120 characters. They fill the box.', id));
+            const t = el('<input type="text" class="af-field" maxlength="120" autocomplete="off" id="' + id + '" data-af-shape-text>');
+            t.value = sh.text;
+            t.addEventListener('input', () => {
+                sh.text = t.value.slice(0, 120);
+                changed();
+            });
+            wrap.appendChild(t);
+            r.editor.appendChild(wrap);
+        }
+        r.editor.appendChild(colorRow('shapeFill', 'Color', sh.kind === 'text' ? 'A warm white by default.' : 'A muted purple by default.', '--af-none', shapeInk(sh.kind), 'Use the built-in color', changed, {
+            get: () => sh.fill,
+            put: (hex) => {
+                sh.fill = hex;
+            },
+        }));
+        r.editor.appendChild(colorRow('shapeFill2', 'Second color, for a gradient', 'None by default. With one, the shape goes from the first color at the top to this one.', '--af-none', '#141218', 'No gradient', changed, {
+            get: () => sh.fill2,
+            put: (hex) => {
+                sh.fill2 = hex;
+            },
+        }));
+        const clear = slider('See-through', numOr(sh.clear, 0), 0, 95, 5, (v) => (v ? v + '%' : 'Solid'), (v) => {
+            sh.clear = v;
+            changed();
+        }, 'Solid by default.');
+        clear.setAttribute('data-af-byeye', '');
+        clear.setAttribute('data-af-shape-clear', '');
+        r.editor.appendChild(clear);
+        const grid = el('<div class="af-shape-grid"></div>');
+        const box = (key, label, value, min, max, help, take) => {
+            const row = numberRow(label, value, min, max, 1, (v) => {
+                take(v);
+                changed();
+            }, help);
+            row.setAttribute('data-af-shape-num', key);
+            grid.appendChild(row);
+        };
+        box('x', 'Across, in percent', Math.round(sh.x * 100), -50, 150, 'Where its middle is. 50 is the middle.', (v) => (sh.x = v / 100));
+        box('y', 'Down, in percent', Math.round(sh.y * 100), -50, 150, 'Where its middle is. 50 is the middle.', (v) => (sh.y = v / 100));
+        box('w', 'Width', sh.w, 4, 4000, 'In pixels of a 1080-pixel frame.', (v) => (sh.w = v));
+        box('h', 'Height', sh.h, 2, 4000, 'In pixels of a 1080-pixel frame.', (v) => (sh.h = v));
+        box('rot', 'Turn, in degrees', sh.rot, -180, 180, '0 is level.', (v) => (sh.rot = v));
+        r.editor.appendChild(grid);
+        const row = el('<div class="af-row af-wrap"></div>');
+        const move = (by) => {
+            const all = shapesNow();
+            const at = all.indexOf(sh);
+            const to = Math.max(0, Math.min(all.length - 1, at + by));
+            if (to === at)
+                return;
+            all.splice(at, 1);
+            all.splice(to, 0, sh);
+            saveDesignSoon(true);
+            drawDesign();
+            redrawDesign();
+        };
+        const dup = button('Duplicate', () => {
+            const all = shapesNow();
+            if (all.length >= SHAPES_MAX)
+                return;
+            const copy = { ...sh, id: rid('sh').replace(/[^a-z0-9]/gi, '').slice(0, 24), x: Math.min(1.5, sh.x + 0.03), y: Math.min(1.5, sh.y + 0.03) };
+            all.splice(all.indexOf(sh) + 1, 0, copy);
+            designSel = copy.id;
+            saveDesignSoon(true);
+            drawDesign();
+            redrawDesign();
+        });
+        dup.disabled = shapesNow().length >= SHAPES_MAX;
+        dup.setAttribute('data-af-shape-act', 'dup');
+        const fwd = button('Bring forward', () => move(1));
+        fwd.setAttribute('data-af-shape-act', 'forward');
+        fwd.disabled = shapesNow().indexOf(sh) === shapesNow().length - 1;
+        const bwd = button('Send back', () => move(-1));
+        bwd.setAttribute('data-af-shape-act', 'back');
+        bwd.disabled = shapesNow().indexOf(sh) === 0;
+        const del = button('Delete', async () => {
+            if (!(await askSure('Delete this shape', 'Delete ' + shapeName(sh, shapesNow().indexOf(sh)) + ' from the design? There is no undo.', 'Delete', true)))
+                return;
+            const all = shapesNow();
+            const at = all.indexOf(sh);
+            if (at >= 0)
+                all.splice(at, 1);
+            designSel = '';
+            saveDesignSoon(true);
+            drawDesign();
+            redrawDesign();
+        });
+        del.setAttribute('data-af-shape-act', 'delete');
+        row.appendChild(dup);
+        row.appendChild(fwd);
+        row.appendChild(bwd);
+        row.appendChild(del);
+        r.editor.appendChild(row);
+    }
+    // The preview takes presses for shapes only while a design is shown, and
+    // only then stops a finger on it from scrolling the page.
+    function paintDesignMode() {
+        const r = studioRefs;
+        if (!r)
+            return;
+        if (designing)
+            r.canvas.setAttribute('data-af-designing', '');
+        else
+            r.canvas.removeAttribute('data-af-designing');
+    }
+    // The outline and the two dots of the picked shape, over the preview.
+    function drawHandles(g, st, k) {
+        const sh = shapeNow();
+        if (!sh)
+            return;
+        const u = Math.min(st.w, st.h) / 1080;
+        const w = sh.w * u;
+        const h = sh.h * u;
+        g.save();
+        g.translate(sh.x * st.w, sh.y * st.h);
+        g.rotate((sh.rot * Math.PI) / 180);
+        g.lineWidth = 2 * k;
+        g.setLineDash([6 * k, 5 * k]);
+        g.strokeStyle = 'rgba(255,255,255,0.9)';
+        g.strokeRect(-w / 2, -h / 2, w, h);
+        g.setLineDash([]);
+        g.beginPath();
+        g.moveTo(0, -h / 2);
+        g.lineTo(0, -h / 2 - TURN_GAP * k);
+        g.stroke();
+        for (const [x, y] of [[w / 2, h / 2], [0, -h / 2 - TURN_GAP * k]]) {
+            g.beginPath();
+            g.arc(x, y, 9 * k, 0, Math.PI * 2);
+            g.fillStyle = '#ffffff';
+            g.fill();
+            g.strokeStyle = 'rgba(0,0,0,0.6)';
+            g.stroke();
+        }
+        g.restore();
+    }
+    // How far above a shape its turn dot is, and how near a press must be to
+    // a dot to take it, in screen pixels. 18 each way is a 36-pixel target.
+    const TURN_GAP = 34;
+    const DOT_REACH = 18;
+    function hookDesign(canvas) {
+        let drag = null;
+        const at = (e) => {
+            const rc = canvas.getBoundingClientRect();
+            const k = canvas.width / Math.max(1, rc.width);
+            return { x: (e.clientX - rc.left) * k, y: (e.clientY - rc.top) * k, k };
+        };
+        const local = (sh, x, y, st) => {
+            const dx = x - sh.x * st.w;
+            const dy = y - sh.y * st.h;
+            const a = (-sh.rot * Math.PI) / 180;
+            return { lx: dx * Math.cos(a) - dy * Math.sin(a), ly: dx * Math.sin(a) + dy * Math.cos(a) };
+        };
+        canvas.addEventListener('pointerdown', (e) => {
+            const st = studioView.st;
+            if (!designing || !st || (theater && theater.canvas === canvas))
+                return;
+            const p = at(e);
+            const u = Math.min(st.w, st.h) / 1080;
+            const reach = DOT_REACH * p.k;
+            const sel = shapeNow();
+            let mode = null;
+            let hit = null;
+            if (sel) {
+                const { lx, ly } = local(sel, p.x, p.y, st);
+                const w = sel.w * u;
+                const h = sel.h * u;
+                if (Math.hypot(lx - w / 2, ly - h / 2) <= reach)
+                    mode = 'size';
+                else if (Math.hypot(lx, ly + h / 2 + TURN_GAP * p.k) <= reach)
+                    mode = 'turn';
+                if (mode)
+                    hit = sel;
+            }
+            if (!hit) {
+                const all = shapesNow();
+                // The front one first, since it is the one on top.
+                for (let i = all.length - 1; i >= 0; i--) {
+                    const sh = all[i];
+                    const { lx, ly } = local(sh, p.x, p.y, st);
+                    const pad = 8 * p.k;
+                    if (Math.abs(lx) <= (sh.w * u) / 2 + pad && Math.abs(ly) <= (sh.h * u) / 2 + pad) {
+                        hit = sh;
+                        mode = 'move';
+                        break;
+                    }
+                }
+            }
+            stopPreview();
+            if (!hit || !mode) {
+                if (designSel) {
+                    designSel = '';
+                    drawDesign();
+                    redrawDesign();
+                }
+                return;
+            }
+            e.preventDefault();
+            if (designSel !== hit.id) {
+                designSel = hit.id;
+                drawDesign();
+            }
+            drag = { mode, id: hit.id, px: p.x, py: p.y, x0: hit.x, y0: hit.y };
+            try {
+                canvas.setPointerCapture(e.pointerId);
+            }
+            catch (_) { }
+            redrawDesign();
+        });
+        canvas.addEventListener('pointermove', (e) => {
+            const st = studioView.st;
+            const sh = drag && shapesNow().find((x) => x.id === drag.id);
+            if (!drag || !st || !sh)
+                return;
+            const p = at(e);
+            const u = Math.min(st.w, st.h) / 1080;
+            if (drag.mode === 'move') {
+                sh.x = Math.round(Math.min(1.5, Math.max(-0.5, drag.x0 + (p.x - drag.px) / st.w)) * 1000) / 1000;
+                sh.y = Math.round(Math.min(1.5, Math.max(-0.5, drag.y0 + (p.y - drag.py) / st.h)) * 1000) / 1000;
+            }
+            else if (drag.mode === 'size') {
+                const { lx, ly } = local(sh, p.x, p.y, st);
+                sh.w = Math.round(Math.min(4000, Math.max(4, (2 * Math.abs(lx)) / u)));
+                sh.h = Math.round(Math.min(4000, Math.max(2, (2 * Math.abs(ly)) / u)));
+            }
+            else {
+                let deg = (Math.atan2(p.y - sh.y * st.h, p.x - sh.x * st.w) * 180) / Math.PI + 90;
+                if (deg > 180)
+                    deg -= 360;
+                sh.rot = Math.round(deg);
+            }
+            redrawDesign();
+        });
+        const end = () => {
+            if (!drag)
+                return;
+            drag = null;
+            saveDesignSoon(true);
+            drawDesign();
+            redrawDesign();
+        };
+        canvas.addEventListener('pointerup', end);
+        canvas.addEventListener('pointercancel', end);
+    }
     function paintPreview() {
         const r = studioRefs;
         const v = studioView;
@@ -12213,6 +12994,12 @@ export function setup(ctx, overrides) {
         const g = r.canvas.getContext('2d');
         if (g)
             videoFrame(g, v.at, v.parts, v.total, v.st, v.title);
+        // The picked shape's outline and dots, on the preview only. Never in
+        // full screen, and never in a saved video, which draws its own frames.
+        if (g && designing && !previewRun && !(theater && theater.canvas === r.canvas)) {
+            const rc = r.canvas.getBoundingClientRect();
+            drawHandles(g, v.st, r.canvas.width / Math.max(1, rc.width));
+        }
         // A tab drawn again while full screen is open makes a new canvas, so
         // the one in the full-screen layer is drawn too.
         if (theater && theater.canvas !== r.canvas) {
@@ -12368,7 +13155,7 @@ export function setup(ctx, overrides) {
     // names. Names, pictures and notes stay as they are when a look is used.
     const LOOK_KEYS = [
         'videoShape', 'videoFont', 'videoSize', 'videoInk', 'videoCaptionInk', 'videoWords', 'videoPlace', 'videoQuotes', 'videoPicShape', 'videoPicSize',
-        'videoNameColor', 'videoBack', 'videoBackColor', 'videoDim', 'videoBlur', 'videoEdges', 'videoEdgeColor', 'videoMove', 'videoMoveSecs',
+        'videoNameColor', 'videoNameFont', 'videoNameSize', 'videoPicRing', 'videoBacks', 'videoBackPick', 'videoEdges', 'videoEdgeColor', 'videoMove', 'videoMoveSecs',
         'videoTitleOn', 'videoFadeOut', 'videoCaptions',
     ];
     const LOOKS_MAX = 20;
@@ -12649,6 +13436,7 @@ export function setup(ctx, overrides) {
         canvas.setAttribute('role', 'img');
         canvas.setAttribute('aria-label', 'A preview of the video');
         canvas.setAttribute('data-af-videopreview', '');
+        hookDesign(canvas);
         vc.appendChild(canvas);
         // Where in the video the preview is. Its length changes with the
         // choices made, so it is built here rather than with slider().
@@ -12719,11 +13507,8 @@ export function setup(ctx, overrides) {
                 set({ videoShape: v });
                 look();
             }, 'Wide by default, 1920 by 1080. Tall is 1080 by 1920, for phone videos such as Reels and Shorts.'));
-            b.appendChild(select('Font', VIDEO_FONTS.map((x) => ({ id: x.id, label: x.label })), S.videoFont || 'book', (v) => {
-                set({ videoFont: v });
-                look();
-            }, 'Book by default. A font your device does not have is drawn in one that is close.'));
-            b.appendChild(numberRow('Size, in percent', Number(S.videoSize) || 100, 60, 160, 5, (v) => {
+            b.appendChild(fontPicker('videoFont', 'Font', 'Book by default. A font your device does not have is drawn in one that is close.', false, look));
+            b.appendChild(numberRow('Size of the words, in percent', Number(S.videoSize) || 100, 60, 160, 5, (v) => {
                 set({ videoSize: v });
                 look();
             }, '100 by default.'));
@@ -12748,7 +13533,13 @@ export function setup(ctx, overrides) {
             b.appendChild(toggle('Quotation marks around speech', 'On by default, as in a book. Narration never has them.', 'videoQuotes', look));
         }));
         vc.appendChild(fold('Speakers', (b) => {
-            b.appendChild(toggle('Show names', 'On by default. Off: no names in the video, in its title, or in the name of any file saved, audio included.', 'videoNames', look));
+            b.appendChild(toggle('Show names', 'On by default. Off: no names in the video, in its title, or in the name of any file saved, audio included.', 'videoNames', look, () => [
+                fontPicker('videoNameFont', 'Font of the names', 'The same as the words by default.', true, look),
+                numberRow('Size of the names, in percent', Math.round(numOr(S.videoNameSize, 100)), 60, 160, 5, (v) => {
+                    set({ videoNameSize: v });
+                    look();
+                }, '100 by default. Apart from the size of the words.'),
+            ]));
             b.appendChild(toggle('Show pictures', 'On by default. Each speaker’s picture from the Cast tab is shown above their line. Narration has none.', 'videoPics', look, () => [
                 segmented('Shape of the pictures', [
                     { id: 'circle', label: 'Circle' },
@@ -12761,6 +13552,7 @@ export function setup(ctx, overrides) {
                     set({ videoPicSize: v });
                     look();
                 }, '150 by default, in pixels of a 1080-pixel frame.'),
+                toggle('A ring around each picture', 'On by default, in the color of the name.', 'videoPicRing', look),
             ]));
             b.appendChild(segmented('Color of the names', [
                 { id: 'kind', label: 'Each kind’s color' },
@@ -12771,18 +13563,23 @@ export function setup(ctx, overrides) {
             }, 'Each kind’s color by default, the colors set under Colors for each kind of part.'));
         }));
         vc.appendChild(fold('Background', (b) => {
+            const bk = backNow();
             const colorBox = el('<div class="af-sub"><div class="af-under"></div></div>');
-            colorBox.firstElementChild.appendChild(colorRow('videoBackColor', 'Background color', 'A very dark gray by default.', '--af-none', '#141218', 'Use the built-in color', look));
+            colorBox.firstElementChild.appendChild(colorRow('backColor', 'Background color', 'A very dark gray by default. A design is drawn over it.', '--af-none', '#141218', 'Use the built-in color', look, {
+                get: () => backNow().color,
+                put: (hex, save) => putBack({ color: hex }, save),
+            }));
             const picBox = el('<div class="af-sub"><div class="af-under"></div></div>');
             const picIn = picBox.firstElementChild;
             const status = el('<p class="af-status"></p>');
             const picRow = el('<div class="af-row"></div>');
             const keep = async (picture) => {
+                const id = backNow().id;
                 status.textContent = picture ? 'Saving the picture' : '';
                 status.dataset.kind = '';
                 let r = null;
                 try {
-                    r = await rpc({ type: 'video_bg_put', picture }, 60000);
+                    r = await rpc({ type: 'video_bg_put', id, picture }, 60000);
                 }
                 catch (_) { }
                 if (!r || r.ok === false) {
@@ -12790,10 +13587,10 @@ export function setup(ctx, overrides) {
                     status.dataset.kind = 'bad';
                     return;
                 }
-                videoBg = r.picture || '';
-                videoBgAsked = Promise.resolve();
-                status.textContent = videoBg ? '' : 'No picture is chosen, so the background is dark.';
-                drop.disabled = !videoBg;
+                videoBgs.set(id, r.picture || '');
+                videoBgAsked.set(id, Promise.resolve());
+                status.textContent = r.picture ? '' : 'No picture is chosen, so the background is dark.';
+                drop.disabled = !r.picture;
                 look();
             };
             const choose = button('Choose a picture', async () => {
@@ -12819,8 +13616,8 @@ export function setup(ctx, overrides) {
                 }
                 // Kept at most 1920 pixels on its long side, so it is sharp in any
                 // shape of video and never larger than it needs to be.
-                const s = Math.min(1, 1920 / Math.max(im.width, im.height));
-                const cv = canvasOf(Math.round(im.width * s), Math.round(im.height * s));
+                const sc = Math.min(1, 1920 / Math.max(im.width, im.height));
+                const cv = canvasOf(Math.round(im.width * sc), Math.round(im.height * sc));
                 const g = cv.getContext('2d');
                 if (!g)
                     return;
@@ -12841,35 +13638,45 @@ export function setup(ctx, overrides) {
             picIn.appendChild(status);
             // Sliders, since how dark and how soft a picture looks is set by
             // eye, watching the preview.
-            const dim = slider('Dim the picture', Number(S.videoDim) || 0, 0, 80, 5, (v) => v + '%', (v) => {
-                set({ videoDim: v });
+            const dim = slider('Dim the picture', numOr(bk.dim, 40), 0, 80, 5, (v) => v + '%', (v) => {
+                putBack({ dim: v });
                 look();
             }, '40% by default. Darker makes the words easier to read on a bright picture.');
             dim.setAttribute('data-af-byeye', '');
             picIn.appendChild(dim);
-            const blur = slider('Blur the picture', Number(S.videoBlur) || 0, 0, 20, 1, (v) => (v ? v + ' px' : 'Off'), (v) => {
-                set({ videoBlur: v });
+            const blur = slider('Blur the picture', numOr(bk.blur, 0), 0, 20, 1, (v) => (v ? v + ' px' : 'Off'), (v) => {
+                putBack({ blur: v });
                 look();
             }, 'Off by default. A little blur makes a busy picture easier to read words over.');
             blur.setAttribute('data-af-byeye', '');
             picIn.appendChild(blur);
+            const designBox = el('<div class="af-sub"><div class="af-under"></div></div>');
+            designBox.setAttribute('data-af-row', 'videoDesign');
+            const designIn = designBox.firstElementChild;
+            buildDesigner(designIn);
             const sel = select('Background', [
                 { id: 'dark', label: 'Dark' },
                 { id: 'color', label: 'A color of your own' },
                 { id: 'picture', label: 'A picture of your own' },
-            ], S.videoBack || 'dark', (v) => {
-                set({ videoBack: v });
-                showUnder(colorBox, v === 'color');
+                { id: 'design', label: 'A design of your own' },
+            ], bk.kind || 'dark', (v) => {
+                putBack({ kind: v });
+                showUnder(colorBox, v === 'color' || v === 'design');
                 showUnder(picBox, v === 'picture');
+                showUnder(designBox, v === 'design');
+                designing = v === 'design';
+                paintDesignMode();
                 look();
             }, 'Dark by default, lit a little in your theme’s accent.');
             sel.setAttribute('data-af-row', 'videoBack');
             b.appendChild(sel);
-            colorBox.hidden = S.videoBack !== 'color';
-            picBox.hidden = S.videoBack !== 'picture';
+            colorBox.hidden = bk.kind !== 'color' && bk.kind !== 'design';
+            picBox.hidden = bk.kind !== 'picture';
+            designBox.hidden = bk.kind !== 'design';
             picBox.setAttribute('data-af-row', 'videoBg');
             b.appendChild(colorBox);
             b.appendChild(picBox);
+            b.appendChild(designBox);
             const edges = slider('Darken the edges', numOr(S.videoEdges, 50), 0, 100, 5, (v) => (v ? v + '%' : 'Off'), (v) => {
                 set({ videoEdges: v });
                 look();
@@ -12878,9 +13685,14 @@ export function setup(ctx, overrides) {
             edges.setAttribute('data-af-row', 'videoEdges');
             b.appendChild(edges);
             b.appendChild(colorRow('videoEdgeColor', 'Color of the edges', 'Black by default. Another color tints the edges with it.', '--af-none', '#000000', 'Use the built-in color', look));
-            loadVideoBg().then(() => {
-                drop.disabled = !videoBg;
+            const id = bk.id;
+            loadVideoBg(id).then(() => {
+                drop.disabled = !videoBgs.get(id);
             });
+        }, (open) => {
+            designing = open && backNow().kind === 'design';
+            paintDesignMode();
+            redrawDesign();
         }));
         vc.appendChild(fold('Moving between lines', (b) => {
             const move = select('Transition', VIDEO_MOVES, S.videoMove || 'rise', (v) => {
@@ -14033,8 +14845,10 @@ export function setup(ctx, overrides) {
                 playerIds.clear();
             // The picture behind videos goes with the settings.
             if (r && r.ok && chosen.indexOf('settings') >= 0) {
-                videoBg = '';
-                videoBgAsked = null;
+                videoBgs.clear();
+                videoBgAsked.clear();
+                ownFonts = [];
+                ownFontsAsked = null;
             }
             resetSaid = r && r.ok ? 'Put back: ' + names + '.' + sameNote : (r && r.error) || 'The reset did not finish.';
             log(resetSaid, r && r.ok ? '' : 'bad', 'setting');

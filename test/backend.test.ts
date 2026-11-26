@@ -2005,3 +2005,96 @@ describe("fitting the Director's wait", () => {
     expect(out.find((m: any) => m.type === "script").script.log.join(" ")).not.toContain("is given up to");
   });
 });
+
+describe("video backgrounds, fonts and names", () => {
+  test("settings from before the list become one background with the id main", () => {
+    const h = host();
+    const s = h.box.cleanSettings({ videoBack: "picture", videoBackColor: "#203040", videoDim: 55, videoBlur: 4 });
+    expect(s.videoBacks).toEqual([{ id: "main", name: "Main", kind: "picture", color: "#203040", dim: 55, blur: 4, shapes: [] }]);
+    expect(s.videoBackPick).toBe("main");
+    expect("videoBack" in s).toBe(false);
+  });
+
+  test("the defaults are one dark background, picked", () => {
+    const h = host();
+    const s = h.box.cleanSettings({});
+    expect(s.videoBacks.length).toBe(1);
+    expect(s.videoBacks[0].kind).toBe("dark");
+    expect(s.videoBackPick).toBe(s.videoBacks[0].id);
+    expect([s.videoNameFont, s.videoNameSize, s.videoPicRing]).toEqual(["", 100, true]);
+  });
+
+  test("a design keeps at most 40 shapes, each held to its limits", () => {
+    const h = host();
+    const shapes = Array.from({ length: 50 }, (_, i) => ({ id: "s" + i, kind: i === 0 ? "nonsense" : "ellipse", x: 9, y: -9, w: 99999, h: 0, rot: 400, fill: "red", fill2: "#00ff00", clear: 200, text: "kept only on a text box" }));
+    const s = h.box.cleanSettings({ videoBacks: [{ id: "d1", name: "Night", kind: "design", color: "#000000", shapes }], videoBackPick: "d1" });
+    const out = s.videoBacks[0].shapes;
+    expect(out.length).toBe(40);
+    expect(out[0]).toEqual({ id: "s0", kind: "rect", x: 1.5, y: -0.5, w: 4000, h: 2, rot: 180, fill: "", fill2: "#00ff00", clear: 95, text: "" });
+    expect(s.videoBackPick).toBe("d1");
+  });
+
+  test("a picked background that is gone falls back to the first one", () => {
+    const h = host();
+    const s = h.box.cleanSettings({ videoBacks: [{ id: "a1", kind: "color" }, { id: "b2", kind: "dark" }], videoBackPick: "zz" });
+    expect(s.videoBackPick).toBe("a1");
+  });
+
+  test("a font choice is a built-in one or a font of your own", () => {
+    const h = host();
+    expect(h.box.cleanSettings({ videoFont: "own:fabc123" }).videoFont).toBe("own:fabc123");
+    expect(h.box.cleanSettings({ videoFont: "own:../x" }).videoFont).toBe("book");
+    expect(h.box.cleanSettings({ videoNameFont: "clean" }).videoNameFont).toBe("clean");
+    expect(h.box.cleanSettings({ videoNameFont: "nope" }).videoNameFont).toBe("");
+  });
+
+  test("each background keeps its own picture, and main reads the picture kept before", async () => {
+    const files = new Map<string, any>([["u1/video-background.json", JSON.stringify({ picture: "data:image/png;base64,AAAA" })]]);
+    const h = host({ files });
+    const one = await h.ask({ type: "video_bg_get", id: "main" }, "u1");
+    expect(one.find((m) => m.type === "video_bg").picture).toBe("data:image/png;base64,AAAA");
+    await h.ask({ type: "video_bg_put", id: "b2", picture: "data:image/jpeg;base64,BBBB" }, "u1");
+    const two = await h.ask({ type: "video_bg_get", id: "b2" }, "u1");
+    expect(two.find((m) => m.type === "video_bg").picture).toBe("data:image/jpeg;base64,BBBB");
+    const main = await h.ask({ type: "video_bg_get", id: "main" }, "u1");
+    expect(main.find((m) => m.type === "video_bg").picture).toBe("data:image/png;base64,AAAA");
+  });
+
+  test("a font is kept when it is a font, and refused when it is not", async () => {
+    const h = host();
+    const ttf = new Uint8Array(64);
+    ttf.set([0, 1, 0, 0]);
+    const ok = (await h.ask({ type: "font_upload", name: "Quill_Hand.ttf", base64: h.box.toBase64(ttf) }, "u1")).find((m) => m.type === "font_saved");
+    expect(ok.ok).toBe(true);
+    expect(ok.font.name).toBe("Quill Hand");
+    const png = new Uint8Array(64);
+    png.set([0x89, 0x50, 0x4e, 0x47]);
+    const no = (await h.ask({ type: "font_upload", name: "a.ttf", base64: h.box.toBase64(png) }, "u1")).find((m) => m.type === "font_saved");
+    expect(no.ok).toBe(false);
+    expect(no.error).toContain("not a font");
+    const big = new Uint8Array(3 * 1024 * 1024 + 10);
+    big.set([0x77, 0x4f, 0x46, 0x32]);
+    const tooBig = (await h.ask({ type: "font_upload", name: "big.woff2", base64: h.box.toBase64(big) }, "u1")).find((m) => m.type === "font_saved");
+    expect(tooBig.error).toContain("larger than 3 MB");
+    const got = (await h.ask({ type: "font_get", id: ok.font.id }, "u1")).find((m) => m.type === "font_data");
+    expect(got.ok).toBe(true);
+    expect(Array.from(h.box.fromBase64(got.base64))).toEqual(Array.from(ttf));
+    const other = (await h.ask({ type: "font_get", id: ok.font.id }, "u2")).find((m) => m.type === "font_data");
+    expect(other.ok).toBe(false);
+  });
+
+  test("Start again on the settings takes out the fonts and the pictures", async () => {
+    const h = host();
+    const ttf = new Uint8Array(64);
+    ttf.set([0x4f, 0x54, 0x54, 0x4f]);
+    await h.ask({ type: "font_upload", name: "a.otf", base64: h.box.toBase64(ttf) }, "u1");
+    await h.ask({ type: "video_bg_put", id: "main", picture: "data:image/png;base64,AAAA" }, "u1");
+    const before = (await h.ask({ type: "reset_check", parts: ["settings"] }, "u1")).find((m) => m.type === "reset_check");
+    expect(before.already).toEqual([]);
+    await h.ask({ type: "reset", parts: ["settings"] }, "u1");
+    const fonts = (await h.ask({ type: "font_list" }, "u1")).find((m) => m.type === "fonts");
+    expect(fonts.list).toEqual([]);
+    const pic = (await h.ask({ type: "video_bg_get", id: "main" }, "u1")).find((m) => m.type === "video_bg");
+    expect(pic.picture).toBe("");
+  });
+});

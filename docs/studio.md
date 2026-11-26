@@ -119,8 +119,8 @@ A browser that can make MP4, such as a recent Chrome or Safari, saves MP4, which
 ### Shape and words
 
 - **Shape**: **Wide, 16 by 9** by default, 1920 by 1080. **Tall** is 1080 by 1920, for phone videos such as Reels and Shorts. **Square** is 1080 by 1080.
-- **Font**: **Book** by default. Also **Clean**, **Typewriter**, **Rounded** and **Your theme's font**. A font your device does not have is drawn in one that is close.
-- **Size, in percent**: 100 by default, from 60 to 160.
+- **Font**: **Book** by default. Also **Clean**, **Typewriter**, **Rounded** and **Your theme's font**. A font your device does not have is drawn in one that is close. Your own fonts are listed under **Your fonts**. See [Your own fonts](#your-own-fonts).
+- **Size of the words, in percent**: 100 by default, from 60 to 160.
 - **Color of the words**: a warm white by default.
 - **How the words show**: **Light up as they are said** by default, with words not said yet dimmer. **Appear as they are said** shows each word only once it is said. **Fade in as they are said** fades each word in as it is said. **Blur in as they are said** fades each word in from a blur. **All at once** shows the whole line.
 - **Where the words sit**: **Middle** by default, or **Lower third**, which leaves the picture behind them clear.
@@ -130,8 +130,13 @@ When each word is said is worked out from where the voice is in the clip, so it 
 
 ### Speakers
 
-- **Show names**: on by default. Off, no names are in the video, in its title, or in the name of any file saved, audio included. Names are still said aloud. To take a name out of the sound too, use **Hide and bleep words**.
-- **Show pictures**: on by default. Each speaker's picture from the Cast tab is shown above their line. Narration has none. Under it are **Shape of the pictures**, a circle or a rounded square, and **Size of the pictures**.
+- **Show names**: on by default. Off, no names are in the video, in its title, or in the name of any file saved, audio included. Names are still said aloud. To take a name out of the sound too, use **Hide and bleep words**. Under it:
+  - **Font of the names**: **The same as the words** by default. Any font, your own included.
+  - **Size of the names, in percent**: 100 by default, from 60 to 160. It is set apart from the size of the words and the size of the pictures.
+- **Show pictures**: on by default. Each speaker's picture from the Cast tab is shown above their line. Narration has none. Under it:
+  - **Shape of the pictures**: a circle or a rounded square.
+  - **Size of the pictures**: 150 by default, in pixels of a 1080-pixel frame.
+  - **A ring around each picture**: on by default, in the color of the name. Off shows the picture with no ring.
 - **Color of the names**: **Each kind's color** by default, the colors set under **Colors for each kind of part** in the Settings tab. **The words' color** uses one color for every name.
 
 ### Background
@@ -139,6 +144,7 @@ When each word is said is worked out from where the voice is in the clip, so it 
 - **Dark** by default, lit a little in your theme's accent.
 - **A color of your own**, picked under it.
 - **A picture of your own**. **Choose a picture** keeps it on your account. It is cut to the video's shape from the middle. **Dim the picture**, 40% by default, makes the words easier to read. **Blur the picture**, off by default, makes a busy picture easier to read words over.
+- **A design of your own**: shapes you place yourself, over a color. See [A design of your own](#a-design-of-your-own).
 
 **Darken the edges**, under any background, makes the edges of the frame darker than the middle. It is 50% by default. **Off** leaves the edges as bright as the middle.
 
@@ -202,6 +208,77 @@ A note is a few words for whoever watches, in a dark box at the top or the botto
 ### Start again
 
 Every choice in the Studio is a setting, kept on your account. **Start again** in the Settings tab, with **Settings** ticked, puts them all back: the look, the notes, the words to hide and the background picture. A setup file carries them too, except the background picture.
+
+## Your own fonts
+
+- **Add a font**, under **Font** or **Font of the names**, adds a font file from your device: TTF, OTF, WOFF or WOFF2.
+- It is kept on your account, so it is there on every device you sign in on.
+- It is named from its file. `Harbor_Script.woff2` is listed as **Harbor Script**, under **Your fonts**.
+- A font can be up to 3 MB, since it travels through the extension. A WOFF2 file is the smallest kind.
+- You can keep up to 8 fonts.
+- **Take this font out** shows while one of your fonts is picked. It asks first. A video that used it is drawn in **Book**.
+- If a font cannot be read, the video is drawn in **Book**, and the Log says why.
+
+Only use a font you are allowed to use. Many fonts are free for videos. Some are not.
+
+## A design of your own
+
+### In short
+
+- **A design of your own** is a background made of shapes: rectangles, rounded rectangles, ellipses, triangles, lines and text boxes.
+- The shapes stay where you put them for the whole video.
+- You place them on the preview with a finger or the mouse, or type exact numbers.
+- Each shape has its own color, an optional second color for a gradient, and how see-through it is.
+- The design is part of your settings, and part of a saved look.
+
+### Steps
+
+1. Open **Background** in the Studio's **Video** card.
+2. Set **Background** to **A design of your own**.
+3. Pick the color behind the shapes under **Background color**.
+4. Pick a kind under **Shape to add**, then press **Add the shape**. It is added in the middle and picked.
+5. Change it:
+   - Drag the shape on the preview to move it.
+   - Drag the dot at its corner to change its size.
+   - Drag the dot above it to turn it.
+   - Or type in **Across, in percent**, **Down, in percent**, **Width**, **Height** and **Turn, in degrees**.
+6. Set **Color**, **Second color, for a gradient** and **See-through**.
+7. Press another shape in the list to change it. Press the picked one again to put it down.
+
+**Duplicate** adds a copy just beside it. **Bring forward** and **Send back** move it in front of or behind the shape next to it. **Delete** asks first.
+
+### What it sends
+
+Nothing. The design is drawn on your device. It is saved with your settings, on your account.
+
+### An example
+
+Corin wants a night sky behind a story told on a pier.
+
+1. **Background color** is `#101830`, a dark blue.
+2. An **Ellipse** for the moon: **Across** 78, **Down** 22, **Width** 160, **Height** 160, **Color** `#f2e8c9`.
+3. A **Rectangle** for the water: **Across** 50, **Down** 92, **Width** 4000, **Height** 240, **Color** `#1b2a48`, **Second color** `#0a1020`, so it gets darker toward the bottom.
+4. A **Text box** with the words **The Pier**: **Across** 50, **Down** 10, **Width** 600, **Height** 80, **See-through** 30%.
+
+The moon is a circle in every shape of video, since sizes are in pixels of a 1080-pixel frame. In a tall video it is still near the top right, since places are shares of the frame. The water is wider than any frame, so it reaches both sides. Corin types 5000 in **Width** once: when the box is left, it shows 4000, the widest a shape can be.
+
+### Details
+
+- The shapes are drawn back to front, in the order of the list. The first is at the back.
+- A design can have up to 40 shapes.
+- **Across** and **Down** say where the middle of the shape is, from 0 to 100, with 50 in the middle. From -50 to 150 lets a shape hang past the edge.
+- **Width** and **Height** are from 4 and 2 to 4000 pixels of a 1080-pixel frame. A line uses **Height** as its thickness.
+- **Turn, in degrees** is from -180 to 180. 0 is level.
+- A new shape is a muted purple, and a new text box a warm white. **Use the built-in color** puts that color back.
+- A text box fills its box with its words, as large as fits, in the font of the words.
+- **Darken the edges** is drawn over the design.
+- The words, pictures and names are drawn over it.
+- While the design is shown, a finger on the preview moves shapes and does not scroll the page. Scroll above or below the preview.
+- The outline and the dots show on the preview only. They are never in full screen or in a saved video.
+
+### How backgrounds are kept
+
+Your backgrounds are kept as a list, each with an id, a name and its own settings. One is picked for the whole video. Today the list has one background, the one the panel shows. A picture for a background is kept in a file of its own, named by the background's id.
 
 ## Hide and bleep words
 

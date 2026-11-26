@@ -174,8 +174,22 @@ function answer(msg) {
     case 'kept_list': return reply({ type: 'kept_list', list: window.__keptList || [] });
     case 'kept_edit': { const e = (window.__keptList || []).find((x) => x.key === msg.key); if (!e) return reply({ type: 'kept_edited', ok: false }); if (typeof msg.name === 'string') e.name = msg.name; if (typeof msg.folder === 'string') e.folder = msg.folder; return reply({ type: 'kept_edited', ok: true, name: e.name || '', folder: e.folder || '' }); }
     case 'sound_kept': return reply({ type: 'sound', missing: true });
-    case 'video_bg_get': return reply({ type: 'video_bg', picture: window.__videoBg || '' });
-    case 'video_bg_put': window.__videoBg = msg.picture || ''; return reply({ type: 'video_bg', ok: true, picture: window.__videoBg });
+    // Each background's picture, by its id, as the backend keeps them.
+    case 'video_bg_get': return reply({ type: 'video_bg', id: msg.id || 'main', picture: (window.__videoBgs || {})[msg.id || 'main'] || ((msg.id || 'main') === 'main' ? window.__videoBg || '' : '') });
+    case 'video_bg_put': window.__videoBgs = Object.assign(window.__videoBgs || {}, { [msg.id || 'main']: msg.picture || '' }); if ((msg.id || 'main') === 'main') window.__videoBg = msg.picture || ''; return reply({ type: 'video_bg', id: msg.id || 'main', ok: true, picture: msg.picture || '' });
+    // Fonts of your own: a list, and each font's bytes by id.
+    case 'font_list': return reply({ type: 'fonts', ok: true, list: window.__fonts || [] });
+    case 'font_upload': {
+      window.__fonts = window.__fonts || [];
+      window.__fontData = window.__fontData || {};
+      const id = 'f' + (window.__fonts.length + 1);
+      const font = { id, name: String(msg.name || '').replace(/\.[a-z0-9]+$/i, '').replace(/[_-]+/g, ' ').trim() || 'My font', bytes: Math.round(String(msg.base64 || '').length * 0.75) };
+      window.__fonts.push(font);
+      window.__fontData[id] = msg.base64;
+      return reply({ type: 'font_saved', ok: true, font, list: window.__fonts });
+    }
+    case 'font_get': return (window.__fontData || {})[msg.id] ? reply({ type: 'font_data', ok: true, id: msg.id, base64: window.__fontData[msg.id] }) : reply({ type: 'font_data', ok: false, id: msg.id, error: 'That font is no longer kept.' });
+    case 'font_delete': window.__fonts = (window.__fonts || []).filter((f) => f.id !== msg.id); return reply({ type: 'fonts', ok: true, list: window.__fonts });
     case 'kept_script': return reply({ type: 'kept_script', script: (window.__keptList || []).some((e) => e.key === msg.key) ? SCRIPT : null });
     case 'sound_play': if (String(msg.id).indexOf('mu-') === 0 && window.__musicB64) return reply({ type: 'sound', base64: window.__musicB64, mime: 'audio/wav' }); return;
     case 'direct_stop': (window.__stops = window.__stops || []).push(Date.now()); return;
@@ -272,6 +286,14 @@ window.__ctx = {
   uploads: {
     // A picture asked for gets a small drawn one, so a picture can be chosen.
     pickFile: async (o) => {
+      // A font asked for gets the one the check put on the page.
+      if (o && (o.accept || []).some((x) => /woff|ttf/.test(x))) {
+        if (!window.__fontFile) return [];
+        const bin = atob(window.__fontFile.base64);
+        const bytes = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+        return [{ name: window.__fontFile.name, mimeType: 'font/ttf', bytes }];
+      }
       if (!o || !(o.accept || []).some((x) => /image/.test(x))) return [];
       const c = document.createElement('canvas');
       // Red on the left, blue on the right, so a crop that moves can be told
@@ -3744,6 +3766,189 @@ if (section("full screen")) {
     await page.waitForTimeout(400);
     check(await page.evaluate(() => !document.querySelector("[data-af-theater]")), size.name + ": the close button closes it");
     check(!errors.length, size.name + ": no page errors. " + errors.slice(0, 2).join(" | "));
+    await context.close();
+  }
+}
+
+if (section("studio design")) {
+  console.log("Fonts of your own, names, rings and a design of your own in the Studio");
+  // A font file from the machine, for the upload. DejaVu Sans Mono is on
+  // most Linux machines, the checks' own included.
+  const FONT = "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf";
+  const fontB64 = existsSync(FONT) ? readFileSync(FONT).toString("base64") : "";
+  for (const size of SIZES) {
+    // Everyone in the cast has a picture, so there is a ring to take off.
+    const { context, page, errors } = await open(THEMES[0], size, 1, () => {
+      const c = document.createElement("canvas");
+      c.width = 40;
+      c.height = 40;
+      const g = c.getContext("2d");
+      g.fillStyle = "#20a0a0";
+      g.fillRect(0, 0, 40, 40);
+      const pic = c.toDataURL("image/png");
+      for (const m of window.__settings.cast || []) m.picture = pic;
+    });
+    await page.evaluate((b64) => {
+      window.__wav = [0.1, 0.3];
+      window.__clipMs = 200;
+      window.__fontFile = b64 ? { name: "Plain_Mono.ttf", base64: b64 } : null;
+    }, fontB64);
+    await page.click('#mount [data-af-slot="message"]');
+    await page.waitForFunction(() => document.querySelector('#mount [data-af-slot="message"]').getAttribute("aria-busy") === null && (window.__synth || []).length > 0, null, { timeout: 15000 });
+    await page.waitForTimeout(2500);
+    await page.click('.af-tab[data-tab="studio"]');
+    await page.waitForTimeout(1500);
+    // A short summary of the preview: the sum of its pixels, sampled.
+    const frame = () => page.evaluate(async () => {
+      await new Promise((x) => requestAnimationFrame(() => requestAnimationFrame(x)));
+      const c = document.querySelector("[data-af-videopreview]");
+      const d = c.getContext("2d").getImageData(0, 0, c.width, c.height).data;
+      let sum = 0;
+      for (let i = 0; i < d.length; i += 4 * 5) sum += d[i] * 3 + d[i + 1] * 5 + d[i + 2] * 7;
+      return sum;
+    });
+    const settle = () => page.waitForTimeout(700);
+    // The same summary over the whole preview, every quarter second, so a
+    // change that shows only while someone speaks is seen.
+    const whole = () => page.evaluate(async () => {
+      const r = document.querySelector("[data-af-scrub] input");
+      const c = document.querySelector("[data-af-videopreview]");
+      const g = c.getContext("2d");
+      const was = r.value;
+      let sum = 0;
+      for (let t = 0; t <= Number(r.max); t += 0.25) {
+        r.value = String(t);
+        r.dispatchEvent(new Event("input", { bubbles: true }));
+        await new Promise((x) => requestAnimationFrame(x));
+        const d = g.getImageData(0, 0, c.width, c.height).data;
+        for (let i = 0; i < d.length; i += 4 * 11) sum += d[i] * 3 + d[i + 1] * 5 + d[i + 2] * 7;
+      }
+      r.value = was;
+      r.dispatchEvent(new Event("input", { bubbles: true }));
+      return sum;
+    });
+
+    // 1. A font of your own.
+    await page.locator(".af-fold", { hasText: "Shape and words" }).first().click();
+    await page.waitForTimeout(400);
+    const plain = await frame();
+    await page.click('[data-af-font-add="videoFont"]');
+    await page.waitForFunction(() => /^own:/.test(String(window.__settings.videoFont || "")), null, { timeout: 8000 }).catch(() => {});
+    await settle();
+    const own = await page.evaluate(() => ({
+      pick: window.__settings.videoFont,
+      shown: (document.querySelector('[data-af-fontpick="videoFont"]') || {}).value,
+      label: ((document.querySelector('[data-af-fontpick="videoFont"]') || {}).selectedOptions || [{}])[0].textContent,
+      loaded: Array.from(document.fonts).some((f) => /^"?af-font-/.test(f.family) && f.status === "loaded"),
+    }));
+    const withFont = await frame();
+    check(!!fontB64 && /^own:/.test(own.pick) && own.shown === own.pick && own.label === "Plain Mono", size.name + ": an uploaded font is picked, named from its file (" + JSON.stringify(own) + ")");
+    check(own.loaded && withFont !== plain, size.name + ": the font is loaded and the preview is drawn in it");
+    await page.click('[data-af-font-drop="videoFont"]');
+    await settle();
+    const dropped = await page.evaluate(() => ({ asked: window.__asked || 0, pick: window.__settings.videoFont, left: (window.__fonts || []).length }));
+    check(dropped.asked >= 1 && dropped.pick === "book" && dropped.left === 0, size.name + ": taking the font out asks first, then goes back to Book (" + JSON.stringify(dropped) + ")");
+
+    // 2 to 4. The names' font and size, and the ring, under Speakers.
+    await page.locator(".af-fold", { hasText: "Speakers" }).first().click();
+    await page.waitForTimeout(400);
+    const start = await page.evaluate(() => ({ font: (document.querySelector('[data-af-fontpick="videoNameFont"]') || {}).value, ring: window.__settings.videoPicRing }));
+    check(start.font === "" && start.ring !== false, size.name + ": the names start in the words' font, with a ring (" + JSON.stringify(start) + ")");
+    const a0 = await whole();
+    await page.selectOption('[data-af-fontpick="videoNameFont"]', "type");
+    await settle();
+    const a1 = await whole();
+    check(a1 !== a0 && (await page.evaluate(() => window.__settings.videoNameFont)) === "type", size.name + ": another font for the names changes the names only, and is saved");
+    const nameBox = page.locator('[data-af-row="videoNames"] input.af-numbox').first();
+    await nameBox.fill("500");
+    await nameBox.dispatchEvent("change");
+    await settle();
+    const a2 = await whole();
+    check((await nameBox.inputValue()) === "160" && (await page.evaluate(() => window.__settings.videoNameSize)) === 160 && a2 !== a1, size.name + ": the names' size is held to 160 when the box is left, and draws bigger");
+    const ring = page.locator('[data-af-row="videoPicRing"] input[type=checkbox]');
+    await ring.click();
+    await settle();
+    const a3 = await whole();
+    check((await page.evaluate(() => window.__settings.videoPicRing)) === false && a3 !== a2, size.name + ": the ring switch takes the ring off");
+
+    // 5. A design of your own.
+    await page.locator(".af-fold", { hasText: "Background" }).first().click();
+    await page.waitForTimeout(400);
+    await page.selectOption('[data-af-row="videoBack"] select', "design");
+    await page.waitForTimeout(500);
+    await page.selectOption('[data-af-row="videoDesign"] select', "ellipse");
+    await page.click("[data-af-shape-add]");
+    await settle();
+    const added = await page.evaluate(() => {
+      const b = window.__settings.videoBacks.find((x) => x.id === window.__settings.videoBackPick);
+      const c = document.querySelector("[data-af-videopreview]");
+      return { kind: b.kind, shapes: b.shapes.length, picked: !!document.querySelector('[data-af-shape][aria-pressed="true"]'), designing: c.hasAttribute("data-af-designing"), touch: getComputedStyle(c).touchAction };
+    });
+    check(added.kind === "design" && added.shapes === 1 && added.picked && added.designing && added.touch === "none", size.name + ": a shape is added, picked, and saved in the picked background (" + JSON.stringify(added) + ")");
+    // Dragged on the preview, from its middle to the right.
+    const box = await page.locator("[data-af-videopreview]").boundingBox();
+    const from = { x: box.x + box.width * 0.52, y: box.y + box.height * 0.52 };
+    const to = { x: box.x + box.width * 0.75, y: box.y + box.height * 0.52 };
+    await page.evaluate(([from, to, touch]) => {
+      const c = document.querySelector("[data-af-videopreview]");
+      const ev = (type, p) => c.dispatchEvent(new PointerEvent(type, { bubbles: true, cancelable: true, clientX: p.x, clientY: p.y, pointerId: 7, pointerType: touch ? "touch" : "mouse", isPrimary: true }));
+      ev("pointerdown", from);
+      for (let i = 1; i <= 6; i++) ev("pointermove", { x: from.x + ((to.x - from.x) * i) / 6, y: from.y });
+      ev("pointerup", to);
+    }, [from, to, size.touch]);
+    await settle();
+    const moved = await page.evaluate(() => {
+      const b = window.__settings.videoBacks.find((x) => x.id === window.__settings.videoBackPick);
+      const sh = b.shapes[0];
+      const across = document.querySelector('[data-af-shape-num="x"] input');
+      return { x: sh.x, box: across && across.value };
+    });
+    check(moved.x > 0.68 && moved.x < 0.82 && Math.abs(Number(moved.box) - Math.round(moved.x * 100)) <= 1, size.name + ": dragging the shape on the preview moves it, and its box follows (" + JSON.stringify(moved) + ")");
+    // The turn box turns it, and the preview changes.
+    const t0 = await frame();
+    const turn = page.locator('[data-af-shape-num="w"] input');
+    await turn.fill("900");
+    await turn.dispatchEvent("change");
+    await settle();
+    check((await frame()) !== t0, size.name + ": a typed width redraws the shape");
+    const m = await page.evaluate(MEASURE, size.touch);
+    check(!m.overflow.length && !m.small.length, size.name + ": the Studio fits with the design open. " + m.overflow.concat(m.small).slice(0, 2).join("; "));
+    await page.evaluate(() => (window.__asked = 0));
+    await page.click('[data-af-shape-act="delete"]');
+    await settle();
+    const gone = await page.evaluate(() => ({ asked: window.__asked, left: window.__settings.videoBacks.find((x) => x.id === window.__settings.videoBackPick).shapes.length }));
+    check(gone.asked === 1 && gone.left === 0, size.name + ": deleting a shape asks first (" + JSON.stringify(gone) + ")");
+    check(!errors.length, size.name + ": no page errors. " + errors.slice(0, 2).join(" | "));
+    await context.close();
+  }
+  // With UI Scale on, a drag still moves a shape to where the pointer goes.
+  for (const zoom of [1.25, 0.85]) {
+    const size = SIZES.find((x) => !x.touch) || SIZES[0];
+    const { context, page, errors } = await open(THEMES[0], size, zoom);
+    await page.click('.af-tab[data-tab="studio"]');
+    await page.waitForTimeout(1200);
+    await page.locator(".af-fold", { hasText: "Background" }).first().click();
+    await page.waitForTimeout(400);
+    await page.selectOption('[data-af-row="videoBack"] select', "design");
+    await page.waitForTimeout(400);
+    await page.click("[data-af-shape-add]");
+    await page.waitForTimeout(600);
+    const moved = await page.evaluate(async () => {
+      const c = document.querySelector("[data-af-videopreview]");
+      c.scrollIntoView({ block: "center" });
+      await new Promise((x) => setTimeout(x, 200));
+      const r = c.getBoundingClientRect();
+      const ev = (type, x, y) => c.dispatchEvent(new PointerEvent(type, { bubbles: true, cancelable: true, clientX: x, clientY: y, pointerId: 3, pointerType: "mouse", isPrimary: true }));
+      ev("pointerdown", r.left + r.width * 0.5, r.top + r.height * 0.5);
+      ev("pointermove", r.left + r.width * 0.6, r.top + r.height * 0.6);
+      ev("pointermove", r.left + r.width * 0.7, r.top + r.height * 0.7);
+      ev("pointerup", r.left + r.width * 0.7, r.top + r.height * 0.7);
+      await new Promise((x) => setTimeout(x, 600));
+      const b = window.__settings.videoBacks.find((x) => x.id === window.__settings.videoBackPick);
+      return { x: b.shapes[0].x, y: b.shapes[0].y };
+    });
+    check(Math.abs(moved.x - 0.7) < 0.03 && Math.abs(moved.y - 0.7) < 0.03, "zoom " + zoom + ": a shape dragged on the preview lands under the pointer (" + JSON.stringify(moved) + ")");
+    check(!errors.length, "zoom " + zoom + ": no page errors. " + errors.slice(0, 2).join(" | "));
     await context.close();
   }
 }

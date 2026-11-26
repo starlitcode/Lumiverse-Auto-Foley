@@ -22,9 +22,14 @@ _2026-11-26_
 - **A link to an audio converter**, in the Studio's **Audio** card, for turning the WAV into an MP3. It opens in a new tab.
 - **Color of the captions**, under **Show sounds as captions** in the Studio. Sound captions can have a color of their own, such as yellow. It is the color of the words until one is picked, and it is part of a saved look.
 - **Fade in as they are said** and **Blur in as they are said**, under **How the words show** in the Studio. Each word fades in as it is said, or fades in from a blur, over about a third of a second.
+- **Your own fonts** in the Studio. **Add a font**, under **Font**, adds a TTF, OTF, WOFF or WOFF2 file of up to 3 MB. It is kept on your account and listed under **Your fonts**. **Take this font out** asks first. See [Your own fonts](docs/studio.md#your-own-fonts).
+- **Font of the names** and **Size of the names, in percent**, under **Show names** in the Studio. The names can have their own font and size, apart from the words and the pictures.
+- **A ring around each picture**, under **Show pictures** in the Studio. On by default. Off shows each picture with no ring.
+- **A design of your own**, a new **Background** in the Studio. Add rectangles, rounded rectangles, ellipses, triangles, lines and text boxes over a color, and drag, size and turn them on the preview, or type exact numbers. Each has its own color, an optional gradient, and how see-through it is. See [A design of your own](docs/studio.md#a-design-of-your-own).
 
 ### Changed
 
+- **Size, in percent** in the Studio is now **Size of the words, in percent**, since the names and the pictures have sizes of their own.
 - **Send a note when it asks again is off by default**, the same as in Auto Refine. A note makes the Director's next ask longer, which costs more. If you were on the old default, a notice says so, and you can take the new one or keep yours.
 - **Freesound licenses is CC0 and CC BY by default.** It was all three, which takes in CC BY-NC, a license for non-commercial use only. A video made in the Studio may be posted where money is made. If you were on the old default, a notice says so. Sounds already in your library stay.
 - **No sound effects are asked for when they cannot play.** With no sound effects in your library, and no Freesound or ElevenLabs key saved or **Get new sounds** off, the Director is not asked for them, so no tokens go on them. The Log says why.
