@@ -52,8 +52,9 @@ interface CastMember {
   // A small picture made on the reader's device, as a data address. Empty
   // shows the first letter of the name.
   picture: string;
-  // The feelings this person has a picture of their own for. Each picture
-  // is kept in a file of its own, by the person's id and the feeling.
+  // The moods this person has a picture of their own for, by the mood's id.
+  // Each picture is kept in a file of its own, by the person's id and the
+  // mood's id.
   moodPics: string[];
   stability: number;
   similarity: number;
@@ -73,8 +74,7 @@ interface CastMember {
 // its middle is, as a share of the frame's width and height, so it stays in
 // the frame in every shape of video. w and h are in pixels of a 1080-pixel
 // frame, so it keeps its own shape. rot is in degrees. clear is how
-// see-through it is, in percent. fill2, when set, makes a gradient from top
-// to bottom. text is the words of a text box.
+// see-through it is, in percent. text is the words of a text box.
 interface VideoShapeDef {
   id: string;
   kind: 'rect' | 'round' | 'ellipse' | 'tri' | 'line' | 'text';
@@ -84,7 +84,11 @@ interface VideoShapeDef {
   h: number;
   rot: number;
   fill: string;
-  fill2: string;
+  // A gradient, none, linear or radial, from fill through each stop, spread
+  // evenly. dir is a linear gradient's direction.
+  grad: 'none' | 'linear' | 'radial';
+  stops: string[];
+  dir: string;
   clear: number;
   text: string;
 }
@@ -99,6 +103,11 @@ interface VideoBack {
   name: string;
   kind: 'dark' | 'color' | 'picture' | 'design';
   color: string;
+  // A color of your own's fill: one color, or a gradient from color through
+  // each stop.
+  fill: 'solid' | 'linear' | 'radial';
+  stops: string[];
+  dir: string;
   dim: number;
   blur: number;
   shapes: VideoShapeDef[];
@@ -232,14 +241,31 @@ interface Settings {
   videoNameFont: string;
   // The size of the names, in percent, apart from the words' size.
   videoNameSize: number;
-  // Whether a ring is drawn around each picture.
+  // Whether a ring is drawn around each picture, and how thick it is, in
+  // pixels of a 1080-pixel frame.
   videoPicRing: boolean;
+  videoPicRingWidth: number;
   // Whether a picture background moves slowly across each scene.
   videoPicMove: boolean;
   // Whether two people who take turns in a scene are shown side by side.
   videoTwo: boolean;
   // Whether a person's picture for the mood of the line is used.
   videoMoodPics: boolean;
+  // The reader's own list of moods for pictures, each with an id, a name
+  // and the words that pick it. Empty is the built-in list.
+  moodList: { id: string; name: string; words: string[] }[];
+  // The fill of the words, the names and the sound captions: one color, or a
+  // linear or radial gradient from their color through each stop. dir is a
+  // linear gradient's direction.
+  videoWordFill: 'solid' | 'linear' | 'radial';
+  videoWordStops: string[];
+  videoWordDir: string;
+  videoNameFill: 'solid' | 'linear' | 'radial';
+  videoNameStops: string[];
+  videoNameDir: string;
+  videoCapFill: 'solid' | 'linear' | 'radial';
+  videoCapStops: string[];
+  videoCapDir: string;
   // The shadows behind the words and behind the names in a video: on or
   // off, a color (empty is black), how dark in percent, how soft and how
   // far below, in pixels of a 1080-pixel frame.
@@ -494,9 +520,20 @@ const DEFAULT_SETTINGS: Settings = {
   videoNameFont: '',
   videoNameSize: 100,
   videoPicRing: true,
+  videoPicRingWidth: 3,
   videoPicMove: true,
   videoTwo: true,
   videoMoodPics: true,
+  moodList: [],
+  videoWordFill: 'solid',
+  videoWordStops: ['#f2b880'],
+  videoWordDir: 'down',
+  videoNameFill: 'solid',
+  videoNameStops: ['#f2b880'],
+  videoNameDir: 'right',
+  videoCapFill: 'solid',
+  videoCapStops: ['#f2b880'],
+  videoCapDir: 'right',
   videoWordShadow: true,
   videoWordShadowInk: '',
   videoWordShadowDark: 65,
@@ -515,7 +552,7 @@ const DEFAULT_SETTINGS: Settings = {
   mpShadowInk: '',
   mpShadowDark: 25,
   mpShadowSoft: 8,
-  videoBacks: [{ id: 'main', name: 'Main', kind: 'dark', color: '', dim: 40, blur: 0, shapes: [], use: 'match', moods: [], places: [] }],
+  videoBacks: [{ id: 'main', name: 'Main', kind: 'dark', color: '', fill: 'solid', stops: ['#2a1f3d'], dir: 'down', dim: 40, blur: 0, shapes: [], use: 'match', moods: [], places: [] }],
   videoBackPick: 'main',
   videoEdges: 50,
   videoEdgeColor: '',
@@ -626,6 +663,13 @@ function fontChoice(v: any, dflt: string): string {
   return FONT_IDS.indexOf(t) >= 0 || /^own:[a-z0-9]{1,40}$/.test(t) ? t : dflt;
 }
 
+// A gradient's colors after its first: 1 to 5 of them, so 2 to 6 in all.
+const GRAD_DIRS = ['down', 'right', 'diag', 'diag2'] as const;
+function cleanStops(v: any, dflt: string): string[] {
+  const out = (Array.isArray(v) ? v : []).map((c: any) => hexColor(c)).filter(Boolean).slice(0, 5);
+  return out.length ? out : [dflt];
+}
+
 // At most 12 backgrounds, and 40 shapes in each.
 const BACKS_MAX = 12;
 const SHAPES_MAX = 40;
@@ -645,7 +689,10 @@ function cleanShape(v: any): VideoShapeDef | null {
     rot: Math.round(num(v.rot, -180, 180, 0)),
     // Empty is the kind's own color, which the panel draws.
     fill: hexColor(v.fill),
-    fill2: hexColor(v.fill2),
+    // A shape saved with one second color, before there were stops, keeps it.
+    grad: pick(v.grad, ['none', 'linear', 'radial'] as const, hexColor(v.fill2) ? 'linear' : 'none'),
+    stops: cleanStops(v.stops, hexColor(v.fill2) || '#141218'),
+    dir: pick(v.dir, GRAD_DIRS, 'down'),
     clear: Math.round(num(v.clear, 0, 95, 0)),
     text: kind === 'text' ? str(v.text, 120) : '',
   };
@@ -672,6 +719,9 @@ function cleanBacks(r: any): { videoBacks: VideoBack[]; videoBackPick: string } 
       name: str(b.name, 40).trim() || 'Background',
       kind: pick(b.kind, ['dark', 'color', 'picture', 'design'] as const, 'dark'),
       color: hexColor(b.color),
+      fill: pick(b.fill, ['solid', 'linear', 'radial'] as const, 'solid'),
+      stops: cleanStops(b.stops, '#2a1f3d'),
+      dir: pick(b.dir, GRAD_DIRS, 'down'),
       dim: Math.round(num(b.dim, 0, 80, 40)),
       blur: Math.round(num(b.blur, 0, 20, 0)),
       shapes,
@@ -683,13 +733,34 @@ function cleanBacks(r: any): { videoBacks: VideoBack[]; videoBackPick: string } 
         .slice(0, 20),
     });
   }
-  if (!list.length) list.push({ id: 'main', name: 'Main', kind: 'dark', color: '', dim: 40, blur: 0, shapes: [], use: 'match', moods: [], places: [] });
+  if (!list.length) list.push({ id: 'main', name: 'Main', kind: 'dark', color: '', fill: 'solid', stops: ['#2a1f3d'], dir: 'down', dim: 40, blur: 0, shapes: [], use: 'match', moods: [], places: [] });
   const want = String(r.videoBackPick == null ? '' : r.videoBackPick);
   return { videoBacks: list, videoBackPick: list.some((x) => x.id === want) ? want : list[0].id };
 }
 
-// The feelings a person can have a picture for, in the Studio's videos.
-const FEELINGS = ['happy', 'sad', 'angry', 'scared', 'calm', 'playful', 'romantic', 'tense'];
+// A mood's id: a few letters and digits. The built-in moods' ids are the
+// names they started with, such as happy. The reader's own list of moods,
+// moodList, is empty while it is the built-in one, which the panel holds.
+const moodId = (v: any) => str(v, 24).toLowerCase().replace(/[^a-z0-9-]/g, '');
+const MOODS_MAX = 40;
+const MOOD_WORDS_MAX = 30;
+function cleanMoods(v: any): { id: string; name: string; words: string[] }[] {
+  if (!Array.isArray(v)) return [];
+  const out: { id: string; name: string; words: string[] }[] = [];
+  for (const m of v.slice(0, MOODS_MAX)) {
+    const id = moodId(m && m.id);
+    if (!id || out.some((x) => x.id === id)) continue;
+    out.push({
+      id,
+      name: str(m.name, 30).replace(/[\u0000-\u001f]/g, ' ').trim() || 'Mood',
+      words: (Array.isArray(m.words) ? m.words : [])
+        .map((w: any) => str(w, 40).replace(/[\u0000-\u001f]/g, ' ').trim().toLowerCase())
+        .filter((w: string, i: number, all: string[]) => w && all.indexOf(w) === i)
+        .slice(0, MOOD_WORDS_MAX),
+    });
+  }
+  return out;
+}
 const moodPicFile = (member: string, feeling: string) => 'cast-moods/' + member + '-' + feeling + '.json';
 const memberId = (v: any) => str(v, 64).replace(/[^a-z0-9_-]/gi, '');
 
@@ -782,7 +853,9 @@ function cleanMember(m: any): CastMember | null {
     voices: cleanVoices(m.voices),
     group: str(m.group, 64),
     picture: cleanPicture(m.picture),
-    moodPics: Array.isArray(m.moodPics) ? FEELINGS.filter((f) => m.moodPics.indexOf(f) >= 0) : [],
+    moodPics: Array.isArray(m.moodPics)
+      ? m.moodPics.map((x: any) => moodId(x)).filter((x: string, i: number, all: string[]) => x && all.indexOf(x) === i).slice(0, MOODS_MAX)
+      : [],
     stability: num(m.stability, 0, 1, base.stability),
     similarity: num(m.similarity, 0, 1, base.similarity),
     style: num(m.style, 0, 1, base.style),
@@ -940,7 +1013,8 @@ function cleanSavedFolders(v: any): Settings['savedFolders'] {
 // used.
 const LOOK_KEYS = [
   'videoShape', 'videoFont', 'videoSize', 'videoInk', 'videoCaptionInk', 'videoWords', 'videoPlace', 'videoQuotes', 'videoPicShape', 'videoPicSize',
-  'videoNameColor', 'videoNameFont', 'videoNameSize', 'videoPicRing', 'videoPicMove', 'videoTwo', 'videoMoodPics',
+  'videoNameColor', 'videoNameFont', 'videoNameSize', 'videoPicRing', 'videoPicRingWidth', 'videoPicMove', 'videoTwo', 'videoMoodPics',
+  'videoWordFill', 'videoWordStops', 'videoWordDir', 'videoNameFill', 'videoNameStops', 'videoNameDir', 'videoCapFill', 'videoCapStops', 'videoCapDir',
   'videoWordShadow', 'videoWordShadowInk', 'videoWordShadowDark', 'videoWordShadowSoft', 'videoWordShadowFar',
   'videoNameShadow', 'videoNameShadowInk', 'videoNameShadowDark', 'videoNameShadowSoft', 'videoNameShadowFar', 'videoBacks', 'videoBackPick', 'videoEdges', 'videoEdgeColor', 'videoMove', 'videoMoveSecs',
   'videoTitleOn', 'videoFadeOut', 'videoCaptions',
@@ -1093,9 +1167,20 @@ function cleanSettings(raw: any): Settings {
     videoNameFont: r.videoNameFont === '' ? '' : fontChoice(r.videoNameFont, ''),
     videoNameSize: Math.round(num(r.videoNameSize, 60, 160, d.videoNameSize)),
     videoPicRing: bool(r.videoPicRing, d.videoPicRing),
+    videoPicRingWidth: Math.round(num(r.videoPicRingWidth, 1, 20, d.videoPicRingWidth)),
     videoPicMove: bool(r.videoPicMove, d.videoPicMove),
     videoTwo: bool(r.videoTwo, d.videoTwo),
     videoMoodPics: bool(r.videoMoodPics, d.videoMoodPics),
+    moodList: cleanMoods(r.moodList),
+    videoWordFill: pick(r.videoWordFill, ['solid', 'linear', 'radial'] as const, 'solid'),
+    videoWordStops: cleanStops(r.videoWordStops, '#f2b880'),
+    videoWordDir: pick(r.videoWordDir, GRAD_DIRS, 'down'),
+    videoNameFill: pick(r.videoNameFill, ['solid', 'linear', 'radial'] as const, 'solid'),
+    videoNameStops: cleanStops(r.videoNameStops, '#f2b880'),
+    videoNameDir: pick(r.videoNameDir, GRAD_DIRS, 'right'),
+    videoCapFill: pick(r.videoCapFill, ['solid', 'linear', 'radial'] as const, 'solid'),
+    videoCapStops: cleanStops(r.videoCapStops, '#f2b880'),
+    videoCapDir: pick(r.videoCapDir, GRAD_DIRS, 'right'),
     videoWordShadow: bool(r.videoWordShadow, d.videoWordShadow),
     videoWordShadowInk: hexColor(r.videoWordShadowInk),
     videoWordShadowDark: Math.round(num(r.videoWordShadowDark, 0, 100, d.videoWordShadowDark)),
@@ -5036,15 +5121,15 @@ async function onPanel(p: any, userId: string | undefined) {
       }
       case 'mood_pic_get': {
         const member = memberId(p.member);
-        const feeling = FEELINGS.indexOf(p.feeling) >= 0 ? String(p.feeling) : '';
+        const feeling = moodId(p.feeling);
         if (!member || !feeling) return answer({ type: 'mood_pic', member, feeling, picture: '' });
         const v = await readJson(moodPicFile(member, feeling), userId);
         return answer({ type: 'mood_pic', member, feeling, picture: cleanPicture(v && v.picture) });
       }
       case 'mood_pic_put': {
         const member = memberId(p.member);
-        const feeling = FEELINGS.indexOf(p.feeling) >= 0 ? String(p.feeling) : '';
-        if (!member || !feeling) return answer({ type: 'mood_pic', ok: false, error: 'That is not a person and a feeling Auto Foley knows.' });
+        const feeling = moodId(p.feeling);
+        if (!member || !feeling) return answer({ type: 'mood_pic', ok: false, error: 'That is not a person and a mood Auto Foley knows.' });
         const picture = cleanPicture(p.picture);
         if (p.picture && !picture) return answer({ type: 'mood_pic', ok: false, member, feeling, error: 'That picture is too large to keep. Pick a smaller one.' });
         const ok = await writeJson(moodPicFile(member, feeling), { picture }, userId);
@@ -5313,7 +5398,7 @@ async function onPanel(p: any, userId: string | undefined) {
         const parts: string[] = Array.isArray(p.parts) ? p.parts.filter((x: any) => RESET_PARTS.indexOf(x) >= 0) : [];
         const s = await loadSettings(userId);
         const fresh = cleanSettings({});
-        const NOT = ['cast', 'groups', 'prompt', 'promptRole', 'engineNoteRole', 'askNoteRole', 'askNotes', 'engineNotes', 'decisionQuestions', 'exportParts', 'importParts', 'resetParts', 'guideSeen', 'builtInSeen', 'movedSeen', 'chatsOff'];
+        const NOT = ['cast', 'groups', 'moodList', 'prompt', 'promptRole', 'engineNoteRole', 'askNoteRole', 'askNotes', 'engineNotes', 'decisionQuestions', 'exportParts', 'importParts', 'resetParts', 'guideSeen', 'builtInSeen', 'movedSeen', 'chatsOff'];
         const strip = (x: any) => {
           const o: any = {};
           for (const k of Object.keys(x).sort()) if (NOT.indexOf(k) < 0) o[k] = x[k];
@@ -5329,7 +5414,7 @@ async function onPanel(p: any, userId: string | undefined) {
           else if (part === 'prompt')
             same = !s.prompt && empty(s.askNotes) && empty(s.engineNotes) && empty(s.decisionQuestions) &&
               s.promptRole === fresh.promptRole && s.engineNoteRole === fresh.engineNoteRole && s.askNoteRole === fresh.askNoteRole;
-          else if (part === 'cast') same = JSON.stringify(s.cast) === JSON.stringify(fresh.cast) && !(s.groups || []).length;
+          else if (part === 'cast') same = JSON.stringify(s.cast) === JSON.stringify(fresh.cast) && !(s.groups || []).length && !(s.moodList || []).length;
           else if (part === 'chats') same = !(s.chatsOff || []).length;
           else if (part === 'sounds') same = !(await loadSounds(userId)).length;
           else if (part === 'audio') {
@@ -5352,7 +5437,7 @@ async function onPanel(p: any, userId: string | undefined) {
         let bgsOk = true;
         if (parts.indexOf('settings') >= 0) bgsOk = await dropVideoBgs(s, userId);
         if (parts.indexOf('settings') >= 0) {
-          const keep = { cast: s.cast, groups: s.groups, prompt: s.prompt, promptRole: s.promptRole, engineNoteRole: s.engineNoteRole, askNoteRole: s.askNoteRole, askNotes: s.askNotes, engineNotes: s.engineNotes, decisionQuestions: s.decisionQuestions, exportParts: s.exportParts, importParts: s.importParts, resetParts: s.resetParts, builtInSeen: s.builtInSeen, movedSeen: s.movedSeen, chatsOff: s.chatsOff };
+          const keep = { cast: s.cast, groups: s.groups, moodList: s.moodList, prompt: s.prompt, promptRole: s.promptRole, engineNoteRole: s.engineNoteRole, askNoteRole: s.askNoteRole, askNotes: s.askNotes, engineNotes: s.engineNotes, decisionQuestions: s.decisionQuestions, exportParts: s.exportParts, importParts: s.importParts, resetParts: s.resetParts, builtInSeen: s.builtInSeen, movedSeen: s.movedSeen, chatsOff: s.chatsOff };
           Object.assign(s, fresh, keep);
         }
         if (parts.indexOf('prompt') >= 0) {
@@ -5374,6 +5459,7 @@ async function onPanel(p: any, userId: string | undefined) {
             }
           s.cast = fresh.cast;
           s.groups = [];
+          s.moodList = [];
         }
         if (parts.indexOf('chats') >= 0) s.chatsOff = [];
         let ok = await saveSettings(userId, s);

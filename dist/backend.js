@@ -110,9 +110,20 @@ const DEFAULT_SETTINGS = {
     videoNameFont: '',
     videoNameSize: 100,
     videoPicRing: true,
+    videoPicRingWidth: 3,
     videoPicMove: true,
     videoTwo: true,
     videoMoodPics: true,
+    moodList: [],
+    videoWordFill: 'solid',
+    videoWordStops: ['#f2b880'],
+    videoWordDir: 'down',
+    videoNameFill: 'solid',
+    videoNameStops: ['#f2b880'],
+    videoNameDir: 'right',
+    videoCapFill: 'solid',
+    videoCapStops: ['#f2b880'],
+    videoCapDir: 'right',
     videoWordShadow: true,
     videoWordShadowInk: '',
     videoWordShadowDark: 65,
@@ -131,7 +142,7 @@ const DEFAULT_SETTINGS = {
     mpShadowInk: '',
     mpShadowDark: 25,
     mpShadowSoft: 8,
-    videoBacks: [{ id: 'main', name: 'Main', kind: 'dark', color: '', dim: 40, blur: 0, shapes: [], use: 'match', moods: [], places: [] }],
+    videoBacks: [{ id: 'main', name: 'Main', kind: 'dark', color: '', fill: 'solid', stops: ['#2a1f3d'], dir: 'down', dim: 40, blur: 0, shapes: [], use: 'match', moods: [], places: [] }],
     videoBackPick: 'main',
     videoEdges: 50,
     videoEdgeColor: '',
@@ -234,6 +245,12 @@ function fontChoice(v, dflt) {
     const t = String(v == null ? '' : v);
     return FONT_IDS.indexOf(t) >= 0 || /^own:[a-z0-9]{1,40}$/.test(t) ? t : dflt;
 }
+// A gradient's colors after its first: 1 to 5 of them, so 2 to 6 in all.
+const GRAD_DIRS = ['down', 'right', 'diag', 'diag2'];
+function cleanStops(v, dflt) {
+    const out = (Array.isArray(v) ? v : []).map((c) => hexColor(c)).filter(Boolean).slice(0, 5);
+    return out.length ? out : [dflt];
+}
 // At most 12 backgrounds, and 40 shapes in each.
 const BACKS_MAX = 12;
 const SHAPES_MAX = 40;
@@ -255,7 +272,10 @@ function cleanShape(v) {
         rot: Math.round(num(v.rot, -180, 180, 0)),
         // Empty is the kind's own color, which the panel draws.
         fill: hexColor(v.fill),
-        fill2: hexColor(v.fill2),
+        // A shape saved with one second color, before there were stops, keeps it.
+        grad: pick(v.grad, ['none', 'linear', 'radial'], hexColor(v.fill2) ? 'linear' : 'none'),
+        stops: cleanStops(v.stops, hexColor(v.fill2) || '#141218'),
+        dir: pick(v.dir, GRAD_DIRS, 'down'),
         clear: Math.round(num(v.clear, 0, 95, 0)),
         text: kind === 'text' ? str(v.text, 120) : '',
     };
@@ -285,6 +305,9 @@ function cleanBacks(r) {
             name: str(b.name, 40).trim() || 'Background',
             kind: pick(b.kind, ['dark', 'color', 'picture', 'design'], 'dark'),
             color: hexColor(b.color),
+            fill: pick(b.fill, ['solid', 'linear', 'radial'], 'solid'),
+            stops: cleanStops(b.stops, '#2a1f3d'),
+            dir: pick(b.dir, GRAD_DIRS, 'down'),
             dim: Math.round(num(b.dim, 0, 80, 40)),
             blur: Math.round(num(b.blur, 0, 20, 0)),
             shapes,
@@ -297,12 +320,35 @@ function cleanBacks(r) {
         });
     }
     if (!list.length)
-        list.push({ id: 'main', name: 'Main', kind: 'dark', color: '', dim: 40, blur: 0, shapes: [], use: 'match', moods: [], places: [] });
+        list.push({ id: 'main', name: 'Main', kind: 'dark', color: '', fill: 'solid', stops: ['#2a1f3d'], dir: 'down', dim: 40, blur: 0, shapes: [], use: 'match', moods: [], places: [] });
     const want = String(r.videoBackPick == null ? '' : r.videoBackPick);
     return { videoBacks: list, videoBackPick: list.some((x) => x.id === want) ? want : list[0].id };
 }
-// The feelings a person can have a picture for, in the Studio's videos.
-const FEELINGS = ['happy', 'sad', 'angry', 'scared', 'calm', 'playful', 'romantic', 'tense'];
+// A mood's id: a few letters and digits. The built-in moods' ids are the
+// names they started with, such as happy. The reader's own list of moods,
+// moodList, is empty while it is the built-in one, which the panel holds.
+const moodId = (v) => str(v, 24).toLowerCase().replace(/[^a-z0-9-]/g, '');
+const MOODS_MAX = 40;
+const MOOD_WORDS_MAX = 30;
+function cleanMoods(v) {
+    if (!Array.isArray(v))
+        return [];
+    const out = [];
+    for (const m of v.slice(0, MOODS_MAX)) {
+        const id = moodId(m && m.id);
+        if (!id || out.some((x) => x.id === id))
+            continue;
+        out.push({
+            id,
+            name: str(m.name, 30).replace(/[\u0000-\u001f]/g, ' ').trim() || 'Mood',
+            words: (Array.isArray(m.words) ? m.words : [])
+                .map((w) => str(w, 40).replace(/[\u0000-\u001f]/g, ' ').trim().toLowerCase())
+                .filter((w, i, all) => w && all.indexOf(w) === i)
+                .slice(0, MOOD_WORDS_MAX),
+        });
+    }
+    return out;
+}
 const moodPicFile = (member, feeling) => 'cast-moods/' + member + '-' + feeling + '.json';
 const memberId = (v) => str(v, 64).replace(/[^a-z0-9_-]/gi, '');
 const MAX_CAST = 80;
@@ -397,7 +443,9 @@ function cleanMember(m) {
         voices: cleanVoices(m.voices),
         group: str(m.group, 64),
         picture: cleanPicture(m.picture),
-        moodPics: Array.isArray(m.moodPics) ? FEELINGS.filter((f) => m.moodPics.indexOf(f) >= 0) : [],
+        moodPics: Array.isArray(m.moodPics)
+            ? m.moodPics.map((x) => moodId(x)).filter((x, i, all) => x && all.indexOf(x) === i).slice(0, MOODS_MAX)
+            : [],
         stability: num(m.stability, 0, 1, base.stability),
         similarity: num(m.similarity, 0, 1, base.similarity),
         style: num(m.style, 0, 1, base.style),
@@ -562,7 +610,8 @@ function cleanSavedFolders(v) {
 // used.
 const LOOK_KEYS = [
     'videoShape', 'videoFont', 'videoSize', 'videoInk', 'videoCaptionInk', 'videoWords', 'videoPlace', 'videoQuotes', 'videoPicShape', 'videoPicSize',
-    'videoNameColor', 'videoNameFont', 'videoNameSize', 'videoPicRing', 'videoPicMove', 'videoTwo', 'videoMoodPics',
+    'videoNameColor', 'videoNameFont', 'videoNameSize', 'videoPicRing', 'videoPicRingWidth', 'videoPicMove', 'videoTwo', 'videoMoodPics',
+    'videoWordFill', 'videoWordStops', 'videoWordDir', 'videoNameFill', 'videoNameStops', 'videoNameDir', 'videoCapFill', 'videoCapStops', 'videoCapDir',
     'videoWordShadow', 'videoWordShadowInk', 'videoWordShadowDark', 'videoWordShadowSoft', 'videoWordShadowFar',
     'videoNameShadow', 'videoNameShadowInk', 'videoNameShadowDark', 'videoNameShadowSoft', 'videoNameShadowFar', 'videoBacks', 'videoBackPick', 'videoEdges', 'videoEdgeColor', 'videoMove', 'videoMoveSecs',
     'videoTitleOn', 'videoFadeOut', 'videoCaptions',
@@ -724,9 +773,20 @@ function cleanSettings(raw) {
         videoNameFont: r.videoNameFont === '' ? '' : fontChoice(r.videoNameFont, ''),
         videoNameSize: Math.round(num(r.videoNameSize, 60, 160, d.videoNameSize)),
         videoPicRing: bool(r.videoPicRing, d.videoPicRing),
+        videoPicRingWidth: Math.round(num(r.videoPicRingWidth, 1, 20, d.videoPicRingWidth)),
         videoPicMove: bool(r.videoPicMove, d.videoPicMove),
         videoTwo: bool(r.videoTwo, d.videoTwo),
         videoMoodPics: bool(r.videoMoodPics, d.videoMoodPics),
+        moodList: cleanMoods(r.moodList),
+        videoWordFill: pick(r.videoWordFill, ['solid', 'linear', 'radial'], 'solid'),
+        videoWordStops: cleanStops(r.videoWordStops, '#f2b880'),
+        videoWordDir: pick(r.videoWordDir, GRAD_DIRS, 'down'),
+        videoNameFill: pick(r.videoNameFill, ['solid', 'linear', 'radial'], 'solid'),
+        videoNameStops: cleanStops(r.videoNameStops, '#f2b880'),
+        videoNameDir: pick(r.videoNameDir, GRAD_DIRS, 'right'),
+        videoCapFill: pick(r.videoCapFill, ['solid', 'linear', 'radial'], 'solid'),
+        videoCapStops: cleanStops(r.videoCapStops, '#f2b880'),
+        videoCapDir: pick(r.videoCapDir, GRAD_DIRS, 'right'),
         videoWordShadow: bool(r.videoWordShadow, d.videoWordShadow),
         videoWordShadowInk: hexColor(r.videoWordShadowInk),
         videoWordShadowDark: Math.round(num(r.videoWordShadowDark, 0, 100, d.videoWordShadowDark)),
@@ -4653,7 +4713,7 @@ async function onPanel(p, userId) {
             }
             case 'mood_pic_get': {
                 const member = memberId(p.member);
-                const feeling = FEELINGS.indexOf(p.feeling) >= 0 ? String(p.feeling) : '';
+                const feeling = moodId(p.feeling);
                 if (!member || !feeling)
                     return answer({ type: 'mood_pic', member, feeling, picture: '' });
                 const v = await readJson(moodPicFile(member, feeling), userId);
@@ -4661,9 +4721,9 @@ async function onPanel(p, userId) {
             }
             case 'mood_pic_put': {
                 const member = memberId(p.member);
-                const feeling = FEELINGS.indexOf(p.feeling) >= 0 ? String(p.feeling) : '';
+                const feeling = moodId(p.feeling);
                 if (!member || !feeling)
-                    return answer({ type: 'mood_pic', ok: false, error: 'That is not a person and a feeling Auto Foley knows.' });
+                    return answer({ type: 'mood_pic', ok: false, error: 'That is not a person and a mood Auto Foley knows.' });
                 const picture = cleanPicture(p.picture);
                 if (p.picture && !picture)
                     return answer({ type: 'mood_pic', ok: false, member, feeling, error: 'That picture is too large to keep. Pick a smaller one.' });
@@ -4974,7 +5034,7 @@ async function onPanel(p, userId) {
                 const parts = Array.isArray(p.parts) ? p.parts.filter((x) => RESET_PARTS.indexOf(x) >= 0) : [];
                 const s = await loadSettings(userId);
                 const fresh = cleanSettings({});
-                const NOT = ['cast', 'groups', 'prompt', 'promptRole', 'engineNoteRole', 'askNoteRole', 'askNotes', 'engineNotes', 'decisionQuestions', 'exportParts', 'importParts', 'resetParts', 'guideSeen', 'builtInSeen', 'movedSeen', 'chatsOff'];
+                const NOT = ['cast', 'groups', 'moodList', 'prompt', 'promptRole', 'engineNoteRole', 'askNoteRole', 'askNotes', 'engineNotes', 'decisionQuestions', 'exportParts', 'importParts', 'resetParts', 'guideSeen', 'builtInSeen', 'movedSeen', 'chatsOff'];
                 const strip = (x) => {
                     const o = {};
                     for (const k of Object.keys(x).sort())
@@ -4993,7 +5053,7 @@ async function onPanel(p, userId) {
                         same = !s.prompt && empty(s.askNotes) && empty(s.engineNotes) && empty(s.decisionQuestions) &&
                             s.promptRole === fresh.promptRole && s.engineNoteRole === fresh.engineNoteRole && s.askNoteRole === fresh.askNoteRole;
                     else if (part === 'cast')
-                        same = JSON.stringify(s.cast) === JSON.stringify(fresh.cast) && !(s.groups || []).length;
+                        same = JSON.stringify(s.cast) === JSON.stringify(fresh.cast) && !(s.groups || []).length && !(s.moodList || []).length;
                     else if (part === 'chats')
                         same = !(s.chatsOff || []).length;
                     else if (part === 'sounds')
@@ -5022,7 +5082,7 @@ async function onPanel(p, userId) {
                 if (parts.indexOf('settings') >= 0)
                     bgsOk = await dropVideoBgs(s, userId);
                 if (parts.indexOf('settings') >= 0) {
-                    const keep = { cast: s.cast, groups: s.groups, prompt: s.prompt, promptRole: s.promptRole, engineNoteRole: s.engineNoteRole, askNoteRole: s.askNoteRole, askNotes: s.askNotes, engineNotes: s.engineNotes, decisionQuestions: s.decisionQuestions, exportParts: s.exportParts, importParts: s.importParts, resetParts: s.resetParts, builtInSeen: s.builtInSeen, movedSeen: s.movedSeen, chatsOff: s.chatsOff };
+                    const keep = { cast: s.cast, groups: s.groups, moodList: s.moodList, prompt: s.prompt, promptRole: s.promptRole, engineNoteRole: s.engineNoteRole, askNoteRole: s.askNoteRole, askNotes: s.askNotes, engineNotes: s.engineNotes, decisionQuestions: s.decisionQuestions, exportParts: s.exportParts, importParts: s.importParts, resetParts: s.resetParts, builtInSeen: s.builtInSeen, movedSeen: s.movedSeen, chatsOff: s.chatsOff };
                     Object.assign(s, fresh, keep);
                 }
                 if (parts.indexOf('prompt') >= 0) {
@@ -5045,6 +5105,7 @@ async function onPanel(p, userId) {
                         }
                     s.cast = fresh.cast;
                     s.groups = [];
+                    s.moodList = [];
                 }
                 if (parts.indexOf('chats') >= 0)
                     s.chatsOff = [];

@@ -1237,6 +1237,8 @@ const PANEL_CSS = `
 .af-shape-grid > * { min-width: 0; }
 .af-moods { gap: 6px; }
 .af-moodpic .af-row { flex-wrap: wrap; }
+.af-moodedit { gap: 6px; padding: 10px 0; border-top: 1px solid var(--af-line); }
+.af-moodedit:first-of-type { border-top: 0; }
 .af-moodthumb { width: 36px; height: 36px; flex: none; overflow: hidden; }
 .af-moodthumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .af-scenebox { gap: 6px; padding: 10px 0; border-top: 1px solid var(--af-line); }
@@ -1579,37 +1581,43 @@ html[data-af-still] [class^="af-"], html[data-af-still] [class*=" af-"], html[da
 // again before saving, so this only needs the defaults for a first render.
 // ---------------------------------------------------------------------------
 
-// The feelings a person can have a picture for, and the words that point
-// to each in a line's voice tags and its note on how it is said. The words
-// are matched whole, so "flat" does not match "flatter".
-const FEELINGS = ['happy', 'sad', 'angry', 'scared', 'calm', 'playful', 'romantic', 'tense'];
-const FEELING_WORDS: Record<string, string[]> = {
-  happy: ['happy', 'happily', 'cheerful', 'cheerfully', 'joyful', 'delighted', 'excited', 'excitedly', 'elated', 'laughs', 'laughing', 'laughter', 'chuckles', 'chuckling', 'giggles', 'giggling', 'grinning', 'beaming', 'brightly', 'warmly'],
-  sad: ['sad', 'sadly', 'sorrowful', 'mournful', 'tearful', 'tearfully', 'crying', 'cries', 'sobs', 'sobbing', 'sniffles', 'heartbroken', 'grieving', 'choked', 'despairing', 'wistful', 'wistfully'],
-  angry: ['angry', 'angrily', 'furious', 'furiously', 'enraged', 'shouts', 'shouting', 'yells', 'yelling', 'snaps', 'snapping', 'snarls', 'growls', 'seething', 'irritated', 'annoyed', 'bitter', 'bitterly', 'hostile'],
-  scared: ['scared', 'afraid', 'frightened', 'terrified', 'fearful', 'fearfully', 'panicked', 'panicking', 'nervous', 'nervously', 'trembling', 'shaky', 'shakily', 'gasps', 'whimpers', 'anxious', 'anxiously'],
-  calm: ['calm', 'calmly', 'gentle', 'gently', 'soothing', 'soothingly', 'steady', 'steadily', 'relaxed', 'peaceful', 'serene', 'softly', 'patient', 'patiently'],
-  playful: ['playful', 'playfully', 'teasing', 'teasingly', 'teases', 'mischievous', 'mischievously', 'sly', 'slyly', 'cheeky', 'smirking', 'smirks', 'sing-song', 'singsong', 'giddy'],
-  romantic: ['romantic', 'tender', 'tenderly', 'loving', 'lovingly', 'affectionate', 'affectionately', 'sultry', 'seductive', 'seductively', 'breathy', 'longing', 'adoring', 'flirtatious', 'flirty', 'intimate'],
-  tense: ['tense', 'tensely', 'urgent', 'urgently', 'strained', 'cold', 'coldly', 'flat', 'flatly', 'wary', 'warily', 'guarded', 'clipped', 'curt', 'curtly', 'grim', 'grimly'],
-};
-// Scene music's moods, read as the nearest feeling.
-const MOOD_FEELING: Record<string, string> = { calm: 'calm', cozy: 'calm', happy: 'happy', playful: 'playful', romantic: 'romantic', sad: 'sad', tense: 'tense', scary: 'scared', action: 'tense', mysterious: 'tense' };
-// The feeling of a line: the one its tags and note name most, the first in
-// the list on a tie, or else the scene's mood, or else none.
-function feelingOf(line: { tags?: string[]; style?: string; text?: string }, sceneMood: string): string {
+// The moods a person can have a picture for, and the words that pick each.
+// This is the built-in list. The reader can rename, reword, reorder,
+// delete and add moods, and their own list is kept in moodList. Each mood
+// is kept by its id, so renaming one keeps its pictures. The built-in ids
+// are the names they started with.
+interface Mood { id: string; name: string; words: string[] }
+const BUILT_IN_MOODS: Mood[] = [
+  { id: 'happy', name: 'Happy', words: ['happy', 'happily', 'cheerful', 'cheerfully', 'joyful', 'delighted', 'excited', 'excitedly', 'elated', 'laughs', 'laughing', 'laughter', 'chuckles', 'chuckling', 'giggles', 'giggling', 'grinning', 'beaming', 'brightly', 'warmly'] },
+  { id: 'sad', name: 'Sad', words: ['sad', 'sadly', 'sorrowful', 'mournful', 'tearful', 'tearfully', 'crying', 'cries', 'sobs', 'sobbing', 'sniffles', 'heartbroken', 'grieving', 'choked', 'despairing', 'wistful', 'wistfully'] },
+  { id: 'angry', name: 'Angry', words: ['angry', 'angrily', 'furious', 'furiously', 'enraged', 'shouts', 'shouting', 'yells', 'yelling', 'snaps', 'snapping', 'snarls', 'growls', 'seething', 'irritated', 'annoyed', 'bitter', 'bitterly', 'hostile'] },
+  { id: 'scared', name: 'Scared', words: ['scared', 'scary', 'afraid', 'frightened', 'terrified', 'fearful', 'fearfully', 'panicked', 'panicking', 'nervous', 'nervously', 'trembling', 'shaky', 'shakily', 'gasps', 'whimpers', 'anxious', 'anxiously'] },
+  { id: 'calm', name: 'Calm', words: ['calm', 'calmly', 'cozy', 'gentle', 'gently', 'soothing', 'soothingly', 'steady', 'steadily', 'relaxed', 'peaceful', 'serene', 'softly', 'patient', 'patiently'] },
+  { id: 'playful', name: 'Playful', words: ['playful', 'playfully', 'teasing', 'teasingly', 'teases', 'mischievous', 'mischievously', 'sly', 'slyly', 'cheeky', 'smirking', 'smirks', 'sing-song', 'singsong', 'giddy'] },
+  { id: 'romantic', name: 'Romantic', words: ['romantic', 'tender', 'tenderly', 'loving', 'lovingly', 'affectionate', 'affectionately', 'sultry', 'seductive', 'seductively', 'breathy', 'longing', 'adoring', 'flirtatious', 'flirty', 'intimate'] },
+  { id: 'tense', name: 'Tense', words: ['tense', 'tensely', 'action', 'mysterious', 'urgent', 'urgently', 'strained', 'cold', 'coldly', 'flat', 'flatly', 'wary', 'warily', 'guarded', 'clipped', 'curt', 'curtly', 'grim', 'grimly'] },
+];
+const MOODS_MAX = 40;
+const MOOD_WORDS_MAX = 30;
+// The mood of a line: the one whose words its tags and note name most, the
+// first in the list on a tie. With none, the first mood whose words hold
+// the scene's mood, such as scary or cozy. With neither, none.
+function feelingOf(line: { tags?: string[]; style?: string; text?: string }, sceneMood: string, moods: Mood[] = BUILT_IN_MOODS): string {
   const said = ((line.tags || []).join(' ') + ' ' + String(line.style || '') + ' ' + (String(line.text || '').match(/\[[^\]]*\]/g) || []).join(' ')).toLowerCase();
   const words = said.split(/[^a-z-]+/).filter(Boolean);
   let best = '';
   let most = 0;
-  for (const f of FEELINGS) {
-    const n = words.filter((w) => FEELING_WORDS[f].indexOf(w) >= 0).length;
+  for (const m of moods) {
+    const n = words.filter((w) => m.words.indexOf(w) >= 0).length;
     if (n > most) {
       most = n;
-      best = f;
+      best = m.id;
     }
   }
-  return best || MOOD_FEELING[sceneMood] || '';
+  if (best) return best;
+  const scene = String(sceneMood || '').toLowerCase();
+  const hit = scene ? moods.find((m) => m.words.indexOf(scene) >= 0) : null;
+  return hit ? hit.id : '';
 }
 
 interface Member {
@@ -1862,9 +1870,20 @@ const DEFAULTS: any = {
   videoNameFont: '',
   videoNameSize: 100,
   videoPicRing: true,
+  videoPicRingWidth: 3,
   videoPicMove: true,
   videoTwo: true,
   videoMoodPics: true,
+  moodList: [],
+  videoWordFill: 'solid',
+  videoWordStops: ['#f2b880'],
+  videoWordDir: 'down',
+  videoNameFill: 'solid',
+  videoNameStops: ['#f2b880'],
+  videoNameDir: 'right',
+  videoCapFill: 'solid',
+  videoCapStops: ['#f2b880'],
+  videoCapDir: 'right',
   videoWordShadow: true,
   videoWordShadowInk: '',
   videoWordShadowDark: 65,
@@ -1883,7 +1902,7 @@ const DEFAULTS: any = {
   mpShadowInk: '',
   mpShadowDark: 25,
   mpShadowSoft: 8,
-  videoBacks: [{ id: 'main', name: 'Main', kind: 'dark', color: '', dim: 40, blur: 0, shapes: [], use: 'match', moods: [], places: [] }],
+  videoBacks: [{ id: 'main', name: 'Main', kind: 'dark', color: '', fill: 'solid', stops: ['#2a1f3d'], dir: 'down', dim: 40, blur: 0, shapes: [], use: 'match', moods: [], places: [] }],
   videoBackPick: 'main',
   videoEdges: 50,
   videoEdgeColor: '',
@@ -3739,8 +3758,13 @@ export function setup(ctx: Ctx, overrides?: any) {
   // The backgrounds are a list, each with an id, and one is picked for the
   // whole video. Settings from before the list have one background in four
   // settings of their own, read here as the entry main.
-  interface VideoShapeDef { id: string; kind: 'rect' | 'round' | 'ellipse' | 'tri' | 'line' | 'text'; x: number; y: number; w: number; h: number; rot: number; fill: string; fill2: string; clear: number; text: string }
-  interface VideoBack { id: string; name: string; kind: 'dark' | 'color' | 'picture' | 'design'; color: string; dim: number; blur: number; shapes: VideoShapeDef[]; use: 'match' | 'hand'; moods: string[]; places: string[] }
+  // grad is none, linear or radial. stops are the colors after fill, so a
+  // gradient has fill and then each stop, spread evenly. dir is a linear
+  // gradient's direction.
+  interface VideoShapeDef { id: string; kind: 'rect' | 'round' | 'ellipse' | 'tri' | 'line' | 'text'; x: number; y: number; w: number; h: number; rot: number; fill: string; grad: 'none' | 'linear' | 'radial'; stops: string[]; dir: string; clear: number; text: string; fill2?: string }
+  // fill, stops and dir are A color of your own's fill: one color, or a
+  // gradient from color through each stop.
+  interface VideoBack { id: string; name: string; kind: 'dark' | 'color' | 'picture' | 'design'; color: string; fill: 'solid' | 'linear' | 'radial'; stops: string[]; dir: string; dim: number; blur: number; shapes: VideoShapeDef[]; use: 'match' | 'hand'; moods: string[]; places: string[] }
   function backList(): VideoBack[] {
     if (Array.isArray(S.videoBacks) && S.videoBacks.length) return S.videoBacks;
     const one: VideoBack = {
@@ -3748,6 +3772,9 @@ export function setup(ctx: Ctx, overrides?: any) {
       name: 'Main',
       kind: ['dark', 'color', 'picture', 'design'].indexOf(S.videoBack) >= 0 ? S.videoBack : 'dark',
       color: hexOr(S.videoBackColor, ''),
+      fill: 'solid',
+      stops: ['#2a1f3d'],
+      dir: 'down',
       dim: numOr(S.videoDim, 40),
       blur: numOr(S.videoBlur, 0),
       shapes: [],
@@ -3904,7 +3931,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         picture: mem && mem.picture ? String(mem.picture) : '',
         caption: '',
         member: mem ? String(mem.id) : '',
-        feeling: line.kind === 'narration' ? '' : feelingOf(line, moodAt(sh, p.k)),
+        feeling: line.kind === 'narration' ? '' : feelingOf(line, moodAt(sh, p.k), moodsNow()),
       };
     });
   }
@@ -3987,7 +4014,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     } else if (bk.kind === 'color' || bk.kind === 'design') {
       // A design starts from its own color, the same box as A color of your
       // own, and its shapes go over it.
-      b.fillStyle = hexOr(bk.color, '#141218');
+      b.fillStyle = fillOf(b, bk.fill || 'solid', [hexOr(bk.color, '#141218')].concat(bk.stops || []), bk.dir || 'down', 0, 0, W, H);
       b.fillRect(0, 0, W, H);
       if (bk.kind === 'design') drawShapes(b, W, H, bk.shapes || [], st.font);
     } else dark();
@@ -4072,12 +4099,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       g.rotate(((Number(sh.rot) || 0) * Math.PI) / 180);
       g.globalAlpha = 1 - Math.min(95, Math.max(0, Number(sh.clear) || 0)) / 100;
       const fill = hexOr(sh.fill, shapeInk(sh.kind));
-      if (/^#[0-9a-f]{6}$/i.test(String(sh.fill2 || ''))) {
-        const grad = g.createLinearGradient(0, -h / 2, 0, h / 2);
-        grad.addColorStop(0, fill);
-        grad.addColorStop(1, String(sh.fill2));
-        g.fillStyle = grad;
-      } else g.fillStyle = fill;
+      g.fillStyle = fillOf(g, sh.grad || 'none', [fill].concat(sh.stops || []), sh.dir || 'down', -w / 2, -h / 2, w / 2, h / 2);
       if (sh.kind === 'text') {
         // The words fill the box: as large as fits its height and width.
         const text = String(sh.text || '').trim();
@@ -4122,7 +4144,8 @@ export function setup(ctx: Ctx, overrides?: any) {
   const SCENE_FADE_S = 1;
   // only, when set, draws that one background behind the whole video, for
   // the preview while it is being changed.
-  async function videoStage(parts: VideoPart[], sh: Show | null = null, only = ''): Promise<VideoStage> {
+  // fixed, when given, is the scenes' timeline, for the example clip.
+  async function videoStage(parts: VideoPart[], sh: Show | null = null, only = '', fixed: { t: number; id: string }[] | null = null): Promise<VideoStage> {
     const { w: W, h: H } = videoSize();
     // Only a font of your own is waited on. The built-in ones need nothing.
     if (/^own:/.test(String(S.videoFont)) || /^own:/.test(nameFontChoice())) {
@@ -4139,6 +4162,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       if (times.length && times[times.length - 1].t >= p.start) times[times.length - 1] = { t: p.start, id: sc.back };
       else times.push({ t: p.start, id: sc.back });
     }
+    if (fixed) times.splice(0, times.length, ...fixed.map((x) => ({ ...x })));
     if (only && backList().some((b) => b.id === only)) times.splice(0, times.length, { t: 0, id: only });
     if (!times.length) times.push({ t: 0, id: dflt });
     times[0].t = 0;
@@ -4289,6 +4313,28 @@ export function setup(ctx: Ctx, overrides?: any) {
     g.shadowOffsetY = Math.min(20, Math.max(0, numOr(S['video' + which + 'ShadowFar'], 2))) * u;
   }
 
+  // A fill over a box: one color, or a linear or radial gradient through
+  // two to six colors, spread evenly. A radial one runs from the middle of
+  // the box to its corners.
+  const GRAD_DIRS = ['down', 'right', 'diag', 'diag2'];
+  function fillOf(g: CanvasRenderingContext2D, kind: string, colors: string[], dir: string, x0: number, y0: number, x1: number, y1: number): string | CanvasGradient {
+    const list = colors.filter((c) => /^#[0-9a-f]{6}$/i.test(String(c || ''))).slice(0, 6);
+    if ((kind !== 'linear' && kind !== 'radial') || list.length < 2) return list[0] || colors[0] || '#ffffff';
+    const cx = (x0 + x1) / 2;
+    const cy = (y0 + y1) / 2;
+    let grad: CanvasGradient;
+    if (kind === 'radial') grad = g.createRadialGradient(cx, cy, 0, cx, cy, Math.max(1, Math.hypot((x1 - x0) / 2, (y1 - y0) / 2)));
+    else if (dir === 'right') grad = g.createLinearGradient(x0, cy, x1, cy);
+    else if (dir === 'diag') grad = g.createLinearGradient(x0, y0, x1, y1);
+    else if (dir === 'diag2') grad = g.createLinearGradient(x0, y1, x1, y0);
+    else grad = g.createLinearGradient(cx, y0, cx, y1);
+    list.forEach((c, i) => grad.addColorStop(i / (list.length - 1), c));
+    return grad;
+  }
+  // A text fill from the settings: the first color, then the stops.
+  const textFill = (g: CanvasRenderingContext2D, which: 'Word' | 'Name' | 'Cap', first: string, x0: number, y0: number, x1: number, y1: number) =>
+    fillOf(g, String(S['video' + which + 'Fill'] || 'solid'), [first].concat(Array.isArray(S['video' + which + 'Stops']) ? S['video' + which + 'Stops'] : []), String(S['video' + which + 'Dir'] || 'down'), x0, y0, x1, y1);
+
   function drawPart(g: CanvasRenderingContext2D, st: VideoStage, p: VideoPart, local: number, alpha: number, dx: number, dy: number) {
     const W = st.w;
     const H = st.h;
@@ -4318,13 +4364,16 @@ export function setup(ctx: Ctx, overrides?: any) {
       }
       const space = g.measureText(' ').width;
       const widths = words.map((wd) => g.measureText(wd).width);
-      let x = W / 2 - Math.min(MAX_W, widths.reduce((a, b) => a + b, 0) + space * (words.length - 1)) / 2 + dx;
+      const lineW = Math.min(MAX_W, widths.reduce((a, b) => a + b, 0) + space * (words.length - 1));
+      let x = W / 2 - lineW / 2 + dx;
       const y = (lower ? H * 0.8 : H / 2) + dy;
+      // The gradient spans the whole caption, so each word is part of it.
+      const capFill = textFill(g, 'Cap', capInk, x, y - size, x + lineW, y + size * 0.25);
       words.forEach((wd, n) => {
         if (p.hidden[n]) coverWord(g, wd, x, y, size, capInk, alpha * 0.8);
         else {
           g.globalAlpha = alpha * 0.8;
-          g.fillStyle = capInk;
+          g.fillStyle = capFill;
           g.fillText(wd, x, y);
         }
         x += widths[n] + space;
@@ -4424,7 +4473,7 @@ export function setup(ctx: Ctx, overrides?: any) {
           g.save();
           g.shadowColor = 'transparent';
           g.globalAlpha = a * 0.9;
-          g.lineWidth = 3 * u;
+          g.lineWidth = Math.min(20, Math.max(1, numOr(S.videoPicRingWidth, 3))) * u;
           g.strokeStyle = ring;
           pathPic();
           g.stroke();
@@ -4445,6 +4494,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         const full = widths.reduce((q, w) => q + w, 0) + gap * (chars.length - 1);
         let nx = x - full / 2;
         const base = at + nameSize;
+        g.fillStyle = textFill(g, 'Name', ring, nx, base - nameSize, nx + full, base + nameSize * 0.25);
         // A name with a hidden word in it is covered whole.
         // Checked on the whole name, since a long one is cut short to fit.
         if (hiddenWords(f.name.split(/\s+/), hiddenList()).some(Boolean)) coverWord(g, label, nx, base, nameSize, ring, a);
@@ -4483,8 +4533,11 @@ export function setup(ctx: Ctx, overrides?: any) {
     const mode = S.videoWords || 'light';
     shown.forEach((row, r) => {
       const ws = row.map((k) => g.measureText(words[k]).width);
-      let x = cx - (ws.reduce((a, b) => a + b, 0) + sp * (row.length - 1)) / 2;
+      const rowW = ws.reduce((a, b) => a + b, 0) + sp * (row.length - 1);
+      let x = cx - rowW / 2;
       const base = y + (r + 1) * lineH - Math.round(lineH * 0.3);
+      // The gradient spans the whole line, so every word reads the same way.
+      const rowFill = textFill(g, 'Word', ink, x, base - size, x + rowW, base + size * 0.25);
       row.forEach((k, n) => {
         const on = k <= said;
         // How far a word is into its fade, from 0 when it is said to 1 a
@@ -4494,10 +4547,10 @@ export function setup(ctx: Ctx, overrides?: any) {
         const a = alpha * (mode === 'all' ? 1 : soft ? ease(into) : on ? 1 : mode === 'appear' ? 0 : 0.45);
         if (a > 0) {
           if (p.hidden[k]) coverWord(g, words[k], x, base, size, ink, a);
-          else if (mode === 'blur' && into < 1) blurWord(g, words[k], x, base, ink, a, (1 - ease(into)) * WORD_BLUR * u);
+          else if (mode === 'blur' && into < 1) blurWord(g, words[k], x, base, rowFill, a, (1 - ease(into)) * WORD_BLUR * u);
           else {
             g.globalAlpha = a;
-            g.fillStyle = ink;
+            g.fillStyle = rowFill;
             g.fillText(words[k], x, base);
           }
         }
@@ -4532,7 +4585,7 @@ export function setup(ctx: Ctx, overrides?: any) {
   // A word drawn blurred by r pixels. Without a canvas blur, it is drawn
   // several times, spread around its place at a low opacity, which looks
   // much the same.
-  function blurWord(g: CanvasRenderingContext2D, word: string, x: number, base: number, ink: string, a: number, r: number) {
+  function blurWord(g: CanvasRenderingContext2D, word: string, x: number, base: number, ink: string | CanvasGradient, a: number, r: number) {
     g.save();
     g.fillStyle = ink;
     if (r < 0.5) {
@@ -10624,6 +10677,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     top.appendChild(findRow);
     const conn = activeConnection();
     if (!conn) top.appendChild(notice('warn', ttsWhy || 'Pick your TTS connection in the Settings tab to choose voices.'));
+    top.appendChild(moodListFold());
     page.appendChild(top);
     const people = castInOrder();
     const q = castFind.trim().toLowerCase();
@@ -11168,13 +11222,173 @@ export function setup(ctx: Ctx, overrides?: any) {
     return row;
   }
 
+  // The moods in use: the reader's own list, or the built-in one.
+  function moodsNow(): Mood[] {
+    return Array.isArray(S.moodList) && S.moodList.length ? S.moodList : BUILT_IN_MOODS;
+  }
+  // Takes out every picture of these moods, from every person and from the
+  // account, so a mood that goes leaves nothing behind.
+  function dropMoodPictures(ids: string[]) {
+    let changed = false;
+    for (const m of (S.cast || []) as Member[]) {
+      const had = m.moodPics || [];
+      const gone = had.filter((x) => ids.indexOf(x) >= 0);
+      if (!gone.length) continue;
+      m.moodPics = had.filter((x) => ids.indexOf(x) < 0);
+      changed = true;
+      for (const id of gone) {
+        moodPics.delete(String(m.id) + ':' + id);
+        rpc({ type: 'mood_pic_put', member: String(m.id), feeling: id, picture: '' }, 15000).catch(() => {});
+      }
+    }
+    return changed;
+  }
+  const picturesOf = (id: string) => ((S.cast || []) as Member[]).filter((m) => (m.moodPics || []).indexOf(id) >= 0).length;
+  // One list of moods for the whole cast, on the Cast tab, since the moods
+  // belong to the people and their pictures, not to one video.
+  function moodListFold(): HTMLElement {
+    return fold('Moods for pictures', (body) => {
+      const draw = () => {
+        body.replaceChildren();
+        body.appendChild(hint('A person can have a picture for each mood. A line shows the mood whose words its voice tags name most. On a tie, the higher one wins.'));
+        const own = (): Mood[] => {
+          if (!Array.isArray(S.moodList) || !S.moodList.length) S.moodList = JSON.parse(JSON.stringify(BUILT_IN_MOODS));
+          return S.moodList;
+        };
+        const keep = () => {
+          set({ moodList: own().slice() });
+          for (const f of moodFolds) f();
+        };
+        const list = moodsNow();
+        list.forEach((mood, n) => {
+          const box = el('<div class="af-col af-moodedit"></div>');
+          box.setAttribute('data-af-mood', mood.id);
+          const nameId = rid('mn');
+          box.appendChild(labelRow('Name', '', nameId));
+          const name = el('<input type="text" class="af-field" maxlength="30" autocomplete="off" id="' + nameId + '" data-af-moodname>') as HTMLInputElement;
+          name.value = mood.name;
+          name.addEventListener('change', () => {
+            const v = name.value.trim().slice(0, 30);
+            if (!v) {
+              name.value = mood.name;
+              return;
+            }
+            const mine = own().find((x) => x.id === mood.id);
+            if (mine) mine.name = v;
+            keep();
+          });
+          box.appendChild(name);
+          const wordsId = rid('mw');
+          box.appendChild(labelRow('Words that pick it', 'One per line, such as angrily. Matched whole.', wordsId));
+          const words = el('<textarea class="af-field" rows="3" spellcheck="false" id="' + wordsId + '" data-af-moodwords></textarea>') as HTMLTextAreaElement;
+          words.value = mood.words.join('\n');
+          words.addEventListener('change', () => {
+            const v = words.value
+              .split('\n')
+              .map((x) => x.trim().toLowerCase().slice(0, 40))
+              .filter((x, i, all) => x && all.indexOf(x) === i)
+              .slice(0, MOOD_WORDS_MAX);
+            words.value = v.join('\n');
+            const mine = own().find((x) => x.id === mood.id);
+            if (mine) mine.words = v;
+            keep();
+          });
+          box.appendChild(words);
+          const row = el('<div class="af-row"></div>');
+          const move = (by: number) => {
+            const all = own();
+            const at = all.findIndex((x) => x.id === mood.id);
+            const to = at + by;
+            if (at < 0 || to < 0 || to >= all.length) return;
+            const [it] = all.splice(at, 1);
+            all.splice(to, 0, it);
+            keep();
+            draw();
+          };
+          const up = button('Move up', () => move(-1));
+          up.disabled = n === 0;
+          up.setAttribute('data-af-mood-act', 'up');
+          const down = button('Move down', () => move(1));
+          down.disabled = n === list.length - 1;
+          down.setAttribute('data-af-mood-act', 'down');
+          const del = button('Delete', async () => {
+            const pics = picturesOf(mood.id);
+            const also = pics ? ' The ' + (pics === 1 ? 'picture one person has' : 'pictures ' + pics + ' people have') + ' for it are taken out with it.' : '';
+            if (!(await askSure('Delete ' + mood.name, 'Delete the mood ' + mood.name + '?' + also + ' There is no undo.', 'Delete', true))) return;
+            const all = own().filter((x) => x.id !== mood.id);
+            S.moodList = all;
+            dropMoodPictures([mood.id]);
+            set({ moodList: all.slice(), cast: S.cast });
+            for (const f of moodFolds) f();
+            draw();
+          });
+          del.setAttribute('data-af-mood-act', 'delete');
+          // One mood is always left, since an empty list is the built-in one.
+          del.disabled = list.length < 2;
+          row.appendChild(up);
+          row.appendChild(down);
+          row.appendChild(del);
+          box.appendChild(row);
+          body.appendChild(box);
+        });
+        const tools = el('<div class="af-row"></div>');
+        const add = button('Add a mood', () => {
+          const all = own();
+          if (all.length >= MOODS_MAX) return;
+          let id = '';
+          do id = 'm' + Math.random().toString(36).slice(2, 9);
+          while (all.some((x) => x.id === id));
+          all.push({ id, name: 'Mood ' + (all.length + 1), words: [] });
+          keep();
+          draw();
+          const fresh = body.querySelector('[data-af-mood="' + id + '"] [data-af-moodname]') as HTMLInputElement | null;
+          if (fresh) fresh.focus();
+        });
+        add.setAttribute('data-af-mood-add', '');
+        add.disabled = list.length >= MOODS_MAX;
+        const back = button('Back to built-in', async () => {
+          if (!Array.isArray(S.moodList) || !S.moodList.length) {
+            said.textContent = 'The moods are already the built-in ones. Nothing changed.';
+            return;
+          }
+          const gone = S.moodList.map((x: Mood) => x.id).filter((id: string) => !BUILT_IN_MOODS.some((b) => b.id === id));
+          const pics = gone.reduce((n: number, id: string) => n + picturesOf(id), 0);
+          const also = pics ? ' Pictures for moods that are not built in are taken out.' : '';
+          if (!(await askSure('Back to the built-in moods', 'Put the built-in moods and their words back?' + also + ' There is no undo.', 'Put them back', true))) return;
+          dropMoodPictures(gone);
+          S.moodList = [];
+          set({ moodList: [], cast: S.cast });
+          for (const f of moodFolds) f();
+          draw();
+        });
+        back.setAttribute('data-af-mood-back', '');
+        tools.appendChild(add);
+        tools.appendChild(back);
+        body.appendChild(tools);
+        const said = el('<p class="af-status" role="status" data-af-moodsaid></p>');
+        body.appendChild(said);
+      };
+      draw();
+    });
+  }
+
   // A picture for each feeling, for the Studio's videos. Each is cropped
   // like the main picture and kept in a file of its own on the account.
+  // Each open Pictures for moods, drawn again when the list of moods changes.
+  const moodFolds = new Set<() => void>();
   function moodPicsFold(m: Member): HTMLElement {
     return fold('Pictures for moods', (body) => {
-      body.appendChild(hint('Optional. A video shows the one that fits the line, from its voice tags, or else the mood of the scene.'));
-      for (const f of FEELINGS) {
-        const label = f.charAt(0).toUpperCase() + f.slice(1);
+      const draw = () => {
+      if (!body.isConnected && drawn) {
+        moodFolds.delete(draw);
+        return;
+      }
+      drawn = true;
+      body.replaceChildren();
+      body.appendChild(hint('Optional. A video shows the one that fits the line. The moods and their words are under Moods for pictures, at the top of this tab.'));
+      for (const mood of moodsNow()) {
+        const f = mood.id;
+        const label = mood.name;
         const line = el('<div class="af-col af-moodpic"></div>');
         line.setAttribute('data-af-moodpic', f);
         const top = el('<div class="af-row"><span class="af-avatar af-moodthumb" aria-hidden="true"></span><span class="af-lab"></span></div>');
@@ -11206,7 +11420,7 @@ export function setup(ctx: Ctx, overrides?: any) {
           moodPics.set(String(m.id) + ':' + f, Promise.resolve(pic));
           const list = (m.moodPics || []).filter((x) => x !== f);
           if (pic) list.push(f);
-          m.moodPics = FEELINGS.filter((x) => list.indexOf(x) >= 0);
+          m.moodPics = moodsNow().map((x) => x.id).filter((x) => list.indexOf(x) >= 0);
           save();
           show(pic);
         };
@@ -11241,7 +11455,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         choose.setAttribute('aria-label', 'Choose a picture for ' + label);
         choose.setAttribute('data-af-moodchoose', f);
         const drop = button('Take it out', async () => {
-          if (!(await askSure('Take out the ' + f + ' picture', 'The ' + f + ' picture of ' + m.name + ' is taken out. The main picture is used instead.', 'Take it out', true))) return;
+          if (!(await askSure('Take out the ' + label + ' picture', 'The ' + label + ' picture of ' + m.name + ' is taken out. The main picture is used instead.', 'Take it out', true))) return;
           await keep('');
         });
         drop.setAttribute('aria-label', 'Take out the picture for ' + label);
@@ -11254,6 +11468,10 @@ export function setup(ctx: Ctx, overrides?: any) {
         show('');
         if (has()) void moodPicture(String(m.id), f).then((pic) => show(pic));
       }
+      };
+      let drawn = false;
+      moodFolds.add(draw);
+      draw();
     });
   }
 
@@ -12365,10 +12583,14 @@ export function setup(ctx: Ctx, overrides?: any) {
   // Keeping a performance: which parts go in, the audio, a video with every
   // choice of how it looks, and words to hide. A preview draws the video
   // with the choices made, and can be played.
-  let studioRefs: { canvas: HTMLCanvasElement; scrub: HTMLInputElement; scrubOut: HTMLElement; play: HTMLButtonElement; make: HTMLButtonElement; dlall: HTMLButtonElement; dlpart: HTMLButtonElement; said: HTMLElement; scrubRow: HTMLElement; trimRow: HTMLElement; tClear: HTMLButtonElement } | null = null;
+  let studioRefs: { example?: HTMLElement; canvas: HTMLCanvasElement; scrub: HTMLInputElement; scrubOut: HTMLElement; play: HTMLButtonElement; make: HTMLButtonElement; dlall: HTMLButtonElement; dlpart: HTMLButtonElement; said: HTMLElement; scrubRow: HTMLElement; trimRow: HTMLElement; tClear: HTMLButtonElement } | null = null;
   // What the preview draws: the last performance, or a made-up line when
   // there is none.
-  let studioView: { sh: Show | null; mix: Mix | null; parts: VideoPart[]; st: VideoStage | null; title: string; total: number; length: number; at: number } = { sh: null, mix: null, parts: [], st: null, title: '', total: 0, length: 0, at: 0 };
+  // example is true while the preview shows the example clip, which has no
+  // sound and no performance behind it.
+  let studioView: { sh: Show | null; mix: Mix | null; parts: VideoPart[]; st: VideoStage | null; title: string; total: number; length: number; at: number; example?: boolean } = { sh: null, mix: null, parts: [], st: null, title: '', total: 0, length: 0, at: 0 };
+  // Whether the reader picked the example while a performance is there.
+  let studioExample = false;
   let studioAsk = 0;
   let previewRun: { stop: () => void } | null = null;
   // Repaints the trim's line, while the Trim fold is open.
@@ -12387,24 +12609,82 @@ export function setup(ctx: Ctx, overrides?: any) {
 
   // A made-up line, said by someone in the cast with a picture where there is
   // one, so the picture and name choices can be seen before anything plays.
-  function samplePart(): VideoPart {
-    const cast: Member[] = (S.cast || []).filter((m: Member) => m.kind !== 'narrator');
-    const who = cast.find((m) => !!m.picture) || cast[0] || null;
-    const words = 'We leave before the bells ring, so pack only what you can carry.'.split(' ');
-    return {
-      k: 0,
-      kind: 'line',
-      narration: false,
-      words,
-      times: words.map((_, k) => k * 0.3),
-      hidden: hiddenWords(words, hiddenList()),
-      start: 0,
-      len: words.length * 0.3,
-      who: who && /^(character|persona|npc)$/.test(who.kind) ? who.kind : 'character',
-      name: who ? shownName(who) : 'Odile Venn',
-      picture: who && who.picture ? String(who.picture) : '',
-      caption: '',
-    };
+  // ---- the example clip ----
+  // A short silent clip, so the look can be seen and changed with nothing
+  // played. Two made-up people take turns, so Two speakers on screen shows,
+  // one line has a voice tag, so a mood picture can show, and a sound
+  // caption, narration and two scenes come in between. The people's
+  // pictures are drawn here: a circle in their kind's color with an
+  // initial, and a lighter one for a mood, so the example never borrows a
+  // picture from the cast.
+  const EXAMPLE_PEOPLE = { a: { name: 'Juniper', kind: 'character' }, b: { name: 'Ansel', kind: 'npc' } };
+  const examplePics = new Map<string, string>();
+  function examplePicture(kind: string, initial: string, light: boolean): string {
+    const key = kind + initial + (light ? '+' : '') + kindHex(kind);
+    const had = examplePics.get(key);
+    if (had) return had;
+    let url = '';
+    try {
+      const c = canvasOf(160, 160);
+      const g = c.getContext('2d') as CanvasRenderingContext2D;
+      g.fillStyle = kindHex(kind);
+      g.fillRect(0, 0, 160, 160);
+      if (light) {
+        g.fillStyle = 'rgba(255,255,255,0.35)';
+        g.fillRect(0, 0, 160, 160);
+      }
+      g.fillStyle = 'rgba(255,255,255,0.92)';
+      g.font = '700 76px system-ui, sans-serif';
+      g.textAlign = 'center';
+      g.textBaseline = 'middle';
+      g.fillText(initial, 80, 86);
+      url = c.toDataURL('image/png');
+    } catch (_) {}
+    examplePics.set(key, url);
+    return url;
+  }
+  function exampleClip(): { parts: VideoPart[]; title: string; total: number; scenes: { t: number; id: string }[] } {
+    const list = hiddenList();
+    // With words to hide, one of them is in the first line, so its cover
+    // shows from the start.
+    const hide = list.length && list[0].length ? ' ' + list[0].join(' ') : '';
+    const lines: { who: 'a' | 'b' | 'n' | 's'; text: string; len: number; tag?: string }[] = [
+      { who: 'n', text: 'Rain tapped on the window of the little shop' + hide + '.', len: 3.4 },
+      { who: 's', text: 'thunder rolling', len: 1.6 },
+      { who: 'a', text: 'Are you closing early tonight?', len: 2.6 },
+      { who: 'b', text: 'Only if the storm lets me.', len: 2.8, tag: 'laughs' },
+      { who: 'a', text: 'Then I will wait here with you.', len: 3 },
+      { who: 'n', text: 'By morning the street was bright and still.', len: 3.4 },
+      { who: 'b', text: 'We made it through.', len: 2.4 },
+    ];
+    const parts: VideoPart[] = [];
+    let at = 0;
+    lines.forEach((l, k) => {
+      const words = l.text.split(/\s+/).filter(Boolean);
+      // Each word is said a little after the last, so the words effects show.
+      const step = (l.len - 0.6) / Math.max(1, words.length);
+      const times = words.map((_, n) => Math.round((0.2 + n * step) * 100) / 100);
+      if (l.who === 's') {
+        parts.push({ k, kind: 'sound', narration: false, words, times: [], hidden: hiddenWords(words, list), start: at, len: l.len, who: 'sound', name: '', picture: '', caption: l.text });
+      } else if (l.who === 'n') {
+        parts.push({ k, kind: 'line', narration: true, words, times, hidden: hiddenWords(words, list), start: at, len: l.len, who: 'narrator', name: '', picture: '', caption: '' });
+      } else {
+        const p = EXAMPLE_PEOPLE[l.who];
+        const mood = !!l.tag && S.videoMoodPics !== false && !!feelingOf({ tags: [l.tag] }, '', moodsNow());
+        parts.push({
+          k, kind: 'line', narration: false, words, times, hidden: hiddenWords(words, list), start: at, len: l.len, who: p.kind, name: p.name,
+          picture: S.videoPics !== false ? examplePicture(p.kind, p.name.charAt(0), mood) : '', caption: '',
+        });
+      }
+      at += l.len;
+    });
+    // A second scene from the morning, on another background when there is
+    // one, so the crossfade shows.
+    const second = backList().find((b) => b.id !== backDefault().id);
+    const morning = parts.find((p) => p.k === 5) as VideoPart;
+    const scenes = [{ t: 0, id: backDefault().id }, { t: morning.start, id: second ? second.id : backDefault().id }];
+    const title = S.videoTitleOn === false ? '' : String(S.videoTitleText || '').trim() || 'The Lantern Shop';
+    return { parts, title, total: at, scenes };
   }
 
   // Builds what the preview draws. `sound` is true when a choice changed the
@@ -12422,17 +12702,31 @@ export function setup(ctx: Ctx, overrides?: any) {
       }
     }
     if (ask !== studioAsk) return;
-    const parts = sh && mix ? videoParts(sh, mix) : [samplePart()];
-    const title = sh && mix ? videoTitle(sh) : '';
-    const total = sh && mix ? mix.channels[0].length / mix.rate : parts[0].len;
-    const st = await videoStage(parts, sh && mix ? sh : null, previewBack);
+    // The example clip, with no performance, or when it is picked.
+    if (!sh || !mix || studioExample) {
+      const ex = exampleClip();
+      const st = await videoStage(ex.parts, null, previewBack, ex.scenes);
+      if (ask !== studioAsk) return;
+      const length = titleSecs(ex.title) + ex.total + Math.min(5, Math.max(0, numOr(S.videoFadeOut, 1.5)));
+      // The same moment in the clip, so a change is seen where it was made.
+      const at = studioView.example ? Math.min(studioView.at, length) : titleSecs(ex.title) + 0.8;
+      studioView = { sh: null, mix: null, parts: ex.parts, st, title: ex.title, total: ex.total, length, at, example: true };
+      paintPreview();
+      paintStudio();
+      trimSaid();
+      return;
+    }
+    const parts = videoParts(sh, mix);
+    const title = videoTitle(sh);
+    const total = mix.channels[0].length / mix.rate;
+    const st = await videoStage(parts, sh, previewBack);
     if (ask !== studioAsk) return;
-    const intro = sh && mix ? titleSecs(title) : 0;
-    const length = intro + total + (sh && mix ? Math.min(5, Math.max(0, numOr(S.videoFadeOut, 1.5))) : 0);
+    const intro = titleSecs(title);
+    const length = intro + total + Math.min(5, Math.max(0, numOr(S.videoFadeOut, 1.5)));
     // The preview stays where it was for the same performance, and starts
     // just after the title for a new one or after a trim.
-    const at = sh && mix ? Math.min(studioView.sh === sh && studioView.at > 0 ? studioView.at : intro + 0.8, length) : 1.5;
-    studioView = { sh: sh && mix ? sh : null, mix, parts, st, title, total, length, at };
+    const at = Math.min(studioView.sh === sh && studioView.at > 0 ? studioView.at : intro + 0.8, length);
+    studioView = { sh, mix, parts, st, title, total, length, at };
     paintPreview();
     paintStudio();
     trimSaid();
@@ -12586,7 +12880,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     };
     const add = button('Add a background', () => {
       if (list.length >= 12) return;
-      const nb: VideoBack = { id: fresh(), name: 'Background ' + (list.length + 1), kind: 'dark', color: '', dim: 40, blur: 0, shapes: [], use: 'match', moods: [], places: [] };
+      const nb: VideoBack = { id: fresh(), name: 'Background ' + (list.length + 1), kind: 'dark', color: '', fill: 'solid', stops: ['#2a1f3d'], dir: 'down', dim: 40, blur: 0, shapes: [], use: 'match', moods: [], places: [] };
       list.push(nb);
       backEditId = nb.id;
       set({ videoBacks: list.slice() });
@@ -12726,6 +13020,103 @@ export function setup(ctx: Ctx, overrides?: any) {
     }
     return wrap;
   }
+
+  // A fill: one color, or a linear or radial gradient. Color 1 is the color
+  // row above it, and colors 2 to 6 are here, spread evenly. A stop past
+  // the second can be removed with no question, since it is quick to add
+  // back. There is no box for where each stop sits.
+  interface FillBind { kind: () => string; setKind: (v: string) => void; stops: () => string[]; setStops: (l: string[], save: boolean) => void; dir: () => string; setDir: (v: string) => void }
+  function gradientRows(key: string, label: string, help: string, bind: FillBind, onChange: () => void): HTMLElement {
+    const wrap = el('<div class="af-col"></div>');
+    wrap.setAttribute('data-af-row', key);
+    const sub = el('<div class="af-sub"><div class="af-under"></div></div>');
+    const inner = sub.firstElementChild as HTMLElement;
+    const draw = () => {
+      inner.replaceChildren();
+      inner.appendChild(hint('Color 1 is the color above. Two very different colors can be harder to read.'));
+      const list = bind.stops().slice(0, 5);
+      if (!list.length) list.push('#f2b880');
+      list.forEach((c, i) => {
+        const row = colorRow(key + 'Stop' + i, 'Color ' + (i + 2), '', '--af-none', '#f2b880', 'Use the built-in color', onChange, {
+          get: () => bind.stops()[i] || '#f2b880',
+          put: (hex, save) => {
+            const now = bind.stops().slice();
+            now[i] = hex || '#f2b880';
+            bind.setStops(now, save);
+          },
+        });
+        if (i >= 1) {
+          const drop = button('Remove', () => {
+            const now = bind.stops().slice();
+            now.splice(i, 1);
+            bind.setStops(now, true);
+            draw();
+            onChange();
+          });
+          drop.setAttribute('data-af-stop-drop', String(i));
+          drop.setAttribute('aria-label', 'Remove color ' + (i + 2));
+          const r = el('<div class="af-row"></div>');
+          r.appendChild(drop);
+          row.appendChild(r);
+        }
+        inner.appendChild(row);
+      });
+      const add = button('Add a color', () => {
+        const now = bind.stops().slice();
+        if (now.length >= 5) return;
+        now.push(now[now.length - 1] || '#f2b880');
+        bind.setStops(now, true);
+        draw();
+        onChange();
+      });
+      add.setAttribute('data-af-stop-add', key);
+      add.disabled = list.length >= 5;
+      const r = el('<div class="af-row"></div>');
+      r.appendChild(add);
+      inner.appendChild(r);
+      const dir = select('Direction', [
+        { id: 'down', label: 'Top to bottom' },
+        { id: 'right', label: 'Left to right' },
+        { id: 'diag', label: 'Top left to bottom right' },
+        { id: 'diag2', label: 'Bottom left to top right' },
+      ], bind.dir() || 'down', (v) => {
+        bind.setDir(v);
+        onChange();
+      });
+      dir.querySelector('select')!.setAttribute('data-af-graddir', key);
+      dir.hidden = bind.kind() !== 'linear';
+      inner.appendChild(dir);
+    };
+    const pick = select(label, [
+      { id: 'solid', label: 'One color' },
+      { id: 'linear', label: 'Linear gradient' },
+      { id: 'radial', label: 'Radial gradient' },
+    ], bind.kind() || 'solid', (v) => {
+      bind.setKind(v);
+      draw();
+      showUnder(sub, v !== 'solid');
+      onChange();
+    }, help);
+    pick.querySelector('select')!.setAttribute('data-af-gradkind', key);
+    wrap.appendChild(pick);
+    draw();
+    sub.hidden = (bind.kind() || 'solid') === 'solid';
+    wrap.appendChild(sub);
+    return wrap;
+  }
+  // A fill kept in three settings, such as videoWordFill, videoWordStops
+  // and videoWordDir.
+  const settingFill = (which: 'Word' | 'Name' | 'Cap'): FillBind => ({
+    kind: () => String(S['video' + which + 'Fill'] || 'solid'),
+    setKind: (v) => set({ ['video' + which + 'Fill']: v }),
+    stops: () => (Array.isArray(S['video' + which + 'Stops']) ? S['video' + which + 'Stops'] : []),
+    setStops: (l, save) => {
+      S['video' + which + 'Stops'] = l;
+      if (save) set({ ['video' + which + 'Stops']: l.slice() });
+    },
+    dir: () => String(S['video' + which + 'Dir'] || 'down'),
+    setDir: (v) => set({ ['video' + which + 'Dir']: v }),
+  });
 
   // A shadow's switch, with its color and the three sliders under it, set
   // by eye on the preview.
@@ -12981,7 +13372,9 @@ export function setup(ctx: Ctx, overrides?: any) {
       h,
       rot: 0,
       fill: '',
-      fill2: '',
+      grad: 'none',
+      stops: ['#141218'],
+      dir: 'down',
       clear: 0,
       text: kind === 'text' ? 'Your words' : '',
     };
@@ -13067,12 +13460,20 @@ export function setup(ctx: Ctx, overrides?: any) {
         sh.fill = hex;
       },
     }));
-    r.editor.appendChild(colorRow('shapeFill2', 'Second color, for a gradient', 'None by default. With one, the shape goes from the first color at the top to this one.', '--af-none', '#141218', 'No gradient', changed, {
-      get: () => sh.fill2,
-      put: (hex) => {
-        sh.fill2 = hex;
+    r.editor.appendChild(gradientRows('shapeFill', 'Fill of the shape', 'One color by default.', {
+      kind: () => (sh.grad && sh.grad !== 'none' ? sh.grad : 'solid'),
+      setKind: (v) => {
+        sh.grad = v === 'linear' || v === 'radial' ? v : 'none';
       },
-    }));
+      stops: () => sh.stops || [],
+      setStops: (l) => {
+        sh.stops = l.slice();
+      },
+      dir: () => sh.dir || 'down',
+      setDir: (v) => {
+        sh.dir = v;
+      },
+    }, changed));
     const clear = slider('See-through', numOr(sh.clear, 0), 0, 95, 5, (v) => (v ? v + '%' : 'Solid'), (v) => {
       sh.clear = v;
       changed();
@@ -13110,7 +13511,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     const dup = button('Duplicate', () => {
       const all = shapesNow();
       if (all.length >= SHAPES_MAX) return;
-      const copy = { ...sh, id: rid('sh').replace(/[^a-z0-9]/gi, '').slice(0, 24), x: Math.min(1.5, sh.x + 0.03), y: Math.min(1.5, sh.y + 0.03) };
+      const copy = { ...sh, stops: (sh.stops || []).slice(), id: rid('sh').replace(/[^a-z0-9]/gi, '').slice(0, 24), x: Math.min(1.5, sh.x + 0.03), y: Math.min(1.5, sh.y + 0.03) };
       all.splice(all.indexOf(sh) + 1, 0, copy);
       designSel = copy.id;
       saveDesignSoon(true);
@@ -13343,14 +13744,19 @@ export function setup(ctx: Ctx, overrides?: any) {
     const mText = r.make.querySelector('span:last-child') || r.make;
     if (mText.textContent !== mWords) mText.textContent = mWords;
     // While a video waits to go on, this button carries it on.
-    r.play.disabled = goOnNow ? false : !v.sh || !!videoRun || videoPreparing;
+    const shown = !!v.sh || !!v.example;
+    r.play.disabled = goOnNow ? false : !shown || !!videoRun || videoPreparing;
     const pWords = goOnNow ? 'Go on with the video' : previewRun ? 'Stop the preview' : 'Play the preview';
     const pText = r.play.querySelector('span:last-child') || r.play;
     if (pText.textContent !== pWords) pText.textContent = pWords;
-    r.scrubRow.hidden = !v.sh;
+    r.scrubRow.hidden = !shown;
     r.trimRow.hidden = !v.sh;
     r.tClear.disabled = !v.sh || !v.sh.trim || (!v.sh.trim.from && !v.sh.trim.to);
-    if (v.sh) {
+    if (r.example) {
+      r.example.hidden = !v.example;
+      setText(r.example, kept ? 'The example has no sound. Make a video and the downloads use your performance.' : 'This is an example with no sound. Play a message to make a video or download audio.');
+    }
+    if (shown) {
       r.scrub.max = String(Math.max(0.1, v.length));
       if (document.activeElement !== r.scrub) r.scrub.value = String(v.at);
       r.scrub.style.setProperty('--af-fill-to', (v.length ? (v.at / v.length) * 100 : 0) + '%');
@@ -13366,16 +13772,56 @@ export function setup(ctx: Ctx, overrides?: any) {
         t.play.title = label;
         t.play.innerHTML = previewRun ? ICON_STOP : ICON_PLAY;
       }
-      t.play.disabled = goOnNow2 ? false : !v.sh || !!videoRun || videoPreparing;
+      t.play.disabled = goOnNow2 ? false : !(v.sh || v.example) || !!videoRun || videoPreparing;
       t.scrub.max = String(Math.max(0.1, v.length));
       if (document.activeElement !== t.scrub) t.scrub.value = String(v.at);
       setText(t.time, mmss(v.at) + ' of ' + mmss(v.length));
     }
   }
 
+  // Plays the example from where the bar is, with no sound, and from the
+  // start again at the end, until it is stopped.
+  function playExample() {
+    const v = studioView;
+    hush('studio');
+    let raf = 0;
+    let done = false;
+    const t0 = performance.now() - (v.at >= v.length - 0.05 ? 0 : v.at) * 1000;
+    let start = t0;
+    const end = () => {
+      if (done) return;
+      done = true;
+      if (raf) cancelAnimationFrame(raf);
+      document.removeEventListener('visibilitychange', away);
+      if (previewRun === run) previewRun = null;
+      paintStudio();
+    };
+    const run = { stop: end };
+    previewRun = run;
+    const away = () => {
+      if (document.visibilityState === 'hidden') end();
+    };
+    document.addEventListener('visibilitychange', away);
+    const tick = () => {
+      if (done || studioView !== v) return end();
+      let t = (performance.now() - start) / 1000;
+      if (t >= v.length) {
+        start = performance.now();
+        t = 0;
+      }
+      v.at = t;
+      paintPreview();
+      paintStudio();
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    paintStudio();
+  }
+
   // Plays the preview from where the bar is, with its sound.
   function playPreview() {
     const v = studioView;
+    if (v.example && v.st) return playExample();
     if (!v.sh || !v.mix || !v.st) return;
     hush('studio');
     const w: any = window as any;
@@ -13433,7 +13879,8 @@ export function setup(ctx: Ctx, overrides?: any) {
   // names. Names, pictures and notes stay as they are when a look is used.
   const LOOK_KEYS = [
     'videoShape', 'videoFont', 'videoSize', 'videoInk', 'videoCaptionInk', 'videoWords', 'videoPlace', 'videoQuotes', 'videoPicShape', 'videoPicSize',
-    'videoNameColor', 'videoNameFont', 'videoNameSize', 'videoPicRing', 'videoPicMove', 'videoTwo', 'videoMoodPics',
+    'videoNameColor', 'videoNameFont', 'videoNameSize', 'videoPicRing', 'videoPicRingWidth', 'videoPicMove', 'videoTwo', 'videoMoodPics',
+    'videoWordFill', 'videoWordStops', 'videoWordDir', 'videoNameFill', 'videoNameStops', 'videoNameDir', 'videoCapFill', 'videoCapStops', 'videoCapDir',
     'videoWordShadow', 'videoWordShadowInk', 'videoWordShadowDark', 'videoWordShadowSoft', 'videoWordShadowFar',
     'videoNameShadow', 'videoNameShadowInk', 'videoNameShadowDark', 'videoNameShadowSoft', 'videoNameShadowFar', 'videoBacks', 'videoBackPick', 'videoEdges', 'videoEdgeColor', 'videoMove', 'videoMoveSecs',
     'videoTitleOn', 'videoFadeOut', 'videoCaptions',
@@ -13813,7 +14260,21 @@ export function setup(ctx: Ctx, overrides?: any) {
     canvas.setAttribute('aria-label', 'A preview of the video');
     canvas.setAttribute('data-af-videopreview', '');
     hookDesign(canvas);
+    // With a performance there, a choice between it and the example.
+    if (keptShow()) {
+      const pick = segmented('Show in the preview', [
+        { id: 'mine', label: 'Your performance' },
+        { id: 'example', label: 'Example' },
+      ], studioExample ? 'example' : 'mine', (v) => {
+        studioExample = v === 'example';
+        studioBuild(false);
+      }, 'Your performance by default. The example shows every part of the look, with no sound.');
+      pick.setAttribute('data-af-row', 'studioExample');
+      vc.appendChild(pick);
+    }
     vc.appendChild(canvas);
+    const exampleNote = el('<p class="af-note" data-af-example role="status" hidden></p>');
+    vc.appendChild(exampleNote);
     // Where in the video the preview is. Its length changes with the
     // choices made, so it is built here rather than with slider().
     const scrubRow = el('<div class="af-col" data-af-scrub data-af-byeye></div>');
@@ -13889,6 +14350,7 @@ export function setup(ctx: Ctx, overrides?: any) {
           look();
         }, '100 by default.'));
         b.appendChild(colorRow('videoInk', 'Color of the words', 'A warm white by default.', '--af-none', STORY_INK, 'Use the built-in color', look));
+        b.appendChild(gradientRows('videoWordFill', 'Fill of the words', 'One color by default. A gradient runs across each line.', settingFill('Word'), look));
         b.appendChild(select('How the words show', [
           { id: 'light', label: 'Light up as they are said' },
           { id: 'appear', label: 'Appear as they are said' },
@@ -13933,7 +14395,16 @@ export function setup(ctx: Ctx, overrides?: any) {
               set({ videoPicSize: v });
               look();
             }, '150 by default, in pixels of a 1080-pixel frame.'),
-            toggle('A ring around each picture', 'On by default, in the color of the name.', 'videoPicRing', look),
+            toggle('A ring around each picture', 'On by default, in the color of the name.', 'videoPicRing', look, () => [
+              (() => {
+                const r = numberRow('How thick the ring is', Math.round(numOr(S.videoPicRingWidth, 3)), 1, 20, 1, (v) => {
+                  set({ videoPicRingWidth: v });
+                  look();
+                }, '3 by default, in pixels of a 1080-pixel frame.');
+                r.setAttribute('data-af-row', 'videoPicRingWidth');
+                return r;
+              })(),
+            ]),
             toggle('Two speakers on screen', 'On by default. Two people who take turns in a scene are shown side by side.', 'videoTwo', look),
             toggle('A picture for each mood', 'On by default. A person with mood pictures on the Cast tab is shown with the one that fits the line.', 'videoMoodPics', look),
           ]),
@@ -13945,6 +14416,7 @@ export function setup(ctx: Ctx, overrides?: any) {
           set({ videoNameColor: v });
           look();
         }, 'Each kind’s color by default, the colors set under Colors for each kind of part.'));
+        b.appendChild(gradientRows('videoNameFill', 'Fill of the names', 'One color by default, the color above. A gradient runs across each name.', settingFill('Name'), look));
       }),
     );
     vc.appendChild(
@@ -13960,6 +14432,16 @@ export function setup(ctx: Ctx, overrides?: any) {
             get: () => backNow().color,
             put: (hex, save) => putBack({ color: hex }, save),
           }),
+        );
+        (colorBox.firstElementChild as HTMLElement).appendChild(
+          gradientRows('backFill', 'Fill of the background', 'One color by default. A radial gradient runs from the middle to the corners.', {
+            kind: () => backNow().fill || 'solid',
+            setKind: (v) => putBack({ fill: v as VideoBack['fill'] }),
+            stops: () => backNow().stops || [],
+            setStops: (l, save) => putBack({ stops: l.slice() }, save),
+            dir: () => backNow().dir || 'down',
+            setDir: (v) => putBack({ dir: v }),
+          }, look),
         );
         const picBox = el('<div class="af-sub"><div class="af-under"></div></div>');
         const picIn = picBox.firstElementChild as HTMLElement;
@@ -14127,6 +14609,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         b.appendChild(
           toggle('Show sounds as captions', 'On by default. A sound shows as a caption in square brackets, such as [thunder]. Off: the background only.', 'videoCaptions', look, () => [
             colorRow('videoCaptionInk', 'Color of the captions', 'The color of the words by default. Pick another, such as yellow, to set captions apart.', '--af-none', hexOr(S.videoInk, STORY_INK), 'Use the color of the words', look),
+            gradientRows('videoCapFill', 'Fill of the captions', 'One color by default. A gradient runs across each caption.', settingFill('Cap'), look),
           ]),
         );
       }),
@@ -14214,6 +14697,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     page.appendChild(cc);
 
     studioRefs = {
+      example: exampleNote,
       canvas,
       scrub,
       scrubOut,
@@ -14700,7 +15184,7 @@ export function setup(ctx: Ctx, overrides?: any) {
   ]);
   // The setting keys each part covers. Which parts are ticked are settings
   // too, but they are never carried in a file or put back by a reset.
-  const NOT_SETTINGS = ['cast', 'groups', 'prompt', 'promptRole', 'engineNoteRole', 'askNoteRole', 'askNotes', 'engineNotes', 'decisionQuestions', 'exportParts', 'importParts', 'resetParts', 'guideSeen', 'builtInSeen', 'movedSeen', 'chatsOff'];
+  const NOT_SETTINGS = ['cast', 'groups', 'moodList', 'prompt', 'promptRole', 'engineNoteRole', 'askNoteRole', 'askNotes', 'engineNotes', 'decisionQuestions', 'exportParts', 'importParts', 'resetParts', 'guideSeen', 'builtInSeen', 'movedSeen', 'chatsOff'];
   const settingKeys = () => Object.keys(DEFAULTS).filter((k) => NOT_SETTINGS.indexOf(k) < 0);
   let transferSaid = '';
   let transferKind = '';
@@ -14758,6 +15242,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         if (parts.indexOf('cast') >= 0) {
           body.cast = JSON.parse(JSON.stringify(S.cast || []));
           body.groups = JSON.parse(JSON.stringify(S.groups || []));
+          body.moodList = JSON.parse(JSON.stringify(S.moodList || []));
         }
         if (parts.indexOf('chats') >= 0) body.chatsOff = (S.chatsOff || []).slice();
         let ok = false;
@@ -14887,6 +15372,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     if (want.indexOf('cast') >= 0 && Array.isArray(body.cast)) {
       S.cast = body.cast;
       S.groups = Array.isArray(body.groups) ? body.groups : [];
+      if (Array.isArray(body.moodList)) S.moodList = body.moodList;
       took.push('the cast');
     }
     // Added to the chats already switched off, never put in their place, so
@@ -15060,7 +15546,7 @@ export function setup(ctx: Ctx, overrides?: any) {
   // the Decision questions and the patterns to leave out.
   function builtInMark(): string {
     const flat = (o: any) => JSON.stringify(Object.keys(o || {}).sort().map((k) => [k, o[k]]));
-    return markText([builtInPrompt, flat(builtInNotes), flat(builtInEngineNotes), flat(builtInQuestions), builtInSkips].join('\u0003'));
+    return markText([builtInPrompt, flat(builtInNotes), flat(builtInEngineNotes), flat(builtInQuestions), builtInSkips, JSON.stringify(BUILT_IN_MOODS)].join('\u0003'));
   }
 
   // The built-in texts this reader has their own version of. Someone on the
@@ -15073,6 +15559,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     if (some(S.askNotes)) out.push('the notes for asking again');
     if (some(S.decisionQuestions)) out.push('the Decision model’s questions');
     if (S.skipPatterns) out.push('the patterns to leave out');
+    if (Array.isArray(S.moodList) && S.moodList.length) out.push('the moods for pictures');
     return out;
   }
 
@@ -15583,7 +16070,7 @@ export function setup(ctx: Ctx, overrides?: any) {
   };
 }
 
-export const __testing = { feelingOf, FEELINGS, FEELING_WORDS, plainWord, hideList, hiddenWords, geminiStyle, sortCast, CAST_SORTS, keyCombo, PAUSE_KEY_DEFAULT, wavBlob, noConnectionWhy, perSentence, clipLevel, levelGain, voiceGender, describeWords, markText, movedFor, movedRowMark, MOVED_DEFAULTS, looksLikeDate, voicedFrames, wordWeight, partTimes, engineOf, noTagsWhy, openRouterVoices, colorCode, hexHsl, hslHex, computedHex, fitTag, tagSound, textFor, styleFor, stripTags, stabilityFor, ENGINES };
+export const __testing = { feelingOf, BUILT_IN_MOODS, plainWord, hideList, hiddenWords, geminiStyle, sortCast, CAST_SORTS, keyCombo, PAUSE_KEY_DEFAULT, wavBlob, noConnectionWhy, perSentence, clipLevel, levelGain, voiceGender, describeWords, markText, movedFor, movedRowMark, MOVED_DEFAULTS, looksLikeDate, voicedFrames, wordWeight, partTimes, engineOf, noTagsWhy, openRouterVoices, colorCode, hexHsl, hslHex, computedHex, fitTag, tagSound, textFor, styleFor, stripTags, stabilityFor, ENGINES };
 
 // The built-in cheer: "Cheering and clapping crowd 1" by freesound_community,
 // a free sound from Pixabay (pixabay.com/sound-effects/people-cheering-and-clapping-crowd-1-5995/),

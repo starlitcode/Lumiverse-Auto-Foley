@@ -2010,7 +2010,7 @@ describe("video backgrounds, fonts and names", () => {
   test("settings from before the list become one background with the id main", () => {
     const h = host();
     const s = h.box.cleanSettings({ videoBack: "picture", videoBackColor: "#203040", videoDim: 55, videoBlur: 4 });
-    expect(s.videoBacks).toEqual([{ id: "main", name: "Main", kind: "picture", color: "#203040", dim: 55, blur: 4, shapes: [], use: "match", moods: [], places: [] }]);
+    expect(s.videoBacks).toEqual([{ id: "main", name: "Main", kind: "picture", color: "#203040", fill: "solid", stops: ["#2a1f3d"], dir: "down", dim: 55, blur: 4, shapes: [], use: "match", moods: [], places: [] }]);
     expect(s.videoBackPick).toBe("main");
     expect("videoBack" in s).toBe(false);
   });
@@ -2030,7 +2030,9 @@ describe("video backgrounds, fonts and names", () => {
     const s = h.box.cleanSettings({ videoBacks: [{ id: "d1", name: "Night", kind: "design", color: "#000000", shapes }], videoBackPick: "d1" });
     const out = s.videoBacks[0].shapes;
     expect(out.length).toBe(40);
-    expect(out[0]).toEqual({ id: "s0", kind: "rect", x: 1.5, y: -0.5, w: 4000, h: 2, rot: 180, fill: "", fill2: "#00ff00", clear: 95, text: "" });
+    // A shape with the one second color it had before stops keeps it, as a
+    // linear gradient.
+    expect(out[0]).toEqual({ id: "s0", kind: "rect", x: 1.5, y: -0.5, w: 4000, h: 2, rot: 180, fill: "", grad: "linear", stops: ["#00ff00"], dir: "down", clear: 95, text: "" });
     expect(s.videoBackPick).toBe("d1");
   });
 
@@ -2159,5 +2161,52 @@ describe("scenes", () => {
     await h.ask({ type: "kept_edit", key, scenes: null }, "u1");
     const none = (await h.ask({ type: "kept_script", key }, "u1")).find((m: any) => m.type === "kept_script");
     expect(none.scenes).toBe(null);
+  });
+});
+
+describe("moods for pictures", () => {
+  test("the list is held to 40 moods and 30 words each, with ids kept", () => {
+    const h = host();
+    const many = Array.from({ length: 50 }, (_, i) => ({ id: "M" + i + "!", name: "  Mood " + i + "  ", words: Array.from({ length: 40 }, (_, j) => "Word" + j).concat(["word0"]) }));
+    const s = h.box.cleanSettings({ moodList: many });
+    expect(s.moodList.length).toBe(40);
+    expect(s.moodList[0].id).toBe("m0");
+    expect(s.moodList[0].name).toBe("Mood 0");
+    expect(s.moodList[0].words.length).toBe(30);
+    expect(s.moodList[0].words[0]).toBe("word0");
+    expect(h.box.cleanSettings({}).moodList).toEqual([]);
+  });
+
+  test("a person's mood pictures are kept by mood id, any id the list has", () => {
+    const h = host();
+    const s = h.box.cleanSettings({ cast: [{ id: "p1", name: "Corin", moodPics: ["happy", "m7x2", "m7x2", "../bad"] }] });
+    const p = s.cast.find((m: any) => m.id === "p1");
+    expect(p.moodPics).toEqual(["happy", "m7x2", "bad"]);
+  });
+
+  test("a picture for a mood of your own is kept and taken out", async () => {
+    const h = host();
+    const pic = "data:image/jpeg;base64,AAAA";
+    const put = (await h.ask({ type: "mood_pic_put", member: "p1", feeling: "m7x2", picture: pic }, "u1")).find((m: any) => m.type === "mood_pic");
+    expect(put.ok).toBe(true);
+    const got = (await h.ask({ type: "mood_pic_get", member: "p1", feeling: "m7x2" }, "u1")).find((m: any) => m.type === "mood_pic");
+    expect(got.picture).toBe(pic);
+    await h.ask({ type: "mood_pic_put", member: "p1", feeling: "m7x2", picture: "" }, "u1");
+    const gone = (await h.ask({ type: "mood_pic_get", member: "p1", feeling: "m7x2" }, "u1")).find((m: any) => m.type === "mood_pic");
+    expect(gone.picture).toBe("");
+  });
+});
+
+describe("gradients", () => {
+  test("a gradient keeps 1 to 5 colors after its first, and a known direction", () => {
+    const h = host();
+    const s = h.box.cleanSettings({ videoWordFill: "radial", videoWordStops: ["#111111", "bad", "#222222", "#333333", "#444444", "#555555", "#666666"], videoWordDir: "sideways" });
+    expect(s.videoWordFill).toBe("radial");
+    expect(s.videoWordStops).toEqual(["#111111", "#222222", "#333333", "#444444", "#555555"]);
+    expect(s.videoWordDir).toBe("down");
+    const d = h.box.cleanSettings({});
+    expect([d.videoWordFill, d.videoNameFill, d.videoCapFill]).toEqual(["solid", "solid", "solid"]);
+    const b = h.box.cleanSettings({ videoBacks: [{ id: "main", kind: "color", fill: "linear", stops: [], dir: "diag" }] }).videoBacks[0];
+    expect([b.fill, b.stops, b.dir]).toEqual(["linear", ["#2a1f3d"], "diag"]);
   });
 });

@@ -4053,6 +4053,331 @@ if (section("player shadow")) {
   }
 }
 
+if (section("gradients")) {
+  console.log("Gradients through three colors, on the words and on the background");
+  const top = (c) => (c[0] > c[1] && c[0] > c[2] ? "red" : c[1] > c[2] ? "green" : "blue");
+  const setPreview = (page, t) => page.evaluate(async (t) => {
+    const r = document.querySelector("[data-af-scrub] input");
+    r.value = String(t);
+    r.dispatchEvent(new Event("input", { bubbles: true }));
+    await new Promise((x) => requestAnimationFrame(() => requestAnimationFrame(x)));
+  }, t);
+  for (const size of SIZES) {
+    // A radial background, red in the middle, green half way out and blue
+    // at the corners, read at a moment with no words or title on it.
+    {
+      const { context, page, errors } = await open(THEMES[0], size, 1, () => {
+        Object.assign(window.__settings, {
+          videoEdges: 0,
+          videoBacks: [{ id: "main", name: "Main", kind: "color", color: "#ff2020", fill: "radial", stops: ["#20ff20", "#2020ff"], dir: "down", dim: 40, blur: 0, shapes: [], use: "match", moods: [], places: [] }],
+          videoBackPick: "main",
+        });
+      });
+      await page.click('.af-tab[data-tab="studio"]');
+      await page.waitForTimeout(1500);
+      await setPreview(page, 2.3);
+      const bg = await page.evaluate(() => {
+        const c = document.querySelector("[data-af-videopreview]");
+        const W = c.width, H = c.height;
+        const d = c.getContext("2d").getImageData(0, 0, W, H).data;
+        const at = (x, y) => { const i = (Math.round(y) * W + Math.round(x)) * 4; return [d[i], d[i + 1], d[i + 2]]; };
+        return { mid: at(W / 2, H / 2), half: at(W * 0.75, H * 0.75), corner: at(2, 2) };
+      });
+      check(top(bg.mid) === "red" && top(bg.half) === "green" && top(bg.corner) === "blue", size.name + ": a radial background is the first color in the middle, the second half way out and the third at the corners (" + JSON.stringify(bg) + ")");
+      check(!errors.length, size.name + ": no page errors. " + errors.slice(0, 2).join(" | "));
+      await context.close();
+    }
+    // A linear gradient on the words, left to right: red, then green, then
+    // blue, on a plain dark background, so only the words are strong colors.
+    {
+      const { context, page, errors } = await open(THEMES[0], size, 1, () => {
+        Object.assign(window.__settings, { videoInk: "#ff2020", videoWordFill: "linear", videoWordStops: ["#20ff20", "#2020ff"], videoWordDir: "right", videoWordShadow: false, videoWords: "all" });
+      });
+      await page.click('.af-tab[data-tab="studio"]');
+      await page.waitForTimeout(1500);
+      await setPreview(page, 4.2);
+      const parts = await page.evaluate(() => {
+        const c = document.querySelector("[data-af-videopreview]");
+        const W = c.width, H = c.height;
+        const y0 = Math.round(H * 0.3);
+        const d = c.getContext("2d").getImageData(0, y0, W, Math.round(H * 0.4)).data;
+        const hits = [];
+        for (let i = 0; i < d.length; i += 4) {
+          const [rr, gg, bb] = [d[i], d[i + 1], d[i + 2]];
+          if (Math.max(rr, gg, bb) > 180 && Math.max(rr, gg, bb) - Math.min(rr, gg, bb) > 120) hits.push({ x: (i / 4) % W, c: rr >= gg && rr >= bb ? "r" : gg >= bb ? "g" : "b" });
+        }
+        if (!hits.length) return null;
+        const xs = hits.map((h) => h.x);
+        const lo = Math.min(...xs), hi = Math.max(...xs);
+        const part = (from, to) => { const n = { r: 0, g: 0, b: 0 }; for (const h of hits) if (h.x >= lo + (hi - lo) * from && h.x <= lo + (hi - lo) * to) n[h.c]++; return n; };
+        return { n: hits.length, left: part(0, 0.15), middle: part(0.42, 0.58), right: part(0.85, 1) };
+      });
+      const most = (n) => (n.r >= n.g && n.r >= n.b ? "red" : n.g >= n.b ? "green" : "blue");
+      check(!!parts && most(parts.left) === "red" && most(parts.middle) === "green" && most(parts.right) === "blue", size.name + ": a three-color gradient on the words is red at the start of the line, green in the middle and blue at the end (" + JSON.stringify(parts) + ")");
+      // Adding a color, and taking it out again, with no question.
+      await page.locator(".af-fold", { hasText: "Shape and words" }).first().click();
+      await page.waitForTimeout(400);
+      await page.click('[data-af-stop-add="videoWordFill"]');
+      await page.waitForTimeout(400);
+      const three = await page.evaluate(() => window.__settings.videoWordStops.length);
+      await page.click('[data-af-row="videoWordFill"] [data-af-stop-drop="2"]');
+      await page.waitForTimeout(400);
+      const two = await page.evaluate(() => ({ n: window.__settings.videoWordStops.length, asked: window.__asked || 0 }));
+      check(three === 3 && two.n === 2 && two.asked === 0, size.name + ": Add a color adds a stop, and Remove takes it out with no question (" + three + ", " + JSON.stringify(two) + ")");
+      await page.selectOption('[data-af-gradkind="videoWordFill"]', "radial");
+      await page.waitForTimeout(500);
+      const dirHidden = await page.evaluate(() => document.querySelector('[data-af-graddir="videoWordFill"]').closest(".af-col").hidden);
+      check(dirHidden && (await page.evaluate(() => window.__settings.videoWordFill)) === "radial", size.name + ": a radial gradient has no direction to pick");
+      const m = await page.evaluate(MEASURE, size.touch);
+      check(!m.overflow.length && !m.small.length, size.name + ": the Studio fits with a gradient open. " + m.overflow.concat(m.small).slice(0, 2).join("; "));
+      check(!errors.length, size.name + ": no page errors. " + errors.slice(0, 2).join(" | "));
+      await context.close();
+    }
+  }
+}
+
+if (section("example clip")) {
+  console.log("With no performance, the preview shows a silent example, and redraws on every change");
+  for (const size of SIZES) {
+    const { context, page, errors } = await open(THEMES[0], size);
+    await page.click('.af-tab[data-tab="studio"]');
+    await page.waitForTimeout(1500);
+    // The sum of the bright pixels, and the yellow ones, at one moment.
+    const frame = (t) => page.evaluate(async (t) => {
+      const r = document.querySelector("[data-af-scrub] input");
+      if (t != null) {
+        r.value = String(t);
+        r.dispatchEvent(new Event("input", { bubbles: true }));
+      }
+      await new Promise((x) => requestAnimationFrame(() => requestAnimationFrame(x)));
+      const c = document.querySelector("[data-af-videopreview]");
+      const d = c.getContext("2d").getImageData(0, 0, c.width, c.height).data;
+      let bright = 0, yellow = 0, sum = 0;
+      for (let i = 0; i < d.length; i += 4 * 3) {
+        if (d[i] + d[i + 1] + d[i + 2] > 500) bright++;
+        if (d[i] > 200 && d[i + 1] > 160 && d[i + 2] < 90) yellow++;
+        sum += d[i] + d[i + 1] * 3 + d[i + 2] * 7;
+      }
+      return { bright, yellow, sum, at: Number(r.value), max: Number(r.max) };
+    }, t);
+    const state = await page.evaluate(() => ({
+      note: (document.querySelector("[data-af-example]") || {}).textContent || "",
+      shown: !!document.querySelector("[data-af-example]") && !document.querySelector("[data-af-example]").hidden,
+      make: document.querySelector('[data-af-studio="make"]') ? document.querySelector('[data-af-studio="make"]').disabled : null,
+      choice: !!document.querySelector('[data-af-row="studioExample"]'),
+    }));
+    const title = await frame(1.2);
+    const line = await frame(9);
+    check(title.max > 15 && title.max < 30 && title.bright > 200 && line.bright > 200 && title.sum !== line.sum, size.name + ": with no performance, the preview draws an example, the title and then lines (" + JSON.stringify([title.max, title.bright, line.bright]) + ")");
+    check(state.shown && /no sound/.test(state.note) && !state.choice, size.name + ": it says the example has no sound (" + state.note + ")");
+    const makeBtn = page.locator("[data-af-card] button", { hasText: "Make a video" }).first();
+    check(await makeBtn.isDisabled(), size.name + ": the example cannot be made into a video");
+    // A change redraws at once, at the same moment, with no press of Play.
+    await page.locator(".af-fold", { hasText: "Shape and words" }).first().click();
+    await page.waitForTimeout(400);
+    await page.locator('[data-af-colorswatch="videoInk"]').click();
+    await page.waitForTimeout(300);
+    await page.fill('[data-af-colorcode="videoInk"]', "#ffd400");
+    await page.locator('[data-af-colorcode="videoInk"]').dispatchEvent("change");
+    await page.waitForTimeout(700);
+    const yellow = await frame(null);
+    check(yellow.yellow > 200 && Math.abs(yellow.at - 9) < 0.06, size.name + ": a new color for the words redraws the example at once, at the same moment (" + yellow.yellow + " yellow, at " + yellow.at + ")");
+    await page.locator('[data-af-row="videoWordShadow"] input[type=checkbox]').first().click();
+    await page.waitForTimeout(700);
+    const noShadow = await frame(null);
+    check(noShadow.sum !== yellow.sum, size.name + ": turning off the words' shadow redraws it at once");
+    await page.locator(".af-fold", { hasText: "Speakers" }).first().click();
+    await page.waitForTimeout(400);
+    const ring = page.locator('[data-af-row="videoPicRingWidth"] input.af-numbox');
+    await ring.fill("14");
+    await ring.dispatchEvent("change");
+    await page.waitForTimeout(700);
+    const thick = await frame(null);
+    check(thick.sum !== noShadow.sum, size.name + ": a thicker ring redraws it at once");
+    const m = await page.evaluate(MEASURE, size.touch);
+    check(!m.overflow.length && !m.small.length, size.name + ": the Studio fits with the example. " + m.overflow.concat(m.small).slice(0, 2).join("; "));
+    // With a performance: it is shown, and a change redraws it at once too.
+    await page.evaluate(() => { window.__wav = [0.1, 1.4]; window.__clipMs = 300; });
+    await page.click('#mount [data-af-slot="message"]');
+    await page.waitForFunction(() => document.querySelector('#mount [data-af-slot="message"]').getAttribute("aria-busy") === null && (window.__synth || []).length > 0, null, { timeout: 20000 });
+    await page.waitForTimeout(4000);
+    await page.click('.af-tab[data-tab="settings"]');
+    await page.waitForTimeout(300);
+    await page.click('.af-tab[data-tab="studio"]');
+    await page.waitForTimeout(1500);
+    const mine = await page.evaluate(() => ({ choice: !!document.querySelector('[data-af-row="studioExample"]'), note: document.querySelector("[data-af-example]").hidden }));
+    check(mine.choice && mine.note, size.name + ": with a performance, it is shown, with a choice of the example");
+    const p0 = await frame(3);
+    await page.locator(".af-fold", { hasText: "Shape and words" }).first().click();
+    await page.waitForTimeout(400);
+    await page.locator('[data-af-colorswatch="videoInk"]').click();
+    await page.waitForTimeout(300);
+    await page.fill('[data-af-colorcode="videoInk"]', "#20d0f0");
+    await page.locator('[data-af-colorcode="videoInk"]').dispatchEvent("change");
+    await page.waitForTimeout(800);
+    const p1 = await frame(null);
+    check(p1.sum !== p0.sum && Math.abs(p1.at - 3) < 0.06, size.name + ": with a performance, a change redraws it at once, at the same moment (" + p1.at + ")");
+    await page.locator('[data-af-row="studioExample"] .af-segbtn[data-v="example"]').click();
+    await page.waitForTimeout(1200);
+    const ex = await frame(null);
+    check(Math.abs(ex.max - title.max) < 0.1 && !(await page.evaluate(() => document.querySelector("[data-af-example]").hidden)), size.name + ": Example shows the example again, with the note");
+    check(!errors.length, size.name + ": no page errors. " + errors.slice(0, 2).join(" | "));
+    await context.close();
+  }
+}
+
+if (section("ring width")) {
+  console.log("How thick the ring around each picture is");
+  for (const size of SIZES) {
+    // Everyone has a picture. The ring is the words' color, and names are
+    // off, so the same words are drawn both times and only the ring grows.
+    const { context, page, errors } = await open(THEMES[0], size, 1, () => {
+      const c = document.createElement("canvas");
+      c.width = 40;
+      c.height = 40;
+      const g = c.getContext("2d");
+      g.fillStyle = "#20a0a0";
+      g.fillRect(0, 0, 40, 40);
+      for (const m of window.__settings.cast || []) m.picture = c.toDataURL("image/png");
+      window.__settings.videoNameColor = "words";
+      window.__settings.videoNames = false;
+    });
+    await page.evaluate(() => { window.__wav = [0.1, 1.4]; window.__clipMs = 300; });
+    await page.click('#mount [data-af-slot="message"]');
+    await page.waitForFunction(() => document.querySelector('#mount [data-af-slot="message"]').getAttribute("aria-busy") === null && (window.__synth || []).length > 0, null, { timeout: 20000 });
+    await page.waitForTimeout(4000);
+    await page.click('.af-tab[data-tab="studio"]');
+    await page.waitForTimeout(1500);
+    const ink = () => page.evaluate(async () => {
+      const r = document.querySelector("[data-af-scrub] input");
+      const c = document.querySelector("[data-af-videopreview]");
+      const g = c.getContext("2d");
+      let n = 0;
+      for (let t = 0.8; t <= Number(r.max); t += 0.25) {
+        r.value = String(t);
+        r.dispatchEvent(new Event("input", { bubbles: true }));
+        await new Promise((x) => requestAnimationFrame(x));
+        const d = g.getImageData(0, 0, c.width, c.height).data;
+        for (let i = 0; i < d.length; i += 4 * 2) if (d[i] > 200 && d[i + 1] > 190 && d[i + 2] > 170) n++;
+      }
+      return n;
+    });
+    await page.locator(".af-fold", { hasText: "Speakers" }).first().click();
+    await page.waitForTimeout(400);
+    const thin = await ink();
+    const box = page.locator('[data-af-row="videoPicRingWidth"] input.af-numbox');
+    const start = await box.inputValue();
+    await box.fill("40");
+    await box.dispatchEvent("change");
+    await page.waitForTimeout(900);
+    const thick = await ink();
+    const held = await box.inputValue();
+    check(start === "3" && held === "20" && (await page.evaluate(() => window.__settings.videoPicRingWidth)) === 20, size.name + ": the ring starts at 3, and is held to 20 when the box is left (" + start + ", " + held + ")");
+    check(thick > thin * 1.3 + 200, size.name + ": a thicker ring draws more ring pixels (" + thin + " at 3, " + thick + " at 20)");
+    await page.locator('[data-af-row="videoPicRing"] input[type=checkbox]').first().click();
+    await page.waitForTimeout(600);
+    check(await page.evaluate(() => document.querySelector('[data-af-row="videoPicRingWidth"]').closest(".af-sub").hidden), size.name + ": the thickness is hidden while the ring is off");
+    check(!errors.length, size.name + ": no page errors. " + errors.slice(0, 2).join(" | "));
+    await context.close();
+  }
+}
+
+if (section("mood list")) {
+  console.log("Moods for pictures can be added, renamed, deleted and put back");
+  const pre = () => {
+    const dot = (color) => { const c = document.createElement("canvas"); c.width = 40; c.height = 40; const g = c.getContext("2d"); g.fillStyle = color; g.fillRect(0, 0, 40, 40); return c.toDataURL("image/png"); };
+    const one = (id, name, color) => ({ id, name, kind: "npc", addedBy: "you", aliases: [], voice: "", voiceName: "", model: "", stability: 0.5, similarity: 0.75, style: 0, speed: 1, note: "", gender: "unknown", muted: false, picture: dot(color) });
+    window.__settings.cast = (window.__settings.cast || []).filter((m) => m.kind === "narrator").concat([one("pb", "Brisa", "#20c040"), one("pt", "Tollan", "#f08010")]);
+    window.__settings.videoEdges = 0;
+    window.__script = { key: "k", messageId: "m1", author: "Brisa", directed: true, added: [], sent: 1, back: 1, counted: true, log: [], lines: [
+      { i: 0, kind: "speech", speaker: "Brisa", text: "The lock on the gate was never broken.", plain: "", tags: [], inSounds: [], big: false, before: "", after: "", note: "" },
+      { i: 1, kind: "speech", speaker: "Tollan", text: "[smugly] Then I was right about the key.", plain: "", tags: ["smugly"], inSounds: [], big: false, before: "", after: "", note: "" },
+    ] };
+  };
+  // How many red pixels of the crop of the test picture are on screen, and
+  // how many of Tollan's orange, across the whole preview.
+  const colors = (page) => page.evaluate(async () => {
+    const r = document.querySelector("[data-af-scrub] input");
+    const c = document.querySelector("[data-af-videopreview]");
+    const g = c.getContext("2d");
+    const near = (d, i, rr, gg, bb) => Math.abs(d[i] - rr) < 40 && Math.abs(d[i + 1] - gg) < 40 && Math.abs(d[i + 2] - bb) < 40;
+    let red = 0, orange = 0;
+    for (let t = 0.8; t <= Number(r.max); t += 0.2) {
+      r.value = String(t);
+      r.dispatchEvent(new Event("input", { bubbles: true }));
+      await new Promise((x) => requestAnimationFrame(x));
+      const d = g.getImageData(0, 0, c.width, c.height).data;
+      for (let i = 0; i < d.length; i += 4 * 3) {
+        if (near(d, i, 0xe0, 0x20, 0x20)) red++;
+        if (near(d, i, 0xf0, 0x80, 0x10)) orange++;
+      }
+    }
+    return { red, orange };
+  });
+  for (const size of SIZES) {
+    const { context, page, errors } = await open(THEMES[0], size, 1, pre);
+    await showTab(page, "cast");
+    await page.locator(".af-fold", { hasText: "Moods for pictures" }).first().click();
+    await page.waitForTimeout(400);
+    await page.click("[data-af-mood-add]");
+    await page.waitForTimeout(500);
+    const fresh = page.locator("[data-af-mood]").last();
+    await fresh.locator("[data-af-moodname]").fill("Smug");
+    await fresh.locator("[data-af-moodname]").dispatchEvent("change");
+    await fresh.locator("[data-af-moodwords]").fill("smugly\nsmirks");
+    await fresh.locator("[data-af-moodwords]").dispatchEvent("change");
+    await page.waitForTimeout(400);
+    const added = await page.evaluate(() => (window.__settings.moodList || []).slice(-1)[0] || null);
+    check(!!added && added.name === "Smug" && JSON.stringify(added.words) === '["smugly","smirks"]', size.name + ": a mood is added with its name and words (" + JSON.stringify(added) + ")");
+    const id = added ? added.id : "";
+    // Tollan's Pictures for moods has the new mood at once.
+    const tollan = page.locator(".af-person").filter({ hasText: "Tollan" }).first();
+    await tollan.locator(".af-fold", { hasText: "Pictures for moods" }).click();
+    await page.waitForTimeout(400);
+    await tollan.locator('[data-af-moodchoose="' + id + '"]').click();
+    await page.waitForTimeout(800);
+    await tollan.locator(".af-btn", { hasText: "Use this" }).click();
+    await page.waitForTimeout(800);
+    const kept = await page.evaluate((id) => ({ list: (window.__settings.cast.find((m) => m.id === "pt") || {}).moodPics, file: !!(window.__moodPics || {})["pt:" + id] }), id);
+    check(JSON.stringify(kept.list) === JSON.stringify([id]) && kept.file, size.name + ": a person can have a picture for the new mood at once (" + JSON.stringify(kept) + ")");
+    const m1 = await page.evaluate(MEASURE, size.touch);
+    check(!m1.overflow.length && !m1.small.length, size.name + ": the Cast tab fits with the moods open. " + m1.overflow.concat(m1.small).slice(0, 2).join("; "));
+    // The video shows it for Tollan's smug line.
+    await page.evaluate(() => { window.__wav = [0.1, 1.4]; window.__clipMs = 300; });
+    await page.click('#mount [data-af-slot="message"]');
+    await page.waitForFunction(() => document.querySelector('#mount [data-af-slot="message"]').getAttribute("aria-busy") === null && (window.__synth || []).length >= 2, null, { timeout: 30000 });
+    await page.waitForTimeout(5000);
+    await page.click('.af-tab[data-tab="studio"]');
+    await page.waitForTimeout(1500);
+    const seen = await colors(page);
+    check(seen.red > 300 && seen.orange === 0, size.name + ": a line whose tag matches the new mood shows that picture (" + JSON.stringify(seen) + ")");
+    // Renamed, it keeps its picture.
+    await showTab(page, "cast");
+    await page.locator(".af-fold", { hasText: "Moods for pictures" }).first().click();
+    await page.waitForTimeout(400);
+    const row = page.locator('[data-af-mood="' + id + '"]');
+    await row.locator("[data-af-moodname]").fill("Pleased with himself");
+    await row.locator("[data-af-moodname]").dispatchEvent("change");
+    await page.waitForTimeout(400);
+    const renamed = await page.evaluate((id) => ({ name: (window.__settings.moodList.find((x) => x.id === id) || {}).name, list: (window.__settings.cast.find((m) => m.id === "pt") || {}).moodPics, file: !!(window.__moodPics || {})["pt:" + id] }), id);
+    check(renamed.name === "Pleased with himself" && JSON.stringify(renamed.list) === JSON.stringify([id]) && renamed.file, size.name + ": a renamed mood keeps its pictures (" + JSON.stringify(renamed) + ")");
+    // Deleted after asking, with its pictures.
+    await page.evaluate(() => { window.__asked = 0; window.__askedTitle = ""; });
+    await row.locator('[data-af-mood-act="delete"]').click();
+    await page.waitForTimeout(600);
+    const gone = await page.evaluate((id) => ({ asked: window.__asked, mood: (window.__settings.moodList || []).some((x) => x.id === id), list: (window.__settings.cast.find((m) => m.id === "pt") || {}).moodPics, file: (window.__moodPics || {})["pt:" + id] }), id);
+    check(gone.asked === 1 && !gone.mood && JSON.stringify(gone.list) === "[]" && gone.file === "", size.name + ": deleting a mood asks first and takes its pictures out (" + JSON.stringify(gone) + ")");
+    // Back to built-in, after asking.
+    await page.evaluate(() => (window.__asked = 0));
+    await page.click("[data-af-mood-back]");
+    await page.waitForTimeout(600);
+    const back = await page.evaluate(() => ({ asked: window.__asked, list: window.__settings.moodList, shown: document.querySelectorAll("[data-af-mood]").length }));
+    check(back.asked === 1 && JSON.stringify(back.list) === "[]" && back.shown === 8, size.name + ": Back to built-in asks, then puts the eight built-in moods back (" + JSON.stringify(back) + ")");
+    check(!errors.length, size.name + ": no page errors. " + errors.slice(0, 2).join(" | "));
+    await context.close();
+  }
+}
+
 if (section("mood pictures")) {
   console.log("A picture for each mood, on the Cast tab");
   // A mood picture chosen on the Cast tab is kept in a file of its own.

@@ -121,12 +121,25 @@ The preview at the top draws the video with your choices. **Where** moves throug
 
 A browser that can make MP4, such as a recent Chrome or Safari, saves MP4, which phones and sharing sites play. Any other browser saves WebM. The video is made at a high quality.
 
+### The example clip
+
+With no performance in the Studio, the preview shows an example clip, about 23 seconds long, so you can see the look and change it before playing anything.
+
+- It has no sound. **Play the preview** plays it silently, and it starts again at the end until you stop it.
+- It shows each part of the look: the title, narration, a sound caption, two made-up people taking turns, a line with a voice tag for a mood picture, quotation marks, the transition between lines, a second scene, and the fade at the end. Notes and hidden words show when you have them.
+- Its people, Juniper and Ansel, have pictures drawn by Auto Foley: a circle in their kind's color with their initial. The mood picture is a lighter circle. It never uses a picture from your cast.
+- With two or more backgrounds, its second scene uses another background, so the crossfade shows.
+- Every change you make redraws it at once, at the same moment in the clip.
+- With a performance there, **Show in the preview** picks **Your performance** or **Example**.
+- The example is never saved. **Make a video** and the downloads use your performance, and stay off while there is none.
+
 ### Shape and words
 
 - **Shape**: **Wide, 16 by 9** by default, 1920 by 1080. **Tall** is 1080 by 1920, for phone videos such as Reels and Shorts. **Square** is 1080 by 1080.
 - **Font**: **Book** by default. Also **Clean**, **Typewriter**, **Rounded** and **Your theme's font**. A font your device does not have is drawn in one that is close. Your own fonts are listed under **Your fonts**. See [Your own fonts](#your-own-fonts).
 - **Size of the words, in percent**: 100 by default, from 60 to 160.
 - **Color of the words**: a warm white by default.
+- **Fill of the words**: **One color** by default. See [Gradients](#gradients).
 - **How the words show**: **Light up as they are said** by default, with words not said yet dimmer. **Appear as they are said** shows each word only once it is said. **Fade in as they are said** fades each word in as it is said. **Blur in as they are said** fades each word in from a blur. **All at once** shows the whole line.
 - **Where the words sit**: **Middle** by default, or **Lower third**, which leaves the picture behind them clear.
 - **Quotation marks around speech**: on by default. Narration never has them.
@@ -143,10 +156,11 @@ When each word is said is worked out from where the voice is in the clip, so it 
 - **Show pictures**: on by default. Each speaker's picture from the Cast tab is shown above their line. Narration has none. Under it:
   - **Shape of the pictures**: a circle or a rounded square.
   - **Size of the pictures**: 150 by default, in pixels of a 1080-pixel frame.
-  - **A ring around each picture**: on by default, in the color of the name. Off shows the picture with no ring.
+  - **A ring around each picture**: on by default, in the color of the name. Off shows the picture with no ring. Under it, **How thick the ring is**: 3 by default, from 1 to 20, in pixels of a 1080-pixel frame. It is the same for every picture, two speakers and mood pictures too.
   - **Two speakers on screen**: on by default. See [Two speakers and mood pictures](#two-speakers-and-mood-pictures).
   - **A picture for each mood**: on by default. See [Two speakers and mood pictures](#two-speakers-and-mood-pictures).
 - **Color of the names**: **Each kind's color** by default, the colors set under **Colors for each kind of part** in the Settings tab. **The words' color** uses one color for every name.
+- **Fill of the names**: **One color** by default, the color above. See [Gradients](#gradients).
 
 ### Background
 
@@ -159,6 +173,24 @@ When each word is said is worked out from where the voice is in the clip, so it 
 **Darken the edges**, under any background, makes the edges of the frame darker than the middle. It is 50% by default. **Off** leaves the edges as bright as the middle.
 
 **Color of the edges**, under it, is black by default. Another color tints the edges with it, as strongly as **Darken the edges** says.
+
+### Gradients
+
+The words, the names, the sound captions, **A color of your own** and each shape in a design have a **Fill**:
+
+- **One color**, the default. Nothing changes from before.
+- **Linear gradient**, which runs in a **Direction**: top to bottom, left to right, or either diagonal.
+- **Radial gradient**, which runs from the middle out to the corners.
+
+How it works:
+
+- Color 1 is the color row above the fill, such as **Color of the words**.
+- Colors 2 to 6 are under the fill. **Add a color** adds one, up to six in all. **Remove**, on each color past the second, takes it out with no question, since it is quick to add back.
+- The colors are spread evenly. There is no box for where each one sits, so the rows stay short on a phone.
+- On text, the gradient runs across each whole line, caption or name, so every word reads the same way. The words effects, the covers on hidden words and the shadows work on top of it.
+- Two very different colors can be harder to read. Check the preview.
+
+A fill is part of your settings, a saved look, and each background in the list.
 
 ### Moving between lines
 
@@ -239,7 +271,7 @@ Every choice in the Studio is a setting, kept on your account. **Start again** i
 - **A design of your own** is a background made of shapes: rectangles, rounded rectangles, ellipses, triangles, lines and text boxes.
 - The shapes stay where you put them for the whole video.
 - You place them on the preview with a finger or the mouse, or type exact numbers.
-- Each shape has its own color, an optional second color for a gradient, and how see-through it is.
+- Each shape has its own color, an optional gradient, and how see-through it is.
 - The design is part of your settings, and part of a saved look.
 
 ### Steps
@@ -253,7 +285,7 @@ Every choice in the Studio is a setting, kept on your account. **Start again** i
    - Drag the dot at its corner to change its size.
    - Drag the dot above it to turn it.
    - Or type in **Across, in percent**, **Down, in percent**, **Width**, **Height** and **Turn, in degrees**.
-6. Set **Color**, **Second color, for a gradient** and **See-through**.
+6. Set **Color**, **Fill of the shape** for a gradient, and **See-through**. See [Gradients](#gradients).
 7. Press another shape in the list to change it. Press the picked one again to put it down.
 
 **Duplicate** adds a copy just beside it. **Bring forward** and **Send back** move it in front of or behind the shape next to it. **Delete** asks first.
@@ -268,7 +300,7 @@ Corin wants a night sky behind a story told on a pier.
 
 1. **Background color** is `#101830`, a dark blue.
 2. An **Ellipse** for the moon: **Across** 78, **Down** 22, **Width** 160, **Height** 160, **Color** `#f2e8c9`.
-3. A **Rectangle** for the water: **Across** 50, **Down** 92, **Width** 4000, **Height** 240, **Color** `#1b2a48`, **Second color** `#0a1020`, so it gets darker toward the bottom.
+3. A **Rectangle** for the water: **Across** 50, **Down** 92, **Width** 4000, **Height** 240, **Color** `#1b2a48`, and **Fill of the shape** set to **Linear gradient**, top to bottom, with **Color 2** `#0a1020`, so it gets darker toward the bottom.
 4. A **Text box** with the words **The Pier**: **Across** 50, **Down** 10, **Width** 600, **Height** 80, **See-through** 30%.
 
 The moon is a circle in every shape of video, since sizes are in pixels of a 1080-pixel frame. In a tall video it is still near the top right, since places are shares of the frame. The water is wider than any frame, so it reaches both sides. Corin types 5000 in **Width** once: when the box is left, it shows 4000, the widest a shape can be.
@@ -355,20 +387,21 @@ Your backgrounds are kept as a list, each with an id, a name and its own setting
 ### In short
 
 - **Two speakers on screen**: when two people take turns speaking in a scene, both pictures show side by side. The one speaking is at full strength, and the other is a little dimmer.
-- **A picture for each mood**: a person can have a picture for each of eight feelings, on the Cast tab. A line is shown with the picture for its feeling.
+- **A picture for each mood**: a person can have a picture for each mood, on the Cast tab. The list of moods is yours to change. A line is shown with the picture for its mood.
 - Both are in **Speakers**, under **Show pictures**, and on by default.
 - Neither asks a model anything, so neither costs anything.
 - With no mood pictures, and one person speaking at a time, the video looks the same as before.
 
 ### Steps
 
-1. On the Cast tab, open a person and open **Pictures for moods**, under **Picture**.
-2. Press **Choose** beside a feeling, and crop the picture the same way as the main one.
-3. Play a message. In the Studio, each line of theirs shows the picture for its feeling.
+1. On the Cast tab, check the moods under **Moods for pictures**. Add your own, or change the words that pick one.
+2. Open a person and open **Pictures for moods**, under **Picture**.
+3. Press **Choose** beside a mood, and crop the picture the same way as the main one.
+4. Play a message. In the Studio, each line of theirs shows the picture for its mood.
 
 ### What it sends
 
-Nothing. The feeling is worked out on your device, from the line. The pictures are kept on your account. See [Pictures for moods](cast.md#pictures-for-moods) for the words each feeling is read from.
+Nothing. The mood is worked out on your device, from the line. The pictures are kept on your account. See [Pictures for moods](cast.md#pictures-for-moods) for the moods, their words, and which wins a tie.
 
 ### An example
 
@@ -387,7 +420,7 @@ Brisa and Tollan are made-up characters, in one scene. Both have a picture, and 
 - Names show under each picture, cut short with an ellipsis if there is no room.
 - When there is no room for two pictures side by side, such as a tall video with large pictures, one picture shows.
 - The change between one picture and two fades over a moment and moves 4 pixels. With Reduce motion on, it changes at once on screen.
-- A line's feeling comes from its voice tags and its note on how it is said. With none, it is the scene's mood. With no mood either, the main picture is used.
+- A line's mood comes from its voice tags and its note on how it is said, matched against the words of each mood. With none, it is the scene's mood. With no mood either, the main picture is used.
 
 ## Hide and bleep words
 

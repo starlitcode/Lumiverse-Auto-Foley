@@ -20,7 +20,7 @@ Someone the AI added has no voice picked. The first time they speak, Auto Foley 
 ## A card
 
 - **Picture.** Optional. **Choose a picture** picks one from your device, then a crop box opens. Drag the picture to move it, and use **Zoom**, or the mouse wheel, to zoom in. The circle shows what the round picture shows. **Use this** saves it, made small, with the cast. **Cancel** keeps the picture you had. With none, the first letter of the name is shown. **Take it out** asks first.
-- **Pictures for moods**, under it. Optional. A picture for each of eight feelings, for the Studio's videos. See [Pictures for moods](#pictures-for-moods).
+- **Pictures for moods**, under it. Optional. A picture for each mood in **Moods for pictures**, for the Studio's videos. See [Pictures for moods](#pictures-for-moods).
   - **Use their Lumiverse picture** takes the picture of the character or persona in Lumiverse with the same name, display name or other name, cut to a square from the middle. If there is none, the card says so.
   - **Use pictures from Lumiverse**, at the top of the Cast tab, does the same for everyone who has no picture yet. A picture already chosen is kept. It says how many it found.
   - Lumiverse's pictures are read the same way the panel reads your chat, so no permission is asked for.
@@ -51,29 +51,55 @@ Someone the AI added has no voice picked. The first time they speak, Auto Foley 
 
 ## Pictures for moods
 
-Each person can have a picture for each of these feelings: happy, sad, angry, scared, calm, playful, romantic and tense.
+A person can have a picture for each mood, for the Studio's videos. A line is shown with the picture for its mood.
 
-- Press **Choose** beside a feeling. The same crop box opens as for the main picture.
-- **Take it out** asks first. The main picture is used again for that feeling.
+### The moods
+
+**Moods for pictures**, at the top of the Cast tab, is one list of moods for the whole cast. It is on the Cast tab since the moods belong to the people and their pictures, not to one video.
+
+Each mood has:
+
+- **Name**, as shown beside each person's pictures.
+- **Words that pick it**, one per line, such as `angrily`. They are matched whole, so `flat` does not match `flatter`.
+
+And:
+
+- **Add a mood** adds one at the end. Give it a name and words.
+- **Move up** and **Move down** change the order. The order decides a tie.
+- **Delete** asks first. Any pictures people have for that mood are taken out with it, from your account too. One mood is always left.
+- **Back to built-in** puts the eight built-in moods and their words back. It asks first. Pictures for moods that are not built in are taken out.
+- A renamed mood keeps its pictures, since each mood is kept by an id of its own.
+- A list can have up to 40 moods, with up to 30 words each.
+
+### A person's pictures
+
+- Open the person and open **Pictures for moods**, under **Picture**. Every mood in the list is there, so a new one can have a picture at once.
+- Press **Choose** beside a mood. The same crop box opens as for the main picture.
+- **Take it out** asks first. The main picture is used again for that mood.
 - Each picture is kept on your account in a file of its own, so the cast stays small.
 - **A picture for each mood**, in the Studio under **Show pictures**, turns them on or off for videos.
 
-### How a line's feeling is found
+### How a line's mood is found
 
-The words in a line's voice tags, and in its note on how it is said, are matched whole against this table. The feeling with the most matches is used. On a tie, the one higher in the table is used.
+1. The words in the line's voice tags, its note on how it is said, and its tags in square brackets are matched against each mood's words.
+2. The mood with the most matches is used. On a tie, the one higher in the list is used.
+3. With no match, the scene's mood is matched against the words, such as scary or cozy. The first mood that has it is used.
+4. With neither, or with no picture for that mood, the main picture is used.
 
-| Feeling | Words |
+### The built-in list
+
+| Mood | Words |
 | --- | --- |
-| happy | happy, happily, cheerful, cheerfully, joyful, delighted, excited, excitedly, elated, laughs, laughing, laughter, chuckles, chuckling, giggles, giggling, grinning, beaming, brightly, warmly |
-| sad | sad, sadly, sorrowful, mournful, tearful, tearfully, crying, cries, sobs, sobbing, sniffles, heartbroken, grieving, choked, despairing, wistful, wistfully |
-| angry | angry, angrily, furious, furiously, enraged, shouts, shouting, yells, yelling, snaps, snapping, snarls, growls, seething, irritated, annoyed, bitter, bitterly, hostile |
-| scared | scared, afraid, frightened, terrified, fearful, fearfully, panicked, panicking, nervous, nervously, trembling, shaky, shakily, gasps, whimpers, anxious, anxiously |
-| calm | calm, calmly, gentle, gently, soothing, soothingly, steady, steadily, relaxed, peaceful, serene, softly, patient, patiently |
-| playful | playful, playfully, teasing, teasingly, teases, mischievous, mischievously, sly, slyly, cheeky, smirking, smirks, sing-song, singsong, giddy |
-| romantic | romantic, tender, tenderly, loving, lovingly, affectionate, affectionately, sultry, seductive, seductively, breathy, longing, adoring, flirtatious, flirty, intimate |
-| tense | tense, tensely, urgent, urgently, strained, cold, coldly, flat, flatly, wary, warily, guarded, clipped, curt, curtly, grim, grimly |
+| Happy | happy, happily, cheerful, cheerfully, joyful, delighted, excited, excitedly, elated, laughs, laughing, laughter, chuckles, chuckling, giggles, giggling, grinning, beaming, brightly, warmly |
+| Sad | sad, sadly, sorrowful, mournful, tearful, tearfully, crying, cries, sobs, sobbing, sniffles, heartbroken, grieving, choked, despairing, wistful, wistfully |
+| Angry | angry, angrily, furious, furiously, enraged, shouts, shouting, yells, yelling, snaps, snapping, snarls, growls, seething, irritated, annoyed, bitter, bitterly, hostile |
+| Scared | scared, scary, afraid, frightened, terrified, fearful, fearfully, panicked, panicking, nervous, nervously, trembling, shaky, shakily, gasps, whimpers, anxious, anxiously |
+| Calm | calm, calmly, cozy, gentle, gently, soothing, soothingly, steady, steadily, relaxed, peaceful, serene, softly, patient, patiently |
+| Playful | playful, playfully, teasing, teasingly, teases, mischievous, mischievously, sly, slyly, cheeky, smirking, smirks, sing-song, singsong, giddy |
+| Romantic | romantic, tender, tenderly, loving, lovingly, affectionate, affectionately, sultry, seductive, seductively, breathy, longing, adoring, flirtatious, flirty, intimate |
+| Tense | tense, tensely, action, mysterious, urgent, urgently, strained, cold, coldly, flat, flatly, wary, warily, guarded, clipped, curt, curtly, grim, grimly |
 
-With no match, the scene's mood is used: calm and cozy are calm, happy is happy, playful is playful, romantic is romantic, sad is sad, scary is scared, and tense, action and mysterious are tense. With no mood either, the main picture is used. A person with no picture for the feeling found is shown with their main picture.
+The words scary, cozy, action and mysterious are there for the scene's mood. When an update changes the built-in list and you have your own, a notice says so, and your list is not changed.
 
 ## How much a box holds
 

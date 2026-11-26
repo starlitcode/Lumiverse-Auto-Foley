@@ -510,15 +510,15 @@ describe("Download audio, odd lengths", () => {
   });
 });
 
-describe("the feeling of a line, for a mood picture", () => {
-  const { feelingOf, FEELINGS, FEELING_WORDS } = __testing;
-  test("the feeling its tags and note name most is used", () => {
+describe("the mood of a line, for a mood picture", () => {
+  const { feelingOf, BUILT_IN_MOODS } = __testing;
+  test("the mood whose words its tags and note name most is used", () => {
     expect(feelingOf({ tags: ["angrily"], text: "[angrily] Give the map back." }, "calm")).toBe("angry");
     expect(feelingOf({ tags: [], style: "teasing, with a grin" }, "")).toBe("playful");
-    // A tie goes to the feeling first in the list.
+    // A tie goes to the mood higher in the list.
     expect(feelingOf({ tags: ["softly", "tearfully"], text: "[softly] [tearfully] Stay." }, "")).toBe("sad");
   });
-  test("with no feeling word, the scene's mood is read as the nearest feeling", () => {
+  test("with no word matched, the first mood whose words hold the scene's mood", () => {
     expect(feelingOf({ tags: [], text: "The rain had stopped." }, "scary")).toBe("scared");
     expect(feelingOf({ tags: [], text: "The rain had stopped." }, "cozy")).toBe("calm");
     expect(feelingOf({ tags: [], text: "The rain had stopped." }, "")).toBe("");
@@ -527,7 +527,15 @@ describe("the feeling of a line, for a mood picture", () => {
     expect(feelingOf({ tags: ["flatter"], text: "" }, "")).toBe("");
     expect(feelingOf({ tags: ["flatly"], text: "" }, "")).toBe("tense");
   });
-  test("every feeling has words", () => {
-    for (const f of FEELINGS) expect(FEELING_WORDS[f].length).toBeGreaterThan(5);
+  test("a list of your own is used in its own order", () => {
+    const mine = [{ id: "m1", name: "Smug", words: ["smugly", "smirks"] }, { id: "playful", name: "Playful", words: ["smirks", "teasing"] }];
+    expect(feelingOf({ tags: ["smirks"], text: "" }, "", mine)).toBe("m1");
+    expect(feelingOf({ tags: ["teasing"], text: "" }, "", mine)).toBe("playful");
+    expect(feelingOf({ tags: ["angrily"], text: "" }, "", mine)).toBe("");
+  });
+  test("every built-in mood has words, and the scene moods are in them", () => {
+    for (const m of BUILT_IN_MOODS) expect(m.words.length).toBeGreaterThan(5);
+    const all = BUILT_IN_MOODS.flatMap((m) => m.words);
+    for (const mood of ["calm", "cozy", "happy", "playful", "romantic", "sad", "tense", "scary", "action", "mysterious"]) expect(all).toContain(mood);
   });
 });
