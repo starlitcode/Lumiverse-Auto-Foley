@@ -4679,6 +4679,60 @@ export function setup(ctx, overrides) {
         g.restore();
     }
     // One frame. t counts from the start of the video, title included.
+    // The title card: the title, a short rule under it, and the line under
+    // the title. a is its strength, and dx and dy move it, for a transition.
+    function drawTitle(g, st, title, a, dx, dy) {
+        if (!title || a <= 0)
+            return;
+        const W = st.w;
+        const H = st.h;
+        const u = Math.min(W, H) / 1080;
+        g.save();
+        g.translate(dx, dy);
+        const size = Math.round(76 * u);
+        g.font = '500 ' + size + 'px ' + st.font;
+        g.textBaseline = 'alphabetic';
+        g.shadowColor = 'rgba(0,0,0,0.65)';
+        g.shadowBlur = 18 * u;
+        const ink = hexOr(S.videoInk, STORY_INK);
+        const text = fitText(g, title, W - 240 * u);
+        const words = text.split(/\s+/);
+        const hide = hiddenWords(words, hiddenList());
+        const sp = g.measureText(' ').width;
+        const ws = words.map((wd) => g.measureText(wd).width);
+        let x = W / 2 - (ws.reduce((p, q) => p + q, 0) + sp * (words.length - 1)) / 2;
+        words.forEach((wd, n) => {
+            if (hide[n])
+                coverWord(g, wd, x, H / 2, size, ink, a);
+            else {
+                g.globalAlpha = a;
+                g.fillStyle = ink;
+                g.fillText(wd, x, H / 2);
+            }
+            x += ws[n] + sp;
+        });
+        g.shadowColor = 'transparent';
+        g.globalAlpha = a * 0.55;
+        g.fillStyle = ink;
+        g.fillRect(W / 2 - 60 * u, H / 2 + 34 * u, 120 * u, 2 * u);
+        // The line under the title, smaller, in its font and with its
+        // shadow, in its own color or the title's.
+        const by = String(S.videoByline || '').trim();
+        if (by) {
+            const bySize = Math.round(34 * u);
+            g.font = '400 ' + bySize + 'px ' + (st.bylineFont || st.font);
+            setShadow(g, 'Byline', u);
+            g.globalAlpha = a;
+            const line = fitText(g, by, W - 240 * u);
+            const bw = g.measureText(line).width;
+            const base = H / 2 + 34 * u + 24 * u + bySize;
+            g.fillStyle = textFill(g, 'Byline', hexOr(S.videoBylineInk, ink), W / 2 - bw / 2, base - bySize, W / 2 + bw / 2, base + bySize * 0.25);
+            g.textAlign = 'center';
+            g.fillText(line, W / 2, base);
+            g.textAlign = 'left';
+        }
+        g.restore();
+    }
     function videoFrame(g, t, parts, total, st, title) {
         const W = st.w;
         const H = st.h;
@@ -4695,52 +4749,10 @@ export function setup(ctx, overrides) {
         drawMarks(g, st, t, intro, total, fadeOut, true);
         const audioT = t - intro;
         if (audioT < 0) {
-            if (title) {
-                // The title fades in, holds, and fades out before the first line.
-                const a = Math.max(0, Math.min(1, t / 0.6, (intro - 0.2 - t) / 0.6));
-                const size = Math.round(76 * u);
-                g.font = '500 ' + size + 'px ' + st.font;
-                g.textBaseline = 'alphabetic';
-                g.shadowColor = 'rgba(0,0,0,0.65)';
-                g.shadowBlur = 18 * u;
-                const ink = hexOr(S.videoInk, STORY_INK);
-                const text = fitText(g, title, W - 240 * u);
-                const words = text.split(/\s+/);
-                const hide = hiddenWords(words, hiddenList());
-                const sp = g.measureText(' ').width;
-                const ws = words.map((wd) => g.measureText(wd).width);
-                let x = W / 2 - (ws.reduce((p, q) => p + q, 0) + sp * (words.length - 1)) / 2;
-                words.forEach((wd, n) => {
-                    if (hide[n])
-                        coverWord(g, wd, x, H / 2, size, ink, a);
-                    else {
-                        g.globalAlpha = a;
-                        g.fillStyle = ink;
-                        g.fillText(wd, x, H / 2);
-                    }
-                    x += ws[n] + sp;
-                });
-                g.shadowColor = 'transparent';
-                g.globalAlpha = a * 0.55;
-                g.fillStyle = ink;
-                g.fillRect(W / 2 - 60 * u, H / 2 + 34 * u, 120 * u, 2 * u);
-                // The line under the title, smaller, in its font and with its
-                // shadow, in its own color or the title's.
-                const by = String(S.videoByline || '').trim();
-                if (by) {
-                    const bySize = Math.round(34 * u);
-                    g.font = '400 ' + bySize + 'px ' + (st.bylineFont || st.font);
-                    setShadow(g, 'Byline', u);
-                    g.globalAlpha = a;
-                    const line = fitText(g, by, W - 240 * u);
-                    const bw = g.measureText(line).width;
-                    const base = H / 2 + 34 * u + 24 * u + bySize;
-                    g.fillStyle = textFill(g, 'Byline', hexOr(S.videoBylineInk, ink), W / 2 - bw / 2, base - bySize, W / 2 + bw / 2, base + bySize * 0.25);
-                    g.textAlign = 'center';
-                    g.fillText(line, W / 2, base);
-                    g.textAlign = 'left';
-                }
-            }
+            // The title fades in from the start and holds until the first line,
+            // which takes over from it with the transition picked.
+            if (title)
+                drawTitle(g, st, title, Math.max(0, Math.min(1, t / 0.6)), 0, 0);
         }
         else if (parts.length) {
             const now = Math.min(audioT, total);
@@ -4751,7 +4763,16 @@ export function setup(ctx, overrides) {
             const local = now - p.start;
             const D = Math.min(2, Math.max(0.1, Number(S.videoMoveSecs) || 0.4));
             const move = S.videoMove || 'rise';
-            if (i === 0 || local >= D || move === 'cut')
+            if (i === 0 && local < D && move !== 'cut') {
+                // The first line takes over from the title, or comes in from the
+                // empty frame when there is none.
+                const k = ease(local / D);
+                const fromTitle = title ? (gg, al, x, y) => drawTitle(gg, st, title, al, x, y) : null;
+                videoMove(g, st, move, k, fromTitle, (gg, al, x, y) => drawPart(gg, st, p, local, al, x, y, 'text'));
+                const lit = move === 'black' ? Math.abs(k * 2 - 1) : 1;
+                facesBetween(g, st, [], drawPart(g, st, p, local, lit, 0, 0, 'faces'), k);
+            }
+            else if (local >= D || move === 'cut' || i === 0)
                 drawPart(g, st, p, local, 1, 0, 0);
             else {
                 // The words and names move as the transition says. Each picture
@@ -4761,7 +4782,7 @@ export function setup(ctx, overrides) {
                 const k = ease(local / D);
                 const a = parts[i - 1];
                 const aT = now - a.start;
-                videoMove(g, st, move, k, a, aT, p, local);
+                videoMove(g, st, move, k, (gg, al, x, y) => drawPart(gg, st, a, aT, al, x, y, 'text'), (gg, al, x, y) => drawPart(gg, st, p, local, al, x, y, 'text'));
                 // Through black takes the pictures through black too.
                 const lit = move === 'black' ? Math.abs(k * 2 - 1) : 1;
                 facesBetween(g, st, drawPart(g, st, a, aT, lit, 0, 0, 'faces'), drawPart(g, st, p, local, lit, 0, 0, 'faces'), k);
@@ -4955,41 +4976,42 @@ export function setup(ctx, overrides) {
     }
     // The last part giving way to the next, with no pictures: those are
     // moved by facesBetween. k runs from 0 to 1, eased.
-    function videoMove(g, st, move, k, a, aT, b, bT) {
+    function videoMove(g, st, move, k, A, B) {
+        const drawA = A || (() => { });
         const W = st.w;
         const H = st.h;
         const u = Math.min(W, H) / 1080;
-        const layer = (c, p, t) => {
+        const layer = (c, d) => {
             const lg = c.getContext('2d');
             lg.clearRect(0, 0, W, H);
-            drawPart(lg, st, p, t, 1, 0, 0, 'text');
+            d(lg, 1, 0, 0);
             return c;
         };
         if (move === 'rise') {
             // The old part fades as it rises, and the new one rises in over it,
             // at once, so there is never a moment with nothing on screen.
             const lift = 8 * u;
-            drawPart(g, st, a, aT, 1 - k, 0, -lift * k, 'text');
-            drawPart(g, st, b, bT, k, 0, lift * (1 - k), 'text');
+            drawA(g, 1 - k, 0, -lift * k);
+            B(g, k, 0, lift * (1 - k));
         }
         else if (move === 'fade') {
             // Out, then in, with the two halves overlapping a little, so no frame
             // is left empty.
-            drawPart(g, st, a, aT, Math.max(0, 1 - k / 0.55), 0, 0, 'text');
-            drawPart(g, st, b, bT, Math.max(0, (k - 0.45) / 0.55), 0, 0, 'text');
+            drawA(g, Math.max(0, 1 - k / 0.55), 0, 0);
+            B(g, Math.max(0, (k - 0.45) / 0.55), 0, 0);
         }
         else if (move === 'dissolve') {
             g.globalAlpha = 1 - k;
-            g.drawImage(layer(st.a, a, aT), 0, 0);
+            g.drawImage(layer(st.a, drawA), 0, 0);
             g.globalAlpha = k;
-            g.drawImage(layer(st.b, b, bT), 0, 0);
+            g.drawImage(layer(st.b, B), 0, 0);
             g.globalAlpha = 1;
         }
         else if (move === 'black') {
             if (k < 0.5)
-                drawPart(g, st, a, aT, 1, 0, 0, 'text');
+                drawA(g, 1, 0, 0);
             else
-                drawPart(g, st, b, bT, 1, 0, 0, 'text');
+                B(g, 1, 0, 0);
             g.globalAlpha = 1 - Math.abs(k * 2 - 1);
             g.fillStyle = '#000';
             g.fillRect(0, 0, W, H);
@@ -4999,8 +5021,8 @@ export function setup(ctx, overrides) {
             // A third of the frame, so the two lines pass each other rather than
             // sit on top of each other.
             const far = W * 0.34;
-            drawPart(g, st, a, aT, Math.max(0, 1 - k * 1.6), -far * k, 0, 'text');
-            drawPart(g, st, b, bT, Math.max(0, k * 1.6 - 0.6), far * (1 - k), 0, 'text');
+            drawA(g, Math.max(0, 1 - k * 1.6), -far * k, 0);
+            B(g, Math.max(0, k * 1.6 - 0.6), far * (1 - k), 0);
         }
         else if (move === 'wipe') {
             // A soft edge moves across: the old part is taken away behind it and
@@ -5018,8 +5040,8 @@ export function setup(ctx, overrides) {
                 lg.globalCompositeOperation = 'source-over';
                 return c;
             };
-            g.drawImage(mask(layer(st.a, a, aT), false), 0, 0);
-            g.drawImage(mask(layer(st.b, b, bT), true), 0, 0);
+            g.drawImage(mask(layer(st.a, drawA), false), 0, 0);
+            g.drawImage(mask(layer(st.b, B), true), 0, 0);
         }
         else if (move === 'focus') {
             // The old part goes soft as it fades, and the new one comes into
@@ -5041,8 +5063,8 @@ export function setup(ctx, overrides) {
                 g.imageSmoothingQuality = 'high';
                 g.drawImage(st.small, 0, 0, sw, sh2, 0, 0, W, H);
             };
-            soft(layer(st.a, a, aT), k, 1 - k);
-            soft(layer(st.b, b, bT), 1 - k, k);
+            soft(layer(st.a, drawA), k, 1 - k);
+            soft(layer(st.b, B), 1 - k, k);
             g.globalAlpha = 1;
         }
         else if (move === 'zoom') {
@@ -5050,12 +5072,12 @@ export function setup(ctx, overrides) {
                 g.globalAlpha = alpha;
                 g.drawImage(c, (W - W * s) / 2, (H - H * s) / 2, W * s, H * s);
             };
-            at(layer(st.a, a, aT), 1 + 0.04 * k, 1 - k);
-            at(layer(st.b, b, bT), 0.96 + 0.04 * k, k);
+            at(layer(st.a, drawA), 1 + 0.04 * k, 1 - k);
+            at(layer(st.b, B), 0.96 + 0.04 * k, k);
             g.globalAlpha = 1;
         }
         else
-            drawPart(g, st, b, bT, 1, 0, 0, 'text');
+            B(g, 1, 0, 0);
     }
     // Makes the video, recorded as it plays, silently. It takes as long as the
     // performance, with the title and the fade at the end.
@@ -6618,7 +6640,7 @@ export function setup(ctx, overrides) {
             }, 150);
             timers.add(findTimer);
         });
-        const findRow = el('<div class="af-col"></div>');
+        const findRow = el('<div class="af-col" data-af-row="savedFind"></div>');
         findRow.appendChild(labelRow('Find a saved script', 'Lists the scripts whose name, file name, person or first line hold what you type.', findId));
         findRow.appendChild(find);
         tools.appendChild(findRow);
@@ -7755,7 +7777,12 @@ export function setup(ctx, overrides) {
         const vw = window.innerWidth || 360;
         const vh = window.innerHeight || 640;
         // Placed against the whole row, so it never covers the setting itself.
-        const row = anchor.closest('[data-af-row]') || anchor;
+        // The row is the nearest one around the "?" that holds no other "?", so
+        // a row that holds others, such as a switch with rows under it, is
+        // never measured in place of the one the "?" is in.
+        // With none, it is the line the "?" is on.
+        const near = anchor.closest('[data-af-row]');
+        const row = near && near.querySelectorAll('[data-af-hint]').length === 1 ? near : anchor.closest('.af-between') || anchor;
         const r = row.getBoundingClientRect();
         const want = Math.min(300, r.width > 180 ? Math.min(r.width, vw - 24) : vw - 24);
         box.style.width = want + 'px';
@@ -7969,13 +7996,20 @@ export function setup(ctx, overrides) {
         const lab = row.querySelector('.af-lab');
         lab.id = id + '-name';
         box.setAttribute('aria-labelledby', lab.id);
+        // The switch's own line is a row of its own, and so is each row under
+        // it. A description is placed by the nearest row around its "?", and
+        // this one holds the rows under the switch too.
+        row.setAttribute('data-af-row', key + '-switch');
         wrap.appendChild(row);
         let sub = null;
         if (under) {
             sub = el('<div class="af-sub"><div class="af-under"></div></div>');
             const inner = sub.firstElementChild;
-            for (const r of under())
+            under().forEach((r, n) => {
+                if (!r.hasAttribute('data-af-row'))
+                    r.setAttribute('data-af-row', key + '-' + n);
                 inner.appendChild(r);
+            });
             sub.hidden = !S[key];
             wrap.appendChild(sub);
         }
@@ -11806,7 +11840,7 @@ export function setup(ctx, overrides) {
         return wrap;
     }
     function pictureRow(m, paintName) {
-        const row = el('<div class="af-col"></div>');
+        const row = el('<div class="af-col" data-af-row="castPicture"></div>');
         row.appendChild(labelRow('Picture', 'Optional. Shown in Now playing and the player. With none, the first letter of the name is shown.'));
         const box = el('<div class="af-pic"><span class="af-avatar"></span></div>');
         const face = box.firstElementChild;
@@ -11965,7 +11999,9 @@ export function setup(ctx, overrides) {
                     });
                     box.appendChild(name);
                     const wordsId = rid('mw');
-                    box.appendChild(labelRow('Words that pick it', 'One per line, such as angrily. Matched whole.', wordsId));
+                    const wordsRow = el('<div class="af-col" data-af-row="moodWords"></div>');
+                    wordsRow.appendChild(labelRow('Words that pick it', 'One per line, such as angrily. Matched whole.', wordsId));
+                    box.appendChild(wordsRow);
                     const words = el('<textarea class="af-field" rows="3" spellcheck="false" id="' + wordsId + '" data-af-moodwords></textarea>');
                     words.value = mood.words.join('\n');
                     words.addEventListener('change', () => {
@@ -12378,7 +12414,7 @@ export function setup(ctx, overrides) {
                 }, 'The TTS connection this person speaks through. Use it to mix engines, such as a narrator on a cheaper engine. Each connection keeps its own voice for them.'));
             }
             const vid = rid('vc');
-            const voiceField = el('<div class="af-col"></div>');
+            const voiceField = el('<div class="af-col" data-af-row="castVoice"></div>');
             voiceField.appendChild(labelRow('Voice', 'Their voice on this connection. Compare voices with Hear a sample before you pick.', vid));
             // The box shows the voice picked from the first frame, and the rest of
             // the list is added under it when it arrives, so what it says never
@@ -12459,7 +12495,7 @@ export function setup(ctx, overrides) {
             const pick = pickOf(m, cn);
             const eng = engineFor(cn, pick.model || cn.model);
             const mid = rid('md');
-            const modelField = el('<div class="af-col"></div>');
+            const modelField = el('<div class="af-col" data-af-row="castModel"></div>');
             modelField.appendChild(labelRow('Model', 'Empty uses the connection’s model. The model decides which acting directions work, shown under this box.', mid));
             const connModel = 'The connection’s model' + (cn.model ? ' (' + esc(cn.model) + ')' : '');
             // The connection's own model, picked by name, shows as the first
@@ -12574,7 +12610,7 @@ export function setup(ctx, overrides) {
             speakBox.appendChild(hint(esc(speakHint(eng))));
         }
         inner.appendChild(speakBox);
-        const mutedRow = el('<div class="af-col"></div>');
+        const mutedRow = el('<div class="af-col" data-af-row="castMuted"></div>');
         {
             const id = rid('mt');
             const box = el('<input type="checkbox" class="af-box" role="switch" id="' + id + '">');
@@ -12994,6 +13030,7 @@ export function setup(ctx, overrides) {
         const has = () => (fs ? hasFsKey : hasKey);
         const kid = rid('key');
         const kf = el('<div class="af-col"></div>');
+        kf.setAttribute('data-af-row', 'key-' + which);
         kf.appendChild(labelRow('Key for ' + (fs ? 'freesound.org' : 'api.elevenlabs.io'), fs
             ? 'Sign in at freesound.org, open freesound.org/apiv2/apply, make a key, and paste its Client secret/Api key here. It is tested at once.'
             : 'Make a key in ElevenLabs with the Sound Effects permission, paste it here and press Save. It is tested at once. The panel never shows it again.', kid));
@@ -13124,7 +13161,7 @@ export function setup(ctx, overrides) {
         lib.appendChild(urow);
         // A sound by link: the browser plays it from that address, so a big
         // file costs nothing to keep.
-        const linkRow = el('<div class="af-col" data-af-link></div>');
+        const linkRow = el('<div class="af-col" data-af-link data-af-row="soundLink"></div>');
         const lid = rid('ln');
         linkRow.appendChild(labelRow('Add a sound by link', 'A link to an MP3, WAV or OGG file, starting with https://. It is played from that address. Name it so the Director’s descriptions can find it.', lid));
         const linkIn = el('<input type="text" class="af-field" id="' + lid + '" placeholder="https://" inputmode="url" autocomplete="off" spellcheck="false">');
@@ -13280,7 +13317,7 @@ export function setup(ctx, overrides) {
     // the cast: a clearly darker tint of their kind's color with a light
     // initial, so the ring, in the full kind's color, stands out around it,
     // and a less dark tint for a mood.
-    const EXAMPLE_PEOPLE = { a: { name: 'Juniper', kind: 'character' }, b: { name: 'Ansel', kind: 'npc' } };
+    const EXAMPLE_PEOPLE = { a: { name: 'Juniper', kind: 'character' }, b: { name: 'Ansel', kind: 'npc' }, c: { name: 'Bram', kind: 'persona' } };
     const examplePics = new Map();
     function examplePicture(kind, initial, light) {
         const key = kind + initial + (light ? '+' : '') + kindHex(kind);
@@ -13311,14 +13348,20 @@ export function setup(ctx, overrides) {
         // With words to hide, one of them is in the first line, so its cover
         // shows from the start.
         const hide = list.length && list[0].length ? ' ' + list[0].join(' ') : '';
+        // Every kind of change happens once: narration to a caption, a caption
+        // to a caption, a caption to a line, the same person twice, one person
+        // to two, two to two, two to one when a third speaks, and a new scene.
         const lines = [
-            { who: 'n', text: 'Rain tapped on the window of the little shop' + hide + '.', len: 3.4 },
-            { who: 's', text: 'thunder rolling', len: 1.6 },
-            { who: 'a', text: 'Are you closing early tonight?', len: 2.6 },
-            { who: 'b', text: 'Only if the storm lets me.', len: 2.8, tag: 'laughs' },
-            { who: 'a', text: 'Then I will wait here with you.', len: 3 },
-            { who: 'n', text: 'By morning the street was bright and still.', len: 3.4 },
-            { who: 'b', text: 'We made it through.', len: 2.4 },
+            { who: 'n', text: 'Rain tapped on the window of the little shop' + hide + '.', len: 2.6 },
+            { who: 's', text: 'thunder rolling', len: 1.4 },
+            { who: 's', text: 'a door creaking', len: 1.4 },
+            { who: 'a', text: 'Are you closing early tonight?', len: 2.2 },
+            { who: 'a', text: 'The lamps are already low.', len: 2 },
+            { who: 'b', text: 'Only if the storm lets me.', len: 2.4, tag: 'laughs' },
+            { who: 'a', text: 'Then I will wait here with you.', len: 2.2 },
+            { who: 'c', text: 'Closing time, both of you.', len: 2 },
+            { who: 'n', text: 'By morning the street was bright and still.', len: 2.6 },
+            { who: 'b', text: 'We made it through.', len: 2 },
         ];
         const parts = [];
         let at = 0;
@@ -13346,7 +13389,7 @@ export function setup(ctx, overrides) {
         // A second scene from the morning, on another background when there is
         // one, so the crossfade shows.
         const second = backList().find((b) => b.id !== backDefault().id);
-        const morning = parts.find((p) => p.k === 5);
+        const morning = parts.find((p) => p.k === 8);
         const scenes = [{ t: 0, id: backDefault().id }, { t: morning.start, id: second ? second.id : backDefault().id }];
         const title = S.videoTitleOn === false ? '' : String(S.videoTitleText || '').trim() || 'The Lantern Shop';
         return { parts, title, total: at, scenes };
@@ -13627,7 +13670,7 @@ export function setup(ctx, overrides) {
         wrap.appendChild(said);
         // The name, as it is shown in the lists.
         const nameId = rid('bn');
-        const nameRow = el('<div class="af-col"></div>');
+        const nameRow = el('<div class="af-col" data-af-row="backName"></div>');
         nameRow.appendChild(labelRow('Name', 'Shown in the lists of backgrounds.', nameId));
         const name = el('<input type="text" class="af-field" maxlength="40" autocomplete="off" id="' + nameId + '" data-af-backname>');
         name.value = bk.name;
@@ -15024,7 +15067,7 @@ export function setup(ctx, overrides) {
             drawLooks(box);
         });
         save.setAttribute('data-af-looksave', '');
-        const addRow = el('<div class="af-col"></div>');
+        const addRow = el('<div class="af-col" data-af-row="lookSave"></div>');
         addRow.appendChild(labelRow('Save this look', 'Keeps the shape, words, captions, pictures, background, edges, transition and ending under a name. Notes, Show names and Show pictures are not part of a look.', newId));
         const line = el('<div class="af-row"></div>');
         line.appendChild(newName);
@@ -15655,7 +15698,7 @@ export function setup(ctx, overrides) {
                 set({ videoTitleText: box.value.trim() });
                 look();
             });
-            const titleRow = el('<div class="af-col"></div>');
+            const titleRow = el('<div class="af-col" data-af-row="videoTitleText"></div>');
             titleRow.appendChild(labelRow('Title', 'Empty uses the chat’s name, while Show names is on.', box.id));
             titleRow.appendChild(box);
             const byBox = el('<input type="text" class="af-field" maxlength="80" spellcheck="true" autocomplete="off" data-af-byline>');
@@ -15666,7 +15709,7 @@ export function setup(ctx, overrides) {
                 set({ videoByline: byBox.value.trim().slice(0, 80) });
                 look();
             });
-            const byRow = el('<div class="af-col"></div>');
+            const byRow = el('<div class="af-col" data-af-row="videoByline"></div>');
             byRow.appendChild(labelRow('A line under the title', 'Empty by default. Shown smaller under the title, such as by and your name. With no title, it is not shown.', byBox.id));
             byRow.appendChild(byBox);
             const byInk = colorRow('videoBylineInk', 'Color of the line', 'The title’s color by default.', '--af-none', hexOr(S.videoInk, STORY_INK), 'Use the title’s color', look);

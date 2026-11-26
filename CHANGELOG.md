@@ -57,6 +57,8 @@ _2026-11-26_
 - **The message for no usable TTS connection left out services.** It now names Cartesia, OpenRouter and OpenVox too.
 - **Check for the Director kept running on a connection that never answered.** The panel stopped waiting after 150 seconds, but the check itself went on in the background with no limit. It now stops after the same wait as the Director.
 - **The shadow of the player under each message was cut off at the player's edge.** The player had your theme's small shadow, but its edge hid it. The shadow now shows in full.
+- **The first line showed at once after the title.** The title faded out first, the screen was empty for a moment, and the first line then appeared in one frame. The title now stays until the first line, and gives way to it with the transition picked.
+- **The description of some settings opened far above its ?.** In the Studio, **Title** sat under **Title at the start**, and the description of its **?** opened above the whole switch and the rows under it, as far as a whole screen away. Each row now has its own place, and every description opens next to its **?**, on a phone and a laptop, at every UI Scale.
 - **A note said Speech detection is only Lumiverse's.** Under **How Auto Foley works with Lumiverse’s own voice settings**, in the Settings tab, it said Auto Foley uses the Cast tab and the Mixer instead. It now says Auto Foley has the same choices under **Reading messages**.
 
 ---

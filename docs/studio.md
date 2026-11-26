@@ -123,11 +123,11 @@ A browser that can make MP4, such as a recent Chrome or Safari, saves MP4, which
 
 ### The example clip
 
-With no performance in the Studio, the preview shows an example clip, about 23 seconds long, so you can see the look and change it before playing anything.
+With no performance in the Studio, the preview shows an example clip, about 25 seconds long, so you can see the look and change it before playing anything.
 
 - It has no sound. **Play the preview** plays it silently, and it starts again at the end until you stop it.
-- It shows each part of the look: the title, narration, a sound caption, two made-up people taking turns, a line with a voice tag for a mood picture, quotation marks, the transition between lines, a second scene, and the fade at the end. Notes and hidden words show when you have them.
-- Its people, Juniper and Ansel, have pictures drawn by Auto Foley: a circle in their kind's color with their initial. The mood picture is a lighter circle. It never uses a picture from your cast.
+- It shows each part of the look, and each kind of change between parts: the title, narration, two sound captions in a row, the same person twice, two made-up people taking turns, a third who speaks after them, a line with a voice tag for a mood picture, quotation marks, a second scene, and the fade at the end. Notes and hidden words show when you have them.
+- Its people, Juniper, Ansel and Bram, have pictures drawn by Auto Foley: a darker tint of their kind's color with their initial, so the ring in the full color stands out. The mood picture is a lighter tint. It never uses a picture from your cast.
 - With two or more backgrounds, its second scene uses another background, so the crossfade shows.
 - Every change you make redraws it at once, at the same moment in the clip.
 - With a performance there, **Show in the preview** picks **Your performance** or **Example**.
@@ -209,6 +209,8 @@ A fill is part of your settings, a saved look, and each background in the list.
 | **Cut, with no movement** | The next line shows at once. |
 
 **How long it takes, in seconds**: 0.4 by default, from 0.1 to 2.
+
+The title gives way to the first line with the same transition.
 
 The pictures move on their own during a transition. A person on screen in both lines moves from their old place to their new one, such as from the middle to the left when a second person comes in. A person who arrives fades in, and one who leaves fades out. The words and names use the transition picked. With **Cut, with no movement**, the pictures change at once. With **Through black**, they go through black with the rest.
 

@@ -4069,16 +4069,18 @@ if (section("gradients")) {
     // A radial background, red in the middle, green half way out and blue
     // at the corners, read at a moment with no words or title on it.
     {
+      // No title, so the frame just after the fade from black holds only the
+      // background, before the first line has begun to come in.
       const { context, page, errors } = await open(THEMES[0], size, 1, () => {
         Object.assign(window.__settings, {
-          videoEdges: 0,
+          videoEdges: 0, videoTitleOn: false, videoMove: "dissolve",
           videoBacks: [{ id: "main", name: "Main", kind: "color", color: "#ff2020", fill: "radial", stops: ["#20ff20", "#2020ff"], dir: "down", dim: 40, blur: 0, shapes: [], use: "match", moods: [], places: [] }],
           videoBackPick: "main",
         });
       });
       await page.click('.af-tab[data-tab="studio"]');
       await page.waitForTimeout(1500);
-      await setPreview(page, 2.3);
+      await setPreview(page, 0.61);
       const bg = await page.evaluate(() => {
         const c = document.querySelector("[data-af-videopreview]");
         const W = c.width, H = c.height;
@@ -4466,12 +4468,12 @@ if (section("example faces")) {
       return { W, runs, ring, inside };
     }, t);
     // The rings, around Juniper's picture alone, at a moment she speaks.
-    const alone = await read(8.6);
+    const alone = await read(9.2);
     check(alone.ring >= 2 && alone.inside > alone.ring * 2, size.name + ": the example's ring is a band of the kind's full color, apart from the darker picture inside it (" + alone.ring + " ring, " + alone.inside + " inside)");
-    // Ansel's line starts at 10 seconds. Every frame of the change has at
+    // Ansel's line starts at 12 seconds. Every frame of the change has at
     // most two pictures, and Juniper's moves left through places between.
     const frames = [];
-    for (let t = 9.95; t <= 10.85; t += 0.05) frames.push(await read(t));
+    for (let t = 11.95; t <= 12.85; t += 0.05) frames.push(await read(t));
     const most = Math.max(...frames.map((f) => f.runs.length));
     const lefts = frames.map((f) => (f.runs.length ? f.runs[0] / f.W : 0)).filter(Boolean);
     // From the middle, 0.5, to the left of the pair, about 0.44, through
@@ -4482,7 +4484,7 @@ if (section("example faces")) {
     // Fade and rise from the sound caption to Juniper's line: no frame with
     // nearly nothing on it.
     const light = [];
-    for (let t = 7.3; t <= 8.3; t += 0.05) {
+    for (let t = 7.7; t <= 8.7; t += 0.05) {
       light.push(await page.evaluate(async (t) => {
         const r = document.querySelector("[data-af-scrub] input");
         r.value = String(t);
@@ -4507,8 +4509,8 @@ if (section("example faces")) {
 
 if (section("caption transitions")) {
   console.log("A sound caption leaves with the transition, the same as a line of words");
-  // The caption is yellow, so its pixels can be told from everything else.
-  // Juniper's line starts at 7.4 seconds, after "[thunder rolling]".
+  // The captions are yellow, so their pixels can be told from everything
+  // else. Juniper's line starts at 7.8 seconds, after "[a door creaking]".
   for (const move of ["rise", "fade", "dissolve", "black", "slide", "wipe", "focus", "zoom", "cut"]) {
     const size = SIZES[1] || SIZES[0];
     const { context, page, errors } = await open(THEMES[0], size, 1, () => {
@@ -4528,7 +4530,7 @@ if (section("caption transitions")) {
       const c = document.querySelector("[data-af-videopreview]");
       const g = c.getContext("2d");
       const out = [];
-      for (let t = 7.2; t <= 8.4; t += 0.05) {
+      for (let t = 7.6; t <= 8.8; t += 0.05) {
         r.value = String(t);
         r.dispatchEvent(new Event("input", { bubbles: true }));
         await new Promise((x) => requestAnimationFrame(x));
@@ -4546,7 +4548,7 @@ if (section("caption transitions")) {
       return out;
     });
     const full = frames[0].yellow;
-    const during = frames.filter((f) => f.t > 7.42 && f.t < 8.18);
+    const during = frames.filter((f) => f.t > 7.82 && f.t < 8.58);
     const both = during.filter((f) => f.yellow > full * 0.9 && f.face > 30).length;
     check(both === 0, move + ": no frame has the caption at full strength with the next picture partly drawn (" + both + " frames)");
     if (move !== "cut") {
@@ -4557,7 +4559,7 @@ if (section("caption transitions")) {
       const end = frames[frames.length - 1].yellow;
       check(rises === 0 && end < full * 0.1 && during.some((f) => f.yellow > full * 0.15 && f.yellow < full * 0.85), move + ": the caption fades out over the change (" + during.map((f) => Math.round((f.yellow / Math.max(1, full)) * 100)).join(" ") + ")");
     }
-    // The other way: the narration gives way to the caption at 5.8
+    // The other way: the narration gives way to the caption at 5
     // seconds. The caption comes in with the transition, and is not at
     // full strength at the start of it.
     const coming = await page.evaluate(async () => {
@@ -4565,7 +4567,7 @@ if (section("caption transitions")) {
       const c = document.querySelector("[data-af-videopreview]");
       const g = c.getContext("2d");
       const out = [];
-      for (let t = 5.7; t <= 6.8; t += 0.05) {
+      for (let t = 4.9; t <= 6.0; t += 0.05) {
         r.value = String(t);
         r.dispatchEvent(new Event("input", { bubbles: true }));
         await new Promise((x) => requestAnimationFrame(x));
@@ -4580,7 +4582,7 @@ if (section("caption transitions")) {
       return out;
     });
     const top = Math.max(...coming.map((f) => f.yellow));
-    const startUp = coming.filter((f) => f.t > 5.82 && f.t < 5.95);
+    const startUp = coming.filter((f) => f.t > 5.02 && f.t < 5.15);
     if (move !== "cut") check(top > 0 && startUp.every((f) => f.yellow < top * 0.7), move + ": a caption coming in after a line comes in with the transition (" + coming.map((f) => Math.round((f.yellow / Math.max(1, top)) * 100)).join(" ") + ")");
     check(!errors.length, move + ": no page errors. " + errors.slice(0, 2).join(" | "));
     await context.close();
@@ -4773,6 +4775,160 @@ if (section("seek bar")) {
       check(!errors.length, say + ": no page errors. " + errors.slice(0, 2).join(" | "));
       await context.close();
     }
+  }
+}
+
+if (section("hint places")) {
+  console.log("Each description opens right by its ?, in an open fold far down a scrolled drawer, at each UI Scale");
+  // Where the description is against its ?: it sits just above the row the
+  // ? is in, or just under that row, and never covers the ?.
+  const measure = (q) => q.evaluate((q) => {
+    const tip = document.querySelector(".af-hint[data-af-open]");
+    if (!tip) return null;
+    const b = q.getBoundingClientRect(), t = tip.getBoundingClientRect();
+    let row = q.closest(".af-col") || q;
+    const r = row.getBoundingClientRect();
+    const covers = t.left < b.right && t.right > b.left && t.top < b.bottom && t.bottom > b.top;
+    const above = t.bottom <= b.top + 1;
+    const gap = above ? b.top - t.bottom : t.top - b.bottom;
+    // Under the row: as far as the row's own controls under the ?.
+    const allowed = above ? 16 : 16 + Math.min(120, Math.max(0, r.bottom - b.bottom));
+    return { covers, above, gap: Math.round(gap), allowed: Math.round(allowed), name: q.getAttribute("aria-label") };
+  });
+  // Scrolls whatever holds the drawer, so the element sits that far down
+  // the screen. Scroll positions are in CSS pixels and boxes in screen
+  // pixels, so the distance is turned back by the page's zoom.
+  const SCROLL_TO = ([sel, text, at]) => {
+    const t = [...document.querySelectorAll(sel)].find((x) => !text || (x.textContent || "").includes(text));
+    let box = t.parentElement;
+    while (box && !(box.scrollHeight > box.clientHeight + 2 && /auto|scroll/.test(getComputedStyle(box).overflowY))) box = box.parentElement;
+    box = box || document.scrollingElement;
+    const zoom = Number(document.documentElement.style.zoom) || 1;
+    box.scrollTop += (t.getBoundingClientRect().top - innerHeight * at) / zoom;
+  };
+  const SCROLLED = () => {
+    let box = document.querySelector("#drawer [data-af-hint]");
+    while (box && !(box.scrollHeight > box.clientHeight + 2 && /auto|scroll/.test(getComputedStyle(box).overflowY))) box = box.parentElement;
+    return Math.round((box || document.scrollingElement).scrollTop);
+  };
+  for (const size of SIZES) for (const zoom of [1, 1.25, 0.85]) {
+    const { context, page, errors } = await open(THEMES[0], size, zoom);
+    const say = size.name + " at " + zoom;
+    await page.click('.af-tab[data-tab="studio"]');
+    await page.waitForTimeout(1200);
+    const head = page.locator(".af-fold", { hasText: "Title and ending" }).first();
+    const tapOrHover = async (q) => {
+      if (size.touch) await q.tap(); else await q.hover();
+      await page.waitForTimeout(220);
+      const m = await measure(q);
+      if (size.touch) await q.tap(); else await page.mouse.move(1, 1);
+      await page.waitForTimeout(220);
+      return m;
+    };
+    const far = (m) => !m || m.covers || m.gap < 0 || m.gap > m.allowed;
+    const tell = (m, q) => (m ? m.name + " " + (m.above ? "above " : "under ") + m.gap + "px" + (m.covers ? ", covers it" : "") : "did not open");
+    // The other folds open, so the drawer is long. It is scrolled down so
+    // the fold's head is near the middle, below the preview that stays at
+    // the top on a phone. Then the fold is opened, and a ? read while it is
+    // still opening.
+    await page.evaluate(() => [...document.querySelectorAll('#drawer .af-fold[aria-expanded="false"]')].filter((x) => !/Title and ending/.test(x.textContent || "")).forEach((b) => b.click()));
+    await page.waitForTimeout(700);
+    await page.evaluate(SCROLL_TO, [".af-fold", "Title and ending", 0.45]);
+    await page.waitForTimeout(150);
+    check((await page.evaluate(SCROLLED)) > 200, say + ": the drawer is scrolled down (" + (await page.evaluate(SCROLLED)) + ")");
+    await head.click();
+    await page.waitForTimeout(40);
+    const qs = head.locator("xpath=..").locator("[data-af-hint]");
+    // Straight at where the ? is drawn now, so nothing waits for the fold
+    // to stop moving first.
+    // The first moment it can be pressed: while the fold is still opening,
+    // the rows below its moving edge are not drawn yet.
+    const at = await qs.nth(1).evaluate(async (q) => {
+      for (let n = 0; n < 40; n++) {
+        const b = q.getBoundingClientRect();
+        const x = b.left + b.width / 2, y = b.top + b.height / 2;
+        if (document.elementFromPoint(x, y) === q) return { x, y, n };
+        await new Promise((r) => requestAnimationFrame(r));
+      }
+      return { x: 0, y: 0, n: -1 };
+    });
+    check(at.n >= 0 && at.n < 25, say + ": the ? can be pressed while the fold is still opening (" + at.n + " frames)");
+    if (size.touch) await page.touchscreen.tap(at.x, at.y); else await page.mouse.move(at.x, at.y);
+    await page.waitForTimeout(220);
+    const early = await measure(qs.nth(1));
+    if (size.touch) await page.touchscreen.tap(at.x, at.y); else await page.mouse.move(1, 1);
+    await page.waitForTimeout(220);
+    check(!far(early), say + ", as the fold opens: the description opens right by its ? (" + tell(early) + ")");
+    await page.waitForTimeout(600);
+    // Then every ? in the fold, each scrolled to sit far down the drawer.
+    const n = await qs.count();
+    const bad = [];
+    let seen = 0;
+    for (let k = 0; k < n; k++) {
+      const q = qs.nth(k);
+      if (!(await q.isVisible())) continue;
+      await q.evaluate((q) => q.setAttribute("data-t-at", ""));
+      await page.evaluate(SCROLL_TO, ["[data-t-at]", "", 0.7]);
+      await q.evaluate((q) => q.removeAttribute("data-t-at"));
+      await page.waitForTimeout(120);
+      const m = await tapOrHover(q);
+      seen++;
+      if (far(m)) bad.push(m ? tell(m) : "did not open: " + (await q.getAttribute("aria-label")));
+    }
+    check(seen >= 8 && !bad.length, say + ": each ? in the title fold opens its description right by it (" + seen + " read). " + bad.slice(0, 3).join(" | "));
+    // Every ? finds its own row: with every fold open and every switch's
+    // rows shown, the nearest row around each ? holds that one ? only.
+    if (zoom === 1) {
+      const shared = [];
+      for (const tab of TABS) {
+        await page.click(`.af-tab[data-tab="${tab}"]`);
+        await page.waitForTimeout(500);
+        for (let round = 0; round < 6; round++) {
+          const more = await page.evaluate(() => {
+            const closed = [...document.querySelectorAll('#drawer .af-fold[aria-expanded="false"], #drawer .af-person-head[aria-expanded="false"]')].filter((b) => !b.closest("[data-spindle-ext]"));
+            closed.forEach((b) => b.click());
+            document.querySelectorAll("#drawer .af-sub[hidden]").forEach((x) => (x.hidden = false));
+            return closed.length;
+          });
+          await page.waitForTimeout(300);
+          if (!more) break;
+        }
+        shared.push(...(await page.evaluate((tab) => [...document.querySelectorAll("#drawer [data-af-hint]")].map((q) => {
+          const row = q.closest("[data-af-row]");
+          const n = row ? row.querySelectorAll("[data-af-hint]").length : 0;
+          return n === 1 ? "" : tab + ": " + q.getAttribute("aria-label") + (row ? " shares " + row.getAttribute("data-af-row") + " with " + (n - 1) + " more" : " has no row");
+        }).filter(Boolean), tab)));
+      }
+      check(!shared.length, say + ": every ? has a row of its own (" + shared.length + " share one). " + [...new Set(shared)].slice(0, 6).join(" | "));
+      await page.click('.af-tab[data-tab="stage"]');
+      await page.waitForTimeout(300);
+    }
+    // Every other ? on every tab, at the top of the drawer, the same way.
+    if (zoom === 1) {
+      let bad = [], seen = 0;
+      for (const tab of TABS) {
+        await page.click(`.af-tab[data-tab="${tab}"]`);
+        await page.waitForTimeout(500);
+        const qs = page.locator("#drawer [data-af-hint]");
+        const n = await qs.count();
+        for (let i = 0; i < n && seen < 400; i++) {
+          const q = qs.nth(i);
+          if (!(await q.isVisible())) continue;
+          await q.evaluate((q) => q.scrollIntoView({ block: "center" }));
+          await page.waitForTimeout(60);
+          if (size.touch) await q.tap(); else await q.hover();
+          await page.waitForTimeout(200);
+          const m = await measure(q);
+          seen++;
+          if (!m || m.covers || m.gap < 0 || m.gap > m.allowed) bad.push(tab + ": " + (m ? m.name + " " + (m.above ? "above " : "under ") + m.gap + "px" + (m.covers ? ", covers it" : "") : "did not open"));
+          if (size.touch) await q.tap(); else await page.mouse.move(1, 1);
+          await page.waitForTimeout(200);
+        }
+      }
+      check(seen > 20 && !bad.length, say + ": every ? on every tab opens its description right by it (" + seen + " read, " + bad.length + " far). " + bad.slice(0, 4).join(" | "));
+    }
+    check(!errors.length, say + ": no page errors. " + errors.slice(0, 2).join(" | "));
+    await context.close();
   }
 }
 
