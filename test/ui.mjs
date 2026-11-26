@@ -3692,6 +3692,21 @@ if (section("studio")) {
   }
 }
 
+if (section("studio follows")) {
+  console.log("With the Studio open, a message played is picked up");
+  const { context, page, errors } = await open(THEMES[0], SIZES[1]);
+  await page.evaluate(() => { window.__wav = [0.1, 0.5]; window.__clipMs = 300; });
+  await page.click('.af-tab[data-tab="studio"]');
+  await page.waitForTimeout(500);
+  check((await page.locator(".af-fold", { hasText: "Which parts go in" }).count()) === 0, "before anything is played, there are no parts to pick");
+  await page.click('#mount [data-af-slot="message"]');
+  await page.waitForFunction(() => !!document.querySelector('[data-af-studio="dlall"]') && !document.querySelector('[data-af-studio="dlall"]').disabled, null, { timeout: 20000 }).catch(() => {});
+  await page.waitForTimeout(800);
+  check((await page.locator(".af-fold", { hasText: "Which parts go in" }).count()) === 1, "after a message plays, its parts can be picked, without leaving the tab");
+  check(!errors.length, "no errors. " + errors.slice(0, 2).join("; "));
+  await context.close();
+}
+
 if (section("transitions")) {
   console.log("Every transition moves from one line to the next, and none is a cut but Cut");
   const { context, page, errors } = await open(THEMES[0], SIZES[1]);
