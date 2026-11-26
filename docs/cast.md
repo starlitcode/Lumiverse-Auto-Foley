@@ -118,6 +118,18 @@ What to know:
 - The floating player lists the cast in the same order.
 - The order follows your account.
 
+## Finding someone
+
+With a large cast, **Find someone**, at the top of the Cast tab, lists only the people you look for.
+
+1. Type part of a name in the box.
+2. Only the people whose name, display name or other names hold what you typed are listed, with how many match.
+3. Clear the box to see everyone again, in their groups.
+
+- Capital letters do not matter.
+- People cannot be moved while the list shows only some of them.
+- What is typed is kept while the page is open, and not saved.
+
 ## Group chats
 
 Auto Foley names no character in its prompt and assumes nothing about who plays whom. In a group chat, each message's author joins the cast, and the Director picks speakers from everyone in it.

@@ -497,3 +497,15 @@ describe("Hide words", () => {
     expect(hiddenWords(["Ilse"], hideList("\n  \n"))).toEqual([false]);
   });
 });
+
+describe("Download audio, odd lengths", () => {
+  const { wavBlob } = __testing as any;
+  test("a data chunk of an odd length is followed by one zero byte", async () => {
+    const b = wavBlob([new Float32Array([0.25])], 48000);
+    const v = new DataView(await b.arrayBuffer());
+    expect(v.getUint32(40, true)).toBe(3);
+    expect(b.size).toBe(44 + 3 + 1);
+    expect(v.getUint32(4, true)).toBe(36 + 3 + 1);
+    expect(v.getUint8(47)).toBe(0);
+  });
+});

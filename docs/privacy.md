@@ -40,7 +40,11 @@ Your Freesound and ElevenLabs keys are kept in Lumiverse's secure storage, under
 
 **Debug info** builds its report on your device. Nothing in it is sent anywhere until you paste it.
 
-Two things are kept in your browser: which tab of the panel was open, and a copy of your settings, so the panel draws at once. The copy in your account replaces it as soon as Lumiverse answers.
+Three things are kept in your browser:
+
+- Which tab of the panel was open.
+- Where the floating player sits on the screen, and whether it is open.
+- A copy of your settings, so the panel draws at once. The copy in your account replaces it as soon as Lumiverse answers.
 
 A script is also kept in memory on the server, up to 40 for each account, so playing one again asks nothing. With **Keep made audio** off, it is gone when Lumiverse restarts.
 

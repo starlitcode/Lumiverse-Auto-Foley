@@ -223,6 +223,8 @@ interface Settings {
   // A button on every message, and one in the chat's own row of buttons.
   messageButton: boolean;
   barButton: boolean;
+  // A small player under each message performed.
+  messagePlayer: boolean;
   // The Start here guide on the Stage tab has been read.
   guideSeen: boolean;
   // Which parts the export, the import and Start again cover.
@@ -410,6 +412,7 @@ const DEFAULT_SETTINGS: Settings = {
   retryDirector: 1,
   messageButton: false,
   barButton: false,
+  messagePlayer: true,
   guideSeen: false,
   exportParts: ['settings', 'prompt', 'cast', 'chats'],
   importParts: ['settings', 'prompt', 'cast', 'chats'],
@@ -859,6 +862,7 @@ function cleanSettings(raw: any): Settings {
     retryDirector: Math.round(num(r.retryDirector, 0, 3, d.retryDirector)),
     messageButton: bool(r.messageButton, d.messageButton),
     barButton: bool(r.barButton, d.barButton),
+    messagePlayer: bool(r.messagePlayer, d.messagePlayer),
     guideSeen: bool(r.guideSeen, d.guideSeen),
     exportParts: partList(r.exportParts, TRANSFER_PARTS, d.exportParts),
     importParts: partList(r.importParts, TRANSFER_PARTS, d.importParts),
@@ -3387,7 +3391,7 @@ async function writeJson(path: string, value: any, userId: string | undefined): 
 }
 
 // The picture behind a video, as a data URL, in a file of its own. It is
-// made on the reader's device, at most 1920 by 1080.
+// made on the reader's device, at most 1920 pixels on its long side.
 const VIDEO_BG_FILE = 'video-background.json';
 const VIDEO_BG_MAX = 3000000;
 function cleanVideoBg(v: any): string {
@@ -4318,7 +4322,7 @@ async function onPanel(p: any, userId: string | undefined) {
       }
       case 'video_bg_put': {
         const picture = cleanVideoBg(p.picture);
-        if (p.picture && !picture) return answer({ type: 'video_bg', ok: false, picture: '', error: 'That picture could not be kept. Pick a JPEG, PNG or WebP picture.' });
+        if (p.picture && !picture) return answer({ type: 'video_bg', ok: false, picture: '', error: 'That picture is too large to keep. Pick a smaller one.' });
         const ok = await writeJson(VIDEO_BG_FILE, { picture }, userId);
         return answer({ type: 'video_bg', ok, picture: ok ? picture : '', error: ok ? '' : 'The picture could not be saved to your account.' });
       }

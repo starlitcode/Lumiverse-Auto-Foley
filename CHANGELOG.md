@@ -14,6 +14,7 @@ _2026-11-25_
 
 - **Auto Foley can be switched off in one chat**, the same as Auto Retry and Auto Refine. In the Settings tab, under **Auto Foley is on**, the **This chat** row has **Turn off here**. In that chat nothing plays or is prepared on its own, and its messages have no button and no player. Every other chat carries on. The pill at the top of the panel says **Off here**. The chats switched off are kept on your account, and **Turn them all back on** switches it on again everywhere. A temporary chat is switched off only while it is open.
 - **Chats you switched off** is a new part of your setup file and of **Start again**. It is chosen for a new install. If you set up Auto Foley before 1.8.0, tick it under each list to include it.
+- **Find someone**, in the Cast tab, for a large cast. Typing part of a name lists only the people whose name, display name or other names hold it, with how many match.
 - **All and None over the switches in What the Log shows**, the same as Auto Refine. All turns every kind of line on, and None turns every one off. A line beside them says how many are on.
 - **The Studio**, a new tab for keeping a performance as audio or as a video. A preview shows the video with your choices, and can be moved through or played. See [The Studio](docs/studio.md).
   - **The performance**: pick which parts go in, with **All** and **None**, and trim where it starts and ends, typed in seconds or set from the preview with **Start here** and **End here**. Add a pause between parts, leave out the sound effects, keep the volumes as you heard them, and even out the loudness.
@@ -25,7 +26,7 @@ _2026-11-25_
 
 ### Changed
 
-- **Downloads are all in the Studio tab.** Under **Now playing** on the Stage tab, **Download audio**, **Download this part** and **Make a video** are now one button, **Download or make a video**, which opens the Studio. In **Saved audio**, **Download** is now **Open in the Studio**, which downloads the whole performance with its sounds.
+- **Downloads are all in the Studio tab.** Under **Now playing** on the Stage tab, **Download audio**, **Download this part** and **Make a video** are now one button, **Download or make a video**, which opens the Studio. In **Saved audio**, **Download** is now **Open in the Studio**, which opens the whole performance, with its sounds, in the Studio, where it can be downloaded.
 - **Who is voiced, in the floating player, looks like a voice call.** The person speaking has a green ring around their picture and **Speaking** under their name, for as long as their line plays. Someone not voiced has a red microphone on their picture and **Not voiced** under their name. Everyone else shows the kind of part they are. The people in the message come first, in the order they speak, and the rest of the cast is behind **Everyone else**, so a large cast is not one long list.
 - **Make a video looks like a story being read.** It opens with the chat's name and fades to black at the end. Each line is large in the middle of the screen, with the words lighting up as they are said. Speech is in quotation marks, with the speaker's picture and name above it, and a sound is a caption in square brackets. The On air light, the stripe and the strip of parts are gone.
 - **Videos are 1920 by 1080, at a higher quality.** They were 1280 by 720. A browser that can make MP4, such as a recent Chrome or Safari, now saves MP4, which phones and sharing sites play. Other browsers save WebM.
@@ -34,6 +35,8 @@ _2026-11-25_
 ### Fixed
 
 - **Saved files were dated in UTC.** A file saved in the evening in the Americas was named with the next day. Files are now dated on your own clock.
+- **A player under each message turned itself back on.** Switching it off was not saved to your account, so it came back after a reload or on another device. It now stays off.
+- **A saved script and a message could play over each other.** Playing one in **Saved audio** while a message played, or the other way round, played both at once. Now one thing plays at a time: a message, a saved script, a sample, or the Studio's preview. Starting one stops the others.
 
 ---
 

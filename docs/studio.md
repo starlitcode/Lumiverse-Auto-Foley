@@ -46,7 +46,7 @@ The video:
 - Opens with the chat's name for two seconds, then shows the narration.
 - Shows `[thunder]` as a caption while the thunder plays.
 - Shows Corvin's name above his line, which is in quotation marks. If he has a picture in the Cast tab, it shows above his name.
-- Covers "Ilse." and "Ilse's" with a black bar. The final 's and the full stop are matched too.
+- Covers "Ilse." and "Ilse's" with a black bar. The final 's and the period are matched too.
 - Bleeps both words in the sound.
 - Fades to black at the end.
 
@@ -76,7 +76,7 @@ These choices change both the audio and the video.
 - **Which parts go in**: a switch for each part heard, with **All** and **None**. It is for this performance only. Playing another message starts with every part in.
 - **Trim**: **Start at** and **End at**, in seconds of the whole performance. 0 for **End at** is the end. The line under them says how long the whole performance is and what is kept. **Start here** and **End here**, under the preview, set them from where the preview is, and **Clear the trim** keeps it all again. The trim is for this performance only. The new ends fade over 10 thousandths of a second, so they do not click.
 - **Sound effects**: on by default. Off, only the voices are kept.
-- **Pause between parts, in seconds**: 0 by default. A short pause, such as 0.3, gives the lines room, as in an audiobook.
+- **Pause between parts, in seconds**: 0 by default. A short pause, such as 0.3, adds a silence between lines, as in an audiobook.
 - **As you heard it**: on by default. It uses your **Voices** and **Sounds** volumes and **Even voice levels**. Off, each part is as the voice service sent it.
 - **Even out the loudness**: on by default. The loudest moment is set just under the most a file can hold, so the file is neither too quiet nor clipped.
 
@@ -133,15 +133,15 @@ When each word is said is worked out from where the voice is in the clip, so it 
 
 - **Dark** by default, lit a little in your theme's accent.
 - **A color of your own**, picked under it.
-- **A picture of your own**. **Choose a picture** keeps it on your account. It is cut to the video's shape from the middle. **Dim the picture**, 40% by default, makes the words easier to read. **Blur the picture**, off by default, keeps a busy picture behind the words.
+- **A picture of your own**. **Choose a picture** keeps it on your account. It is cut to the video's shape from the middle. **Dim the picture**, 40% by default, makes the words easier to read. **Blur the picture**, off by default, makes a busy picture easier to read words over.
 
 **Darken the edges**, under any background, makes the edges of the frame darker than the middle. It is 50% by default. **Off** leaves the edges as bright as the middle.
 
-**Color of the edges**, under it, is black by default. Another color makes the edges glow in that color, as strongly as **Darken the edges** says.
+**Color of the edges**, under it, is black by default. Another color tints the edges with it, as strongly as **Darken the edges** says.
 
 ### Moving between lines
 
-**Transition** sets how one line gives way to the next. None of them flashes.
+**Transition** sets how the screen changes from one line to the next. None of them flashes.
 
 | Transition | What it does |
 | --- | --- |
@@ -181,6 +181,10 @@ A note is a few words for whoever watches, in a dark box at the top or the botto
 ### Put the look back
 
 **Put the look back** puts back every choice under **Video**: the shape, words, pictures, background, edges, transition and ending. Notes, **Show names** and **Show pictures** stay as they are. If nothing would change, it says so.
+
+### Start again
+
+Every choice in the Studio is a setting, kept on your account. **Start again** in the Settings tab, with **Settings** ticked, puts them all back: the look, the notes, the words to hide and the background picture. A setup file carries them too, except the background picture.
 
 ## Hide and bleep words
 

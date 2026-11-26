@@ -525,14 +525,18 @@ function wavBlob(channels, rate) {
     const ch = Math.max(1, Math.min(2, channels.length));
     const n = channels.length ? channels[0].length : 0;
     const BYTES = 3;
-    const buf = new ArrayBuffer(44 + n * ch * BYTES);
+    // A chunk of an odd length is followed by one zero byte, as the WAV format
+    // asks, so strict players read the file.
+    const data = n * ch * BYTES;
+    const pad = data % 2;
+    const buf = new ArrayBuffer(44 + data + pad);
     const v = new DataView(buf);
     const ascii = (o, t) => {
         for (let k = 0; k < t.length; k++)
             v.setUint8(o + k, t.charCodeAt(k));
     };
     ascii(0, 'RIFF');
-    v.setUint32(4, 36 + n * ch * BYTES, true);
+    v.setUint32(4, 36 + data + pad, true);
     ascii(8, 'WAVE');
     ascii(12, 'fmt ');
     v.setUint32(16, 16, true);
@@ -1410,6 +1414,8 @@ html[data-af-still] .af-tick, html[data-af-still] .af-tick::after { transition: 
 .af-pickbar { gap: 8px; padding-top: 4px; }
 .af-grip { flex: none; display: grid; place-items: center; width: 26px; min-height: 40px; border-radius: var(--af-r-sm); color: var(--af-muted); cursor: grab; touch-action: none; user-select: none; -webkit-user-select: none; }
 .af-grip svg { width: 16px; height: 16px; }
+/* Find someone lists only some of the cast, so nothing is moved while it does. */
+.af-finding .af-grip { display: none; }
 .af-grip:focus-visible { outline: none; box-shadow: inset 0 0 0 2px var(--af-accent-soft); }
 @media (hover: hover) { .af-grip:hover { color: var(--af-text); background: var(--af-accent-faint); } }
 @media (pointer: coarse) { .af-grip { width: 32px; min-height: 44px; } }
@@ -2953,13 +2959,18 @@ export function setup(ctx, overrides) {
         const had = decodedFor.get(sh);
         if (had && had.n === sh.played.length)
             return had.p;
+        // Clips decoded before are kept, and only the new ones are decoded, so
+        // a long performance heard with the Studio open is not decoded again
+        // for every part.
+        const before = had ? had.p : Promise.resolve([]);
+        const from = had ? had.n : 0;
         const p = (async () => {
             const w = window;
             const Off = w.OfflineAudioContext || w.webkitOfflineAudioContext;
             if (!Off)
                 return [];
-            const out = [];
-            for (let pi = 0; pi < sh.played.length; pi++) {
+            const out = (await before).slice();
+            for (let pi = from; pi < sh.played.length; pi++) {
                 try {
                     const raw = await sh.played[pi].blob.arrayBuffer();
                     const ctxA = new Off(1, 1, MIX_RATE);
@@ -3120,9 +3131,8 @@ export function setup(ctx, overrides) {
                     d[i] *= f;
                     d[d.length - 1 - i] *= f;
                 }
+            // A trim inside a pause keeps that silence, with no part to show.
             parts = parts.filter((p) => p.start + p.len > t.from && p.start < t.to).map((p) => ({ ...p, start: p.start - t.from }));
-            if (!parts.length)
-                return null;
         }
         // Even out the loudness: the loudest moment is brought to 1 dB under
         // the most a file can hold, up or down.
@@ -3319,6 +3329,9 @@ export function setup(ctx, overrides) {
     ];
     const STORY_INK = '#f4efe6';
     const hexOr = (v, d) => (/^#[0-9a-f]{6}$/i.test(String(v || '')) ? String(v) : d);
+    // A number from the settings, or the fallback when it is not one. 0 is a
+    // number, so a setting at 0 stays at 0.
+    const numOr = (v, d) => (Number.isFinite(Number(v)) && v !== '' && v != null ? Number(v) : d);
     // The picture behind the video, kept on the account in a file of its own,
     // since it is too big to save with every change to the settings.
     let videoBg = '';
@@ -3452,7 +3465,7 @@ export function setup(ctx, overrides) {
         // Darker at the edges, as much as Darken the edges asks, so the words in
         // the middle stand out. 0 leaves the edges as they are.
         // The edges are black unless Color of the edges picks another color.
-        const edges = Math.min(100, Math.max(0, Number(S.videoEdges))) / 100;
+        const edges = Math.min(100, Math.max(0, numOr(S.videoEdges, 50))) / 100;
         if (edges > 0) {
             const n = parseInt(hexOr(S.videoEdgeColor, '#000000').slice(1), 16);
             const rgb = ((n >> 16) & 255) + ',' + ((n >> 8) & 255) + ',' + (n & 255);
@@ -3484,6 +3497,7 @@ export function setup(ctx, overrides) {
     // A word hidden by the censor: a black bar, or the word blurred or in
     // pixels, as the reader picked. Each covers the whole word.
     let coverCanvas = null;
+    let coverTiny = null;
     function coverWord(g, text, x, base, size, ink, alpha) {
         const w = Math.max(size * 0.6, g.measureText(text).width);
         const top = base - size * 0.82;
@@ -3509,7 +3523,9 @@ export function setup(ctx, overrides) {
             const f = pixels ? 1 / Math.max(4, size / 7) : 1 / Math.max(6, size / 5);
             const sw = Math.max(1, Math.round(cw * f));
             const sh2 = Math.max(1, Math.round(chh * f));
-            const tiny = document.createElement('canvas');
+            if (!coverTiny)
+                coverTiny = document.createElement('canvas');
+            const tiny = coverTiny;
             tiny.width = sw;
             tiny.height = sh2;
             const tg = tiny.getContext('2d');
@@ -3672,7 +3688,8 @@ export function setup(ctx, overrides) {
             let x = cx - full / 2;
             const base = y + nameSize;
             // A name with a hidden word in it is covered whole.
-            if (hiddenWords(label.split(/\s+/), hiddenList()).some(Boolean))
+            // Checked on the whole name, since a long one is cut short to fit.
+            if (hiddenWords(name.split(/\s+/), hiddenList()).some(Boolean))
                 coverWord(g, label, x, base, nameSize, ring, alpha);
             else
                 chars.forEach((ch, k) => {
@@ -3807,7 +3824,7 @@ export function setup(ctx, overrides) {
         const H = st.h;
         const u = Math.min(W, H) / 1080;
         const intro = titleSecs(title);
-        const fadeOut = Math.min(5, Math.max(0, Number(S.videoFadeOut)));
+        const fadeOut = Math.min(5, Math.max(0, numOr(S.videoFadeOut, 1.5)));
         g.save();
         g.globalAlpha = 1;
         g.drawImage(st.back, 0, 0);
@@ -3970,7 +3987,23 @@ export function setup(ctx, overrides) {
     }
     // Makes the video, recorded as it plays, silently. It takes as long as the
     // performance, with the title and the fade at the end.
+    // True while a video gets ready, before it records, so a second press
+    // cannot start a second one.
+    let videoPreparing = false;
     async function makeVideo() {
+        if (videoPreparing || videoRun)
+            return;
+        videoPreparing = true;
+        paintStudio();
+        try {
+            await recordVideo();
+        }
+        finally {
+            videoPreparing = false;
+            paintStudio();
+        }
+    }
+    async function recordVideo() {
         const sh = keptShow();
         if (!sh)
             return keepSaid('Play a message first. A video can then be made of it.');
@@ -4031,7 +4064,7 @@ export function setup(ctx, overrides) {
         rec.ondataavailable = (e) => e.data && e.data.size && chunks.push(e.data);
         const total = buf.duration;
         const intro = titleSecs(title);
-        const length = intro + total + Math.min(5, Math.max(0, Number(S.videoFadeOut)));
+        const length = intro + total + Math.min(5, Math.max(0, numOr(S.videoFadeOut, 1.5)));
         let ended = false;
         let raf = 0;
         const t0 = actx.currentTime + 0.1;
@@ -4070,7 +4103,7 @@ export function setup(ctx, overrides) {
                 src.stop();
             }
             catch (_) { }
-            rec.onstop = () => {
+            const done = () => {
                 try {
                     actx.close();
                 }
@@ -4087,10 +4120,17 @@ export function setup(ctx, overrides) {
                 paintStage();
                 paintStudio();
             };
+            // A recorder that already stopped on its own sends no stop event, so
+            // what it would do is done here.
+            if (rec.state === 'inactive')
+                return done();
+            rec.onstop = done;
             try {
                 rec.stop();
             }
-            catch (_) { }
+            catch (_) {
+                done();
+            }
         };
         videoRun = { cancel: () => finish(false) };
         const tick = () => {
@@ -4108,8 +4148,14 @@ export function setup(ctx, overrides) {
             await actx.resume();
         }
         catch (_) { }
-        rec.start(1000);
-        src.start(t0 + intro);
+        try {
+            rec.start(1000);
+            src.start(t0 + intro);
+        }
+        catch (e) {
+            finish(false);
+            return keepSaid('The video could not start: ' + String((e && e.message) || e).slice(0, 160));
+        }
         tick();
         paintStage();
         paintStudio();
@@ -4392,6 +4438,7 @@ export function setup(ctx, overrides) {
     let lastMeta = { chatId: '', messageId: '', swipeId: 0 };
     function startShow(script, meta, fromLine, only) {
         stop();
+        hush('show');
         lastScript = script;
         lastMeta = meta;
         lastFailed = null;
@@ -4541,6 +4588,9 @@ export function setup(ctx, overrides) {
         }
         const chatId = activeChatId();
         stop();
+        // Anything else playing stops at the press, not when the first line is
+        // ready.
+        hush('show');
         busyMessage = messageId;
         directorWriting = false;
         phase = busyWords();
@@ -4943,8 +4993,9 @@ export function setup(ctx, overrides) {
         return false;
     }
     // ---- Saved audio ----
-    // Every saved script, newest first, with Play, Download and Delete. Play
-    // and Download use only the audio already saved, so they spend nothing. A
+    // Every saved script, newest first, with Play, Open in the Studio and
+    // Delete. Play and Open in the Studio use only the audio already saved, so
+    // they spend nothing. A
     // line with no saved audio, such as one made with a voice changed since,
     // is left out, and the row says so.
     let savedAudio = null;
@@ -4959,8 +5010,32 @@ export function setup(ctx, overrides) {
         }
         savedAudio = null;
         savedPlaying = '';
+        try {
+            document.querySelectorAll('[data-af-saved-row] [data-af-saved-play]').forEach((b) => (b.textContent = 'Play'));
+        }
+        catch (_) { }
     }
     disposers.push(stopSavedPlay);
+    // One thing plays at a time: a message, a saved script, a sample from
+    // the Cast or Sounds tab, or the Studio's preview. Starting one stops the
+    // others, so two are never heard over each other.
+    function hush(keep) {
+        if (keep !== 'show' && (show || busyMessage)) {
+            if (busyMessage)
+                stopDirecting();
+            stop('Stopped');
+        }
+        if (keep !== 'saved')
+            stopSavedPlay();
+        if (keep !== 'sample' && preview) {
+            try {
+                preview.pause();
+            }
+            catch (_) { }
+        }
+        if (keep !== 'studio')
+            stopPreview();
+    }
     // The saved audio of a script's spoken lines, in order, and the
     // fingerprint of every line, saved or not.
     async function savedClipsOf(sc) {
@@ -5058,9 +5133,9 @@ export function setup(ctx, overrides) {
                         lines++;
                 }
                 else if (it.kind === 'applause') {
-                    const r = await makeApplauseClip();
-                    if (r.blob && typeof r.blob !== 'string')
-                        blob = r.blob;
+                    // Left out, the same as when a message plays: the cheer is the
+                    // audience, not the performance.
+                    continue;
                 }
                 else {
                     const r = await rpc({ type: 'sound_kept', description: it.sound || '' }, 15000);
@@ -5086,11 +5161,10 @@ export function setup(ctx, overrides) {
                     if (v.level != null) {
                         const key = voiceKeyOf(it.line);
                         sh.voiceKeys.set(k, key);
-                        const list = levels.get(key) || [];
-                        list.push(v.level);
-                        if (list.length > LEVEL_KEEP)
-                            list.shift();
-                        levels.set(key, list);
+                        // A voice already heard keeps its levels, so opening the same
+                        // script again and again does not change Even voice levels.
+                        if (!levels.has(key))
+                            levels.set(key, [v.level]);
                     }
                 }
             }
@@ -5108,7 +5182,7 @@ export function setup(ctx, overrides) {
         return '';
     }
     function savedCard() {
-        const c = card('Saved audio', 'Every message with a saved script, newest first. Play and Download use only saved audio, so nothing is spent.');
+        const c = card('Saved audio', 'Every message with a saved script, newest first. Play and Open in the Studio use only saved audio, so nothing is spent.');
         c.setAttribute('data-af-saved', '');
         // Shown at once, with no fold to open, so the list is in plain sight.
         const list = el('<div class="af-col" data-af="savedlist"></div>');
@@ -5170,41 +5244,57 @@ export function setup(ctx, overrides) {
         row.appendChild(first);
         const note = el('<div class="af-hint" aria-live="polite"></div>');
         note.hidden = true;
+        // The row on screen now. Stopping a message draws the Stage tab again,
+        // so the row a press started in can be replaced by a new one for the
+        // same script while its audio gets ready.
+        const live = () => {
+            try {
+                const k = String(e.key || '').replace(/["\\]/g, '');
+                return document.querySelector('[data-af-saved-row][data-af-key="' + k + '"]') || row;
+            }
+            catch (_) {
+                return row;
+            }
+        };
         const say = (t) => {
-            setText(note, t);
-            note.hidden = !t;
+            const n = live().querySelector('.af-hint') || note;
+            setText(n, t);
+            n.hidden = !t;
+        };
+        const label = (t) => {
+            const b = live().querySelector('[data-af-saved-play]');
+            if (b)
+                b.textContent = t;
         };
         const btns = el('<div class="af-row"></div>');
-        const play = button('Play', async () => {
+        const play = button(savedPlaying === e.key ? 'Stop' : 'Play', async () => {
             if (savedPlaying === e.key) {
                 stopSavedPlay();
-                play.textContent = 'Play';
                 return;
             }
-            stopSavedPlay();
-            document.querySelectorAll('[data-af-saved-row] [data-af-saved-play]').forEach((b) => (b.textContent = 'Play'));
+            hush('saved');
             say('Joining the saved audio');
             const j = await joinedSaved(e.key);
             if (!j.wav)
                 return say(j.why || '');
             say(j.missing ? j.missing + (j.missing === 1 ? ' line has' : ' lines have') + ' no saved audio, so ' + (j.missing === 1 ? 'it is' : 'they are') + ' left out.' : '');
+            // Something else may have started while the audio was joined.
+            hush('saved');
             try {
                 const a = new AudioCtor();
                 a.src = URL.createObjectURL(j.wav);
                 a.volume = Math.max(0, Math.min(1, Number(S.voiceVolume) || 0));
                 savedAudio = a;
                 savedPlaying = e.key;
-                play.textContent = 'Stop';
+                label('Stop');
                 a.onended = () => {
                     if (savedAudio === a)
                         stopSavedPlay();
-                    play.textContent = 'Play';
                 };
                 await a.play();
             }
             catch (_) {
                 stopSavedPlay();
-                play.textContent = 'Play';
                 say('The browser would not play it. Tap Play again.');
             }
         });
@@ -6729,8 +6819,8 @@ export function setup(ctx, overrides) {
     // of the ones on, and two buttons that turn every one on or off. Each is
     // grayed while it would change nothing. `count` reads how many are on.
     // `setAll` saves the change and gives back the switches that have to move.
-    // Each moving switch gets the press a finger gives it, so its knob stretches
-    // toward where it is going, then lets go and springs into place. With
+    // Each moving switch is drawn pressed for a moment, as when it is tapped,
+    // so its knob stretches toward where it is going, then moves there. With
     // Reduce motion on there is no stretch, so the switches move at once.
     const NUDGE_MS = 110;
     function bulkBar(count, total, setAll) {
@@ -6806,6 +6896,7 @@ export function setup(ctx, overrides) {
         if (!held)
             page.style.minHeight = page.offsetHeight + 'px';
         page.innerHTML = '';
+        page.classList.remove('af-finding');
         stageRefs = null;
         studioRefs = null;
         stopPreview();
@@ -6977,8 +7068,7 @@ export function setup(ctx, overrides) {
         '.af-pl-ch[data-speaking="true"] .af-pl-state{color:var(--af-good)}' +
         '.af-pl-ch[data-off="true"] .af-pl-name{color:var(--af-muted)}' +
         '.af-pl-ch[data-off="true"] .af-pl-state{color:var(--af-bad)}' +
-        '.af-pl-ch .af-round{width:32px;height:32px}' +
-        '.af-pl-ch .af-round[aria-pressed="true"]{color:var(--af-muted)}' +
+        '.af-pl-ch .af-round{width:32px;height:32px;color:var(--af-muted)}' +
         '.af-pl-more{margin-top:4px;flex:none}' +
         '.af-pl-ch[data-off="true"] .af-round{color:var(--af-bad)}' +
         '@media (pointer:coarse){.af-pl .af-round{width:40px;height:40px}.af-pl-tr .af-pl-side{width:40px;height:40px}.af-pl-tr{padding:0 46px}.af-pl-tr .af-play{width:54px;height:54px}.af-pl-sw>div{min-height:40px}.af-pl-ch .af-round{width:36px;height:36px}}' +
@@ -7873,8 +7963,9 @@ export function setup(ctx, overrides) {
                 ch.dataset.off = m.muted ? 'true' : 'false';
                 paintCallState(ch);
                 b.innerHTML = m.muted ? ICON_MIC_OFF : ICON_MIC;
-                b.setAttribute('aria-pressed', m.muted ? 'false' : 'true');
-                const said = m.muted ? 'Voice ' + m.name + ' again' : 'Do not voice ' + m.name;
+                // Named for what a press does, with no pressed state as well, so a
+                // screen reader does not read "Do not voice, pressed".
+                const said = m.muted ? 'Voice ' + shownName(m) + ' again' : 'Do not voice ' + shownName(m);
                 b.setAttribute('aria-label', said);
                 b.title = said;
             };
@@ -7939,7 +8030,8 @@ export function setup(ctx, overrides) {
         }
         setText(q('who'), name || (busyMessage ? (directorWriting ? 'Writing the script' : 'Getting the script') : playerWhose === 'mine' ? 'Your latest message' : 'The latest reply'));
         // The On air light says whether it is playing, so this says only where.
-        const partOf = show ? 'Part ' + (Math.min(show.index, total - 1) + 1) + ' of ' + total + (show.saved.has(show.index) ? ' · saved' : '') : '';
+        const shown = show ? Math.min(show.index, total - 1) : 0;
+        const partOf = show ? 'Part ' + (shown + 1) + ' of ' + total + (show.saved.has(shown) ? ' · saved' : '') : '';
         setText(q('cap'), show ? (paused ? 'Paused · ' + partOf.toLowerCase() : partOf) : busyMessage ? 'Getting ready' : 'Ready');
         setText(q('sub'), chatInfo.kind === 'none' ? 'No chat open' : chatInfo.name || 'This chat');
         // The bar under Play, for where in the part playing it is. Painted on a
@@ -8552,6 +8644,7 @@ export function setup(ctx, overrides) {
             }
         }
         catch (_) { }
+        hush('sample');
         preview = new AudioCtor();
         preview.src = typeof blob === 'string' ? blob : URL.createObjectURL(blob);
         preview.volume = volume;
@@ -9283,13 +9376,54 @@ export function setup(ctx, overrides) {
         sortPick.setAttribute('data-af-castsort', '');
         top.appendChild(hint('Groups sort the cast, such as one for each story. Drag the dots beside a person or a group to move it.'));
         top.appendChild(sortPick);
+        // Find someone: typing lists only the people whose name, display name or
+        // other names hold the words, with no groups. Moving people is left out
+        // while it lists them, since it shows only some of the cast.
+        const findId = rid('cf');
+        const find = el('<input type="search" class="af-field" autocomplete="off" spellcheck="false" placeholder="Type part of a name">');
+        find.id = findId;
+        find.value = castFind;
+        find.setAttribute('data-af-castfind', '');
+        let findTimer = null;
+        find.addEventListener('input', () => {
+            if (findTimer)
+                clearTimeout(findTimer);
+            findTimer = setTimeout(() => {
+                timers.delete(findTimer);
+                castFind = find.value;
+                renderTab();
+                // The box is drawn again, so the typing goes on where it was.
+                const again = page.querySelector('[data-af-castfind]');
+                if (again) {
+                    again.focus();
+                    try {
+                        again.setSelectionRange(again.value.length, again.value.length);
+                    }
+                    catch (_) { }
+                }
+            }, 150);
+            timers.add(findTimer);
+        });
+        const findRow = el('<div class="af-col" data-af-row="castFind"></div>');
+        findRow.appendChild(labelRow('Find someone', 'Lists only the people whose name, display name or other names hold what you type.', findId));
+        findRow.appendChild(find);
+        top.appendChild(findRow);
         const conn = activeConnection();
         if (!conn)
             top.appendChild(notice('warn', ttsWhy || 'Pick your TTS connection in the Settings tab to choose voices.'));
         page.appendChild(top);
+        const people = castInOrder();
+        const q = castFind.trim().toLowerCase();
+        page.classList.toggle('af-finding', !!q);
+        if (q) {
+            const hits = people.filter((m) => [m.name, m.display, ...(m.aliases || [])].some((n) => String(n || '').toLowerCase().includes(q)));
+            page.appendChild(el('<p class="af-note" data-af-castfound role="status">' + esc(hits.length ? hits.length + ' of ' + people.length + (people.length === 1 ? ' person' : ' people') + ' match. Clear the box to see everyone.' : 'Nobody in the cast matches that. Clear the box to see everyone.') + '</p>'));
+            for (const m of hits)
+                page.appendChild(personCard(m));
+            return;
+        }
         if (groupDraft && groupDraft.id === 'new')
             page.appendChild(groupEditor());
-        const people = castInOrder();
         const known = new Set(groups().map((f) => f.id));
         for (const f of groups())
             page.appendChild(groupDraft && groupDraft.id === f.id ? groupEditor() : groupSection(f, people.filter((m) => m.group === f.id)));
@@ -9297,6 +9431,8 @@ export function setup(ctx, overrides) {
             if (!m.group || !known.has(m.group))
                 page.appendChild(personCard(m));
     }
+    // What Find someone holds, for this page only.
+    let castFind = '';
     // The cast in the order the tab shows it, as Sort the cast says.
     function castInOrder() {
         return sortCast(S.cast, String(S.castSort || 'kind'));
@@ -10792,6 +10928,8 @@ export function setup(ctx, overrides) {
     let previewRun = null;
     // Repaints the trim's line, while the Trim fold is open.
     let trimSaid = () => { };
+    // Draws Which parts go in again, while it is open.
+    let studioPartsRefill = () => { };
     function stopPreview() {
         const r = previewRun;
         previewRun = null;
@@ -10843,8 +10981,10 @@ export function setup(ctx, overrides) {
         if (ask !== studioAsk)
             return;
         const intro = sh && mix ? titleSecs(title) : 0;
-        const length = intro + total + (sh && mix ? Math.min(5, Math.max(0, Number(S.videoFadeOut))) : 0);
-        const at = sh && mix ? Math.min(studioView.at || intro + 0.8, length) : 1.5;
+        const length = intro + total + (sh && mix ? Math.min(5, Math.max(0, numOr(S.videoFadeOut, 1.5))) : 0);
+        // The preview stays where it was for the same performance, and starts
+        // just after the title for a new one or after a trim.
+        const at = sh && mix ? Math.min(studioView.sh === sh && studioView.at > 0 ? studioView.at : intro + 0.8, length) : 1.5;
         studioView = { sh: sh && mix ? sh : null, mix, parts, st, title, total, length, at };
         paintPreview();
         paintStudio();
@@ -10886,17 +11026,18 @@ export function setup(ctx, overrides) {
         if (now && now.played.length !== studioForN && !videoRun) {
             studioForN = now.played.length;
             studioBuild(true);
+            studioPartsRefill();
         }
         const kept = !!now;
         const v = studioView;
         r.dlall.disabled = !kept || !!videoRun;
         r.dlpart.disabled = !show;
-        r.make.disabled = (!kept && !videoRun) || !!previewRun;
+        r.make.disabled = (!kept && !videoRun) || !!previewRun || videoPreparing;
         const mWords = videoRun ? 'Stop the video' : 'Make a video';
         const mText = r.make.querySelector('span:last-child') || r.make;
         if (mText.textContent !== mWords)
             mText.textContent = mWords;
-        r.play.disabled = !v.sh || !!videoRun;
+        r.play.disabled = !v.sh || !!videoRun || videoPreparing;
         const pWords = previewRun ? 'Stop the preview' : 'Play the preview';
         const pText = r.play.querySelector('span:last-child') || r.play;
         if (pText.textContent !== pWords)
@@ -10918,6 +11059,7 @@ export function setup(ctx, overrides) {
         const v = studioView;
         if (!v.sh || !v.mix || !v.st)
             return;
+        hush('studio');
         const w = window;
         const ACtx = w.AudioContext || w.webkitAudioContext;
         if (!ACtx)
@@ -11064,38 +11206,47 @@ export function setup(ctx, overrides) {
         pc.setAttribute('data-af-card', 'studio-show');
         if (sh) {
             pc.appendChild(fold('Which parts go in', (body) => {
-                const out = partsLeftOut(sh);
-                const boxes = [];
-                const bar = bulkBar(() => sh.played.length - out.size, sh.played.length, (on) => {
-                    const moving = boxes.filter((b) => b.checked !== on);
-                    if (on)
-                        out.clear();
-                    else
-                        sh.played.forEach((_, pi) => out.add(pi));
-                    studioBuild(true);
-                    return moving;
-                });
-                body.appendChild(bar.el);
-                sh.played.forEach((p, pi) => {
-                    const it = sh.items[p.k];
-                    const what = !it ? 'A part' : it.kind === 'voice' ? speakerName(it.line) + ': ' + String(it.line.text || '').replace(/\[[^\]]*\]/g, '').trim() : it.kind === 'applause' ? 'The audience' : 'Sound: ' + String(it.sound || '');
-                    const box = el('<input type="checkbox" class="af-box" role="switch">');
-                    box.checked = !out.has(pi);
-                    box.setAttribute('aria-label', 'Part ' + (pi + 1));
-                    box.addEventListener('change', () => {
-                        if (box.checked)
-                            out.delete(pi);
+                // Drawn again as each part is heard, while the message still plays.
+                const fill = () => {
+                    body.replaceChildren();
+                    const out = partsLeftOut(sh);
+                    const boxes = [];
+                    const bar = bulkBar(() => sh.played.length - out.size, sh.played.length, (on) => {
+                        const moving = boxes.filter((b) => b.checked !== on);
+                        if (on)
+                            out.clear();
                         else
-                            out.add(pi);
-                        bar.paint();
+                            sh.played.forEach((_, pi) => out.add(pi));
                         studioBuild(true);
+                        return moving;
                     });
-                    boxes.push(box);
-                    const row = labelRow((pi + 1) + '. ' + (what.length > 70 ? what.slice(0, 68).trimEnd() + '…' : what), '', undefined, box);
-                    row.setAttribute('data-af-studiopart', String(pi));
-                    body.appendChild(row);
-                });
-                body.appendChild(hint('This is for this performance only. Playing another message starts with every part in.'));
+                    body.appendChild(bar.el);
+                    sh.played.forEach((p, pi) => {
+                        const it = sh.items[p.k];
+                        const what = !it ? 'A part' : it.kind === 'voice' ? speakerName(it.line) + ': ' + String(it.line.text || '').replace(/\[[^\]]*\]/g, '').trim() : it.kind === 'applause' ? 'The audience' : 'Sound: ' + String(it.sound || '');
+                        const box = el('<input type="checkbox" class="af-box" role="switch">');
+                        box.checked = !out.has(pi);
+                        box.setAttribute('aria-label', 'Part ' + (pi + 1));
+                        box.addEventListener('change', () => {
+                            if (box.checked)
+                                out.delete(pi);
+                            else
+                                out.add(pi);
+                            bar.paint();
+                            studioBuild(true);
+                        });
+                        boxes.push(box);
+                        const row = labelRow((pi + 1) + '. ' + (what.length > 70 ? what.slice(0, 68).trimEnd() + '…' : what), '', undefined, box);
+                        row.setAttribute('data-af-studiopart', String(pi));
+                        body.appendChild(row);
+                    });
+                    body.appendChild(hint('This is for this performance only. Playing another message starts with every part in.'));
+                };
+                fill();
+                studioPartsRefill = () => {
+                    if (body.isConnected)
+                        fill();
+                };
             }));
             // The trim, in seconds of the whole performance. Start here and End
             // here, under the preview, set it from where the preview is.
@@ -11127,7 +11278,7 @@ export function setup(ctx, overrides) {
         pc.appendChild(numberRow('Pause between parts, in seconds', Number(S.studioGap) || 0, 0, 3, 0.1, (v) => {
             set({ studioGap: v });
             studioBuild(true);
-        }, '0 by default. A short pause, such as 0.3, gives the lines room, as in an audiobook.'));
+        }, '0 by default. A short pause, such as 0.3, adds a silence between lines, as in an audiobook.'));
         pc.appendChild(toggle('As you heard it', 'On by default. Uses your Voices and Sounds volumes and Even voice levels. Off: each part as the voice service sent it.', 'studioAsHeard', () => studioBuild(true)));
         pc.appendChild(toggle('Even out the loudness', 'On by default. The loudest moment is set just under the most a file can hold, so the file is neither too quiet nor clipped.', 'studioLoud', () => studioBuild(true)));
         page.appendChild(pc);
@@ -11175,7 +11326,7 @@ export function setup(ctx, overrides) {
         vc.appendChild(scrubRow);
         // Trims from where the preview is. The preview shows the trimmed video,
         // so its place is counted from the trim's start.
-        const trimRow = el('<div class="af-row" data-af-trimrow></div>');
+        const trimRow = el('<div class="af-row"></div>');
         const trimAt = (end) => {
             const v = studioView;
             if (!v.sh || !v.mix)
@@ -11351,7 +11502,7 @@ export function setup(ctx, overrides) {
             const blur = slider('Blur the picture', Number(S.videoBlur) || 0, 0, 20, 1, (v) => (v ? v + ' px' : 'Off'), (v) => {
                 set({ videoBlur: v });
                 look();
-            }, 'Off by default. A little blur keeps a busy picture behind the words.');
+            }, 'Off by default. A little blur makes a busy picture easier to read words over.');
             blur.setAttribute('data-af-byeye', '');
             picIn.appendChild(blur);
             const sel = select('Background', [
@@ -11371,14 +11522,14 @@ export function setup(ctx, overrides) {
             picBox.setAttribute('data-af-row', 'videoBg');
             b.appendChild(colorBox);
             b.appendChild(picBox);
-            const edges = slider('Darken the edges', Number(S.videoEdges), 0, 100, 5, (v) => (v ? v + '%' : 'Off'), (v) => {
+            const edges = slider('Darken the edges', numOr(S.videoEdges, 50), 0, 100, 5, (v) => (v ? v + '%' : 'Off'), (v) => {
                 set({ videoEdges: v });
                 look();
             }, '50% by default. Off leaves the edges as bright as the middle.');
             edges.setAttribute('data-af-byeye', '');
             edges.setAttribute('data-af-row', 'videoEdges');
             b.appendChild(edges);
-            b.appendChild(colorRow('videoEdgeColor', 'Color of the edges', 'Black by default. A color makes the edges glow in it.', '--af-none', '#000000', 'Use the built-in color', look));
+            b.appendChild(colorRow('videoEdgeColor', 'Color of the edges', 'Black by default. Another color tints the edges with it.', '--af-none', '#000000', 'Use the built-in color', look));
             loadVideoBg().then(() => {
                 drop.disabled = !videoBg;
             });
@@ -11400,7 +11551,6 @@ export function setup(ctx, overrides) {
             box.id = rid('vt');
             box.value = String(S.videoTitleText || '');
             box.placeholder = String(chatInfo.name || 'The chat’s name');
-            box.setAttribute('data-af-videotitle', '');
             box.addEventListener('change', () => {
                 set({ videoTitleText: box.value.trim() });
                 look();
@@ -11409,7 +11559,7 @@ export function setup(ctx, overrides) {
             titleRow.appendChild(labelRow('Title', 'Empty uses the chat’s name, while Show names is on.', box.id));
             titleRow.appendChild(box);
             b.appendChild(toggle('Title at the start', 'On by default. The title shows for two seconds before the first line.', 'videoTitleOn', look, () => [titleRow]));
-            b.appendChild(numberRow('Fade to black at the end, in seconds', Number(S.videoFadeOut), 0, 5, 0.5, (v) => {
+            b.appendChild(numberRow('Fade to black at the end, in seconds', numOr(S.videoFadeOut, 1.5), 0, 5, 0.5, (v) => {
                 set({ videoFadeOut: v });
                 look();
             }, '1.5 by default. 0 ends at once.'));
@@ -11432,7 +11582,6 @@ export function setup(ctx, overrides) {
             set(patch);
             keepSaid('');
             renderTab();
-            studioBuild(false);
         });
         lookBack.setAttribute('data-af-studio', 'lookback');
         lookRow.appendChild(lookBack);
@@ -11442,7 +11591,7 @@ export function setup(ctx, overrides) {
         // ---- censor ----
         const cc = card('Hide and bleep words', 'Covers words on screen and bleeps them in the audio, such as a name you do not want to share.');
         cc.setAttribute('data-af-card', 'studio-censor');
-        const words = el('<textarea class="af-field" rows="4" spellcheck="false" placeholder="One word or name on each line"></textarea>');
+        const words = el('<textarea class="af-field" rows="4" maxlength="4000" spellcheck="false" placeholder="One word or name on each line"></textarea>');
         words.id = rid('cw');
         words.value = String(S.censorWords || '');
         words.setAttribute('data-af-censorwords', '');
@@ -12596,8 +12745,18 @@ export function setup(ctx, overrides) {
             lines.push('settings changed from the default (' + changed.length + ' of ' + keys.length + '):');
             if (!changed.length)
                 lines.push('  (none)');
+            // Words the reader wrote, which can hold names, are counted, never
+            // shown: the words to hide, a video's own title, its notes, the names
+            // of groups and the ids of chats.
+            const PRIVATE = {
+                censorWords: (v) => String(v || '').split(/\n/).filter((x) => x.trim()).length + ' entries',
+                videoTitleText: (v) => String(v || '').length + ' characters',
+                videoNotes: (v) => (Array.isArray(v) ? v.length : 0) + ' notes',
+                groups: (v) => (Array.isArray(v) ? v.length : 0) + ' groups',
+                chatsOff: (v) => (Array.isArray(v) ? v.length : 0) + ' chats',
+            };
             for (const k of changed)
-                lines.push('  ' + k + ': ' + shown(S[k]) + ', default ' + shown(DEFAULTS[k]));
+                lines.push('  ' + k + ': ' + (PRIVATE[k] ? PRIVATE[k](S[k]) : shown(S[k]) + ', default ' + shown(DEFAULTS[k])));
             lines.push('  prompt: ' + (S.prompt ? 'your own, ' + String(S.prompt).length + ' characters' : 'the built-in one'));
         }
         if (debugPicked.cast) {

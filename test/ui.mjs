@@ -618,6 +618,35 @@ if (section("perform")) {
 }
 
 
+if (section("find someone")) {
+  console.log("Find someone lists only the people who match, for a large cast");
+  for (const size of SIZES) {
+    const { context, page, errors } = await open(THEMES[0], size);
+    const where = size.name;
+    await page.click('.af-tab[data-tab="cast"]');
+    await page.waitForTimeout(300);
+    const cards = () => page.evaluate(() => [...document.querySelectorAll(".af-person")].map((c) => c.dataset.person));
+    const all = await cards();
+    await page.fill("[data-af-castfind]", "FERRY");
+    await page.waitForTimeout(500);
+    const got = await cards();
+    check(got.join() === "b", where + ": typing part of a name lists only who matches, in any case (" + got.join() + ")");
+    check(/1 of 4 people match/.test(await page.locator("[data-af-castfound]").textContent()), where + ": and says how many match");
+    check(await page.evaluate(() => document.activeElement && document.activeElement.hasAttribute("data-af-castfind")), where + ": the box keeps the typing");
+    check(await page.evaluate(() => [...document.querySelectorAll(".af-grip")].every((g) => getComputedStyle(g).display === "none")), where + ": people cannot be moved while it lists them");
+    await page.fill("[data-af-castfind]", "zzz");
+    await page.waitForTimeout(500);
+    check((await cards()).length === 0 && /Nobody in the cast matches/.test(await page.locator("[data-af-castfound]").textContent()), where + ": no match says so");
+    await page.fill("[data-af-castfind]", "");
+    await page.waitForTimeout(500);
+    check((await cards()).join() === all.join(), where + ": an empty box shows everyone again");
+    const m = await page.evaluate(MEASURE, size.touch);
+    check(!m.overflow.length && !m.small.length, where + ": the box fits. " + m.overflow.concat(m.small).slice(0, 2).join("; "));
+    check(!errors.length, where + ": no errors. " + errors.slice(0, 2).join("; "));
+    await context.close();
+  }
+}
+
 if (section("voice call")) {
   console.log("Who is voiced looks like a voice call: a green ring while speaking, red when not voiced");
   for (const size of SIZES) {
@@ -1344,7 +1373,20 @@ if (section("saved audio")) {
     await row.locator("[data-af-saved-play]").click();
     await page.waitForTimeout(500);
     check(((await row.locator("[data-af-saved-play]").textContent()) || "") === "Stop", size.name + ": Play plays it, and the button turns to Stop");
-    check((await page.evaluate(() => (window.__synth || []).length)) === made, size.name + ": playing and downloading make nothing new");
+    check((await page.evaluate(() => (window.__synth || []).length)) === made, size.name + ": playing and opening it in the Studio make nothing new");
+    // One thing plays at a time. A message started while a saved script
+    // plays stops the saved script, and the other way round.
+    const playLabel = () => page.evaluate(() => document.querySelector('[data-af="play"]').getAttribute("aria-label"));
+    await page.click('#mount [data-af-slot="message"]');
+    await page.waitForTimeout(700);
+    check(((await row.locator("[data-af-saved-play]").textContent()) || "") === "Play", size.name + ": starting a message stops the saved script");
+    check((await playLabel()) === "Pause", size.name + ": and the message plays (" + (await playLabel()) + ")");
+    await row.locator("[data-af-saved-play]").click();
+    await page.waitForTimeout(700);
+    check((await playLabel()) !== "Pause", size.name + ": starting the saved script stops the message (" + (await playLabel()) + ")");
+    check(((await row.locator("[data-af-saved-play]").textContent()) || "") === "Stop", size.name + ": and the saved script plays");
+    await row.locator("[data-af-saved-play]").click();
+    await page.waitForTimeout(200);
     const m = await page.evaluate(MEASURE, size.touch);
     check(!m.overflow.length && !m.small.length, size.name + ": the list fits. " + m.overflow.concat(m.small).slice(0, 2).join("; "));
     await row.locator(".af-btn", { hasText: "Delete" }).click();
