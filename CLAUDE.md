@@ -212,6 +212,13 @@ Two skills are available. Load them before starting work.
   settings each, not tools to build animations from scratch.
 - Make a video uses the look the preview shows, and the two match frame for
   frame.
+- Only a button that names the Studio opens it: **Open the Studio**, **Go to
+  the Studio** and **Open in the Studio**. A button outside the Studio that
+  downloads or makes a video, such as **Download or make a video** on the
+  Stage tab, goes to the drawer's **Studio** tab, where **Quick shortcuts**
+  do it in one tap.
+- A template being tried is never saved until **Use this template**. Every
+  way out of the Studio puts the look back.
 - A shared file never holds keys, chat text, persona or character names,
   account ids or saved audio.
 
