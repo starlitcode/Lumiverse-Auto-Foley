@@ -111,6 +111,9 @@ Two skills are available. Load them before starting work.
   value, so it is not listed.
 - `test/repo.test.ts` holds the checks on the whole repository: versions,
   permissions, docs links and the writing rules.
+- A failed read of the account is not the same as nothing saved. A read that
+  fails never leads to a write. A list or setting counts as read only after a
+  read that worked. The panel warns once and tries the read again.
 
 ## Voice engines
 
@@ -184,6 +187,29 @@ Two skills are available. Load them before starting work.
   speakers and gives the chance a line describes a sound. Every reason it
   cannot be asked is said in plain words in the Log, and the Director then
   does the whole job.
+
+## The Studio
+
+- The Studio is a workspace of its own. With App manipulation it covers the
+  whole screen through `ctx.ui.mountApp`. Without it, it opens in Lumiverse's
+  extension window, as large as Lumiverse allows. Its background is solid, so
+  nothing behind it shows. Opening it from the drawer closes the drawer.
+- Shortcuts work only inside the workspace, never while typing in a box, and
+  never for a key another extension or Lumiverse already used. They never take
+  Ctrl or Cmd with K or L, or Ctrl+Shift+U. A switch turns them all off.
+- A template sets every look setting, so nothing is left from the look before.
+  It never changes the user's own text, pictures, fonts or projects. It uses
+  only built-in transitions and built-in fonts. Its name and description are
+  plain.
+- A font is bundled only when its license allows it. Its license file is kept
+  in the repo, and it is credited in the README's Credits.
+- Built-in transitions and effects never flash. Each one passes the
+  frame-by-frame transition check. An animation a user makes is their own
+  choice.
+- Make a video uses the look the preview shows, and the two match frame for
+  frame.
+- A shared file never holds keys, chat text, persona or character names,
+  account ids or saved audio.
 
 ## Thinking formats
 
@@ -348,6 +374,14 @@ Every change to the panel or the page has to work on a phone and on a laptop.
   high and reads it back as 0, at every UI Scale step from 50% to 150%. It
   never compares `scrollHeight` with `clientHeight`, which can read as equal
   while the box still scrolls.
+- No text box, text area or number box is focused by the code on a touch
+  screen. Focus opens the phone's keyboard. With a mouse, focus can go where it
+  helps.
+- Each part of the panel has one scroll area at most. A box whose content fits
+  never scrolls. Where scrolling is needed, the bar is thin and takes no space.
+- Every "?" description opens next to its own row. A row is never built inside
+  another row's element. If it is, the "?" finds the outer row, and the
+  description opens above the whole block, far from the button.
 
 ## Motion
 
