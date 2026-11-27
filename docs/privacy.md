@@ -37,6 +37,7 @@ All of this is kept by Lumiverse, under your account, with `spindle.userStorage`
 - Fonts you add in the Studio, up to 8, each up to 3 MB. A font is read only to draw your videos on your device.
 - Pictures for moods on the Cast tab, if you choose them, each in a file of its own, made small like the main picture.
 - Watermark pictures in the Studio, if you choose them, each in a file of its own, at most 512 pixels on the long side.
+- Projects in the Studio, if you make them, each in a file of its own with a list of their names. A project holds Studio settings and the id of the saved performance it uses, not audio or pictures.
 - A picture taken from a character or persona in Lumiverse, when you press **Use pictures from Lumiverse** or **Use their Lumiverse picture**, made small like a picture you choose.
 - Your sound library: sounds found on Freesound, with their credit, sounds made by ElevenLabs, your uploads, and your links. A music track is kept here too, with the mood it is marked with.
 - With **Keep made audio** on, which it is by default: each spoken line, up to the size you pick, and the last 300 scripts, with their text. **Clear kept audio** deletes them, and **Do not keep it** stops it.

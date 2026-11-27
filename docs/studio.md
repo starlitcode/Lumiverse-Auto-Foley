@@ -146,6 +146,50 @@ On a computer, these keys work while the Studio is open and you are not typing i
 - The workspace lays itself out by its own size, so it fits the window on a tablet, a phone turned sideways and a small laptop the same way.
 - Reduce motion, in the panel or on your device, turns off its fade and slide.
 
+## Projects
+
+### In short
+
+- A project saves how a video is made. It never saves the video file.
+- It keeps the saved performance it uses, the trim, the cuts and scenes you made on the timeline, and every Studio setting.
+- Pictures and fonts are kept by their ids, so a project does not copy them.
+- While a project is open, each change is saved to it on its own, a moment after you stop.
+- Projects are listed in the Studio under **Projects**, with folders.
+
+### Steps
+
+1. Open the Studio and pick **Projects**.
+2. Press **New project**. It starts from what the Studio shows now: the look and the performance. Its name shows at the top of the Studio.
+3. Change the look, trim or cut parts. The top says **Project, saving**, then **Project, saved**.
+4. To come back to it, press **Open** beside it. Every setting it holds is put back, so the preview shows the same frame.
+5. **More** beside a project has its name, **Folder**, **Duplicate** and **Delete**. **Delete** asks first.
+6. **Close the project** stops saving changes to it. The Studio keeps its look.
+
+Opening another project saves the one open first.
+
+### What it sends
+
+Nothing leaves your device but the project itself, which is saved to your account with Lumiverse. No model is asked.
+
+### An example
+
+1. Tamsin plays a message from Orrin and opens the Studio. She presses **New project**. It is named **Project 1**.
+2. She uses the **Paper page** template. A moment later the top says **Project, saved**.
+3. She presses **New project** again for a second version. **Project 2** starts from the Paper page look, and she uses **Night sky** on it.
+4. She presses **Open** beside **Project 1**. Project 2 is saved first. The Paper page look comes back, and the preview shows the same frame as before.
+5. Under **More**, she types **Orrin at the mill** as its name. The top of the Studio follows.
+6. Later she deletes the saved audio of Orrin's message. Opening **Orrin at the mill** shows: "The saved audio this project uses has been deleted. The video cannot be made until the project is linked to a saved performance. Everything else in it is open." She presses **Use another saved performance**, picks one, and presses **Use it**.
+
+### Details
+
+- A project's saved performance is the one open when it was made. Opening another saved performance in the Studio while a project is open makes the project use that one.
+- A project whose saved audio is gone opens with that notice. Its look still opens.
+- A save that fails warns once, in plain words, and the top says **Project, not saved**. The change stays on the page until it is saved.
+- A background or watermark picture that a project uses stays on your account, even after it leaves the backgrounds in use.
+- Up to 100 projects and 30 folders. A project is at most about 400 KB, which shapes and notes make up most of.
+- A setup file does not carry projects or their folders, since they point at saved audio and pictures that the file does not carry either.
+- **Start again** with **Settings** ticked deletes every project.
+
 ## Older performances
 
 The Studio holds the last message you played since the page was opened. A message played before that is in **Saved audio**, in the Studio, while **Keep made audio** is on.
@@ -375,7 +419,7 @@ A note is a few words for whoever watches, in a dark box at the top or the botto
 
 ### Start again
 
-Every choice in the Studio is a setting, kept on your account. **Start again** in the Settings tab, with **Settings** ticked, puts them all back: the look, the notes, the words to hide, the background pictures and your own fonts. A setup file carries the settings too, but not the background pictures, your fonts or the pictures for moods.
+Every choice in the Studio is a setting, kept on your account. **Start again** in the Settings tab, with **Settings** ticked, puts them all back: the look, the notes, the words to hide, the background pictures, your own fonts and your projects. A setup file carries the settings too, but not the background pictures, your fonts or the pictures for moods.
 
 ## Your own fonts
 

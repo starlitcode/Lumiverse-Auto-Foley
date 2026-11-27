@@ -43,6 +43,7 @@ _2026-11-26_
 - **Keyboard shortcuts** in the Studio, on a computer: Space plays the preview, the arrow keys move along it, F shows it full screen, Ctrl and Z undoes, and more, with Cmd on a Mac. **?** or **Keyboard shortcuts** lists them. They can be turned off, and Lumiverse's own keys always go through. See [Keyboard shortcuts](docs/studio.md#keyboard-shortcuts).
 
 - **Templates** in the Studio: eleven built-in looks, from a plain one to a paper page, film bars, neon glow, a pastel one, a cold dark one, a bright comic one, a typewriter page, a warm lamp and a dreamy sky. Each shows a frame of the example, tries on the preview with a press, and **Use this template** keeps it as one Undo step. Your own line under the title, watermarks, pictures and fonts stay. See [Templates](docs/studio.md#templates).
+- **Projects** in the Studio. A project saves how a video is made: the saved performance it uses, the trim, the cuts and scenes, and every Studio setting, with pictures and fonts kept by their ids. While a project is open, each change is saved to it on its own, and the top of the Studio shows its name and whether it is saved. Projects can be put in folders, opened, renamed, duplicated and deleted. A project whose saved audio is gone opens with a notice and **Use another saved performance**. See [Projects](docs/studio.md#projects).
 
 ### Changed
 
