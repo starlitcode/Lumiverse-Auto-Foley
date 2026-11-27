@@ -5992,7 +5992,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     }
     frameBody(body, t, parts, total, st, title, intro, fadeOut);
     if (whole) {
-      g.fillStyle = '#000';
+      g.fillStyle = ou && kOpen < 1 ? openColor(st) : '#000';
       g.fillRect(0, 0, W, H);
       const layer = animLayer(st, 7);
       const d: Drawer = (gg, al, x, y) => {
@@ -6004,15 +6004,20 @@ export function setup(ctx: Ctx, overrides?: any) {
       if (ou && kOpen < 1) runAnim(g, st, ou, 'in', kOpen, d, 8);
       else if (eu) runAnim(g, st, eu, 'out', kEnd, d, 8);
     }
-    // In from black at the start, and out to black at the end, unless an
-    // animation is picked for them.
+    // In at the start and out to black at the end, unless an animation is
+    // picked for them. The start comes in from a darker tint of the
+    // background, so a light look opens gently, and from black on a dark one.
     const fadeIn = ou ? 0 : Math.max(0, 1 - t / 0.6);
     const fadeEnd = !eu && fadeOut > 0 ? Math.max(0, Math.min(1, (t - (intro + total)) / fadeOut)) : 0;
-    const black = Math.max(fadeIn, fadeEnd);
-    if (black > 0) {
+    if (fadeIn > 0 || fadeEnd > 0) {
       g.shadowColor = 'transparent';
-      g.globalAlpha = black;
-      g.fillStyle = '#000';
+      if (fadeIn >= fadeEnd) {
+        g.globalAlpha = fadeIn;
+        g.fillStyle = openColor(st);
+      } else {
+        g.globalAlpha = fadeEnd;
+        g.fillStyle = '#000';
+      }
       g.fillRect(0, 0, W, H);
     }
     // Stickers over everything but the watermarks, then the watermarks,
@@ -6020,6 +6025,42 @@ export function setup(ctx: Ctx, overrides?: any) {
     drawStickers(g, st, t, intro, total, fadeOut, 'top');
     drawMarks(g, st, t, intro, total, fadeOut, false);
     g.restore();
+  }
+  // The color the video opens from: a darker tint of the first scene's
+  // background, read once from its drawing, or black when the background
+  // is dark.
+  function openColor(st: VideoStage): string {
+    const kept = (st as any).openColor;
+    if (kept) return kept;
+    let out = '#000000';
+    try {
+      const first = st.scenes && st.scenes.length ? st.layers.get(st.scenes[0].id) : null;
+      const src = first || st.back;
+      const c = canvasOf(8, 8);
+      const g = c.getContext('2d') as CanvasRenderingContext2D;
+      g.drawImage(src, 0, 0, 8, 8);
+      const d = g.getImageData(0, 0, 8, 8).data;
+      let r = 0;
+      let gr = 0;
+      let b = 0;
+      for (let i = 0; i < d.length; i += 4) {
+        r += d[i];
+        gr += d[i + 1];
+        b += d[i + 2];
+      }
+      const n = d.length / 4;
+      r /= n;
+      gr /= n;
+      b /= n;
+      const lum = (0.2126 * r + 0.7152 * gr + 0.0722 * b) / 255;
+      if (lum >= 0.3) {
+        const k = 0.9;
+        const hx = (v: number) => Math.round(Math.max(0, Math.min(255, v * k))).toString(16).padStart(2, '0');
+        out = '#' + hx(r) + hx(gr) + hx(b);
+      }
+    } catch (_) {}
+    (st as any).openColor = out;
+    return out;
   }
   // Everything in a frame under the fades: the background, the stickers
   // and watermark behind the words, the title or the line, and the notes.

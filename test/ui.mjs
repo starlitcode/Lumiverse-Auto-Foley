@@ -7436,6 +7436,45 @@ if (section("sharing files")) {
   }
 }
 
+if (section("light opening")) {
+  console.log("A light template opens from a darker tint of its own background, gently; a dark one still opens from black");
+  const size = SIZES.find((x) => !x.touch) || SIZES[0];
+  const steps = async (tpl) => {
+    const { context, page } = await open(THEMES[0], size, 1);
+    await openWs(page);
+    await wsSec(page, "Templates");
+    await page.waitForTimeout(400);
+    await page.click('[data-af-tpl="' + tpl + '"]');
+    await page.waitForTimeout(1500);
+    const r = await page.evaluate(async () => {
+      const s = document.querySelector("[data-af-scrub] input");
+      s.step = "any";
+      const means = [];
+      for (let t = 0; t <= 1.2; t += 1 / 30) {
+        s.value = String(t); s.dispatchEvent(new Event("input", { bubbles: true }));
+        await new Promise((x) => requestAnimationFrame(() => requestAnimationFrame(x)));
+        const c = document.querySelector("[data-af-videopreview]");
+        const k = document.createElement("canvas"); k.width = 64; k.height = 36;
+        const g = k.getContext("2d"); g.drawImage(c, 0, 0, 64, 36);
+        const d = g.getImageData(0, 0, 64, 36).data;
+        let sum = 0; for (let i = 0; i < d.length; i += 4) sum += (d[i] + d[i + 1] + d[i + 2]) / 3;
+        means.push(sum / (d.length / 4));
+      }
+      let step = 0;
+      for (let i = 1; i < means.length; i++) step = Math.max(step, Math.abs(means[i] - means[i - 1]));
+      return { step, first: means[0], last: means[means.length - 1] };
+    });
+    await context.close();
+    return r;
+  };
+  for (const tpl of ["blush", "paper", "cats"]) {
+    const r = await steps(tpl);
+    check(r.step < 6 && r.first > 100, tpl + ": the light template opens gently, from a darker tint, not black (largest step " + r.step.toFixed(1) + ", first frame " + Math.round(r.first) + ")");
+  }
+  const dark = await steps("plain");
+  check(dark.first < 12, "plain: a dark template still opens from black (first frame " + Math.round(dark.first) + ")");
+}
+
 if (section("stickers")) {
   console.log("Stickers: drawn where they are put, flipped, mixed, filling the frame, behind the words, at their times, and edited on a phone and a laptop");
   // The pictures the checks use, drawn once in a page of their own.

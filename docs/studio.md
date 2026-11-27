@@ -473,7 +473,7 @@ The pictures move on their own during a transition. A person on screen in both l
 
 | Place | Default |
 | --- | --- |
-| Opening, Ending | In from black, out to black. Ending takes as long as **Fade to black at the end**. |
+| Opening, Ending | In from black, out to black. On a light background, the opening comes in from a darker shade of the background in place of black, so it is not a sudden change from dark to light. Ending takes as long as **Fade to black at the end**. |
 | Between lines | The transition under **Moving between lines**. Moves the pictures, names and words as one. |
 | Scene change | The same as between lines, where a new scene starts. |
 | Background on a scene change | A slow fade. |

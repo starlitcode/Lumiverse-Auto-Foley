@@ -70,6 +70,7 @@ _2026-11-26_
 - **The Director's built-in prompt has a part on music.** It says how to pick a mood and when to change it, and it is only used while Scene music is on. If you have your own prompt, a notice says the built-in one changed. Suggested by a Discord user.
 
 - **A calmer built-in look for the Studio's video.** The background is a soft dark blue gradient in place of Dark, the words fade in as they are said in place of lighting up, a transition takes 0.5 seconds in place of 0.4, the edges are darkened 35% in place of 50%, and the names are in Clean beside the words in Book. If you were on the old values, a notice says so, and you can take the new ones or keep yours.
+- **A video on a light background opens from a darker shade of it.** The opening used to come in from black, which is a sudden change from dark to light. A dark background still opens from black.
 - **Every wait shows a number that moves.** Getting a line from the voice service, the Director writing the script, directing ahead, waiting for a new reply to settle, reading saved audio, and getting the audio or pictures ready for the Studio now count the seconds, or the part, so a long wait never looks stuck.
 
 ### Fixed
