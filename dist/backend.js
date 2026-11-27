@@ -316,14 +316,14 @@ function cleanMarks(v) {
 }
 // A gradient's colors after its first: 1 to 5 of them, so 2 to 6 in all.
 const GRAD_DIRS = ['down', 'right', 'diag', 'diag2'];
-function cleanStops(v, dflt) {
-    const out = (Array.isArray(v) ? v : []).map((c) => hexColor(c)).filter(Boolean).slice(0, 5);
+function cleanStops(v, dflt, max = 5) {
+    const out = (Array.isArray(v) ? v : []).map((c) => hexColor(c)).filter(Boolean).slice(0, max);
     return out.length ? out : [dflt];
 }
 // At most 12 backgrounds, and 40 shapes in each.
 const BACKS_MAX = 12;
 const SHAPES_MAX = 40;
-const SHAPE_KINDS = ['rect', 'round', 'ellipse', 'tri', 'line', 'text', 'heart', 'star', 'poly', 'diamond', 'arrow', 'bubble', 'ring', 'moon', 'cloud', 'sparkle'];
+const SHAPE_KINDS = ['rect', 'round', 'ellipse', 'tri', 'line', 'text', 'heart', 'star', 'poly', 'diamond', 'arrow', 'bubble', 'ring', 'moon', 'cloud', 'sparkle', 'cat', 'dog', 'bunny', 'paw', 'bone', 'fish', 'carrot', 'bat', 'rose', 'checker', 'broken', 'stripes'];
 function cleanShape(v) {
     if (!v || typeof v !== 'object')
         return null;
@@ -343,7 +343,8 @@ function cleanShape(v) {
         fill: hexColor(v.fill),
         // A shape saved with one second color, before there were stops, keeps it.
         grad: pick(v.grad, ['none', 'linear', 'radial'], hexColor(v.fill2) ? 'linear' : 'none'),
-        stops: cleanStops(v.stops, hexColor(v.fill2) || '#141218'),
+        // Stripes take up to seven colors, like a flag.
+        stops: cleanStops(v.stops, hexColor(v.fill2) || '#141218', kind === 'stripes' ? 6 : 5),
         dir: pick(v.dir, GRAD_DIRS, 'down'),
         clear: Math.round(num(v.clear, 0, 95, 0)),
         text: kind === 'text' ? str(v.text, 120) : '',
@@ -356,6 +357,8 @@ function cleanShape(v) {
         lineW: Math.round(num(v.lineW, 0, 40, 0)),
         flipX: v.flipX === true,
         flipY: v.flipY === true,
+        ink: hexColor(v.ink),
+        blush: v.blush !== false,
     };
 }
 // The backgrounds and the one picked. Settings saved before there was a

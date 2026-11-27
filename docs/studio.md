@@ -282,7 +282,7 @@ With no performance in the Studio, the preview shows an example clip, about 25 s
 
 Leaving **Templates** while you try one puts your look back.
 
-The chips above the templates show one group at a time: **All**, **Moods**, **Scenes**, **Styles** and **Colors**.
+The chips above the templates show one group at a time: **All**, **Moods**, **Scenes**, **Styles**, **Colors**, **Pets**, **Aesthetics** and **Pride**.
 
 **Moods**
 
@@ -315,6 +315,42 @@ The chips above the templates show one group at a time: **All**, **Moods**, **Sc
 | **Comic panel** | Comedy, games and silly scenes. | Slide across, 0.4 seconds |
 | **Eighties sunset** | Science fiction, city nights and stories set in the 1980s. | Gentle zoom, 0.5 seconds |
 | **Film subtitles** | Drama and tense scenes, with the words at the bottom like subtitles. | Dissolve, 0.7 seconds |
+
+**Pets**
+
+| Template | What it suits | Transition |
+| --- | --- | --- |
+| **Cats** | Soft peach colors and cats, for light and happy scenes. | Dissolve, 0.5 seconds |
+| **Dogs** | Soft blue colors and dogs, for light and happy scenes. | Dissolve, 0.5 seconds |
+| **Bunnies** | Soft lilac colors and bunnies, for light and happy scenes. | Dissolve, 0.5 seconds |
+
+**Aesthetics**
+
+| Template | What it suits | Transition |
+| --- | --- | --- |
+| **Goth** | Dark and elegant, with bats, roses and a crescent moon. | Through black, 0.8 seconds |
+| **Emo** | Black with hot pink, stars, broken hearts and a checkerboard. | Slide across, 0.35 seconds |
+| **Kawaii** | Pastel pink, baby blue and mint, with hearts, stars and clouds. | Dissolve, 0.5 seconds |
+
+**Pride**
+
+Each shows its flag's colors as a band of stripes near the bottom, on a dark background that keeps the words easy to read, with rings and names in one of the flag's colors. Each uses Fade out, then in, 0.5 seconds. The colors are the ones commonly listed for each flag, such as on [Flag Color Codes](https://www.flagcolorcodes.com/).
+
+| Template | Colors, top to bottom |
+| --- | --- |
+| **Pride** | #e40303, #ff8c00, #ffed00, #008026, #24408e, #732982 |
+| **Lesbian** | #d52d00, #ef7627, #ff9a56, #ffffff, #d162a4, #b55690, #a30262 |
+| **Gay** | #078d70, #26ceaa, #98e8c1, #ffffff, #7bade2, #5049cc, #3d1a78 |
+| **Bisexual** | #d60270 (two fifths), #9b4f96, #0038a8 (two fifths) |
+| **Transgender** | #5bcefa, #f5a9b8, #ffffff, #f5a9b8, #5bcefa |
+| **Queer** | #000000, #99d9ea, #00a2e8, #b5e61d, #ffffff, #ffc90e, #fd6666 |
+| **Intersex** | #ffd800, with a ring of #7902aa |
+| **Asexual** | #000000, #a3a3a3, #ffffff, #800080 |
+| **Pansexual** | #ff218c, #ffd800, #21b1ff |
+| **Nonbinary** | #fcf434, #ffffff, #9c59d1, #2c2c2c |
+| **Aromantic** | #3da542, #a7d379, #ffffff, #a9a9a9, #000000 |
+| **Genderfluid** | #ff76a4, #ffffff, #c011d7, #000000, #2f3cbe |
+| **Agender** | #000000, #b9b9b9, #ffffff, #b8f483, #ffffff, #b9b9b9, #000000 |
 
 **Colors**
 
@@ -474,7 +510,7 @@ Every choice in the Studio is a setting, kept on your account. **Start again** i
 
 ### In short
 
-- **A design of your own** is a background made of shapes: rectangles, rounded rectangles, ellipses, triangles, lines, text boxes, hearts, stars, polygons, diamonds, arrows, speech bubbles, rings, crescent moons, clouds and sparkles.
+- **A design of your own** is a background made of shapes: rectangles, rounded rectangles, ellipses, triangles, lines, text boxes, hearts, stars, polygons, diamonds, arrows, speech bubbles, rings, crescent moons, clouds, sparkles, cat, dog and bunny faces, paw prints, bones, fish, carrots, bats, roses, checkerboard strips, broken hearts and stripes.
 - The shapes stay where you put them for the whole video.
 - You place them on the preview with a finger or the mouse, or type exact numbers.
 - Each shape has its own color, an optional gradient, and how see-through it is.
@@ -502,6 +538,9 @@ Every choice in the Studio is a setting, kept on your account. **Start again** i
 - **Polygon**: **Sides**, 6 by default, from 3 to 12.
 - **Speech bubble**: **Where the tail points**: down, up, left or right.
 - **Ring**: **How thick, in percent**, 18 by default.
+
+- **Cat face**, **Dog face** and **Bunny face**: **Color of the eyes**, dark brown by default, and **Pink cheeks**, on by default. A **Fish** has an eye, and a **Rose** a curl, in the same color.
+- **Stripes**: bands of the colors under **Fill of the shape**, from top to bottom, up to seven. A gradient direction of right turns them into bands from left to right.
 
 Every shape but a text box can have an outline: **Color of the outline**, white by default, and **Outline, in pixels**, 0 by default, which is none. **Flip across** and **Flip up and down** mirror a shape.
 

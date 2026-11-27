@@ -5649,7 +5649,7 @@ if (section("templates")) {
     await wsSec(page, "Templates");
     await page.waitForFunction(() => [...document.querySelectorAll("[data-af-tpl] img")].every((i) => i.getAttribute("src")), null, { timeout: 30000 }).catch(() => {});
     const thumbs = await page.evaluate(() => [...document.querySelectorAll("[data-af-tpl] img")].map((i) => i.getAttribute("src") || ""));
-    check(thumbs.length >= 8 && thumbs.length <= 26 && thumbs.every(Boolean), size.name + ": there are 8 to 26 templates, each with a picture drawn (" + thumbs.length + ")");
+    check(thumbs.length >= 8 && thumbs.length <= 50 && thumbs.every(Boolean), size.name + ": there are 8 to 50 templates, each with a picture drawn (" + thumbs.length + ")");
     check(new Set(thumbs).size === thumbs.length, size.name + ": no two pictures are the same");
     // Each one tried on the preview, at the same moment: readable words.
     const ids = await page.evaluate(() => [...document.querySelectorAll("[data-af-tpl]")].map((b) => b.getAttribute("data-af-tpl")));
@@ -6493,7 +6493,7 @@ if (section("template groups")) {
     await wsSec(page, "Templates");
     await page.waitForTimeout(400);
     const chips = await page.evaluate(() => [...document.querySelectorAll("[data-af-tplcat]")].map((b) => ({ id: b.getAttribute("data-af-tplcat"), text: b.textContent, h: b.getBoundingClientRect().height, cut: b.scrollWidth > b.clientWidth + 1 })));
-    check(chips.length === 5 && chips[0].id === "all" && chips.every((c) => c.h >= 32 && !c.cut), size.name + ": five chips, All first, each 32 pixels tall or more and not cut (" + chips.map((c) => c.text + " " + Math.round(c.h)).join(", ") + ")");
+    check(chips.length === 8 && chips[0].id === "all" && chips.every((c) => c.h >= 32 && !c.cut), size.name + ": eight chips, All first, each 32 pixels tall or more and not cut (" + chips.map((c) => c.text + " " + Math.round(c.h)).join(", ") + ")");
     const shown = () => page.evaluate(() => [...document.querySelectorAll("[data-af-tpl]")].filter((b) => !b.hidden).map((b) => b.getAttribute("data-af-tpl")));
     const all = await shown();
     const tap = async (id) => { const b = page.locator('[data-af-tplcat="' + id + '"]'); const box = await b.boundingBox(); if (size.touch) await page.touchscreen.tap(box.x + box.width / 2, box.y + box.height / 2); else await b.click(); await page.waitForTimeout(250); };
@@ -6546,6 +6546,9 @@ if (section("new shapes")) {
     heart: [[0, 0.1], [-0.47, -0.47]], star: [[0, 0], [0.45, 0.45]], poly: [[0, 0], [0.47, 0.47]], diamond: [[0, 0], [0.4, 0.4]],
     arrow: [[0, 0], [0.45, -0.45]], bubble: [[0, -0.1], [0.49, -0.49]], ring: [[0.41, 0], [0, 0]], moon: [[-0.8 / 2, 0.1], [0, 0]],
     cloud: [[0, 0], [0.48, -0.45]], sparkle: [[0, 0], [0.33, -0.33]],
+    cat: [[0, 0.3], [0, -0.45]], dog: [[0, -0.2], [0.47, -0.47]], bunny: [[0, 0.35], [0, -0.3]], paw: [[0, 0.16], [0, -0.1]],
+    bone: [[0, 0], [0, 0.35]], fish: [[-0.1, 0.2], [0.3, 0.4]], carrot: [[0, 0], [0.3, 0.3]], bat: [[0, 0.1], [0, 0.4]],
+    rose: [[0.1, 0.1], [0.45, 0.45]], checker: [[-0.25, -0.25], [0.25, -0.25]], broken: [[-0.25, -0.1], [0.47, 0.47]],
   };
   const size = SIZES.find((x) => !x.touch) || SIZES[0];
   const frameOf = async (shape) => {
@@ -6584,7 +6587,7 @@ if (section("new shapes")) {
     await wsSec(page, "Background");
     await page.waitForTimeout(400);
     const kinds = await page.evaluate(() => [...document.querySelectorAll("[data-af-shapekind]")].map((b) => ({ id: b.getAttribute("data-af-shapekind"), h: b.getBoundingClientRect().height, cut: b.scrollWidth > b.clientWidth + 1 })));
-    check(kinds.length === 16 && kinds.every((k) => k.h >= 32 && !k.cut), sz2.name + ": the shape picker shows all 16 shapes with their names, each 32 pixels tall or more");
+    check(kinds.length === 28 && kinds.every((k) => k.h >= 32 && !k.cut), sz2.name + ": the shape picker shows all 28 shapes with their names, each 32 pixels tall or more");
     await page.click('[data-af-shapekind="star"]');
     await page.click("[data-af-shape-add]");
     await page.waitForTimeout(600);
@@ -6652,6 +6655,26 @@ if (section("template use matches")) {
     check(!errors.length, size.name + ": no page errors. " + errors.slice(0, 2).join(" | "));
     await context.close();
   }
+}
+
+// UI_SHEET_OUT=file.png draws every newer shape large and small, to look at
+// by eye.
+if (process.env.UI_SHEET_OUT && section("shapes sheet")) {
+  const kinds = ["cat", "dog", "bunny", "paw", "bone", "fish", "carrot", "bat", "rose", "checker", "broken", "heart", "star", "sparkle", "cloud", "moon"];
+  const fills = ["#f4b183", "#9ec5e8", "#d8c2f0", "#e8a0a0", "#f2ead8", "#7fb3d5", "#f08a3c", "#3a2a4a", "#c0304a", "#111111", "#e0407a", "#ff8fb1", "#ffd75e", "#ffffff", "#e8eef7", "#f4ecd0"];
+  const shapes = [];
+  kinds.forEach((k, i) => {
+    const big = { id: "a" + i, kind: k, x: 0.07 + (i % 8) * 0.122, y: i < 8 ? 0.22 : 0.62, w: k === "checker" ? 220 : 170, h: k === "checker" ? 60 : 170, rot: 0, fill: fills[i], grad: "none", stops: [], dir: "down", clear: 0, text: "" };
+    shapes.push(big);
+    shapes.push(Object.assign({}, big, { id: "b" + i, y: big.y + 0.2, w: big.w / 3, h: big.h / 3 }));
+  });
+  const pre = `window.__settings.videoBacks = [{ id: "main", name: "Main", kind: "design", color: "#8a8a8a", fill: "solid", stops: [], dir: "down", dim: 40, blur: 0, shapes: ${JSON.stringify(shapes)}, use: "match", moods: [], places: [] }]; window.__settings.videoBackPick = "main"; window.__settings.videoEdges = 0; window.__settings.videoTitleOn = false; window.__settings.videoPics = false; window.__settings.videoNames = false; window.__settings.videoInk = "#8a8a8a";`;
+  const { context, page } = await open(THEMES[0], SIZES[1], 1, pre);
+  await openWs(page);
+  await page.waitForTimeout(800);
+  const png = await page.evaluate(() => document.querySelector("[data-af-videopreview]").toDataURL("image/png").split(",")[1]);
+  (await import("node:fs")).writeFileSync(process.env.UI_SHEET_OUT, Buffer.from(png, "base64"));
+  await context.close();
 }
 
 if (section("snapping")) {

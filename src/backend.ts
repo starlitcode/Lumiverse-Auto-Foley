@@ -77,7 +77,7 @@ interface CastMember {
 // see-through it is, in percent. text is the words of a text box.
 interface VideoShapeDef {
   id: string;
-  kind: 'rect' | 'round' | 'ellipse' | 'tri' | 'line' | 'text' | 'heart' | 'star' | 'poly' | 'diamond' | 'arrow' | 'bubble' | 'ring' | 'moon' | 'cloud' | 'sparkle';
+  kind: (typeof SHAPE_KINDS)[number];
   x: number;
   y: number;
   w: number;
@@ -103,6 +103,9 @@ interface VideoShapeDef {
   lineW: number;
   flipX: boolean;
   flipY: boolean;
+  // A face's eye color, or a rose's curl, and pink cheeks on a face.
+  ink: string;
+  blush: boolean;
 }
 interface VideoMark {
   id: string;
@@ -793,15 +796,15 @@ function cleanMarks(v: any): VideoMark[] {
 
 // A gradient's colors after its first: 1 to 5 of them, so 2 to 6 in all.
 const GRAD_DIRS = ['down', 'right', 'diag', 'diag2'] as const;
-function cleanStops(v: any, dflt: string): string[] {
-  const out = (Array.isArray(v) ? v : []).map((c: any) => hexColor(c)).filter(Boolean).slice(0, 5);
+function cleanStops(v: any, dflt: string, max = 5): string[] {
+  const out = (Array.isArray(v) ? v : []).map((c: any) => hexColor(c)).filter(Boolean).slice(0, max);
   return out.length ? out : [dflt];
 }
 
 // At most 12 backgrounds, and 40 shapes in each.
 const BACKS_MAX = 12;
 const SHAPES_MAX = 40;
-const SHAPE_KINDS = ['rect', 'round', 'ellipse', 'tri', 'line', 'text', 'heart', 'star', 'poly', 'diamond', 'arrow', 'bubble', 'ring', 'moon', 'cloud', 'sparkle'] as const;
+const SHAPE_KINDS = ['rect', 'round', 'ellipse', 'tri', 'line', 'text', 'heart', 'star', 'poly', 'diamond', 'arrow', 'bubble', 'ring', 'moon', 'cloud', 'sparkle', 'cat', 'dog', 'bunny', 'paw', 'bone', 'fish', 'carrot', 'bat', 'rose', 'checker', 'broken', 'stripes'] as const;
 function cleanShape(v: any): VideoShapeDef | null {
   if (!v || typeof v !== 'object') return null;
   const kind = pick(v.kind, SHAPE_KINDS, 'rect');
@@ -819,7 +822,8 @@ function cleanShape(v: any): VideoShapeDef | null {
     fill: hexColor(v.fill),
     // A shape saved with one second color, before there were stops, keeps it.
     grad: pick(v.grad, ['none', 'linear', 'radial'] as const, hexColor(v.fill2) ? 'linear' : 'none'),
-    stops: cleanStops(v.stops, hexColor(v.fill2) || '#141218'),
+    // Stripes take up to seven colors, like a flag.
+    stops: cleanStops(v.stops, hexColor(v.fill2) || '#141218', kind === 'stripes' ? 6 : 5),
     dir: pick(v.dir, GRAD_DIRS, 'down'),
     clear: Math.round(num(v.clear, 0, 95, 0)),
     text: kind === 'text' ? str(v.text, 120) : '',
@@ -832,6 +836,8 @@ function cleanShape(v: any): VideoShapeDef | null {
     lineW: Math.round(num(v.lineW, 0, 40, 0)),
     flipX: v.flipX === true,
     flipY: v.flipY === true,
+    ink: hexColor(v.ink),
+    blush: v.blush !== false,
   };
 }
 // The backgrounds and the one picked. Settings saved before there was a

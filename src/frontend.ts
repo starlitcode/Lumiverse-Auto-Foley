@@ -3989,11 +3989,12 @@ export function setup(ctx: Ctx, overrides?: any) {
   // grad is none, linear or radial. stops are the colors after fill, so a
   // gradient has fill and then each stop, spread evenly. dir is a linear
   // gradient's direction.
-  type ShapeKind = 'rect' | 'round' | 'ellipse' | 'tri' | 'line' | 'text' | 'heart' | 'star' | 'poly' | 'diamond' | 'arrow' | 'bubble' | 'ring' | 'moon' | 'cloud' | 'sparkle';
+  type ShapeKind = 'rect' | 'round' | 'ellipse' | 'tri' | 'line' | 'text' | 'heart' | 'star' | 'poly' | 'diamond' | 'arrow' | 'bubble' | 'ring' | 'moon' | 'cloud' | 'sparkle' | 'cat' | 'dog' | 'bunny' | 'paw' | 'bone' | 'fish' | 'carrot' | 'bat' | 'rose' | 'checker' | 'broken' | 'stripes';
   // points and depth are a star's, sides a polygon's, tail the side a
   // speech bubble's tail points to, thick a ring's thickness in percent.
-  // line and lineW are an outline, flipX and flipY mirror it.
-  interface VideoShapeDef { id: string; kind: ShapeKind; x: number; y: number; w: number; h: number; rot: number; fill: string; grad: 'none' | 'linear' | 'radial'; stops: string[]; dir: string; clear: number; text: string; fill2?: string; points?: number; depth?: number; sides?: number; tail?: string; thick?: number; line?: string; lineW?: number; flipX?: boolean; flipY?: boolean }
+  // line and lineW are an outline, flipX and flipY mirror it. ink is the
+  // color of a face's eyes and nose, and blush gives a face pink cheeks.
+  interface VideoShapeDef { id: string; kind: ShapeKind; x: number; y: number; w: number; h: number; rot: number; fill: string; grad: 'none' | 'linear' | 'radial'; stops: string[]; dir: string; clear: number; text: string; fill2?: string; points?: number; depth?: number; sides?: number; tail?: string; thick?: number; line?: string; lineW?: number; flipX?: boolean; flipY?: boolean; ink?: string; blush?: boolean }
   // fill, stops and dir are A color of your own's fill: one color, or a
   // gradient from color through each stop.
   interface VideoBack { id: string; name: string; kind: 'dark' | 'color' | 'picture' | 'design'; color: string; fill: 'solid' | 'linear' | 'radial'; stops: string[]; dir: string; dim: number; blur: number; shapes: VideoShapeDef[]; use: 'match' | 'hand'; moods: string[]; places: string[] }
@@ -4458,9 +4459,147 @@ export function setup(ctx: Ctx, overrides?: any) {
       if (side === 'left') { g.lineTo(x0, oy + tl); g.lineTo(-w / 2, oy - tl * 1.6); g.lineTo(x0, oy - tl); }
       g.arcTo(x0, y0, x1, y0, rr);
       g.closePath();
+    } else if (k in SHAPE_PARTS) {
+      for (const part of SHAPE_PARTS[k](w, h)) part(g);
     } else if ((k === 'round' || k === 'line') && (g as any).roundRect) {
       (g as any).roundRect(-w / 2, -h / 2, w, h, k === 'line' ? h / 2 : Math.min(w, h) * 0.18);
     } else g.rect(-w / 2, -h / 2, w, h);
+  }
+  // Shapes made of several pieces. Each piece adds itself to the path, so
+  // filling the path fills the whole shape.
+  type Piece = (g: CanvasRenderingContext2D) => void;
+  const oval = (x: number, y: number, rx: number, ry: number, rot = 0): Piece => (g) => {
+    g.moveTo(x + rx * Math.cos(rot), y + rx * Math.sin(rot));
+    g.ellipse(x, y, rx, ry, rot, 0, Math.PI * 2);
+  };
+  const pts = (list: [number, number][]): Piece => (g) => {
+    list.forEach(([x, y], i) => (i ? g.lineTo(x, y) : g.moveTo(x, y)));
+    g.closePath();
+  };
+  const catHead = (w: number, h: number): Piece => (g) => {
+    g.moveTo(-0.42 * w, 0.08 * h);
+    g.ellipse(0, 0.08 * h, 0.42 * w, 0.38 * h, 0, Math.PI, 0, true);
+    g.quadraticCurveTo(0.44 * w, -0.08 * h, 0.36 * w, -0.18 * h);
+    g.lineTo(0.4 * w, -0.48 * h);
+    g.lineTo(0.12 * w, -0.3 * h);
+    g.quadraticCurveTo(0, -0.36 * h, -0.12 * w, -0.3 * h);
+    g.lineTo(-0.4 * w, -0.48 * h);
+    g.lineTo(-0.36 * w, -0.18 * h);
+    g.quadraticCurveTo(-0.44 * w, -0.08 * h, -0.42 * w, 0.08 * h);
+    g.closePath();
+  };
+  const heartPiece = (w: number, h: number): Piece => (g) => {
+    for (let i = 0; i < 96; i++) {
+      const t = (i / 96) * Math.PI * 2;
+      const x = 16 * Math.pow(Math.sin(t), 3);
+      const y = -(13 * Math.cos(t) - 5 * Math.cos(2 * t) - 2 * Math.cos(3 * t) - Math.cos(4 * t));
+      const px = (x / 32) * w, py = ((y + 2.5) / 29) * h;
+      if (i) g.lineTo(px, py);
+      else g.moveTo(px, py);
+    }
+    g.closePath();
+  };
+  const BAT: [number, number][] = [[0, -0.12], [0.05, -0.24], [0.08, -0.1], [0.2, -0.16], [0.5, -0.26], [0.44, -0.02], [0.34, -0.06], [0.3, 0.1], [0.2, 0.0], [0.12, 0.14], [0, 0.24]];
+  const SHAPE_PARTS: Record<string, (w: number, h: number) => Piece[]> = {
+    cat: (w, h) => [catHead(w, h)],
+    dog: (w, h) => [oval(-0.34 * w, 0.02 * h, 0.13 * w, 0.3 * h, 0.25), oval(0.34 * w, 0.02 * h, 0.13 * w, 0.3 * h, -0.25), oval(0, 0.06 * h, 0.34 * w, 0.4 * h)],
+    bunny: (w, h) => [oval(-0.14 * w, -0.28 * h, 0.09 * w, 0.22 * h, -0.12), oval(0.14 * w, -0.28 * h, 0.09 * w, 0.22 * h, 0.12), oval(0, 0.16 * h, 0.32 * w, 0.32 * h)],
+    paw: (w, h) => [oval(0, 0.16 * h, 0.3 * w, 0.25 * h), oval(-0.33 * w, -0.1 * h, 0.11 * w, 0.14 * h), oval(-0.12 * w, -0.32 * h, 0.11 * w, 0.14 * h), oval(0.12 * w, -0.32 * h, 0.11 * w, 0.14 * h), oval(0.33 * w, -0.1 * h, 0.11 * w, 0.14 * h)],
+    bone: (w, h) => [pts([[-0.36 * w, -0.14 * h], [0.36 * w, -0.14 * h], [0.36 * w, 0.14 * h], [-0.36 * w, 0.14 * h]]), oval(-0.38 * w, -0.22 * h, 0.12 * w, 0.24 * h), oval(-0.38 * w, 0.22 * h, 0.12 * w, 0.24 * h), oval(0.38 * w, -0.22 * h, 0.12 * w, 0.24 * h), oval(0.38 * w, 0.22 * h, 0.12 * w, 0.24 * h)],
+    fish: (w, h) => [oval(-0.08 * w, 0, 0.36 * w, 0.32 * h), pts([[0.22 * w, 0], [0.5 * w, -0.32 * h], [0.5 * w, 0.32 * h]])],
+    carrot: (w, h) => [pts([[-0.2 * w, -0.24 * h], [0.2 * w, -0.24 * h], [0, 0.5 * h]]), oval(-0.1 * w, -0.36 * h, 0.06 * w, 0.14 * h, -0.4), oval(0, -0.4 * h, 0.06 * w, 0.14 * h), oval(0.1 * w, -0.36 * h, 0.06 * w, 0.14 * h, 0.4)],
+    bat: (w, h) => [pts(BAT.map(([x, y]) => [x * w, y * h] as [number, number]).concat(BAT.slice(1, -1).reverse().map(([x, y]) => [-x * w, y * h] as [number, number])))],
+    rose: (w, h) => [0, 1, 2, 3, 4].map((i) => oval(Math.cos((i * Math.PI * 2) / 5 - Math.PI / 2) * 0.2 * w, Math.sin((i * Math.PI * 2) / 5 - Math.PI / 2) * 0.2 * h, 0.22 * w, 0.22 * h)),
+    checker: (w, h) => {
+      const rows = 2;
+      const size = h / rows;
+      const cols = Math.max(1, Math.round(w / size));
+      const out: Piece[] = [];
+      for (let c = 0; c < cols; c++) for (let r = 0; r < rows; r++) if ((c + r) % 2 === 0) out.push(pts([[-w / 2 + (c * w) / cols, -h / 2 + r * size], [-w / 2 + ((c + 1) * w) / cols, -h / 2 + r * size], [-w / 2 + ((c + 1) * w) / cols, -h / 2 + (r + 1) * size], [-w / 2 + (c * w) / cols, -h / 2 + (r + 1) * size]]));
+      return out;
+    },
+    broken: (w, h) => [heartPiece(w, h)],
+  };
+  // The parts drawn over a shape's fill: a face's eyes, nose and cheeks, a
+  // rose's curl, a fish's eye, a carrot's leaves in green, and the crack of
+  // a broken heart.
+  const FACES = ['cat', 'dog', 'bunny'];
+  function shapeDetails(g: CanvasRenderingContext2D, sh: VideoShapeDef, w: number, h: number) {
+    const k = sh.kind;
+    const ink = hexOr(sh.ink, '#3b2b2b');
+    const m = Math.min(w, h);
+    g.save();
+    g.shadowColor = 'transparent';
+    if (FACES.indexOf(k) >= 0) {
+      const cy = k === 'bunny' ? 0.18 * h : k === 'dog' ? 0.08 * h : 0.1 * h;
+      if (k === 'bunny') {
+        // The inside of the ears.
+        g.fillStyle = 'rgba(255,150,170,0.55)';
+        g.beginPath();
+        oval(-0.14 * w, -0.26 * h, 0.045 * w, 0.15 * h, -0.12)(g);
+        oval(0.14 * w, -0.26 * h, 0.045 * w, 0.15 * h, 0.12)(g);
+        g.fill();
+      }
+      if (k === 'dog') {
+        // A lighter muzzle.
+        g.fillStyle = 'rgba(255,255,255,0.45)';
+        g.beginPath();
+        oval(0, cy + 0.14 * h, 0.17 * w, 0.12 * h)(g);
+        g.fill();
+      }
+      if (sh.blush !== false) {
+        g.fillStyle = 'rgba(255,120,150,0.45)';
+        g.beginPath();
+        oval(-0.22 * w, cy + 0.1 * h, 0.07 * w, 0.045 * h)(g);
+        oval(0.22 * w, cy + 0.1 * h, 0.07 * w, 0.045 * h)(g);
+        g.fill();
+      }
+      g.fillStyle = ink;
+      g.beginPath();
+      oval(-0.13 * w, cy - 0.02 * h, 0.045 * m, 0.05 * m)(g);
+      oval(0.13 * w, cy - 0.02 * h, 0.045 * m, 0.05 * m)(g);
+      g.fill();
+      // A small round nose, and a mouth of two short curves.
+      g.fillStyle = k === 'dog' ? ink : '#d9777f';
+      g.beginPath();
+      oval(0, cy + 0.08 * h, 0.045 * w, 0.032 * h)(g);
+      g.fill();
+      g.strokeStyle = ink;
+      g.lineWidth = Math.max(1, 0.018 * m);
+      g.lineCap = 'round';
+      g.beginPath();
+      g.arc(-0.04 * w, cy + 0.12 * h, 0.04 * w, 0.2, Math.PI - 0.2);
+      g.moveTo(0.08 * w, cy + 0.12 * h);
+      g.arc(0.04 * w, cy + 0.12 * h, 0.04 * w, 0.2, Math.PI - 0.2);
+      g.stroke();
+    } else if (k === 'fish') {
+      g.fillStyle = ink;
+      g.beginPath();
+      oval(-0.26 * w, -0.06 * h, 0.04 * m, 0.04 * m)(g);
+      g.fill();
+    } else if (k === 'carrot') {
+      g.fillStyle = '#5aa45a';
+      g.beginPath();
+      oval(-0.1 * w, -0.36 * h, 0.06 * w, 0.14 * h, -0.4)(g);
+      oval(0, -0.4 * h, 0.06 * w, 0.14 * h)(g);
+      oval(0.1 * w, -0.36 * h, 0.06 * w, 0.14 * h, 0.4)(g);
+      g.fill();
+    } else if (k === 'rose') {
+      g.strokeStyle = ink;
+      g.globalAlpha *= 0.5;
+      g.lineWidth = Math.max(1, 0.025 * m);
+      g.lineCap = 'round';
+      g.beginPath();
+      for (let i = 0; i <= 60; i++) {
+        const a = (i / 60) * Math.PI * 4;
+        const r = (0.02 + (i / 60) * 0.2) * m;
+        const x = Math.cos(a) * r, y = Math.sin(a) * r;
+        if (i) g.lineTo(x, y);
+        else g.moveTo(x, y);
+      }
+      g.stroke();
+    }
+    g.restore();
   }
   // A shape's own color, used while its color is empty: a warm white for
   // words, a muted purple for every other shape.
@@ -4494,8 +4633,38 @@ export function setup(ctx: Ctx, overrides?: any) {
           g.fillText(text, 0, 0);
         }
       } else {
-        shapePath(g, sh, w, h);
-        g.fill();
+        if (sh.kind === 'stripes') {
+          // Bands of its colors, one after another, across or down.
+          const cols = [fill].concat(sh.stops || []);
+          const down = sh.dir !== 'right';
+          cols.forEach((c, i) => {
+            g.fillStyle = hexOr(c, fill);
+            if (down) g.fillRect(-w / 2, -h / 2 + (i * h) / cols.length - 0.5, w, h / cols.length + 1);
+            else g.fillRect(-w / 2 + (i * w) / cols.length - 0.5, -h / 2, w / cols.length + 1, h);
+          });
+        } else if (sh.kind === 'broken') {
+          // Two halves of a heart, split along a zigzag and moved apart a
+          // little, so the crack shows whatever is behind.
+          const zig: [number, number][] = [[0.02 * w, -0.6 * h], [0.02 * w, -0.4 * h], [-0.06 * w, -0.15 * h], [0.06 * w, 0.02 * h], [-0.05 * w, 0.2 * h], [0.02 * w, 0.6 * h]];
+          for (const side of [-1, 1]) {
+            g.save();
+            g.translate(side * 0.03 * w, 0);
+            g.rotate(side * 0.05);
+            g.beginPath();
+            zig.forEach(([x, y], i) => (i ? g.lineTo(x, y) : g.moveTo(x, y)));
+            g.lineTo(side * w, 0.6 * h);
+            g.lineTo(side * w, -0.6 * h);
+            g.closePath();
+            g.clip();
+            shapePath(g, sh, w, h);
+            g.fill();
+            g.restore();
+          }
+        } else {
+          shapePath(g, sh, w, h);
+          g.fill();
+        }
+        if (sh.kind in SHAPE_PARTS) shapeDetails(g, sh, w, h);
         // An outline of its own, drawn over the fill.
         const lw = Math.min(40, Math.max(0, numOr(sh.lineW, 0)));
         if (lw > 0) {
@@ -14421,6 +14590,18 @@ export function setup(ctx: Ctx, overrides?: any) {
     { id: 'moon', label: 'Crescent moon' },
     { id: 'cloud', label: 'Cloud' },
     { id: 'sparkle', label: 'Sparkle' },
+    { id: 'cat', label: 'Cat face' },
+    { id: 'dog', label: 'Dog face' },
+    { id: 'bunny', label: 'Bunny face' },
+    { id: 'paw', label: 'Paw print' },
+    { id: 'bone', label: 'Bone' },
+    { id: 'fish', label: 'Fish' },
+    { id: 'carrot', label: 'Carrot' },
+    { id: 'bat', label: 'Bat' },
+    { id: 'rose', label: 'Rose' },
+    { id: 'checker', label: 'Checkerboard strip' },
+    { id: 'broken', label: 'Broken heart' },
+    { id: 'stripes', label: 'Stripes' },
   ];
   const SHAPES_MAX = 40;
   // Whether the Background is set to a design while the Studio is drawn, so
@@ -14481,7 +14662,7 @@ export function setup(ctx: Ctx, overrides?: any) {
   });
   function newShape(kind: VideoShapeDef['kind']): VideoShapeDef {
     const n = shapesNow().length;
-    const size: Record<string, [number, number]> = { rect: [520, 300], round: [520, 300], ellipse: [360, 360], tri: [420, 360], line: [640, 14], text: [760, 120], heart: [340, 320], star: [360, 360], poly: [360, 360], diamond: [300, 380], arrow: [480, 220], bubble: [520, 340], ring: [360, 360], moon: [300, 300], cloud: [520, 300], sparkle: [260, 260] };
+    const size: Record<string, [number, number]> = { rect: [520, 300], round: [520, 300], ellipse: [360, 360], tri: [420, 360], line: [640, 14], text: [760, 120], heart: [340, 320], star: [360, 360], poly: [360, 360], diamond: [300, 380], arrow: [480, 220], bubble: [520, 340], ring: [360, 360], moon: [300, 300], cloud: [520, 300], sparkle: [260, 260], cat: [300, 300], dog: [320, 300], bunny: [280, 340], paw: [240, 240], bone: [300, 120], fish: [300, 180], carrot: [160, 320], bat: [420, 220], rose: [260, 260], checker: [900, 80], broken: [320, 300], stripes: [900, 120] };
     const [w, h] = size[kind] || [400, 240];
     return {
       id: rid('sh').replace(/[^a-z0-9]/gi, '').slice(0, 24),
@@ -14663,6 +14844,25 @@ export function setup(ctx: Ctx, overrides?: any) {
         sh.tail = v;
         changed();
       }));
+    if (['cat', 'dog', 'bunny', 'fish', 'rose'].indexOf(sh.kind) >= 0)
+      r.editor.appendChild(colorRow('shapeInk', sh.kind === 'rose' ? 'Color of the curl' : 'Color of the eyes', 'A dark brown by default.', '--af-none', '#3b2b2b', 'Use dark brown', changed, {
+        get: () => sh.ink || '',
+        put: (hex) => {
+          sh.ink = hex;
+        },
+      }));
+    if (['cat', 'dog', 'bunny'].indexOf(sh.kind) >= 0) {
+      const bl = button('Pink cheeks', () => {
+        sh.blush = sh.blush === false;
+        bl.setAttribute('aria-pressed', sh.blush !== false ? 'true' : 'false');
+        changed();
+      });
+      bl.setAttribute('aria-pressed', sh.blush !== false ? 'true' : 'false');
+      bl.setAttribute('data-af-shape-act', 'blush');
+      const br = el('<div class="af-row"></div>');
+      br.appendChild(bl);
+      r.editor.appendChild(br);
+    }
     if (sh.kind !== 'text') {
       r.editor.appendChild(colorRow('shapeLine', 'Color of the outline', 'White by default.', '--af-none', '#ffffff', 'Use white', changed, {
         get: () => sh.line || '',
@@ -15622,6 +15822,9 @@ export function setup(ctx: Ctx, overrides?: any) {
     { id: 'scenes', label: 'Scenes' },
     { id: 'styles', label: 'Styles' },
     { id: 'colors', label: 'Colors' },
+    { id: 'pets', label: 'Pets' },
+    { id: 'aesthetics', label: 'Aesthetics' },
+    { id: 'pride', label: 'Pride' },
   ];
   let tplCat = 'all';
   const shape = (kind: VideoShapeDef['kind'], x: number, y: number, w: number, h: number, fill: string, more: Partial<VideoShapeDef> = {}): VideoShapeDef =>
@@ -16437,6 +16640,636 @@ export function setup(ctx: Ctx, overrides?: any) {
       },
       back: backOf('Pink', { color: '#7a1f55', fill: 'radial', stops: ['#2e0b20'] }),
       cat: 'colors',
+    },
+    {
+      id: 'cats',
+      name: 'Cats',
+      suits: 'Soft peach colors and cats, for light and happy scenes.',
+      look: {
+        videoFont: 'round', videoSize: 104, videoInk: '#4a2c20', videoWords: 'fade', videoPlace: 'middle', videoQuotes: true, videoWordFill: 'solid',
+        videoWordStops: ['#f2b880'], videoWordDir: 'down', videoWordShadow: false, videoWordShadowInk: '', videoWordShadowDark: 55,
+        videoWordShadowSoft: 14, videoWordShadowFar: 2,
+        videoBox: false, videoBoxColor: '#000000', videoBoxClear: 40, videoBoxRound: 16, videoBoxWidth: 'fit',
+        videoOwnColors: true, videoKindColors: { narrator: '#f4a77e', character: '#f4a77e', persona: '#f4a77e', npc: '#f4a77e' },
+        videoBackRules: false,
+        videoCaptions: true, videoCaptionInk: '#b05a3a', videoCapFill: 'solid', videoCapStops: ['#f2b880'], videoCapDir: 'right',
+        videoNameFont: 'round', videoNameSize: 104, videoNameColor: 'words', videoNameFill: 'solid', videoNameStops: ['#f2b880'],
+        videoNameDir: 'right', videoNameShadow: false, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18,
+        videoNameShadowFar: 2,
+        videoPicShape: 'circle', videoPicSize: 150, videoPicRing: true, videoPicRingWidth: 4, videoPicMove: true, videoTwo: true,
+        videoMoodPics: true,
+        videoEdges: 0, videoEdgeColor: '', videoMove: 'dissolve', videoMoveSecs: 0.5,
+        videoTitleOn: true, videoFadeOut: 1.5, videoBylineInk: '#b05a3a', videoBylineFont: '', videoBylineFill: 'solid',
+        videoBylineStops: ['#f2b880'], videoBylineDir: 'right', videoBylineShadow: false, videoBylineShadowInk: '', videoBylineShadowDark: 65,
+        videoBylineShadowSoft: 18, videoBylineShadowFar: 0,
+        studioMusic: true,
+      },
+      back: backOf('Cats', {
+        kind: 'design', color: '#ffe7d8', fill: 'linear', stops: ['#f9c9b0'], dir: 'down',
+        shapes: [
+          shape('cat', 0.08, 0.15, 170, 170, '#f4a77e'),
+          shape('cat', 0.92, 0.82, 190, 190, '#f7b58f', { rot: -10 }),
+          shape('paw', 0.9, 0.14, 90, 90, '#e8967a', { clear: 35, rot: 20 }),
+          shape('paw', 0.1, 0.85, 90, 90, '#e8967a', { clear: 35, rot: -15 }),
+          shape('paw', 0.2, 0.92, 60, 60, '#e8967a', { clear: 45, rot: -30 }),
+          shape('fish', 0.8, 0.08, 120, 70, '#7fb3d5', { rot: -12 }),
+          shape('fish', 0.2, 0.07, 100, 60, '#7fb3d5', { rot: 10, flipX: true }),
+        ],
+      }),
+      cat: 'pets',
+    },
+    {
+      id: 'dogs',
+      name: 'Dogs',
+      suits: 'Soft blue colors and dogs, for light and happy scenes.',
+      look: {
+        videoFont: 'round', videoSize: 104, videoInk: '#22344d', videoWords: 'fade', videoPlace: 'middle', videoQuotes: true, videoWordFill: 'solid',
+        videoWordStops: ['#f2b880'], videoWordDir: 'down', videoWordShadow: false, videoWordShadowInk: '', videoWordShadowDark: 55,
+        videoWordShadowSoft: 14, videoWordShadowFar: 2,
+        videoBox: false, videoBoxColor: '#000000', videoBoxClear: 40, videoBoxRound: 16, videoBoxWidth: 'fit',
+        videoOwnColors: true, videoKindColors: { narrator: '#7a9cc6', character: '#7a9cc6', persona: '#7a9cc6', npc: '#7a9cc6' },
+        videoBackRules: false,
+        videoCaptions: true, videoCaptionInk: '#3d6a9e', videoCapFill: 'solid', videoCapStops: ['#f2b880'], videoCapDir: 'right',
+        videoNameFont: 'round', videoNameSize: 104, videoNameColor: 'words', videoNameFill: 'solid', videoNameStops: ['#f2b880'],
+        videoNameDir: 'right', videoNameShadow: false, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18,
+        videoNameShadowFar: 2,
+        videoPicShape: 'circle', videoPicSize: 150, videoPicRing: true, videoPicRingWidth: 4, videoPicMove: true, videoTwo: true,
+        videoMoodPics: true,
+        videoEdges: 0, videoEdgeColor: '', videoMove: 'dissolve', videoMoveSecs: 0.5,
+        videoTitleOn: true, videoFadeOut: 1.5, videoBylineInk: '#3d6a9e', videoBylineFont: '', videoBylineFill: 'solid',
+        videoBylineStops: ['#f2b880'], videoBylineDir: 'right', videoBylineShadow: false, videoBylineShadowInk: '', videoBylineShadowDark: 65,
+        videoBylineShadowSoft: 18, videoBylineShadowFar: 0,
+        studioMusic: true,
+      },
+      back: backOf('Dogs', {
+        kind: 'design', color: '#e6f0fc', fill: 'linear', stops: ['#c9dcf3'], dir: 'down',
+        shapes: [
+          shape('dog', 0.09, 0.16, 180, 170, '#c49a6c'),
+          shape('dog', 0.91, 0.83, 190, 180, '#d8b48a', { rot: 8 }),
+          shape('bone', 0.9, 0.12, 130, 52, '#fff7e6', { rot: -20, lineW: 3, line: '#c8b08a' }),
+          shape('bone', 0.12, 0.86, 110, 44, '#fff7e6', { rot: 18, lineW: 3, line: '#c8b08a' }),
+          shape('paw', 0.78, 0.08, 70, 70, '#7a9cc6', { clear: 40, rot: 15 }),
+          shape('paw', 0.24, 0.93, 60, 60, '#7a9cc6', { clear: 45, rot: -20 }),
+        ],
+      }),
+      cat: 'pets',
+    },
+    {
+      id: 'bunnies',
+      name: 'Bunnies',
+      suits: 'Soft lilac colors and bunnies, for light and happy scenes.',
+      look: {
+        videoFont: 'round', videoSize: 104, videoInk: '#3b2a55', videoWords: 'fade', videoPlace: 'middle', videoQuotes: true, videoWordFill: 'solid',
+        videoWordStops: ['#f2b880'], videoWordDir: 'down', videoWordShadow: false, videoWordShadowInk: '', videoWordShadowDark: 55,
+        videoWordShadowSoft: 14, videoWordShadowFar: 2,
+        videoBox: false, videoBoxColor: '#000000', videoBoxClear: 40, videoBoxRound: 16, videoBoxWidth: 'fit',
+        videoOwnColors: true, videoKindColors: { narrator: '#b9a0e0', character: '#b9a0e0', persona: '#b9a0e0', npc: '#b9a0e0' },
+        videoBackRules: false,
+        videoCaptions: true, videoCaptionInk: '#7a5aa8', videoCapFill: 'solid', videoCapStops: ['#f2b880'], videoCapDir: 'right',
+        videoNameFont: 'round', videoNameSize: 104, videoNameColor: 'words', videoNameFill: 'solid', videoNameStops: ['#f2b880'],
+        videoNameDir: 'right', videoNameShadow: false, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18,
+        videoNameShadowFar: 2,
+        videoPicShape: 'circle', videoPicSize: 150, videoPicRing: true, videoPicRingWidth: 4, videoPicMove: true, videoTwo: true,
+        videoMoodPics: true,
+        videoEdges: 0, videoEdgeColor: '', videoMove: 'dissolve', videoMoveSecs: 0.5,
+        videoTitleOn: true, videoFadeOut: 1.5, videoBylineInk: '#7a5aa8', videoBylineFont: '', videoBylineFill: 'solid',
+        videoBylineStops: ['#f2b880'], videoBylineDir: 'right', videoBylineShadow: false, videoBylineShadowInk: '', videoBylineShadowDark: 65,
+        videoBylineShadowSoft: 18, videoBylineShadowFar: 0,
+        studioMusic: true,
+      },
+      back: backOf('Bunnies', {
+        kind: 'design', color: '#f2eafc', fill: 'linear', stops: ['#dccdf3'], dir: 'down',
+        shapes: [
+          shape('bunny', 0.08, 0.15, 150, 190, '#ffffff'),
+          shape('bunny', 0.92, 0.82, 160, 200, '#fbf4ff', { rot: -8 }),
+          shape('carrot', 0.9, 0.14, 60, 120, '#f08a3c', { rot: 25 }),
+          shape('carrot', 0.13, 0.86, 54, 108, '#f08a3c', { rot: -25 }),
+          shape('paw', 0.78, 0.09, 60, 60, '#b9a0e0', { clear: 40, rot: 10 }),
+          shape('paw', 0.24, 0.92, 56, 56, '#b9a0e0', { clear: 45, rot: -10 }),
+        ],
+      }),
+      cat: 'pets',
+    },
+    {
+      id: 'goth',
+      name: 'Goth',
+      suits: 'Dark and elegant, with bats, roses and a crescent moon.',
+      look: {
+        videoFont: 'book', videoSize: 102, videoInk: '#ebe6f0', videoWords: 'blur', videoPlace: 'middle', videoQuotes: true, videoWordFill: 'solid',
+        videoWordStops: ['#f2b880'], videoWordDir: 'down', videoWordShadow: true, videoWordShadowInk: '#000000', videoWordShadowDark: 70,
+        videoWordShadowSoft: 14, videoWordShadowFar: 0,
+        videoBox: false, videoBoxColor: '#000000', videoBoxClear: 40, videoBoxRound: 16, videoBoxWidth: 'fit',
+        videoOwnColors: true, videoKindColors: { narrator: '#c8c4d4', character: '#c8c4d4', persona: '#c8c4d4', npc: '#c8c4d4' },
+        videoBackRules: false,
+        videoCaptions: true, videoCaptionInk: '#b9a8d0', videoCapFill: 'solid', videoCapStops: ['#f2b880'], videoCapDir: 'right',
+        videoNameFont: 'book', videoNameSize: 104, videoNameColor: 'words', videoNameFill: 'solid', videoNameStops: ['#f2b880'],
+        videoNameDir: 'right', videoNameShadow: false, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18,
+        videoNameShadowFar: 2,
+        videoPicShape: 'circle', videoPicSize: 140, videoPicRing: true, videoPicRingWidth: 2, videoPicMove: true, videoTwo: true,
+        videoMoodPics: true,
+        videoEdges: 55, videoEdgeColor: '#000000', videoMove: 'black', videoMoveSecs: 0.8,
+        videoTitleOn: true, videoFadeOut: 2.5, videoBylineInk: '#c8c4d4', videoBylineFont: '', videoBylineFill: 'solid',
+        videoBylineStops: ['#f2b880'], videoBylineDir: 'right', videoBylineShadow: true, videoBylineShadowInk: '#000000', videoBylineShadowDark: 70,
+        videoBylineShadowSoft: 14, videoBylineShadowFar: 0,
+        studioMusic: true,
+      },
+      back: backOf('Goth', {
+        kind: 'design', color: '#16101c', fill: 'linear', stops: ['#0a070d'], dir: 'down',
+        shapes: [
+          shape('rect', 0.5, 0.05, 1700, 2, '#a898c0', { clear: 25 }),
+          shape('rect', 0.5, 0.95, 1700, 2, '#a898c0', { clear: 25 }),
+          shape('rect', 0.5, 0.065, 1600, 1, '#8a7aa0', { clear: 55 }),
+          shape('rect', 0.5, 0.935, 1600, 1, '#8a7aa0', { clear: 55 }),
+          shape('moon', 0.88, 0.18, 120, 120, '#d8d4e0', { clear: 10 }),
+          shape('bat', 0.12, 0.16, 170, 90, '#7a6a94'),
+          shape('bat', 0.24, 0.1, 100, 54, '#7a6a94', { clear: 25 }),
+          shape('rose', 0.1, 0.84, 120, 120, '#8a1838', { ink: '#2a0510' }),
+          shape('rose', 0.17, 0.88, 70, 70, '#7a1838', { ink: '#2a0510' }),
+          shape('rose', 0.9, 0.86, 100, 100, '#8a1838', { ink: '#2a0510' }),
+        ],
+      }),
+      cat: 'aesthetics',
+    },
+    {
+      id: 'emo',
+      name: 'Emo',
+      suits: 'Black with hot pink, stars, broken hearts and a checkerboard.',
+      look: {
+        videoFont: 'clean', videoSize: 108, videoInk: '#ffffff', videoWords: 'appear', videoPlace: 'middle', videoQuotes: true,
+        videoWordFill: 'solid', videoWordStops: ['#f2b880'], videoWordDir: 'down', videoWordShadow: true, videoWordShadowInk: '#ff2d8a',
+        videoWordShadowDark: 40, videoWordShadowSoft: 8, videoWordShadowFar: 0,
+        videoBox: false, videoBoxColor: '#000000', videoBoxClear: 40, videoBoxRound: 16, videoBoxWidth: 'fit',
+        videoOwnColors: true, videoKindColors: { narrator: '#ff2d8a', character: '#ff2d8a', persona: '#ff2d8a', npc: '#ff2d8a' },
+        videoBackRules: false,
+        videoCaptions: true, videoCaptionInk: '#ff2d8a', videoCapFill: 'solid', videoCapStops: ['#f2b880'], videoCapDir: 'right',
+        videoNameFont: 'clean', videoNameSize: 110, videoNameColor: 'words', videoNameFill: 'solid', videoNameStops: ['#f2b880'],
+        videoNameDir: 'right', videoNameShadow: false, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18,
+        videoNameShadowFar: 2,
+        videoPicShape: 'rounded', videoPicSize: 140, videoPicRing: true, videoPicRingWidth: 3, videoPicMove: true, videoTwo: true,
+        videoMoodPics: true,
+        videoEdges: 30, videoEdgeColor: '#000000', videoMove: 'slide', videoMoveSecs: 0.35,
+        videoTitleOn: true, videoFadeOut: 1, videoBylineInk: '#ff2d8a', videoBylineFont: '', videoBylineFill: 'solid', videoBylineStops: ['#f2b880'],
+        videoBylineDir: 'right', videoBylineShadow: false, videoBylineShadowInk: '', videoBylineShadowDark: 65, videoBylineShadowSoft: 18,
+        videoBylineShadowFar: 0,
+        studioMusic: true,
+      },
+      back: backOf('Emo', {
+        kind: 'design', color: '#0c0c0e', fill: 'solid', stops: [], dir: 'down',
+        shapes: [
+          shape('checker', 0.5, 0.04, 2400, 60, '#f2f2f2'),
+          shape('checker', 0.5, 0.96, 2400, 60, '#f2f2f2'),
+          shape('star', 0.1, 0.2, 90, 90, '#ff2d8a', { points: 5 }),
+          shape('star', 0.9, 0.78, 110, 110, '#ff2d8a', { points: 5, rot: 12 }),
+          shape('star', 0.84, 0.2, 50, 50, '#ff2d8a', { clear: 30 }),
+          shape('broken', 0.12, 0.8, 120, 110, '#e0102a', { rot: -10 }),
+          shape('broken', 0.9, 0.36, 70, 64, '#e0102a', { rot: 10, clear: 20 }),
+        ],
+      }),
+      cat: 'aesthetics',
+    },
+    {
+      id: 'kawaii',
+      name: 'Kawaii',
+      suits: 'Pastel pink, baby blue and mint, with hearts, stars and clouds.',
+      look: {
+        videoFont: 'round', videoSize: 104, videoInk: '#5a3a5e', videoWords: 'fade', videoPlace: 'middle', videoQuotes: true, videoWordFill: 'solid',
+        videoWordStops: ['#f2b880'], videoWordDir: 'down', videoWordShadow: false, videoWordShadowInk: '', videoWordShadowDark: 55,
+        videoWordShadowSoft: 14, videoWordShadowFar: 2,
+        videoBox: false, videoBoxColor: '#000000', videoBoxClear: 40, videoBoxRound: 16, videoBoxWidth: 'fit',
+        videoOwnColors: true, videoKindColors: { narrator: '#ff9ec7', character: '#ff9ec7', persona: '#ff9ec7', npc: '#ff9ec7' },
+        videoBackRules: false,
+        videoCaptions: true, videoCaptionInk: '#d0609a', videoCapFill: 'solid', videoCapStops: ['#f2b880'], videoCapDir: 'right',
+        videoNameFont: 'round', videoNameSize: 104, videoNameColor: 'words', videoNameFill: 'solid', videoNameStops: ['#f2b880'],
+        videoNameDir: 'right', videoNameShadow: false, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18,
+        videoNameShadowFar: 2,
+        videoPicShape: 'circle', videoPicSize: 150, videoPicRing: true, videoPicRingWidth: 5, videoPicMove: true, videoTwo: true,
+        videoMoodPics: true,
+        videoEdges: 0, videoEdgeColor: '', videoMove: 'dissolve', videoMoveSecs: 0.5,
+        videoTitleOn: true, videoFadeOut: 1.5, videoBylineInk: '#d0609a', videoBylineFont: '', videoBylineFill: 'solid',
+        videoBylineStops: ['#f2b880'], videoBylineDir: 'right', videoBylineShadow: false, videoBylineShadowInk: '', videoBylineShadowDark: 65,
+        videoBylineShadowSoft: 18, videoBylineShadowFar: 0,
+        studioMusic: true,
+      },
+      back: backOf('Kawaii', {
+        kind: 'design', color: '#ffe4f0', fill: 'linear', stops: ['#e8f1ff', '#e2fbf1'], dir: 'down',
+        shapes: [
+          shape('cloud', 0.12, 0.14, 240, 140, '#ffffff', { clear: 10 }),
+          shape('cloud', 0.88, 0.86, 260, 150, '#ffffff', { clear: 10 }),
+          shape('heart', 0.9, 0.15, 90, 84, '#ff9ec7', { rot: 10 }),
+          shape('heart', 0.1, 0.84, 80, 74, '#ff9ec7', { rot: -10 }),
+          shape('star', 0.78, 0.1, 60, 60, '#ffe58a'),
+          shape('star', 0.22, 0.9, 54, 54, '#ffe58a', { rot: 15 }),
+          shape('sparkle', 0.94, 0.4, 50, 50, '#ffffff'),
+          shape('sparkle', 0.06, 0.6, 44, 44, '#ffffff'),
+          shape('sparkle', 0.3, 0.08, 36, 36, '#ffffff'),
+          shape('sparkle', 0.7, 0.92, 40, 40, '#ffffff'),
+        ],
+      }),
+      cat: 'aesthetics',
+    },
+    {
+      id: 'pride',
+      name: 'Pride',
+      suits: 'The colors of the rainbow pride flag.',
+      look: {
+        videoFont: 'round', videoSize: 104, videoInk: '#f6f4fb', videoWords: 'fade', videoPlace: 'middle', videoQuotes: true, videoWordFill: 'solid',
+        videoWordStops: ['#f2b880'], videoWordDir: 'down', videoWordShadow: true, videoWordShadowInk: '', videoWordShadowDark: 55,
+        videoWordShadowSoft: 14, videoWordShadowFar: 2,
+        videoBox: false, videoBoxColor: '#000000', videoBoxClear: 40, videoBoxRound: 16, videoBoxWidth: 'fit',
+        videoOwnColors: true, videoKindColors: { narrator: '#ff8c00', character: '#ff8c00', persona: '#ff8c00', npc: '#ff8c00' },
+        videoBackRules: false,
+        videoCaptions: true, videoCaptionInk: '#ff8c00', videoCapFill: 'solid', videoCapStops: ['#f2b880'], videoCapDir: 'right',
+        videoNameFont: 'round', videoNameSize: 100, videoNameColor: 'words', videoNameFill: 'solid', videoNameStops: ['#f2b880'],
+        videoNameDir: 'right', videoNameShadow: true, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18,
+        videoNameShadowFar: 2,
+        videoPicShape: 'circle', videoPicSize: 150, videoPicRing: true, videoPicRingWidth: 4, videoPicMove: true, videoTwo: true,
+        videoMoodPics: true,
+        videoEdges: 25, videoEdgeColor: '#000000', videoMove: 'fade', videoMoveSecs: 0.5,
+        videoTitleOn: true, videoFadeOut: 1.5, videoBylineInk: '#ff8c00', videoBylineFont: '', videoBylineFill: 'solid',
+        videoBylineStops: ['#f2b880'], videoBylineDir: 'right', videoBylineShadow: true, videoBylineShadowInk: '', videoBylineShadowDark: 65,
+        videoBylineShadowSoft: 18, videoBylineShadowFar: 0,
+        studioMusic: true,
+      },
+      back: backOf('Pride', {
+        kind: 'design', color: '#1c1a24', fill: 'radial', stops: ['#0e0d14'], dir: 'down',
+        shapes: [
+          shape('stripes', 0.5, 0.9, 4000, 110, '#e40303', { grad: 'linear', stops: ['#ff8c00', '#ffed00', '#008026', '#24408e', '#732982'] }),
+        ],
+      }),
+      cat: 'pride',
+    },
+    {
+      id: 'lesbian',
+      name: 'Lesbian',
+      suits: 'The colors of the lesbian pride flag.',
+      look: {
+        videoFont: 'round', videoSize: 104, videoInk: '#f6f4fb', videoWords: 'fade', videoPlace: 'middle', videoQuotes: true, videoWordFill: 'solid',
+        videoWordStops: ['#f2b880'], videoWordDir: 'down', videoWordShadow: true, videoWordShadowInk: '', videoWordShadowDark: 55,
+        videoWordShadowSoft: 14, videoWordShadowFar: 2,
+        videoBox: false, videoBoxColor: '#000000', videoBoxClear: 40, videoBoxRound: 16, videoBoxWidth: 'fit',
+        videoOwnColors: true, videoKindColors: { narrator: '#ef7627', character: '#ef7627', persona: '#ef7627', npc: '#ef7627' },
+        videoBackRules: false,
+        videoCaptions: true, videoCaptionInk: '#ef7627', videoCapFill: 'solid', videoCapStops: ['#f2b880'], videoCapDir: 'right',
+        videoNameFont: 'round', videoNameSize: 100, videoNameColor: 'words', videoNameFill: 'solid', videoNameStops: ['#f2b880'],
+        videoNameDir: 'right', videoNameShadow: true, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18,
+        videoNameShadowFar: 2,
+        videoPicShape: 'circle', videoPicSize: 150, videoPicRing: true, videoPicRingWidth: 4, videoPicMove: true, videoTwo: true,
+        videoMoodPics: true,
+        videoEdges: 25, videoEdgeColor: '#000000', videoMove: 'fade', videoMoveSecs: 0.5,
+        videoTitleOn: true, videoFadeOut: 1.5, videoBylineInk: '#ef7627', videoBylineFont: '', videoBylineFill: 'solid',
+        videoBylineStops: ['#f2b880'], videoBylineDir: 'right', videoBylineShadow: true, videoBylineShadowInk: '', videoBylineShadowDark: 65,
+        videoBylineShadowSoft: 18, videoBylineShadowFar: 0,
+        studioMusic: true,
+      },
+      back: backOf('Lesbian', {
+        kind: 'design', color: '#1c1a24', fill: 'radial', stops: ['#0e0d14'], dir: 'down',
+        shapes: [
+          shape('stripes', 0.5, 0.9, 4000, 110, '#d52d00', { grad: 'linear', stops: ['#ef7627', '#ff9a56', '#ffffff', '#d162a4', '#b55690', '#a30262'] }),
+        ],
+      }),
+      cat: 'pride',
+    },
+    {
+      id: 'gay',
+      name: 'Gay',
+      suits: 'The colors of the gay men’s pride flag.',
+      look: {
+        videoFont: 'round', videoSize: 104, videoInk: '#f6f4fb', videoWords: 'fade', videoPlace: 'middle', videoQuotes: true, videoWordFill: 'solid',
+        videoWordStops: ['#f2b880'], videoWordDir: 'down', videoWordShadow: true, videoWordShadowInk: '', videoWordShadowDark: 55,
+        videoWordShadowSoft: 14, videoWordShadowFar: 2,
+        videoBox: false, videoBoxColor: '#000000', videoBoxClear: 40, videoBoxRound: 16, videoBoxWidth: 'fit',
+        videoOwnColors: true, videoKindColors: { narrator: '#26ceaa', character: '#26ceaa', persona: '#26ceaa', npc: '#26ceaa' },
+        videoBackRules: false,
+        videoCaptions: true, videoCaptionInk: '#26ceaa', videoCapFill: 'solid', videoCapStops: ['#f2b880'], videoCapDir: 'right',
+        videoNameFont: 'round', videoNameSize: 100, videoNameColor: 'words', videoNameFill: 'solid', videoNameStops: ['#f2b880'],
+        videoNameDir: 'right', videoNameShadow: true, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18,
+        videoNameShadowFar: 2,
+        videoPicShape: 'circle', videoPicSize: 150, videoPicRing: true, videoPicRingWidth: 4, videoPicMove: true, videoTwo: true,
+        videoMoodPics: true,
+        videoEdges: 25, videoEdgeColor: '#000000', videoMove: 'fade', videoMoveSecs: 0.5,
+        videoTitleOn: true, videoFadeOut: 1.5, videoBylineInk: '#26ceaa', videoBylineFont: '', videoBylineFill: 'solid',
+        videoBylineStops: ['#f2b880'], videoBylineDir: 'right', videoBylineShadow: true, videoBylineShadowInk: '', videoBylineShadowDark: 65,
+        videoBylineShadowSoft: 18, videoBylineShadowFar: 0,
+        studioMusic: true,
+      },
+      back: backOf('Gay', {
+        kind: 'design', color: '#1c1a24', fill: 'radial', stops: ['#0e0d14'], dir: 'down',
+        shapes: [
+          shape('stripes', 0.5, 0.9, 4000, 110, '#078d70', { grad: 'linear', stops: ['#26ceaa', '#98e8c1', '#ffffff', '#7bade2', '#5049cc', '#3d1a78'] }),
+        ],
+      }),
+      cat: 'pride',
+    },
+    {
+      id: 'bi',
+      name: 'Bisexual',
+      suits: 'The colors of the bisexual pride flag.',
+      look: {
+        videoFont: 'round', videoSize: 104, videoInk: '#f6f4fb', videoWords: 'fade', videoPlace: 'middle', videoQuotes: true, videoWordFill: 'solid',
+        videoWordStops: ['#f2b880'], videoWordDir: 'down', videoWordShadow: true, videoWordShadowInk: '', videoWordShadowDark: 55,
+        videoWordShadowSoft: 14, videoWordShadowFar: 2,
+        videoBox: false, videoBoxColor: '#000000', videoBoxClear: 40, videoBoxRound: 16, videoBoxWidth: 'fit',
+        videoOwnColors: true, videoKindColors: { narrator: '#d60270', character: '#d60270', persona: '#d60270', npc: '#d60270' },
+        videoBackRules: false,
+        videoCaptions: true, videoCaptionInk: '#d60270', videoCapFill: 'solid', videoCapStops: ['#f2b880'], videoCapDir: 'right',
+        videoNameFont: 'round', videoNameSize: 100, videoNameColor: 'words', videoNameFill: 'solid', videoNameStops: ['#f2b880'],
+        videoNameDir: 'right', videoNameShadow: true, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18,
+        videoNameShadowFar: 2,
+        videoPicShape: 'circle', videoPicSize: 150, videoPicRing: true, videoPicRingWidth: 4, videoPicMove: true, videoTwo: true,
+        videoMoodPics: true,
+        videoEdges: 25, videoEdgeColor: '#000000', videoMove: 'fade', videoMoveSecs: 0.5,
+        videoTitleOn: true, videoFadeOut: 1.5, videoBylineInk: '#d60270', videoBylineFont: '', videoBylineFill: 'solid',
+        videoBylineStops: ['#f2b880'], videoBylineDir: 'right', videoBylineShadow: true, videoBylineShadowInk: '', videoBylineShadowDark: 65,
+        videoBylineShadowSoft: 18, videoBylineShadowFar: 0,
+        studioMusic: true,
+      },
+      back: backOf('Bisexual', {
+        kind: 'design', color: '#1c1a24', fill: 'radial', stops: ['#0e0d14'], dir: 'down',
+        shapes: [
+          shape('stripes', 0.5, 0.9, 4000, 110, '#d60270', { grad: 'linear', stops: ['#d60270', '#9b4f96', '#0038a8', '#0038a8'] }),
+        ],
+      }),
+      cat: 'pride',
+    },
+    {
+      id: 'trans',
+      name: 'Transgender',
+      suits: 'The colors of the transgender pride flag.',
+      look: {
+        videoFont: 'round', videoSize: 104, videoInk: '#f6f4fb', videoWords: 'fade', videoPlace: 'middle', videoQuotes: true, videoWordFill: 'solid',
+        videoWordStops: ['#f2b880'], videoWordDir: 'down', videoWordShadow: true, videoWordShadowInk: '', videoWordShadowDark: 55,
+        videoWordShadowSoft: 14, videoWordShadowFar: 2,
+        videoBox: false, videoBoxColor: '#000000', videoBoxClear: 40, videoBoxRound: 16, videoBoxWidth: 'fit',
+        videoOwnColors: true, videoKindColors: { narrator: '#f5a9b8', character: '#f5a9b8', persona: '#f5a9b8', npc: '#f5a9b8' },
+        videoBackRules: false,
+        videoCaptions: true, videoCaptionInk: '#f5a9b8', videoCapFill: 'solid', videoCapStops: ['#f2b880'], videoCapDir: 'right',
+        videoNameFont: 'round', videoNameSize: 100, videoNameColor: 'words', videoNameFill: 'solid', videoNameStops: ['#f2b880'],
+        videoNameDir: 'right', videoNameShadow: true, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18,
+        videoNameShadowFar: 2,
+        videoPicShape: 'circle', videoPicSize: 150, videoPicRing: true, videoPicRingWidth: 4, videoPicMove: true, videoTwo: true,
+        videoMoodPics: true,
+        videoEdges: 25, videoEdgeColor: '#000000', videoMove: 'fade', videoMoveSecs: 0.5,
+        videoTitleOn: true, videoFadeOut: 1.5, videoBylineInk: '#f5a9b8', videoBylineFont: '', videoBylineFill: 'solid',
+        videoBylineStops: ['#f2b880'], videoBylineDir: 'right', videoBylineShadow: true, videoBylineShadowInk: '', videoBylineShadowDark: 65,
+        videoBylineShadowSoft: 18, videoBylineShadowFar: 0,
+        studioMusic: true,
+      },
+      back: backOf('Transgender', {
+        kind: 'design', color: '#1c1a24', fill: 'radial', stops: ['#0e0d14'], dir: 'down',
+        shapes: [
+          shape('stripes', 0.5, 0.9, 4000, 110, '#5bcefa', { grad: 'linear', stops: ['#f5a9b8', '#ffffff', '#f5a9b8', '#5bcefa'] }),
+        ],
+      }),
+      cat: 'pride',
+    },
+    {
+      id: 'queer',
+      name: 'Queer',
+      suits: 'The colors of the queer pride flag.',
+      look: {
+        videoFont: 'round', videoSize: 104, videoInk: '#f6f4fb', videoWords: 'fade', videoPlace: 'middle', videoQuotes: true, videoWordFill: 'solid',
+        videoWordStops: ['#f2b880'], videoWordDir: 'down', videoWordShadow: true, videoWordShadowInk: '', videoWordShadowDark: 55,
+        videoWordShadowSoft: 14, videoWordShadowFar: 2,
+        videoBox: false, videoBoxColor: '#000000', videoBoxClear: 40, videoBoxRound: 16, videoBoxWidth: 'fit',
+        videoOwnColors: true, videoKindColors: { narrator: '#00a2e8', character: '#00a2e8', persona: '#00a2e8', npc: '#00a2e8' },
+        videoBackRules: false,
+        videoCaptions: true, videoCaptionInk: '#00a2e8', videoCapFill: 'solid', videoCapStops: ['#f2b880'], videoCapDir: 'right',
+        videoNameFont: 'round', videoNameSize: 100, videoNameColor: 'words', videoNameFill: 'solid', videoNameStops: ['#f2b880'],
+        videoNameDir: 'right', videoNameShadow: true, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18,
+        videoNameShadowFar: 2,
+        videoPicShape: 'circle', videoPicSize: 150, videoPicRing: true, videoPicRingWidth: 4, videoPicMove: true, videoTwo: true,
+        videoMoodPics: true,
+        videoEdges: 25, videoEdgeColor: '#000000', videoMove: 'fade', videoMoveSecs: 0.5,
+        videoTitleOn: true, videoFadeOut: 1.5, videoBylineInk: '#00a2e8', videoBylineFont: '', videoBylineFill: 'solid',
+        videoBylineStops: ['#f2b880'], videoBylineDir: 'right', videoBylineShadow: true, videoBylineShadowInk: '', videoBylineShadowDark: 65,
+        videoBylineShadowSoft: 18, videoBylineShadowFar: 0,
+        studioMusic: true,
+      },
+      back: backOf('Queer', {
+        kind: 'design', color: '#1c1a24', fill: 'radial', stops: ['#0e0d14'], dir: 'down',
+        shapes: [
+          shape('stripes', 0.5, 0.9, 4000, 110, '#000000', { grad: 'linear', stops: ['#99d9ea', '#00a2e8', '#b5e61d', '#ffffff', '#ffc90e', '#fd6666'] }),
+        ],
+      }),
+      cat: 'pride',
+    },
+    {
+      id: 'intersex',
+      name: 'Intersex',
+      suits: 'The colors of the intersex pride flag.',
+      look: {
+        videoFont: 'round', videoSize: 104, videoInk: '#f6f4fb', videoWords: 'fade', videoPlace: 'middle', videoQuotes: true, videoWordFill: 'solid',
+        videoWordStops: ['#f2b880'], videoWordDir: 'down', videoWordShadow: true, videoWordShadowInk: '', videoWordShadowDark: 55,
+        videoWordShadowSoft: 14, videoWordShadowFar: 2,
+        videoBox: false, videoBoxColor: '#000000', videoBoxClear: 40, videoBoxRound: 16, videoBoxWidth: 'fit',
+        videoOwnColors: true, videoKindColors: { narrator: '#7902aa', character: '#7902aa', persona: '#7902aa', npc: '#7902aa' },
+        videoBackRules: false,
+        videoCaptions: true, videoCaptionInk: '#ffd800', videoCapFill: 'solid', videoCapStops: ['#f2b880'], videoCapDir: 'right',
+        videoNameFont: 'round', videoNameSize: 100, videoNameColor: 'words', videoNameFill: 'solid', videoNameStops: ['#f2b880'],
+        videoNameDir: 'right', videoNameShadow: true, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18,
+        videoNameShadowFar: 2,
+        videoPicShape: 'circle', videoPicSize: 150, videoPicRing: true, videoPicRingWidth: 4, videoPicMove: true, videoTwo: true,
+        videoMoodPics: true,
+        videoEdges: 25, videoEdgeColor: '#000000', videoMove: 'fade', videoMoveSecs: 0.5,
+        videoTitleOn: true, videoFadeOut: 1.5, videoBylineInk: '#ffd800', videoBylineFont: '', videoBylineFill: 'solid',
+        videoBylineStops: ['#f2b880'], videoBylineDir: 'right', videoBylineShadow: true, videoBylineShadowInk: '', videoBylineShadowDark: 65,
+        videoBylineShadowSoft: 18, videoBylineShadowFar: 0,
+        studioMusic: true,
+      },
+      back: backOf('Intersex', {
+        kind: 'design', color: '#1c1a24', fill: 'radial', stops: ['#0e0d14'], dir: 'down',
+        shapes: [
+          shape('rect', 0.5, 0.9, 4000, 110, '#ffd800'),
+          shape('ring', 0.5, 0.9, 96, 96, '#7902aa', { thick: 22 }),
+        ],
+      }),
+      cat: 'pride',
+    },
+    {
+      id: 'ace',
+      name: 'Asexual',
+      suits: 'The colors of the asexual pride flag.',
+      look: {
+        videoFont: 'round', videoSize: 104, videoInk: '#f6f4fb', videoWords: 'fade', videoPlace: 'middle', videoQuotes: true, videoWordFill: 'solid',
+        videoWordStops: ['#f2b880'], videoWordDir: 'down', videoWordShadow: true, videoWordShadowInk: '', videoWordShadowDark: 55,
+        videoWordShadowSoft: 14, videoWordShadowFar: 2,
+        videoBox: false, videoBoxColor: '#000000', videoBoxClear: 40, videoBoxRound: 16, videoBoxWidth: 'fit',
+        videoOwnColors: true, videoKindColors: { narrator: '#800080', character: '#800080', persona: '#800080', npc: '#800080' },
+        videoBackRules: false,
+        videoCaptions: true, videoCaptionInk: '#800080', videoCapFill: 'solid', videoCapStops: ['#f2b880'], videoCapDir: 'right',
+        videoNameFont: 'round', videoNameSize: 100, videoNameColor: 'words', videoNameFill: 'solid', videoNameStops: ['#f2b880'],
+        videoNameDir: 'right', videoNameShadow: true, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18,
+        videoNameShadowFar: 2,
+        videoPicShape: 'circle', videoPicSize: 150, videoPicRing: true, videoPicRingWidth: 4, videoPicMove: true, videoTwo: true,
+        videoMoodPics: true,
+        videoEdges: 25, videoEdgeColor: '#000000', videoMove: 'fade', videoMoveSecs: 0.5,
+        videoTitleOn: true, videoFadeOut: 1.5, videoBylineInk: '#800080', videoBylineFont: '', videoBylineFill: 'solid',
+        videoBylineStops: ['#f2b880'], videoBylineDir: 'right', videoBylineShadow: true, videoBylineShadowInk: '', videoBylineShadowDark: 65,
+        videoBylineShadowSoft: 18, videoBylineShadowFar: 0,
+        studioMusic: true,
+      },
+      back: backOf('Asexual', {
+        kind: 'design', color: '#1c1a24', fill: 'radial', stops: ['#0e0d14'], dir: 'down',
+        shapes: [
+          shape('stripes', 0.5, 0.9, 4000, 110, '#000000', { grad: 'linear', stops: ['#a3a3a3', '#ffffff', '#800080'] }),
+        ],
+      }),
+      cat: 'pride',
+    },
+    {
+      id: 'pan',
+      name: 'Pansexual',
+      suits: 'The colors of the pansexual pride flag.',
+      look: {
+        videoFont: 'round', videoSize: 104, videoInk: '#f6f4fb', videoWords: 'fade', videoPlace: 'middle', videoQuotes: true, videoWordFill: 'solid',
+        videoWordStops: ['#f2b880'], videoWordDir: 'down', videoWordShadow: true, videoWordShadowInk: '', videoWordShadowDark: 55,
+        videoWordShadowSoft: 14, videoWordShadowFar: 2,
+        videoBox: false, videoBoxColor: '#000000', videoBoxClear: 40, videoBoxRound: 16, videoBoxWidth: 'fit',
+        videoOwnColors: true, videoKindColors: { narrator: '#ffd800', character: '#ffd800', persona: '#ffd800', npc: '#ffd800' },
+        videoBackRules: false,
+        videoCaptions: true, videoCaptionInk: '#ffd800', videoCapFill: 'solid', videoCapStops: ['#f2b880'], videoCapDir: 'right',
+        videoNameFont: 'round', videoNameSize: 100, videoNameColor: 'words', videoNameFill: 'solid', videoNameStops: ['#f2b880'],
+        videoNameDir: 'right', videoNameShadow: true, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18,
+        videoNameShadowFar: 2,
+        videoPicShape: 'circle', videoPicSize: 150, videoPicRing: true, videoPicRingWidth: 4, videoPicMove: true, videoTwo: true,
+        videoMoodPics: true,
+        videoEdges: 25, videoEdgeColor: '#000000', videoMove: 'fade', videoMoveSecs: 0.5,
+        videoTitleOn: true, videoFadeOut: 1.5, videoBylineInk: '#ffd800', videoBylineFont: '', videoBylineFill: 'solid',
+        videoBylineStops: ['#f2b880'], videoBylineDir: 'right', videoBylineShadow: true, videoBylineShadowInk: '', videoBylineShadowDark: 65,
+        videoBylineShadowSoft: 18, videoBylineShadowFar: 0,
+        studioMusic: true,
+      },
+      back: backOf('Pansexual', {
+        kind: 'design', color: '#1c1a24', fill: 'radial', stops: ['#0e0d14'], dir: 'down',
+        shapes: [
+          shape('stripes', 0.5, 0.9, 4000, 110, '#ff218c', { grad: 'linear', stops: ['#ffd800', '#21b1ff'] }),
+        ],
+      }),
+      cat: 'pride',
+    },
+    {
+      id: 'enby',
+      name: 'Nonbinary',
+      suits: 'The colors of the nonbinary pride flag.',
+      look: {
+        videoFont: 'round', videoSize: 104, videoInk: '#f6f4fb', videoWords: 'fade', videoPlace: 'middle', videoQuotes: true, videoWordFill: 'solid',
+        videoWordStops: ['#f2b880'], videoWordDir: 'down', videoWordShadow: true, videoWordShadowInk: '', videoWordShadowDark: 55,
+        videoWordShadowSoft: 14, videoWordShadowFar: 2,
+        videoBox: false, videoBoxColor: '#000000', videoBoxClear: 40, videoBoxRound: 16, videoBoxWidth: 'fit',
+        videoOwnColors: true, videoKindColors: { narrator: '#9c59d1', character: '#9c59d1', persona: '#9c59d1', npc: '#9c59d1' },
+        videoBackRules: false,
+        videoCaptions: true, videoCaptionInk: '#9c59d1', videoCapFill: 'solid', videoCapStops: ['#f2b880'], videoCapDir: 'right',
+        videoNameFont: 'round', videoNameSize: 100, videoNameColor: 'words', videoNameFill: 'solid', videoNameStops: ['#f2b880'],
+        videoNameDir: 'right', videoNameShadow: true, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18,
+        videoNameShadowFar: 2,
+        videoPicShape: 'circle', videoPicSize: 150, videoPicRing: true, videoPicRingWidth: 4, videoPicMove: true, videoTwo: true,
+        videoMoodPics: true,
+        videoEdges: 25, videoEdgeColor: '#000000', videoMove: 'fade', videoMoveSecs: 0.5,
+        videoTitleOn: true, videoFadeOut: 1.5, videoBylineInk: '#9c59d1', videoBylineFont: '', videoBylineFill: 'solid',
+        videoBylineStops: ['#f2b880'], videoBylineDir: 'right', videoBylineShadow: true, videoBylineShadowInk: '', videoBylineShadowDark: 65,
+        videoBylineShadowSoft: 18, videoBylineShadowFar: 0,
+        studioMusic: true,
+      },
+      back: backOf('Nonbinary', {
+        kind: 'design', color: '#1c1a24', fill: 'radial', stops: ['#0e0d14'], dir: 'down',
+        shapes: [
+          shape('stripes', 0.5, 0.9, 4000, 110, '#fcf434', { grad: 'linear', stops: ['#ffffff', '#9c59d1', '#2c2c2c'] }),
+        ],
+      }),
+      cat: 'pride',
+    },
+    {
+      id: 'aro',
+      name: 'Aromantic',
+      suits: 'The colors of the aromantic pride flag.',
+      look: {
+        videoFont: 'round', videoSize: 104, videoInk: '#f6f4fb', videoWords: 'fade', videoPlace: 'middle', videoQuotes: true, videoWordFill: 'solid',
+        videoWordStops: ['#f2b880'], videoWordDir: 'down', videoWordShadow: true, videoWordShadowInk: '', videoWordShadowDark: 55,
+        videoWordShadowSoft: 14, videoWordShadowFar: 2,
+        videoBox: false, videoBoxColor: '#000000', videoBoxClear: 40, videoBoxRound: 16, videoBoxWidth: 'fit',
+        videoOwnColors: true, videoKindColors: { narrator: '#a7d379', character: '#a7d379', persona: '#a7d379', npc: '#a7d379' },
+        videoBackRules: false,
+        videoCaptions: true, videoCaptionInk: '#a7d379', videoCapFill: 'solid', videoCapStops: ['#f2b880'], videoCapDir: 'right',
+        videoNameFont: 'round', videoNameSize: 100, videoNameColor: 'words', videoNameFill: 'solid', videoNameStops: ['#f2b880'],
+        videoNameDir: 'right', videoNameShadow: true, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18,
+        videoNameShadowFar: 2,
+        videoPicShape: 'circle', videoPicSize: 150, videoPicRing: true, videoPicRingWidth: 4, videoPicMove: true, videoTwo: true,
+        videoMoodPics: true,
+        videoEdges: 25, videoEdgeColor: '#000000', videoMove: 'fade', videoMoveSecs: 0.5,
+        videoTitleOn: true, videoFadeOut: 1.5, videoBylineInk: '#a7d379', videoBylineFont: '', videoBylineFill: 'solid',
+        videoBylineStops: ['#f2b880'], videoBylineDir: 'right', videoBylineShadow: true, videoBylineShadowInk: '', videoBylineShadowDark: 65,
+        videoBylineShadowSoft: 18, videoBylineShadowFar: 0,
+        studioMusic: true,
+      },
+      back: backOf('Aromantic', {
+        kind: 'design', color: '#1c1a24', fill: 'radial', stops: ['#0e0d14'], dir: 'down',
+        shapes: [
+          shape('stripes', 0.5, 0.9, 4000, 110, '#3da542', { grad: 'linear', stops: ['#a7d379', '#ffffff', '#a9a9a9', '#000000'] }),
+        ],
+      }),
+      cat: 'pride',
+    },
+    {
+      id: 'fluid',
+      name: 'Genderfluid',
+      suits: 'The colors of the genderfluid pride flag.',
+      look: {
+        videoFont: 'round', videoSize: 104, videoInk: '#f6f4fb', videoWords: 'fade', videoPlace: 'middle', videoQuotes: true, videoWordFill: 'solid',
+        videoWordStops: ['#f2b880'], videoWordDir: 'down', videoWordShadow: true, videoWordShadowInk: '', videoWordShadowDark: 55,
+        videoWordShadowSoft: 14, videoWordShadowFar: 2,
+        videoBox: false, videoBoxColor: '#000000', videoBoxClear: 40, videoBoxRound: 16, videoBoxWidth: 'fit',
+        videoOwnColors: true, videoKindColors: { narrator: '#c011d7', character: '#c011d7', persona: '#c011d7', npc: '#c011d7' },
+        videoBackRules: false,
+        videoCaptions: true, videoCaptionInk: '#c011d7', videoCapFill: 'solid', videoCapStops: ['#f2b880'], videoCapDir: 'right',
+        videoNameFont: 'round', videoNameSize: 100, videoNameColor: 'words', videoNameFill: 'solid', videoNameStops: ['#f2b880'],
+        videoNameDir: 'right', videoNameShadow: true, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18,
+        videoNameShadowFar: 2,
+        videoPicShape: 'circle', videoPicSize: 150, videoPicRing: true, videoPicRingWidth: 4, videoPicMove: true, videoTwo: true,
+        videoMoodPics: true,
+        videoEdges: 25, videoEdgeColor: '#000000', videoMove: 'fade', videoMoveSecs: 0.5,
+        videoTitleOn: true, videoFadeOut: 1.5, videoBylineInk: '#c011d7', videoBylineFont: '', videoBylineFill: 'solid',
+        videoBylineStops: ['#f2b880'], videoBylineDir: 'right', videoBylineShadow: true, videoBylineShadowInk: '', videoBylineShadowDark: 65,
+        videoBylineShadowSoft: 18, videoBylineShadowFar: 0,
+        studioMusic: true,
+      },
+      back: backOf('Genderfluid', {
+        kind: 'design', color: '#1c1a24', fill: 'radial', stops: ['#0e0d14'], dir: 'down',
+        shapes: [
+          shape('stripes', 0.5, 0.9, 4000, 110, '#ff76a4', { grad: 'linear', stops: ['#ffffff', '#c011d7', '#000000', '#2f3cbe'] }),
+        ],
+      }),
+      cat: 'pride',
+    },
+    {
+      id: 'agender',
+      name: 'Agender',
+      suits: 'The colors of the agender pride flag.',
+      look: {
+        videoFont: 'round', videoSize: 104, videoInk: '#f6f4fb', videoWords: 'fade', videoPlace: 'middle', videoQuotes: true, videoWordFill: 'solid',
+        videoWordStops: ['#f2b880'], videoWordDir: 'down', videoWordShadow: true, videoWordShadowInk: '', videoWordShadowDark: 55,
+        videoWordShadowSoft: 14, videoWordShadowFar: 2,
+        videoBox: false, videoBoxColor: '#000000', videoBoxClear: 40, videoBoxRound: 16, videoBoxWidth: 'fit',
+        videoOwnColors: true, videoKindColors: { narrator: '#b8f483', character: '#b8f483', persona: '#b8f483', npc: '#b8f483' },
+        videoBackRules: false,
+        videoCaptions: true, videoCaptionInk: '#b8f483', videoCapFill: 'solid', videoCapStops: ['#f2b880'], videoCapDir: 'right',
+        videoNameFont: 'round', videoNameSize: 100, videoNameColor: 'words', videoNameFill: 'solid', videoNameStops: ['#f2b880'],
+        videoNameDir: 'right', videoNameShadow: true, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18,
+        videoNameShadowFar: 2,
+        videoPicShape: 'circle', videoPicSize: 150, videoPicRing: true, videoPicRingWidth: 4, videoPicMove: true, videoTwo: true,
+        videoMoodPics: true,
+        videoEdges: 25, videoEdgeColor: '#000000', videoMove: 'fade', videoMoveSecs: 0.5,
+        videoTitleOn: true, videoFadeOut: 1.5, videoBylineInk: '#b8f483', videoBylineFont: '', videoBylineFill: 'solid',
+        videoBylineStops: ['#f2b880'], videoBylineDir: 'right', videoBylineShadow: true, videoBylineShadowInk: '', videoBylineShadowDark: 65,
+        videoBylineShadowSoft: 18, videoBylineShadowFar: 0,
+        studioMusic: true,
+      },
+      back: backOf('Agender', {
+        kind: 'design', color: '#1c1a24', fill: 'radial', stops: ['#0e0d14'], dir: 'down',
+        shapes: [
+          shape('stripes', 0.5, 0.9, 4000, 110, '#000000', { grad: 'linear', stops: ['#b9b9b9', '#ffffff', '#b8f483', '#ffffff', '#b9b9b9', '#000000'] }),
+        ],
+      }),
+      cat: 'pride',
     },
   ];
   // Every setting that changes the drawn frame, and music on or off. The
