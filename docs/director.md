@@ -124,7 +124,7 @@ The same rules are used in Auto Retry and Auto Refine.
 
 ## Scene music
 
-With **Scene music** on, the Director also picks the mood of the scene, from a list of ten, and marks the line where it changes. See [Scene music](music.md).
+With **Scene music** on, the Director also picks the mood of the scene, and marks the line where it changes. It picks from the moods listed in the rules, as `moods`. Each has a `name`, and most have an `about` that says when it fits. It answers with the name. The list is **Scene moods**, on the Sounds tab, ten by default, and yours to change. See [Changing the moods](music.md#changing-the-moods).
 
 ## Scenes
 

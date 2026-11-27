@@ -299,6 +299,9 @@ interface Settings {
   // The reader's own list of moods for pictures, each with an id, a name
   // and the words that pick it. Empty is the built-in list.
   moodList: { id: string; name: string; words: string[] }[];
+  // The reader's own list of scene moods, for scene music and backgrounds.
+  // Empty while it is the built-in one.
+  sceneMoodList: SceneMood[];
   // The line under the title, and its color. Empty color is the title's.
   videoByline: string;
   videoBylineInk: string;
@@ -602,6 +605,7 @@ const DEFAULT_SETTINGS: Settings = {
   videoTwo: true,
   videoMoodPics: true,
   moodList: [],
+  sceneMoodList: [],
   videoByline: '',
   videoBylineInk: '',
   videoBylineFont: '',
@@ -933,7 +937,9 @@ function cleanBacks(r: any): { videoBacks: VideoBack[]; videoBackPick: string } 
       blur: Math.round(num(b.blur, 0, 20, 0)),
       shapes,
       use: b.use === 'hand' ? 'hand' : 'match',
-      moods: Array.isArray(b.moods) ? MUSIC_MOODS.filter((m) => b.moods.indexOf(m) >= 0) : [],
+      // A mood's id, from the reader's list of scene moods. One no longer in
+      // the list matches nothing, so it is harmless.
+      moods: Array.isArray(b.moods) ? b.moods.map((m: any) => moodId(m)).filter((m: string, i: number, all: string[]) => m && all.indexOf(m) === i).slice(0, SCENE_MOODS_MAX) : [],
       places: (Array.isArray(b.places) ? b.places : [])
         .map((w: any) => str(w, 40).replace(/[\u0000-\u001f]/g, ' ').trim().toLowerCase())
         .filter((w: string, i: number, all: string[]) => w && all.indexOf(w) === i)
@@ -951,6 +957,21 @@ function cleanBacks(r: any): { videoBacks: VideoBack[]; videoBackPick: string } 
 const moodId = (v: any) => str(v, 24).toLowerCase().replace(/[^a-z0-9-]/g, '');
 const MOODS_MAX = 40;
 const MOOD_WORDS_MAX = 30;
+// The reader's own scene moods: at most 30, each with a name no other has,
+// so the Director can name it.
+function cleanSceneMoods(v: any): SceneMood[] {
+  if (!Array.isArray(v)) return [];
+  const out: SceneMood[] = [];
+  const line = (x: any, n: number) => str(x, n).replace(/[\u0000-\u001f]/g, ' ').replace(/\s+/g, ' ').trim();
+  for (const m of v.slice(0, SCENE_MOODS_MAX)) {
+    const id = moodId(m && m.id);
+    if (!id || out.some((x) => x.id === id)) continue;
+    let name = line(m.name, 30) || 'Mood';
+    for (let n = 2; out.some((x) => x.name.toLowerCase() === name.toLowerCase()); n++) name = (line(m.name, 26) || 'Mood') + ' ' + n;
+    out.push({ id, name, about: line(m.about, 200), search: line(m.search, 80) });
+  }
+  return out;
+}
 function cleanMoods(v: any): { id: string; name: string; words: string[] }[] {
   if (!Array.isArray(v)) return [];
   const out: { id: string; name: string; words: string[] }[] = [];
@@ -1393,6 +1414,7 @@ function cleanSettings(raw: any): Settings {
     videoTwo: bool(r.videoTwo, d.videoTwo),
     videoMoodPics: bool(r.videoMoodPics, d.videoMoodPics),
     moodList: cleanMoods(r.moodList),
+    sceneMoodList: cleanSceneMoods(r.sceneMoodList),
     videoByline: str(r.videoByline, 80).replace(/[\u0000-\u001f]/g, ' ').trim(),
     videoBylineInk: hexColor(r.videoBylineInk),
     videoBylineFont: r.videoBylineFont === '' ? '' : fontChoice(r.videoBylineFont, ''),
@@ -2515,11 +2537,11 @@ Set "sung": true on a line someone actually sings, like song lyrics or a lullaby
 </singing>
 
 <music>
-When "music" is true in the rules, music plays quietly under the scene, and you pick its mood from "moods". Give the first line a "mood" that fits how the scene feels when it opens. After that, set "mood" only on a line where the feeling really turns and stays turned, like a joke that sours into a threat or a chase that finally ends. Everywhere else leave it as "", and the music carries on. Music that flips every other line is worse than music that holds, so let the small wobbles go.
+When "music" is true in the rules, music plays quietly under the scene, and you pick its mood from the moods listed in "moods". Each one has a "name", and most have an "about" that says when it fits. Put the name in "mood". Give the first line a "mood" that fits how the scene feels when it opens. After that, set "mood" only on a line where the feeling really turns and stays turned, like a joke that sours into a threat or a chase that finally ends. Everywhere else leave it as "", and the music carries on. Music that flips every other line is worse than music that holds, so let the small wobbles go.
 </music>
 
 <scenes>
-When "scenes" is true in the rules, the video can change what's behind the words when the scene changes. Put a few plain words naming the place in "scene" on the first line, like "night market" or "hospital waiting room", using the text's own words when it gives them. Do it again on a line where the story really moves on: it goes somewhere new, or it jumps ahead in time. A mood that turns hard and stays turned counts too. Give that same line a "mood" from "moods" for how the new scene feels. Everywhere else, "scene" stays "". Most messages are one scene, and that's fine.
+When "scenes" is true in the rules, the video can change what's behind the words when the scene changes. Put a few plain words naming the place in "scene" on the first line, like "night market" or "hospital waiting room", using the text's own words when it gives them. Do it again on a line where the story really moves on: it goes somewhere new, or it jumps ahead in time. A mood that turns hard and stays turned counts too. Give that same line a "mood" from the moods listed, for how the new scene feels. Everywhere else, "scene" stays "". Most messages are one scene, and that's fine.
 </scenes>
 
 <new_speakers>
@@ -2650,7 +2672,7 @@ function applyDirection(
   cast: CastMember[],
   author: string,
   fixed: Record<number, string>,
-  rules: TagRules & { sounds: boolean; effects: boolean; narrationRead: boolean; findSpeakers: boolean; bigMoments: boolean; lineStyle?: boolean; music?: boolean; scenes?: boolean },
+  rules: TagRules & { sounds: boolean; effects: boolean; narrationRead: boolean; findSpeakers: boolean; bigMoments: boolean; lineStyle?: boolean; music?: boolean; scenes?: boolean; moods?: SceneMood[] },
 ): { lines: DirectedLine[]; newSpeakers: { name: string; gender: string; about: string; role: string }[]; log: string[] } {
   const log: string[] = [];
   const byIndex: Record<number, any> = {};
@@ -2725,8 +2747,8 @@ function applyDirection(
     if (d.sung === true) line.sung = true;
     if (rules.lineStyle) line.style = cleanStyle(d.style);
     if (rules.music || rules.scenes) {
-      const mood = String(d.mood || '').trim().toLowerCase();
-      if (MUSIC_MOODS.indexOf(mood) >= 0) line.mood = mood;
+      const mood = sceneMoodOf(rules.moods || BUILT_IN_SCENE_MOODS, d.mood);
+      if (mood) line.mood = mood;
     }
     if (rules.scenes) {
       const place = str(d.scene, 80).replace(/[\u0000-\u001f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 60);
@@ -4110,6 +4132,7 @@ async function direct(userId: string | undefined, p: any): Promise<Script> {
     // Scenes are only asked for while there is more than one background to
     // pick from, so nobody else pays for the extra words.
     scenes: s.videoBacks.length > 1,
+    moods: sceneMoodsOf(s),
   };
 
   // The text first: a quote the story itself says who spoke, such as
@@ -4183,7 +4206,8 @@ async function direct(userId: string | undefined, p: any): Promise<Script> {
       scenes: s.videoBacks.length > 1,
     },
   };
-  if (s.musicOn || s.videoBacks.length > 1) payload.rules.moods = MUSIC_MOODS;
+  // The moods by name, each with what it is for, from the reader's list.
+  if (s.musicOn || s.videoBacks.length > 1) payload.rules.moods = sceneMoodsOf(s).map((m) => (m.about ? { name: m.name, about: m.about } : { name: m.name }));
   if (tagsOn && engine.tags === 'list') payload.rules.tag_list = engine.list;
   if (s.engineNoteRole !== 'rules') payload._engineNote = engineNote(s, engine.id);
   if (Object.keys(hints).length) payload.rules.sound_hints = hints;
@@ -4610,22 +4634,36 @@ function fromBase64(text: string): Uint8Array {
 // Sounds: the library, made sounds and uploads
 // ---------------------------------------------------------------------------
 
-// The moods scene music is picked by. A track in the library is marked with
-// one of them, and the Director picks one for each turn in a scene.
-const MUSIC_MOODS = ['calm', 'cozy', 'happy', 'playful', 'romantic', 'sad', 'tense', 'scary', 'action', 'mysterious'];
-// What Freesound is searched for, for each mood.
-const MUSIC_SEARCH: Record<string, string> = {
-  calm: 'calm ambient music',
-  cozy: 'cozy acoustic music',
-  happy: 'happy upbeat music',
-  playful: 'playful whimsical music',
-  romantic: 'romantic piano music',
-  sad: 'sad piano music',
-  tense: 'tense suspense music',
-  scary: 'horror dark ambient music',
-  action: 'action battle music',
-  mysterious: 'mysterious ambient music',
-};
+// The moods of a scene, which scene music and backgrounds are picked by. A
+// track in the library is marked with one of them, and the Director picks
+// one for each turn in a scene, from the names and descriptions it is
+// sent. This is the built-in list. The reader's own list is sceneMoodList,
+// empty while it is this one. Each mood is kept by its id, so renaming one
+// keeps the tracks and backgrounds marked with it.
+interface SceneMood { id: string; name: string; about: string; search: string }
+const BUILT_IN_SCENE_MOODS: SceneMood[] = [
+  { id: 'calm', name: 'Calm', about: 'Quiet and settled. Nothing is at stake.', search: 'calm ambient music' },
+  { id: 'cozy', name: 'Cozy', about: 'Warm and safe, like a home or a friend nearby.', search: 'cozy acoustic music' },
+  { id: 'happy', name: 'Happy', about: 'Bright and glad. Good news, a win, a party.', search: 'happy upbeat music' },
+  { id: 'playful', name: 'Playful', about: 'Teasing, silly or light. Jokes and games.', search: 'playful whimsical music' },
+  { id: 'romantic', name: 'Romantic', about: 'Tender or longing, between people who care for each other.', search: 'romantic piano music' },
+  { id: 'sad', name: 'Sad', about: 'Loss, hurt or grief.', search: 'sad piano music' },
+  { id: 'tense', name: 'Tense', about: 'Something could go wrong. An argument, a threat, a wait.', search: 'tense suspense music' },
+  { id: 'scary', name: 'Scary', about: 'Fear and horror. Something is out there.', search: 'horror dark ambient music' },
+  { id: 'action', name: 'Action', about: 'A fight, a chase or a race against time.', search: 'action battle music' },
+  { id: 'mysterious', name: 'Mysterious', about: 'Something hidden, strange or not yet known.', search: 'mysterious ambient music' },
+];
+const SCENE_MOODS_MAX = 30;
+function sceneMoodsOf(s: { sceneMoodList?: SceneMood[] }): SceneMood[] {
+  return Array.isArray(s.sceneMoodList) && s.sceneMoodList.length ? s.sceneMoodList : BUILT_IN_SCENE_MOODS;
+}
+// The mood the Director named, by its name or its id, as its id.
+function sceneMoodOf(list: SceneMood[], v: any): string {
+  const t = String(v == null ? '' : v).trim().toLowerCase();
+  if (!t) return '';
+  const m = list.find((x) => x.name.toLowerCase() === t) || list.find((x) => x.id === t);
+  return m ? m.id : '';
+}
 
 interface SoundEntry {
   id: string;
@@ -4704,7 +4742,7 @@ function cleanSoundEntry(e: any): SoundEntry | null {
   };
   if (url) entry.url = url;
   if (credit) entry.credit = credit;
-  if (MUSIC_MOODS.indexOf(String(e.mood)) >= 0) entry.mood = String(e.mood);
+  if (moodId(e.mood)) entry.mood = moodId(e.mood);
   return entry;
 }
 
@@ -5122,7 +5160,9 @@ async function soundFor(userId: string | undefined, description: string, again?:
 // music comes from set to look on Freesound too, a track is found there and
 // kept in the library, marked with the mood.
 async function musicFor(userId: string | undefined, mood: string, skip: string[]): Promise<{ id?: string; base64?: string; url?: string; mime?: string; name?: string; credit?: Credit; error?: string }> {
-  if (MUSIC_MOODS.indexOf(mood) < 0) return { error: 'There is no music mood called "' + mood + '".' };
+  const set = await loadSettings(userId);
+  const moodDef = sceneMoodsOf(set).find((m) => m.id === mood);
+  if (!moodDef) return { error: 'There is no scene mood called "' + mood + '".' };
   const list = await loadSounds(userId);
   // The tracks for the mood, the ones not in skip first, then the least
   // played. skip only picks among them: a mood with a track in the library
@@ -5145,14 +5185,14 @@ async function musicFor(userId: string | undefined, mood: string, skip: string[]
       // The file is gone while its entry stayed. The next track is tried.
     }
   }
-  const s = await loadSettings(userId);
+  const s = set;
   const none = all.length ? 'The ' + mood + ' music in your library could not be read.' : 'No music in your library is marked ' + mood + '.';
   if (all.length) return { error: none };
   if (s.musicFrom !== 'both') return { error: none + ' Mark a track with it in the Sounds tab.' };
   const fsKey = await getKey(userId, FS_KEY_NAME);
   if (!fsKey) return { error: none + ' Mark a track with it in the Sounds tab, or save a Freesound key to find one.' };
   const seen = list.filter((e) => e.mood === mood && e.credit).map((e) => (e.credit as Credit).fsId);
-  const got = await findFreesound(fsKey, s, mood, seen, { queries: [MUSIC_SEARCH[mood], mood + ' music'] });
+  const got = await findFreesound(fsKey, s, mood, seen, { queries: [moodDef.search || moodDef.name.toLowerCase() + ' music', moodDef.name.toLowerCase() + ' music'].filter((q, i, all) => all.indexOf(q) === i) });
   if (got.error) return { error: none + ' ' + got.error };
   if (got.none || !got.bytes || !got.credit) return { error: none + ' Freesound found no music for it either.' };
   return keepSound(userId, list, null, got.credit.title, got.bytes, got.b64 || '', 'found', got.credit, mood);
@@ -5362,7 +5402,7 @@ async function onPanel(p: any, userId: string | undefined) {
         // The messages with a saved script, so each gets its player.
         await readKeptScripts(userId || '', settings);
         const keptIds = Array.from(new Set((scripts[userId || ''] || []).map((x) => x.script.messageId).filter(Boolean)));
-        answer({ type: 'state', settings, sounds, hasKey, hasFsKey, fresh, keptIds, builtInPrompt: BUILT_IN_PROMPT, builtInNotes: ASK_NOTES, builtInEngineNotes: ENGINE_NOTES, builtInSkips: BUILT_IN_SKIPS, builtInQuestions: DECISION_QUESTIONS, musicMoods: MUSIC_MOODS, version: VERSION, decisions: hasDecisions() });
+        answer({ type: 'state', settings, sounds, hasKey, hasFsKey, fresh, keptIds, builtInPrompt: BUILT_IN_PROMPT, builtInNotes: ASK_NOTES, builtInEngineNotes: ENGINE_NOTES, builtInSkips: BUILT_IN_SKIPS, builtInQuestions: DECISION_QUESTIONS, builtInSceneMoods: BUILT_IN_SCENE_MOODS, version: VERSION, decisions: hasDecisions() });
         return;
       }
       case 'save': {
@@ -5829,7 +5869,8 @@ async function onPanel(p: any, userId: string | undefined) {
         if (Array.isArray(p.triggers)) e.triggers = p.triggers.map((t: any) => str(t, 40).trim().toLowerCase()).filter(Boolean).slice(0, 12);
         // '' makes a music track a sound effect again.
         if (typeof p.mood === 'string') {
-          if (MUSIC_MOODS.indexOf(p.mood) >= 0) e.mood = p.mood;
+          const known = sceneMoodsOf(await loadSettings(userId)).some((m) => m.id === p.mood);
+          if (known) e.mood = p.mood;
           else delete e.mood;
         }
         const ok = await saveSounds(userId, list);

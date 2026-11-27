@@ -637,7 +637,7 @@ It reaches a few pixels, so it helps without holding the shape. **Snap while mov
 
 ### What it sends
 
-- With two or more backgrounds, the Director's rules have `"scenes": true` and the list of moods. It sends back a `"scene"`, a few words naming the place, on the line a scene starts, with a `"mood"`. See [The prompt](director.md#the-prompt).
+- With two or more backgrounds, the Director's rules have `"scenes": true` and the list of moods, each with its name and what it is for. The list is **Scene moods**, on the Sounds tab. See [Changing the moods](music.md#changing-the-moods). It sends back a `"scene"`, a few words naming the place, on the line a scene starts, with a `"mood"`. See [The prompt](director.md#the-prompt).
 - With one background, nothing more is sent, so nothing more is spent.
 - Changes you make in **Scenes** are kept with the performance in **Saved audio**. They are not sent anywhere else.
 

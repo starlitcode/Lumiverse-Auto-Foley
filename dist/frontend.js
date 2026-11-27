@@ -1751,6 +1751,19 @@ const BUILT_IN_MOODS = [
 ];
 const MOODS_MAX = 40;
 const MOOD_WORDS_MAX = 30;
+const BUILT_IN_SCENE_MOODS = [
+    { id: 'calm', name: 'Calm', about: 'Quiet and settled. Nothing is at stake.', search: 'calm ambient music' },
+    { id: 'cozy', name: 'Cozy', about: 'Warm and safe, like a home or a friend nearby.', search: 'cozy acoustic music' },
+    { id: 'happy', name: 'Happy', about: 'Bright and glad. Good news, a win, a party.', search: 'happy upbeat music' },
+    { id: 'playful', name: 'Playful', about: 'Teasing, silly or light. Jokes and games.', search: 'playful whimsical music' },
+    { id: 'romantic', name: 'Romantic', about: 'Tender or longing, between people who care for each other.', search: 'romantic piano music' },
+    { id: 'sad', name: 'Sad', about: 'Loss, hurt or grief.', search: 'sad piano music' },
+    { id: 'tense', name: 'Tense', about: 'Something could go wrong. An argument, a threat, a wait.', search: 'tense suspense music' },
+    { id: 'scary', name: 'Scary', about: 'Fear and horror. Something is out there.', search: 'horror dark ambient music' },
+    { id: 'action', name: 'Action', about: 'A fight, a chase or a race against time.', search: 'action battle music' },
+    { id: 'mysterious', name: 'Mysterious', about: 'Something hidden, strange or not yet known.', search: 'mysterious ambient music' },
+];
+const SCENE_MOODS_MAX = 30;
 // The mood of a line: the one whose words its tags and note name most, the
 // first in the list on a tie. With none, the first mood whose words hold
 // the scene's mood, such as scary or cozy. With neither, none.
@@ -1950,6 +1963,7 @@ const DEFAULTS = {
     videoTwo: true,
     videoMoodPics: true,
     moodList: [],
+    sceneMoodList: [],
     videoByline: '',
     videoBylineInk: '',
     videoBylineFont: '',
@@ -3655,7 +3669,7 @@ export function setup(ctx, overrides) {
         for (const run of runs) {
             const data = await musicDecoded((sh.musicIds || {})[run.mood] || '', run.mood);
             if (!data || !data[0].length) {
-                log('The ' + run.mood + ' music could not be read, so it is not in the download.', 'bad');
+                log('The music for ' + sceneMoodName(run.mood) + ' could not be read, so it is not in the download.', 'bad');
                 continue;
             }
             const len = data[0].length;
@@ -3999,8 +4013,15 @@ export function setup(ctx, overrides) {
     // While Background is open, the preview shows the background being
     // changed behind the whole video. Empty shows each scene's own.
     let previewBack = '';
-    // The moods a background can be for, the same as Scene music's.
-    const sceneMoods = () => (musicMoods.length ? musicMoods : ['calm', 'cozy', 'happy', 'playful', 'romantic', 'sad', 'tense', 'scary', 'action', 'mysterious']);
+    // The moods a background can be for, the same as Scene music's: the
+    // reader's own list, or the built-in one.
+    const sceneMoodsNow = () => (Array.isArray(S.sceneMoodList) && S.sceneMoodList.length ? S.sceneMoodList : builtInSceneMoods);
+    const sceneMoods = () => sceneMoodsNow().map((m) => m.id);
+    // A mood's name. One no longer in the list shows its id.
+    const sceneMoodName = (id) => {
+        const m = sceneMoodsNow().find((x) => x.id === id) || builtInSceneMoods.find((x) => x.id === id);
+        return m ? m.name : id;
+    };
     function backNow() {
         const list = backList();
         return list.find((b) => b.id === backEditId) || backDefault();
@@ -6397,7 +6418,8 @@ export function setup(ctx, overrides) {
     // fades from one track to the next, goes down while someone speaks,
     // pauses with the performance, and fades out when it stops. A message
     // that keeps the same mood as the one before carries on the same track.
-    let musicMoods = [];
+    // The built-in scene moods, as the backend has them.
+    let builtInSceneMoods = BUILT_IN_SCENE_MOODS;
     let musicNow = null;
     const musicGoing = [];
     let musicTimer = null;
@@ -6537,7 +6559,7 @@ export function setup(ctx, overrides) {
             url = got.url ? String(got.url) : URL.createObjectURL(base64ToBlob(got.base64, got.mime || 'audio/mpeg'));
         }
         catch (e) {
-            log('The music for ' + mood + ' could not be read: ' + String((e && e.message) || e).slice(0, 120), 'bad');
+            log('The music for ' + sceneMoodName(mood) + ' could not be read: ' + String((e && e.message) || e).slice(0, 120), 'bad');
             return;
         }
         const el = new AudioCtor();
@@ -6559,7 +6581,7 @@ export function setup(ctx, overrides) {
             }
             catch (_) { }
         }
-        log('Music for a ' + mood + ' mood: ' + String(got.name || 'a track') + (got.credit ? ', by ' + got.credit.by + ' on Freesound' : '') + '.', '', 'sound');
+        log('Music for ' + sceneMoodName(mood) + ': ' + String(got.name || 'a track') + (got.credit ? ', by ' + got.credit.by + ' on Freesound' : '') + '.', '', 'sound');
         musicRun();
     }
     function musicPause(on) {
@@ -13425,6 +13447,196 @@ export function setup(ctx, overrides) {
             draw();
         });
     }
+    // The scene moods, on the Sounds tab under Scene music, since scene music
+    // and backgrounds are both picked by them. The Director is sent each
+    // mood's name and what it is for.
+    let soundsRedraw = null;
+    function sceneMoodFold() {
+        return fold('Scene moods', (body) => {
+            const draw = () => {
+                body.replaceChildren();
+                body.appendChild(hint('The Director picks one of these for each scene, by its name and what it is for. Music and backgrounds are picked by them.'));
+                const own = () => {
+                    if (!Array.isArray(S.sceneMoodList) || !S.sceneMoodList.length)
+                        S.sceneMoodList = JSON.parse(JSON.stringify(builtInSceneMoods));
+                    return S.sceneMoodList;
+                };
+                const said = el('<p class="af-status" role="status" data-af-scenemoodsaid></p>');
+                const say = (t, bad) => {
+                    said.textContent = t;
+                    if (bad)
+                        said.dataset.kind = 'bad';
+                    else
+                        delete said.dataset.kind;
+                };
+                const keep = () => {
+                    set({ sceneMoodList: own().slice() });
+                    if (soundsRedraw)
+                        soundsRedraw();
+                };
+                const list = sceneMoodsNow();
+                list.forEach((mood, n) => {
+                    const box = el('<div class="af-col af-moodedit"></div>');
+                    box.setAttribute('data-af-scenemood', mood.id);
+                    const mine = () => own().find((x) => x.id === mood.id);
+                    const nameId = rid('sn');
+                    box.appendChild(labelRow('Name', '', nameId));
+                    const name = el('<input type="text" class="af-field" maxlength="30" autocomplete="off" id="' + nameId + '" data-af-scenemoodname>');
+                    name.value = mood.name;
+                    name.addEventListener('change', () => {
+                        const v = name.value.replace(/\s+/g, ' ').trim().slice(0, 30);
+                        if (!v) {
+                            name.value = mood.name;
+                            return;
+                        }
+                        if (sceneMoodsNow().some((x) => x.id !== mood.id && x.name.toLowerCase() === v.toLowerCase())) {
+                            name.value = mood.name;
+                            say('Another mood is called ' + v + '. Each mood needs a name of its own, so the Director can name it.', true);
+                            return;
+                        }
+                        const m = mine();
+                        if (m)
+                            m.name = v;
+                        mood.name = v;
+                        say('');
+                        keep();
+                    });
+                    box.appendChild(name);
+                    const aboutId = rid('sa');
+                    box.appendChild(labelRow('What it is for', 'The Director reads this. Up to 200 characters.', aboutId));
+                    const about = el('<textarea class="af-field" rows="2" maxlength="200" spellcheck="true" id="' + aboutId + '" data-af-scenemoodabout></textarea>');
+                    about.value = mood.about;
+                    about.addEventListener('change', () => {
+                        const v = about.value.replace(/\s+/g, ' ').trim().slice(0, 200);
+                        about.value = v;
+                        const m = mine();
+                        if (m)
+                            m.about = v;
+                        keep();
+                    });
+                    box.appendChild(about);
+                    const searchId = rid('ss');
+                    box.appendChild(labelRow('Freesound search words', 'What scene music is searched for on Freesound. Empty uses the name and music.', searchId));
+                    const search = el('<input type="text" class="af-field" maxlength="80" autocomplete="off" id="' + searchId + '" data-af-scenemoodsearch>');
+                    search.value = mood.search;
+                    search.addEventListener('change', () => {
+                        const v = search.value.replace(/\s+/g, ' ').trim().slice(0, 80);
+                        search.value = v;
+                        const m = mine();
+                        if (m)
+                            m.search = v;
+                        keep();
+                    });
+                    box.appendChild(search);
+                    const row = el('<div class="af-row af-wrap"></div>');
+                    const move = (by) => {
+                        const all = own();
+                        const at = all.findIndex((x) => x.id === mood.id);
+                        const to = at + by;
+                        if (at < 0 || to < 0 || to >= all.length)
+                            return;
+                        const [it] = all.splice(at, 1);
+                        all.splice(to, 0, it);
+                        keep();
+                        draw();
+                    };
+                    const up = button('Move up', () => move(-1));
+                    up.disabled = n === 0;
+                    up.setAttribute('data-af-scenemood-act', 'up');
+                    const down = button('Move down', () => move(1));
+                    down.disabled = n === list.length - 1;
+                    down.setAttribute('data-af-scenemood-act', 'down');
+                    const del = button('Delete', async () => {
+                        const uses = sceneMoodUses([mood.id]);
+                        if (!(await askSure('Delete ' + mood.name, 'Delete the scene mood ' + mood.name + '?' + uses + ' There is no undo.', 'Delete', true)))
+                            return;
+                        S.sceneMoodList = own().filter((x) => x.id !== mood.id);
+                        dropSceneMoods([mood.id]);
+                        if (soundsRedraw)
+                            soundsRedraw();
+                        draw();
+                    });
+                    del.setAttribute('data-af-scenemood-act', 'delete');
+                    // One mood is always left, since an empty list is the built-in one.
+                    del.disabled = list.length < 2;
+                    row.appendChild(up);
+                    row.appendChild(down);
+                    row.appendChild(del);
+                    box.appendChild(row);
+                    body.appendChild(box);
+                });
+                const tools = el('<div class="af-row af-wrap"></div>');
+                const add = button('Add a mood', () => {
+                    const all = own();
+                    if (all.length >= SCENE_MOODS_MAX)
+                        return;
+                    let id = '';
+                    do
+                        id = 'm' + Math.random().toString(36).slice(2, 9);
+                    while (all.some((x) => x.id === id));
+                    let nm = 'Mood ' + (all.length + 1);
+                    for (let k = all.length + 2; all.some((x) => x.name.toLowerCase() === nm.toLowerCase()); k++)
+                        nm = 'Mood ' + k;
+                    all.push({ id, name: nm, about: '', search: '' });
+                    keep();
+                    draw();
+                    focusField(body.querySelector('[data-af-scenemood="' + id + '"] [data-af-scenemoodname]'));
+                });
+                add.setAttribute('data-af-scenemood-add', '');
+                add.disabled = list.length >= SCENE_MOODS_MAX;
+                const back = button('Back to built-in', async () => {
+                    if (!Array.isArray(S.sceneMoodList) || !S.sceneMoodList.length) {
+                        say('The scene moods are already the built-in ones. Nothing changed.');
+                        return;
+                    }
+                    const gone = S.sceneMoodList.map((x) => x.id).filter((id) => !builtInSceneMoods.some((b) => b.id === id));
+                    const uses = sceneMoodUses(gone);
+                    if (!(await askSure('Back to the built-in scene moods', 'Put the built-in scene moods back, with their names, what they are for and their search words?' + uses + ' There is no undo.', 'Put them back', true)))
+                        return;
+                    S.sceneMoodList = [];
+                    dropSceneMoods(gone);
+                    if (soundsRedraw)
+                        soundsRedraw();
+                    draw();
+                });
+                back.setAttribute('data-af-scenemood-back', '');
+                tools.appendChild(add);
+                tools.appendChild(back);
+                body.appendChild(tools);
+                body.appendChild(said);
+            };
+            draw();
+        });
+    }
+    // What uses these moods, said in a sentence for a question that asks
+    // first: the backgrounds picked for them and the tracks marked with them.
+    function sceneMoodUses(ids) {
+        if (!ids.length)
+            return '';
+        const backs = backList().filter((b) => (b.moods || []).some((m) => ids.indexOf(m) >= 0)).map((b) => b.name);
+        const tracks = sounds.filter((x) => x && ids.indexOf(x.mood) >= 0).length;
+        const out = [];
+        if (backs.length)
+            out.push((backs.length === 1 ? 'The background ' + backs[0] + ' is' : 'The backgrounds ' + backs.slice(0, -1).join(', ') + ' and ' + backs[backs.length - 1] + ' are') + ' used for it, and stop being used for it.');
+        if (tracks)
+            out.push((tracks === 1 ? 'One music track is' : tracks + ' music tracks are') + ' marked with it. ' + (tracks === 1 ? 'It stays' : 'They stay') + ' in your library, and ' + (tracks === 1 ? 'plays' : 'play') + ' for no mood until you pick another under Music for.');
+        return out.length ? ' ' + out.join(' ') : '';
+    }
+    // The moods taken out of every background, then the list saved.
+    function dropSceneMoods(ids) {
+        const backs = backList();
+        let changed = false;
+        for (const b of backs) {
+            const was = (b.moods || []).length;
+            b.moods = (b.moods || []).filter((m) => ids.indexOf(m) < 0);
+            if (b.moods.length !== was)
+                changed = true;
+        }
+        const patch = { sceneMoodList: (S.sceneMoodList || []).slice() };
+        if (changed)
+            patch.videoBacks = backs.slice();
+        set(patch);
+    }
     // A picture for each feeling, for the Studio's videos. Each is cropped
     // like the main picture and kept in a file of its own on the account.
     // Each open Pictures for moods, drawn again when the list of moods changes.
@@ -14441,8 +14653,9 @@ export function setup(ctx, overrides) {
                 { id: 'library', label: 'Your library only' },
             ], S.musicFrom || 'both', (v) => set({ musicFrom: v }), 'Your library first by default. A track found on Freesound is kept in your library, marked with its mood.'),
             toggle('Lower the music while someone speaks', 'On by default. The music goes down while a voice plays.', 'musicDip'),
-            hint('To use your own music, upload a track below and pick its mood under Music for. The moods are ' + (musicMoods.length ? musicMoods.join(', ') : 'listed on each sound') + '.'),
+            hint('To use your own music, upload a track below and pick its mood under Music for. The moods are under Scene moods, below.'),
         ]));
+        mus.appendChild(sceneMoodFold());
         page.appendChild(mus);
         page.appendChild(keyCard('freesound'));
         page.appendChild(keyCard('eleven'));
@@ -14530,6 +14743,12 @@ export function setup(ctx, overrides) {
             drawList();
         });
         drawList();
+        soundsRedraw = () => {
+            if (listBox.isConnected)
+                drawList();
+            else
+                soundsRedraw = null;
+        };
         page.appendChild(lib);
     }
     function soundRow(s) {
@@ -14546,7 +14765,12 @@ export function setup(ctx, overrides) {
             again.addEventListener('click', () => soundAgain(s.name, s.id, s.source === 'found'));
         // A sound with a mood is a music track for that mood, never a sound
         // effect.
-        const moodPick = select('Music for', [{ id: '', label: 'Not music, a sound effect' }].concat(musicMoods.map((m) => ({ id: m, label: m.charAt(0).toUpperCase() + m.slice(1) }))), s.mood || '', (v) => {
+        const moodOpts = [{ id: '', label: 'Not music, a sound effect' }].concat(sceneMoodsNow().map((m) => ({ id: m.id, label: m.name })));
+        // A track marked with a mood since deleted stays marked, and is not
+        // played as a sound effect, until another is picked.
+        if (s.mood && !moodOpts.some((o) => o.id === s.mood))
+            moodOpts.push({ id: s.mood, label: 'A deleted mood' });
+        const moodPick = select('Music for', moodOpts, s.mood || '', (v) => {
             rpc({ type: 'sound_edit', id: s.id, mood: v }, 15000).then((res) => {
                 if (res && Array.isArray(res.sounds))
                     sounds = res.sounds;
@@ -15052,7 +15276,7 @@ export function setup(ctx, overrides) {
             for (const m of sceneMoods()) {
                 const on = (bk.moods || []).indexOf(m) >= 0;
                 const chip = el('<button type="button" class="af-segbtn af-mood" aria-pressed="' + (on ? 'true' : 'false') + '"></button>');
-                chip.textContent = m.charAt(0).toUpperCase() + m.slice(1);
+                chip.textContent = sceneMoodName(m);
                 chip.setAttribute('data-af-backmood', m);
                 chip.addEventListener('click', () => {
                     const has = (bk.moods || []).indexOf(m) >= 0;
@@ -21486,7 +21710,7 @@ export function setup(ctx, overrides) {
                             box.appendChild(head);
                             if (sc.place || sc.mood) {
                                 const about = el('<p class="af-note"></p>');
-                                about.textContent = [sc.place ? 'Place: ' + sc.place : '', sc.mood ? 'Mood: ' + sc.mood : ''].filter(Boolean).join('. ') + '.';
+                                about.textContent = [sc.place ? 'Place: ' + sc.place : '', sc.mood ? 'Mood: ' + sceneMoodName(sc.mood) : ''].filter(Boolean).join('. ') + '.';
                                 box.appendChild(about);
                             }
                             const auto = scenesOf({ ...sh, sceneHand: { cuts: hand().cuts, backs: {} } }).find((x) => x.i === sc.i);
@@ -23027,7 +23251,7 @@ export function setup(ctx, overrides) {
     // the Decision questions and the patterns to leave out.
     function builtInMark() {
         const flat = (o) => JSON.stringify(Object.keys(o || {}).sort().map((k) => [k, o[k]]));
-        return markText([builtInPrompt, flat(builtInNotes), flat(builtInEngineNotes), flat(builtInQuestions), builtInSkips, JSON.stringify(BUILT_IN_MOODS)].join('\u0003'));
+        return markText([builtInPrompt, flat(builtInNotes), flat(builtInEngineNotes), flat(builtInQuestions), builtInSkips, JSON.stringify(BUILT_IN_MOODS), JSON.stringify(builtInSceneMoods)].join('\u0003'));
     }
     // The built-in texts this reader has their own version of. Someone on the
     // built-in text already has any new wording, so is not told.
@@ -23046,6 +23270,8 @@ export function setup(ctx, overrides) {
             out.push('the patterns to leave out');
         if (Array.isArray(S.moodList) && S.moodList.length)
             out.push('the moods for pictures');
+        if (Array.isArray(S.sceneMoodList) && S.sceneMoodList.length)
+            out.push('the scene moods');
         return out;
     }
     // A notice with buttons. The buttons sit under the words, inside the
@@ -23548,8 +23774,8 @@ export function setup(ctx, overrides) {
         builtInEngineNotes = r.builtInEngineNotes && typeof r.builtInEngineNotes === 'object' ? r.builtInEngineNotes : {};
         builtInSkips = typeof r.builtInSkips === 'string' ? r.builtInSkips : '';
         builtInQuestions = r.builtInQuestions && typeof r.builtInQuestions === 'object' ? r.builtInQuestions : {};
-        if (Array.isArray(r.musicMoods))
-            musicMoods = r.musicMoods.map((x) => String(x));
+        if (Array.isArray(r.builtInSceneMoods) && r.builtInSceneMoods.length)
+            builtInSceneMoods = r.builtInSceneMoods;
         hostHasDecisions = r.decisions !== false;
         backendVersion = String(r.version || '');
         // A new account starts on every default and every built-in text as they

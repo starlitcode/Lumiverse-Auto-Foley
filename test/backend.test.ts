@@ -875,6 +875,18 @@ describe("Freesound", () => {
     expect(h.calls.cors.some((c) => c.url.includes("elevenlabs"))).toBe(false);
   });
 
+  test("scene music is searched for with the mood's own search words, and a mood not in the list finds nothing", async () => {
+    const h = host({ cors: fsCors });
+    await h.ask({ type: "save", settings: { musicOn: true, sceneMoodList: [{ id: "tense", name: "Dread", about: "", search: "low cello drone" }, { id: "mq1", name: "Gloom", about: "", search: "" }] } });
+    await h.ask({ type: "key_save", which: "freesound", key: "fs_key_123" });
+    await h.ask({ type: "music_for", mood: "tense" });
+    expect(h.calls.cors.some((c) => c.url.startsWith("https://freesound.org/apiv2/search/") && c.url.includes("query=low%20cello%20drone"))).toBe(true);
+    await h.ask({ type: "music_for", mood: "mq1" });
+    expect(h.calls.cors.some((c) => c.url.startsWith("https://freesound.org/apiv2/search/") && c.url.includes("query=gloom%20music"))).toBe(true);
+    const none = (await h.ask({ type: "music_for", mood: "calm" })).find((m) => m.type === "music");
+    expect(none.error).toContain("no scene mood");
+  });
+
   test("the license setting is followed", async () => {
     const h = host({ cors: fsCors });
     await h.ask({ type: "key_save", which: "freesound", key: "fs_key_123" });
@@ -1960,10 +1972,38 @@ describe("scene music", () => {
     const out = await h.ask(msg);
     const sent = JSON.stringify(h.calls.generate[0]);
     expect(sent.indexOf('\\"music\\":true')).toBeGreaterThan(-1);
-    expect(sent.indexOf("mysterious")).toBeGreaterThan(-1);
+    expect(sent.indexOf("Mysterious")).toBeGreaterThan(-1);
     const lines = out.find((m: any) => m.type === "script").script.lines;
     // A mood not on the list is dropped, and the case does not matter.
     expect(lines.map((l: any) => l.mood || "")).toEqual(["tense", "", "sad"]);
+  });
+
+  test("the reader's own scene moods are sent by name with what each is for, and a mood the Director names is kept by its id", async () => {
+    const own = [
+      { id: "tense", name: "Dread", about: "Something bad is close.", search: "low drone music" },
+      { id: "mq1", name: "Furious", about: "Rage, shouting.", search: "" },
+      { id: "sad", name: "Sad", about: "", search: "" },
+    ];
+    const h = host({ answers: [reply] });
+    await h.ask({ type: "save", settings: { musicOn: true, sceneMoodList: own } });
+    const out = await h.ask(msg);
+    const sent = JSON.stringify(h.calls.generate[0]);
+    expect(sent.indexOf("Something bad is close.")).toBeGreaterThan(-1);
+    expect(sent.indexOf("Furious")).toBeGreaterThan(-1);
+    expect(sent.indexOf("Mysterious")).toBe(-1);
+    const lines = out.find((m: any) => m.type === "script").script.lines;
+    // "Tense" is the id of the mood now named Dread, "furious" is the name
+    // of the reader's own mood, and "sad" is both.
+    expect(lines.map((l: any) => l.mood || "")).toEqual(["tense", "mq1", "sad"]);
+  });
+
+  test("scene moods are cleaned: at most 30, each with a name of its own", () => {
+    const h = host();
+    const many = Array.from({ length: 35 }, (_, i) => ({ id: "m" + i, name: i < 3 ? "Gloom" : "Mood " + i, about: "x".repeat(300) }));
+    const s = h.box.cleanSettings({ sceneMoodList: many });
+    expect(s.sceneMoodList.length).toBe(30);
+    expect(s.sceneMoodList.slice(0, 3).map((m: any) => m.name)).toEqual(["Gloom", "Gloom 2", "Gloom 3"]);
+    expect(s.sceneMoodList[0].about.length).toBe(200);
   });
 
   test("with Scene music off, no mood is asked for or kept", async () => {
@@ -1971,7 +2011,7 @@ describe("scene music", () => {
     const out = await h.ask(msg);
     const sent = JSON.stringify(h.calls.generate[0]);
     expect(sent.indexOf('\\"music\\":false')).toBeGreaterThan(-1);
-    expect(sent.indexOf("mysterious")).toBe(-1);
+    expect(sent.indexOf("Mysterious")).toBe(-1);
     const lines = out.find((m: any) => m.type === "script").script.lines;
     expect(lines.every((l: any) => !l.mood)).toBe(true);
   });
@@ -2197,7 +2237,7 @@ describe("scenes", () => {
     const out = await h.ask(msg);
     const sent = JSON.stringify(h.calls.generate[0]);
     expect(sent.indexOf('\\"scenes\\":true')).toBeGreaterThan(-1);
-    expect(sent.indexOf("mysterious")).toBeGreaterThan(-1);
+    expect(sent.indexOf("Mysterious")).toBeGreaterThan(-1);
     const lines = out.find((m: any) => m.type === "script").script.lines;
     expect(lines.map((l: any) => l.scene || "")).toEqual(["dark warehouse", "", "Quell Harbor docks"]);
     expect(lines.map((l: any) => l.mood || "")).toEqual(["tense", "", "calm"]);
@@ -2223,7 +2263,9 @@ describe("scenes", () => {
     const h = host();
     const s = h.box.cleanSettings({ videoBacks: [{ id: "main" }, { id: "b2", use: "hand", moods: ["calm", "angry", "calm", "sad"], places: ["Tavern ", "", "tavern", "Old Mill"] }] });
     expect(s.videoBacks[1].use).toBe("hand");
-    expect(s.videoBacks[1].moods).toEqual(["calm", "sad"]);
+    // Moods are kept by id, once each. One not in the reader's list of
+    // scene moods matches no scene.
+    expect(s.videoBacks[1].moods).toEqual(["calm", "angry", "sad"]);
     expect(s.videoBacks[1].places).toEqual(["tavern", "old mill"]);
   });
 

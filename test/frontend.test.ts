@@ -561,3 +561,17 @@ describe("templates", () => {
     }
   });
 });
+
+describe("scene moods", () => {
+  test("the panel's built-in scene moods are the same as the backend's", () => {
+    const list = (file: string) => {
+      const src = readFileSync(join(import.meta.dir, "..", "src", file), "utf8");
+      const m = src.match(/const BUILT_IN_SCENE_MOODS: SceneMood\[\] = (\[[\s\S]*?\n\]);/);
+      expect(m).toBeTruthy();
+      return vm.runInNewContext("(" + (m as RegExpMatchArray)[1] + ")");
+    };
+    const front = list("frontend.ts");
+    expect(front.length).toBe(10);
+    expect(JSON.stringify(front)).toBe(JSON.stringify(list("backend.ts")));
+  });
+});

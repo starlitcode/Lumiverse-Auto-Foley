@@ -138,7 +138,7 @@ function answer(msg) {
       // An account whose settings cannot be read, for as many tries as set.
       if (window.__loadFails > 0) { window.__loadFails--; window.__loadAsks = (window.__loadAsks || 0) + 1; return reply({ type: 'failed', of: 'load', readFailed: true, error: 'Auto Foley could not read your settings from your account. Nothing was changed. Reload the page to try again.' }); }
       window.__loadAsks = (window.__loadAsks || 0) + 1;
-      return reply({ type: 'state', fresh: window.__fresh !== false, settings: window.__settings, sounds: window.__sounds, hasKey: true, musicMoods: ['calm', 'cozy', 'happy', 'playful', 'romantic', 'sad', 'tense', 'scary', 'action', 'mysterious'], builtInPrompt: '<the_director>\\nYou direct.\\n</the_director>', builtInSkips: '^[ \\\\t]*\\\\|.*\\\\|[ \\\\t]*$\\n【[^】\\\\n]*】', version: '0', decisions: true });
+      return reply({ type: 'state', fresh: window.__fresh !== false, settings: window.__settings, sounds: window.__sounds, hasKey: true, builtInPrompt: '<the_director>\\nYou direct.\\n</the_director>', builtInSkips: '^[ \\\\t]*\\\\|.*\\\\|[ \\\\t]*$\\n【[^】\\\\n]*】', version: '0', decisions: true });
     case 'save': window.__saves = (window.__saves || 0) + 1; window.__settings = msg.settings; return reply({ type: 'saved', ok: true, settings: msg.settings });
     case 'direct': {
       // A check can hold the answer, and send the note that the Director is
@@ -3924,7 +3924,7 @@ if (section("scene music")) {
     // each track.
     await toTab(page, "stage");
     await page.waitForTimeout(300);
-    check(await page.evaluate(() => /Music for a tense mood: A tense track\./.test((document.querySelector(".af-log") || {}).textContent || "")), size.name + ": the Log names the track");
+    check(await page.evaluate(() => /Music for Tense: A tense track\./.test((document.querySelector(".af-log") || {}).textContent || "")), size.name + ": the Log names the track");
     check((await page.locator(".af-strip", { hasText: "Music" }).count()) === 1, size.name + ": the Mixer has a Music strip");
     // Each library sound can be marked as music for a mood.
     await toTab(page, "sounds");
@@ -6700,6 +6700,79 @@ if (section("top bar")) {
     await page.click('[data-af-ws="lockall"]');
     await page.waitForTimeout(300);
     check(open1 !== (await lockIcon()), size.name + ": the padlock shows closed once Lock all is on");
+    check(!errors.length, size.name + ": no page errors. " + errors.slice(0, 2).join(" | "));
+    await context.close();
+  }
+}
+
+if (section("scene moods")) {
+  console.log("Scene moods: renamed, described, added, deleted and put back, with their names shown everywhere");
+  const PRE = `window.__settings.videoBacks = [{ id: "main", name: "Main", kind: "color", color: "#202020", fill: "solid", stops: [], dir: "down", dim: 40, blur: 0, shapes: [], use: "match", moods: [], places: [] }, { id: "b2", name: "Lighthouse", kind: "color", color: "#203040", fill: "solid", stops: [], dir: "down", dim: 40, blur: 0, shapes: [], use: "match", moods: ["calm", "sad"], places: [] }]; window.__settings.videoBackPick = "main"; window.__sounds = window.__sounds.concat([{ id: "t1", name: "a slow harp", triggers: [], source: "upload", mime: "audio/mpeg", bytes: 3000, added: 4, uses: 0, mood: "sad" }]);`;
+  const openFold = async (page) => {
+    await page.click('.af-tab[data-tab="sounds"]');
+    await page.waitForTimeout(350);
+    await page.evaluate(() => [...document.querySelectorAll(".af-fold")].find((b) => b.textContent.includes("Scene moods")).click());
+    await page.waitForTimeout(400);
+  };
+  for (const size of SIZES) {
+    const { context, page, errors } = await open(THEMES[0], size, 1, PRE);
+    await openFold(page);
+    const n = await page.locator("[data-af-scenemood]").count();
+    check(n === 10, size.name + ": the ten built-in scene moods are listed (" + n + ")");
+    const m = await page.evaluate(MEASURE, size.touch);
+    check(!m.overflow.length && !m.small.length, size.name + ": the scene moods fit. " + m.overflow.concat(m.small).slice(0, 2).join("; "));
+    // Renamed, with what it is for changed.
+    await page.fill('[data-af-scenemood="calm"] [data-af-scenemoodname]', "Hushed");
+    await page.press('[data-af-scenemood="calm"] [data-af-scenemoodname]', "Tab");
+    await page.fill('[data-af-scenemood="calm"] [data-af-scenemoodabout]', "Whispers in a quiet room.");
+    await page.press('[data-af-scenemood="calm"] [data-af-scenemoodabout]', "Tab");
+    await page.waitForTimeout(400);
+    const renamed = await page.evaluate(() => Object.assign({ n: (window.__settings.sceneMoodList || []).length }, (window.__settings.sceneMoodList || []).find((x) => x.id === "calm")));
+    check(renamed.name === "Hushed" && renamed.about === "Whispers in a quiet room." && renamed.n === 10, size.name + ": a renamed mood keeps its id, with its new name and what it is for (" + JSON.stringify(renamed) + ")");
+    // A name another mood has is refused.
+    await page.fill('[data-af-scenemood="cozy"] [data-af-scenemoodname]', "hushed");
+    await page.press('[data-af-scenemood="cozy"] [data-af-scenemoodname]', "Tab");
+    await page.waitForTimeout(300);
+    const dupe = await page.evaluate(() => ({ name: window.__settings.sceneMoodList.find((x) => x.id === "cozy").name, said: document.querySelector("[data-af-scenemoodsaid]").textContent }));
+    check(dupe.name === "Cozy" && /Another mood/.test(dupe.said), size.name + ": a name another mood has is refused, and the panel says why");
+    // The library's Music for uses the new names.
+    const opts = await page.evaluate(() => [...document.querySelectorAll('[data-af-soundmood="t1"] option')].map((o) => o.textContent));
+    check(opts.includes("Hushed") && !opts.includes("Calm"), size.name + ": Music for in the library shows the new name (" + opts.slice(0, 4).join(", ") + ")");
+    // Added.
+    await page.click("[data-af-scenemood-add]");
+    await page.waitForTimeout(300);
+    const added = await page.evaluate(() => window.__settings.sceneMoodList.slice(-1)[0]);
+    check(added && added.name === "Mood 11" && /^m[a-z0-9]+$/.test(added.id), size.name + ": Add a mood adds one at the end (" + JSON.stringify(added) + ")");
+    // Moved.
+    await page.click('[data-af-scenemood="sad"] [data-af-scenemood-act="up"]');
+    await page.waitForTimeout(300);
+    const order = await page.evaluate(() => window.__settings.sceneMoodList.map((x) => x.id));
+    check(order.indexOf("sad") === order.indexOf("romantic") - 1, size.name + ": Move up moves a mood up");
+    // Deleted: it asks, names what uses it, and leaves the background.
+    await page.evaluate(() => (window.__asked = 0));
+    await page.click('[data-af-scenemood="sad"] [data-af-scenemood-act="delete"]');
+    await page.waitForTimeout(500);
+    const del = await page.evaluate(() => ({ asked: window.__asked, text: window.__askedText, list: window.__settings.sceneMoodList.map((x) => x.id), back: window.__settings.videoBacks[1].moods }));
+    check(del.asked === 1 && /Lighthouse/.test(del.text) && /One music track/.test(del.text), size.name + ": Delete asks first, and names the background and the track that use it (" + del.text + ")");
+    check(!del.list.includes("sad") && JSON.stringify(del.back) === '["calm"]', size.name + ": the deleted mood leaves the list and the background (" + JSON.stringify(del.back) + ")");
+    const deletedOpt = await page.evaluate(() => (document.querySelector('[data-af-soundmood="t1"] select') || {}).selectedOptions?.[0]?.textContent);
+    check(deletedOpt === "A deleted mood", size.name + ": a track marked with a deleted mood says so (" + deletedOpt + ")");
+    // The Studio's background shows the new names.
+    await openWs(page);
+    await wsSec(page, "Background");
+    await page.waitForTimeout(300);
+    await page.selectOption("[data-af-backpick]", "b2");
+    await page.waitForTimeout(400);
+    const chips = await page.evaluate(() => [...document.querySelectorAll("[data-af-backmood]")].map((b) => b.textContent));
+    check(chips.includes("Hushed") && chips.includes("Mood 11") && !chips.includes("Sad"), size.name + ": the background's moods show the reader's list (" + chips.join(", ") + ")");
+    await page.click('[data-af-ws="close"]');
+    await page.waitForTimeout(400);
+    // Back to built-in.
+    await openFold(page);
+    await page.click("[data-af-scenemood-back]");
+    await page.waitForTimeout(500);
+    const back = await page.evaluate(() => ({ list: window.__settings.sceneMoodList, n: document.querySelectorAll("[data-af-scenemood]").length, asked: window.__asked }));
+    check(back.list.length === 0 && back.n === 10 && back.asked === 2, size.name + ": Back to built-in asks first, and puts the ten built-in moods back");
     check(!errors.length, size.name + ": no page errors. " + errors.slice(0, 2).join(" | "));
     await context.close();
   }

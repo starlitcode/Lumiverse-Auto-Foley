@@ -20,25 +20,42 @@
 
 ## The moods
 
-The Director picks from these ten moods:
+The Director picks from the **Scene moods** list, under **Scene music** on the Sounds tab. The same list picks backgrounds for scenes in the Studio. These are the ten built-in moods:
 
-| Mood | Searched for on Freesound |
-| --- | --- |
-| calm | calm ambient music |
-| cozy | cozy acoustic music |
-| happy | happy upbeat music |
-| playful | playful whimsical music |
-| romantic | romantic piano music |
-| sad | sad piano music |
-| tense | tense suspense music |
-| scary | horror dark ambient music |
-| action | action battle music |
-| mysterious | mysterious ambient music |
+| Mood | What it is for | Searched for on Freesound |
+| --- | --- | --- |
+| Calm | Quiet and settled. Nothing is at stake. | calm ambient music |
+| Cozy | Warm and safe, like a home or a friend nearby. | cozy acoustic music |
+| Happy | Bright and glad. Good news, a win, a party. | happy upbeat music |
+| Playful | Teasing, silly or light. Jokes and games. | playful whimsical music |
+| Romantic | Tender or longing, between people who care for each other. | romantic piano music |
+| Sad | Loss, hurt or grief. | sad piano music |
+| Tense | Something could go wrong. An argument, a threat, a wait. | tense suspense music |
+| Scary | Fear and horror. Something is out there. | horror dark ambient music |
+| Action | A fight, a chase or a race against time. | action battle music |
+| Mysterious | Something hidden, strange or not yet known. | mysterious ambient music |
+
+### Changing the moods
+
+Open **Scene moods** under **Scene music**. Each mood has:
+
+- **Name**: what the Director picks it by, and what the panel shows. Each mood needs a name of its own.
+- **What it is for**: a short description the Director reads, up to 200 characters.
+- **Freesound search words**: what scene music for it is searched for. Empty uses the name and "music".
+
+**Add a mood** adds one at the end, up to 30. **Move up** and **Move down** change the order. **Delete** asks first, and says which backgrounds and tracks use the mood:
+
+- A background used for it stops being used for it.
+- A track marked with it stays in your library and plays for no mood. Its **Music for** reads **A deleted mood** until you pick another.
+
+**Back to built-in** asks first, then puts the ten built-in moods back.
+
+Each mood is kept by an id, so a renamed mood keeps its tracks and backgrounds. The built-in moods change only when Auto Foley is updated. If that happens while you have your own list, a notice says so.
 
 ## What it sends
 
-- **To the Director**: `"music": true` and the list of moods, with the message. It sends back a mood on the line where the scene starts, and on any line where the mood turns. It is the same call as before, so it costs nothing extra. The rules it follows are in the `<music>` part of its prompt, which can be read and changed on the Director tab. See [The prompt](director.md#the-prompt).
-- **To Freesound**, only when your library has no track for a mood and **Where music comes from** allows it: the search words for that mood, with your Freesound key. See [Privacy](privacy.md).
+- **To the Director**: `"music": true` and the list of moods, each with its name and what it is for, with the message. It sends back a mood on the line where the scene starts, and on any line where the mood turns. It is the same call as before, so it costs nothing extra. The rules it follows are in the `<music>` part of its prompt, which can be read and changed on the Director tab. See [The prompt](director.md#the-prompt).
+- **To Freesound**, only when your library has no track for a mood and **Where music comes from** allows it: the Freesound search words for that mood, with your Freesound key. See [Privacy](privacy.md).
 
 Nothing is sent for music that is already in your library.
 
