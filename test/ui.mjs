@@ -7243,6 +7243,31 @@ if (section("full backup")) {
   }
 }
 
+if (section("studio tour shots")) {
+  // Pictures for the Studio tour in the docs, made only when asked for.
+  const dir = process.env.UI_TOUR_SHOTS;
+  if (dir) {
+    console.log("Pictures for the Studio tour");
+    for (const size of SIZES) {
+      const { context, page } = await open(THEMES[0], size, 1, `window.__settings.videoTitleOn = false;`);
+      await openWs(page);
+      await page.waitForTimeout(600);
+      await wsSec(page, "Templates");
+      await page.waitForTimeout(600);
+      await page.screenshot({ path: dir + "/studio-tour-" + size.name + "-templates.png" });
+      await wsSec(page, "Animations");
+      await page.waitForTimeout(300);
+      await page.evaluate(() => document.querySelector('[data-af-animlook="lines"]').click());
+      await page.waitForTimeout(900);
+      await page.evaluate(() => document.querySelector('[data-af-animlook="lines"]').scrollIntoView({ block: "start" }));
+      await page.waitForTimeout(300);
+      await page.screenshot({ path: dir + "/studio-tour-" + size.name + "-animations.png" });
+      await context.close();
+    }
+    check(true, "the pictures are saved in " + dir);
+  }
+}
+
 if (section("stickers")) {
   console.log("Stickers: drawn where they are put, flipped, mixed, filling the frame, behind the words, at their times, and edited on a phone and a laptop");
   // The pictures the checks use, drawn once in a page of their own.

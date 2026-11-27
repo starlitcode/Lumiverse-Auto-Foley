@@ -40,6 +40,7 @@ Once a message has been performed, a small player sits under its text, with Back
 **Start here**
 
 - [Getting started](docs/getting-started.md): set it up and perform your first message
+- [A tour of the Studio](docs/studio-tour.md): make a video of a performance, on a laptop or a phone
 
 **Going further**
 

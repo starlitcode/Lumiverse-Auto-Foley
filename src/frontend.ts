@@ -21922,6 +21922,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       row.appendChild(open);
     }
     c.appendChild(row);
+    c.appendChild(hint('New to the Studio? The <a href="https://github.com/starlitcode/Lumiverse-Auto-Foley/blob/stable/docs/studio-tour.md" target="_blank" rel="noopener" data-af-tourlink>Studio tour</a> on GitHub shows each part, on a laptop and a phone.'));
     // Quick shortcuts.
     const box = el('<div class="af-col af-quick" data-af-quick><h4 class="af-quickh">Quick shortcuts</h4></div>');
     box.appendChild(hint('Make a video uses the look in the Studio\u2019s preview. Download audio saves the whole performance in one file, with any cuts you made in the Studio.'));
