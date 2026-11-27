@@ -17,7 +17,7 @@
 ## Steps
 
 1. Play a message, on the Stage tab or with the button on a message. For an older message, press **Open in the Studio** on it under **Saved audio** instead.
-2. Open the Studio: press **Open the Studio** on the **Studio** tab in the drawer. **Download or make a video**, under **Now playing** on the Stage tab, opens it too.
+2. Open the Studio: press **Open the Studio** on the **Studio** tab in the drawer. **Download or make a video**, under **Now playing** on the Stage tab, takes you to that tab.
 3. Under **The performance and scenes**, open **Which parts go in** and switch off any part you do not want. To cut the start or the end, use **Trim**.
 4. For audio, pick **One file** or **A file for each part** under **Audio**, then press **Download audio** at the top.
 5. For a video, set the look in the parts of the Studio, such as **Shape and words** and **Background**. Watch the preview change.
@@ -72,7 +72,7 @@ The file is saved as an MP4 or a WebM, named with the chat's name and the day.
 1. Open it with **Open the Studio** on the drawer's **Studio** tab. These open it too:
    - **Open the Studio** in the chat's **Extras** menu, while **In the Extras menu** is on.
    - **Open the Studio** in the floating player's menu.
-   - **Download or make a video** on the Stage tab, and **Open in the Studio** under **Saved audio**.
+   - **Open in the Studio** under **Saved audio**.
    - Searching for Auto Foley, the Studio or a video in Lumiverse's command palette (Ctrl+K or Cmd+K) opens the drawer's **Studio** tab, with its **Open the Studio** button.
    Opening the Studio closes Lumiverse's drawer, so the Studio is in view. While the Studio is open, the drawer's **Studio** tab says "The Studio is open." with **Go to the Studio**, which closes the drawer again.
 2. Pick a part of the Studio and change its settings. The preview changes at once.
@@ -106,7 +106,7 @@ Tamsin edits a video on a laptop, with **App manipulation** granted.
 
 ### Quick shortcuts
 
-The drawer's **Studio** tab has **Open the Studio**, and under it **Quick shortcuts**, for a file in one tap without opening the Studio.
+The drawer's **Studio** tab has **Open the Studio**, and under it **Quick shortcuts**, for a file in one tap without opening the Studio. **Download or make a video**, under **Now playing** on the Stage tab, takes you to this tab.
 
 - **Download audio** saves the whole performance in one file, whatever **Save as** says, with any parts you cut or trimmed on the timeline left out. The Studio's own **Download audio** follows **Save as**.
 - **Make a video** uses the look you set up in the Studio, such as the template and every setting, and the cuts you made on the timeline. It is the same video the Studio makes. The line under it counts the time, and **Stop the video** stops it.

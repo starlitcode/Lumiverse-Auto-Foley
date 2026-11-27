@@ -290,7 +290,7 @@ The colors are saved with your settings, under your account.
 
 ## Downloads and videos
 
-Everything to keep what you heard is in the Studio: downloading the audio, a part, or a video. **Open the Studio**, on the drawer's **Studio** tab, opens it, and so does **Download or make a video**, under **Now playing**. For an older message, press **Open in the Studio** on it under **Saved audio**, in the Studio. See [The Studio](studio.md).
+Everything to keep what you heard is in the Studio: downloading the audio, a part, or a video. **Open the Studio**, on the drawer's **Studio** tab, opens it. **Download or make a video**, under **Now playing**, takes you to that tab, where **Download audio** and **Make a video** work in one tap without opening the Studio. For an older message, press **Open in the Studio** on it under **Saved audio**, in the Studio. See [The Studio](studio.md).
 
 For a file in one tap, **Quick shortcuts** on the **Studio** tab has **Download audio** and **Make a video**, with your current look. See [Quick shortcuts](studio.md#quick-shortcuts).
 

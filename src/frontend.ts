@@ -9753,17 +9753,18 @@ export function setup(ctx: Ctx, overrides?: any) {
   const pill = root.querySelector('[data-af="pill"]') as HTMLElement;
   const chatline = root.querySelector('[data-af="chatline"]') as HTMLElement;
 
+  // Shows one of the drawer's tabs, the same as a tap on it.
+  function goTab(id: TabId) {
+    if (id === tab) return;
+    tab = id;
+    try {
+      localStorage.setItem('lv-auto-foley:tab', id);
+    } catch (_) {}
+    hideHint();
+    switchTab();
+  }
   root.querySelectorAll('.af-tab').forEach((b) => {
-    b.addEventListener('click', () => {
-      const id = (b as HTMLElement).dataset.tab as TabId;
-      if (id === tab) return;
-      tab = id;
-      try {
-        localStorage.setItem('lv-auto-foley:tab', id);
-      } catch (_) {}
-      hideHint();
-      switchTab();
-    });
+    b.addEventListener('click', () => goTab((b as HTMLElement).dataset.tab as TabId));
   });
 
   // A tab switch keeps the drawer exactly where it was scrolled to, the same
@@ -12424,10 +12425,10 @@ export function setup(ctx: Ctx, overrides?: any) {
     );
     now.appendChild(againRow);
     now.appendChild(retryRow);
-    // Keeping what was heard is all in the Studio, with every choice
-    // for it in one place.
+    // Goes to the drawer's Studio tab, where Quick shortcuts download the
+    // audio or make the video in one tap. Open the Studio is there too.
     const keepRow = el('<div class="af-row" data-af="keeprow"></div>');
-    const video = button('Download or make a video', () => openStudio('show'), '', ICON_DOWNLOAD);
+    const video = button('Download or make a video', () => goTab('studio'), '', ICON_DOWNLOAD);
     video.setAttribute('data-af', 'studio');
     keepRow.appendChild(video);
     now.appendChild(keepRow);

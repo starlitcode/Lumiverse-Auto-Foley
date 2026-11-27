@@ -12,6 +12,7 @@ _2026-11-27_
 
 ### Changed
 
+- **Download or make a video goes to the Studio tab.** Under **Now playing** on the Stage tab, it opened the Studio. It now goes to the drawer's **Studio** tab, where **Download audio** and **Make a video** work in one tap, and **Open the Studio** is there too.
 - **A clearer hint for Make a video.** Under **Quick shortcuts** on the drawer's **Studio** tab, the hint said **Make a video** "uses the look in the Studio's preview". It now says it "uses the look you set up in the Studio", which is the template and the settings you picked there. [The Studio](docs/studio.md) says the same.
 - **A clearer hint for Include my pictures and fonts.** Under **Saved looks** in the Studio, the hint now says that with it on, the file also holds the look's background picture, stickers and fonts, so the person you share it with gets them too.
 

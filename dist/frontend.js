@@ -10032,19 +10032,20 @@ export function setup(ctx, overrides) {
     const page = root.querySelector('[data-af="page"]');
     const pill = root.querySelector('[data-af="pill"]');
     const chatline = root.querySelector('[data-af="chatline"]');
+    // Shows one of the drawer's tabs, the same as a tap on it.
+    function goTab(id) {
+        if (id === tab)
+            return;
+        tab = id;
+        try {
+            localStorage.setItem('lv-auto-foley:tab', id);
+        }
+        catch (_) { }
+        hideHint();
+        switchTab();
+    }
     root.querySelectorAll('.af-tab').forEach((b) => {
-        b.addEventListener('click', () => {
-            const id = b.dataset.tab;
-            if (id === tab)
-                return;
-            tab = id;
-            try {
-                localStorage.setItem('lv-auto-foley:tab', id);
-            }
-            catch (_) { }
-            hideHint();
-            switchTab();
-        });
+        b.addEventListener('click', () => goTab(b.dataset.tab));
     });
     // A tab switch keeps the drawer exactly where it was scrolled to, the same
     // as Auto Retry and Auto Refine. Every box that can scroll is read before
@@ -12872,10 +12873,10 @@ export function setup(ctx, overrides) {
         }, 'af-primary', ICON_REDO));
         now.appendChild(againRow);
         now.appendChild(retryRow);
-        // Keeping what was heard is all in the Studio, with every choice
-        // for it in one place.
+        // Goes to the drawer's Studio tab, where Quick shortcuts download the
+        // audio or make the video in one tap. Open the Studio is there too.
         const keepRow = el('<div class="af-row" data-af="keeprow"></div>');
-        const video = button('Download or make a video', () => openStudio('show'), '', ICON_DOWNLOAD);
+        const video = button('Download or make a video', () => goTab('studio'), '', ICON_DOWNLOAD);
         video.setAttribute('data-af', 'studio');
         keepRow.appendChild(video);
         now.appendChild(keepRow);

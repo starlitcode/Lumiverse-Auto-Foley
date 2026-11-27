@@ -9650,11 +9650,21 @@ if (section("downloads")) {
     await page.evaluate(() => { window.__wav = [0.1, 0.5]; window.__clipMs = 1500; });
     await toTab(page, "stage");
     await page.waitForTimeout(300);
-    // The Stage has one button for all of it, which opens the Studio.
+    // The Stage has one button for all of it, which goes to the drawer's
+    // Studio tab. It does not open the Studio.
     check(await page.evaluate(() => !document.querySelector('[data-af="dlall"]') && !document.querySelector('[data-af="dlpart"]') && /Download or make a video/.test(document.querySelector('[data-af="studio"]').textContent)), where + ": the Stage has one Download or make a video button, and no download buttons of its own");
     await page.click('[data-af="studio"]');
     await page.waitForTimeout(500);
-    check(await page.evaluate(() => !!document.querySelector("[data-af-ws] [data-af-videopreview]")), where + ": it opens the Studio");
+    const went = await page.evaluate(() => ({
+      ws: !!document.querySelector("[data-af-ws]"),
+      tab: (document.querySelector('.af-tab[aria-selected="true"], .af-tab.af-on, .af-tab.active') || {}).textContent || "",
+      audio: !!document.querySelector("[data-af-quickaudio]"),
+      video: !!document.querySelector("[data-af-quickvideo]"),
+    }));
+    check(!went.ws && went.audio && went.video && /Studio/.test(went.tab), where + ": it goes to the Studio tab, with Download audio and Make a video, and opens no Studio " + JSON.stringify(went));
+    await page.click("[data-af-studio-open]");
+    await page.waitForTimeout(500);
+    check(await page.evaluate(() => !!document.querySelector("[data-af-ws] [data-af-videopreview]")), where + ": Open the Studio there opens it");
     await wsSec(page, "Audio");
     const state = () => page.evaluate(() => ["dlall", "dlpart"].map((k) => document.querySelector('[data-af-studio="' + k + '"]').disabled));
     check((await state()).join() === "true,true", where + ": with nothing played, both downloads are off (" + (await state()).join() + ")");
