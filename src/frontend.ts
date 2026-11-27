@@ -7867,6 +7867,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     });
     const del = button('Delete the folder', async () => {
       if (!(await askSure('Delete the folder', 'The folder ' + f.name + ' is deleted. The ' + items.length + ' ' + (items.length === 1 ? fk.one + ' in it stays' : fk.many + ' in it stay') + ', out of any folder.', 'Delete the folder', true))) return;
+      await leave(wrap);
       for (const e of fk.members().filter((x) => x.folder === f.id)) await fk.unfile(e);
       set({ [fk.key]: folders().filter((x) => x.id !== f.id) });
       redraw();
@@ -7921,7 +7922,10 @@ export function setup(ctx: Ctx, overrides?: any) {
       const remove = button('Remove it', async () => {
         try {
           const r = await rpc({ type: 'kept_drop', key: e.key, sigs: [] }, 30000);
-          if (r && r.ok) savedForget([e.key]);
+          if (r && r.ok) {
+            await leave(live());
+            savedForget([e.key]);
+          }
           else say(String((r && r.error) || 'It could not be removed.'));
         } catch (_) {
           say('It could not be removed: the backend did not answer.');
@@ -8091,6 +8095,7 @@ export function setup(ctx: Ctx, overrides?: any) {
           return;
         }
         if (!r || !r.ok) throw new Error('no');
+        await leave(live());
         savedForget([e.key]);
         log('A saved script and its saved audio were deleted.', '', 'setting');
       } catch (_) {
@@ -9090,6 +9095,80 @@ export function setup(ctx: Ctx, overrides?: any) {
     while (prev && prev.hidden) prev = prev.previousElementSibling as HTMLElement | null;
     return { side: prev ? 'marginTop' : 'marginBottom', px };
   }
+  // Something deleted leaves smoothly, as a row of Auto Refine's does: it
+  // fades and slides 4 pixels up while its space closes over several frames,
+  // so what is under it moves up with it. Every delete and remove in the
+  // panel and the Studio uses this, so they all move the same way. With
+  // Reduce motion it goes at once. The promise is kept once it has gone,
+  // after which the caller takes it out of the list and draws the list
+  // again, which no longer moves anything.
+  function leave(node: Element | null | undefined): Promise<void> {
+    const box = node as HTMLElement | null;
+    return new Promise((done) => {
+      let ran = false;
+      const finish = () => {
+        if (ran) return;
+        ran = true;
+        done();
+      };
+      try {
+        if (!box || !box.isConnected || calm() || box.hidden) return finish();
+        // offsetHeight is in CSS pixels, so UI Scale does not change it.
+        const tall = box.offsetHeight;
+        if (!(tall > 0)) return finish();
+        const how = getComputedStyle(box);
+        // A content-box box counts its padding and edge outside its height,
+        // so they come off the height written.
+        const edges = how.boxSizing === 'border-box' ? 0 : ['paddingTop', 'paddingBottom', 'borderTopWidth', 'borderBottomWidth'].reduce((n, k) => n + (parseFloat((how as any)[k]) || 0), 0);
+        const gap = gapBeside(box);
+        box.style.transition = 'none';
+        // A row's own entry animation would hold its strength where it is.
+        box.style.animation = 'none';
+        box.style.flexShrink = '0';
+        box.style.minHeight = '0px';
+        box.style.overflow = 'hidden';
+        box.style.height = Math.max(0, tall - edges) + 'px';
+        box.style.opacity = how.opacity;
+        box.style.pointerEvents = 'none';
+        box.setAttribute('data-af-leaving', '');
+        // Read the layout between the two, or there is nothing to travel
+        // between.
+        void box.offsetWidth;
+        // Ease-out, so it moves on the first frame and lands softly. The
+        // fade and the slide take as long as the space, so it is seen until
+        // the end.
+        const ease = '220ms ease-out';
+        box.style.transition = ['height', 'opacity', 'transform', 'margin-top', 'margin-bottom', 'padding-top', 'padding-bottom', 'border-top-width', 'border-bottom-width'].map((p) => p + ' ' + ease).join(',');
+        box.style.height = '0px';
+        box.style.opacity = '0';
+        box.style.transform = 'translateY(-4px)';
+        box.style.paddingTop = '0px';
+        box.style.paddingBottom = '0px';
+        box.style.borderTopWidth = '0px';
+        box.style.borderBottomWidth = '0px';
+        // The gap beside it in its list closes too, or the last few pixels
+        // go all at once.
+        box.style.marginTop = gap && gap.side === 'marginTop' ? -gap.px + 'px' : '0px';
+        box.style.marginBottom = gap && gap.side === 'marginBottom' ? -gap.px + 'px' : '0px';
+        const end = (e: TransitionEvent) => {
+          if (e.target !== box || e.propertyName !== 'height') return;
+          box.removeEventListener('transitionend', end);
+          finish();
+        };
+        box.addEventListener('transitionend', end);
+        // A page that does not animate still hands it over.
+        const t = setTimeout(() => {
+          timers.delete(t);
+          finish();
+        }, 600);
+        timers.add(t);
+      } catch (_) {
+        finish();
+      }
+    });
+  }
+  // Several at once, such as the people picked in the cast.
+  const leaveAll = (nodes: (Element | null | undefined)[]) => Promise.all(nodes.map((n) => leave(n))).then(() => {});
   function reveal(box: HTMLElement, open: boolean) {
     const anyBox = box as any;
     const run = (anyBox._afRun = (anyBox._afRun || 0) + 1);
@@ -12044,6 +12123,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       const n = who.length;
       const ok = await askSure('Remove ' + n + (n === 1 ? ' person' : ' people'), 'They are taken out of the cast. If they speak again, they are added back with no voice picked.', 'Remove', true);
       if (!ok) return;
+      await leaveAll(who.map((m) => root.querySelector('[data-person="' + (typeof CSS !== 'undefined' && CSS.escape ? CSS.escape(String(m.id)) : String(m.id)) + '"]')));
       const gone = new Set(who.map((m) => m.id));
       S.cast = (S.cast as Member[]).filter((m) => !gone.has(m.id));
       for (const id of gone) openPeople.delete(id);
@@ -12394,6 +12474,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         button('Delete', async () => {
           const ok = await askSure('Delete the group ' + f.name, 'The group is deleted. ' + (people.length ? 'The ' + count + ' in it stay in the cast, outside any group.' : 'It is empty.'), 'Delete', true);
           if (!ok) return;
+          await leave(sec);
           S.groups = groups().filter((x) => x.id !== f.id);
           for (const m of S.cast as Member[]) if (m.group === f.id) m.group = '';
           save();
@@ -12855,6 +12936,7 @@ export function setup(ctx: Ctx, overrides?: any) {
             const pics = picturesOf(mood.id);
             const also = pics ? ' The ' + (pics === 1 ? 'picture one person has' : 'pictures ' + pics + ' people have') + ' for it are taken out with it.' : '';
             if (!(await askSure('Delete ' + mood.name, 'Delete the mood ' + mood.name + '?' + also + ' There is no undo.', 'Delete', true))) return;
+            await leave(box);
             const all = own().filter((x) => x.id !== mood.id);
             S.moodList = all;
             const done = await dropMoodPictures([mood.id]);
@@ -13008,6 +13090,7 @@ export function setup(ctx: Ctx, overrides?: any) {
           const del = button('Delete', async () => {
             const uses = sceneMoodUses([mood.id]);
             if (!(await askSure('Delete ' + mood.name, 'Delete the scene mood ' + mood.name + '?' + uses + ' There is no undo.', 'Delete', true))) return;
+            await leave(box);
             S.sceneMoodList = own().filter((x) => x.id !== mood.id);
             dropSceneMoods([mood.id]);
             if (soundsRedraw) soundsRedraw();
@@ -13630,6 +13713,7 @@ export function setup(ctx: Ctx, overrides?: any) {
             ok = confirm('Remove ' + m.name + ' from the cast?');
           }
           if (!ok) return;
+          await leave(inner.closest('[data-person]'));
           S.cast = S.cast.filter((x: Member) => x.id !== m.id);
           openPeople.delete(m.id);
           save();
@@ -14290,12 +14374,16 @@ export function setup(ctx: Ctx, overrides?: any) {
     });
     (r.querySelector('.af-danger') as HTMLElement).addEventListener('click', async () => {
       if (!(await askSure('Delete this sound', '“' + s.name + '” is deleted from your library. ' + (s.source === 'upload' ? 'Upload it again to get it back.' : s.source === 'link' ? 'Add the link again to get it back.' : s.source === 'found' ? 'If it is needed again, Freesound is searched again.' : 'If it is needed again, a new one is made, which costs ElevenLabs credits.'), 'Delete', true))) return;
+      // It leaves first, since the new list arrives with the answer and is
+      // drawn at once. If the delete fails, the list is drawn again with it.
+      await leave(r);
       try {
         const res = await rpc({ type: 'sound_delete', id: s.id }, 15000);
         if (res && Array.isArray(res.sounds)) sounds = res.sounds;
         renderTab();
       } catch (e: any) {
         log('The sound could not be deleted: the backend did not answer.', 'bad');
+        renderTab();
       }
     });
     return r;
@@ -14805,7 +14893,8 @@ export function setup(ctx: Ctx, overrides?: any) {
           },
         });
         if (i >= 1) {
-          const drop = button('Remove', () => {
+          const drop = button('Remove', async () => {
+            await leave(row);
             const now = bind.stops().slice();
             now.splice(i, 1);
             bind.setStops(now, true);
@@ -15493,6 +15582,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     } else {
       void (async () => {
         if (!(await askSure('Delete this shape', 'Delete ' + shapeName(sh, shapesNow().indexOf(sh)) + ' from the design?', 'Delete', true))) return;
+        if (designRefs) await leaveAll([designRefs.list.querySelector('[data-af-shape="' + sh.id + '"]'), designRefs.editor]);
         const now = shapesNow();
         const i = now.indexOf(sh);
         if (i >= 0) now.splice(i, 1);
@@ -15623,6 +15713,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         return;
       }
       if (!(await askSure('Delete this sticker', 'Delete ' + stickerName(k, stickersNow().indexOf(k)) + '? Its picture is taken out of your account, unless a saved look or a project still uses it.', 'Delete', true))) return;
+      if (stickerRefs) await leaveAll([stickerRefs.list.querySelector('[data-af-sticker="' + k.id + '"]'), stickerRefs.editor]);
       const now = stickersNow();
       const i = now.indexOf(k);
       if (i >= 0) now.splice(i, 1);
@@ -16420,7 +16511,8 @@ export function setup(ctx: Ctx, overrides?: any) {
             if (!hex) drawPeople();
           },
         }));
-        const rm = button('Remove', () => {
+        const rm = button('Remove', async () => {
+          await leave(row);
           const next = Object.assign({}, S.videoPersonColors || {});
           delete next[id];
           set({ videoPersonColors: next });
@@ -16678,6 +16770,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       card.appendChild(backsBox);
       const del = button('Delete', async () => {
         if (!(await askSure('Delete watermark ' + (n + 1), 'Delete this watermark' + (m.pic ? ' and its picture' : '') + '? There is no undo.', 'Delete', true))) return;
+        await leave(card);
         const at = list.indexOf(m);
         if (at >= 0) list.splice(at, 1);
         save(true);
@@ -18886,6 +18979,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       use.setAttribute('data-af-lookuse', '');
       const del = button('Delete', async () => {
         if (!(await askSure('Delete the look', 'The saved look ' + l.name + ' is deleted. The look in use now stays as it is.', 'Delete', true))) return;
+        await leave(row);
         set({ videoLooks: looks.filter((x) => x.id !== l.id) });
         drawLooks(box);
       }, 'af-danger');
@@ -18975,7 +19069,8 @@ export function setup(ctx: Ctx, overrides?: any) {
         keep();
       }));
       const row = el('<div class="af-row"></div>');
-      row.appendChild(button('Remove this note', () => {
+      row.appendChild(button('Remove this note', async () => {
+        await leave(one);
         notes.splice(i, 1);
         keep();
         drawNoteEditors(box, changed);
@@ -19409,6 +19504,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       if (!(await askSure('Delete this project', 'The project ' + e.name + ' is deleted. Its saved audio, pictures and fonts stay. There is no undo.', 'Delete', true))) return;
       const r = await projectAsk({ type: 'project_drop', id: e.id });
       if (!r || !r.ok) return say((r && r.error) || 'It could not be deleted: the backend did not answer.');
+      await leave(row);
       projectList = r.list;
       const was = openProject && openProject.id === e.id;
       if (was) {

@@ -52,6 +52,7 @@ _2026-11-26_
 
 ### Changed
 
+- **Anything deleted leaves smoothly.** A person, a group, a folder, a saved performance, a project, a sound, a mood, a note, a watermark, a saved look, a shape, a sticker or a color fades and slides up while its space closes, and what is under it moves up with it. Reduce motion takes it out at once.
 - **The Director's built-in prompt picks a mood from the moods it is sent.** Its music part says to pick a mood by its name from the moods listed, each with what it is for. If you have your own prompt, a notice says the built-in one changed.
 - **Put the look back** under **Saved looks** is now **Back to the built-in look**, and is also at the top of **Templates**. It puts back the look exactly as the built-in look template sets it, as one Undo step, and offers to save your look first. Your shape of video now stays, as it does with any template. See [Back to the built-in look](docs/studio.md#back-to-the-built-in-look).
 - **Permission notices follow Lumiverse at once.** A notice for a refused permission goes as soon as Lumiverse grants it, and comes back if it is taken away, with no reload. The Log says each change. Without **App manipulation**, the **Studio** tab and the Studio's window say that it opens in a window and how to open it full screen.

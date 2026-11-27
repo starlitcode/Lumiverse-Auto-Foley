@@ -214,6 +214,7 @@ function answer(msg) {
     case 'video_bg_put': window.__videoBgs = Object.assign(window.__videoBgs || {}, { [msg.id || 'main']: msg.picture || '' }); if ((msg.id || 'main') === 'main') window.__videoBg = msg.picture || ''; return reply({ type: 'video_bg', id: msg.id || 'main', ok: true, picture: msg.picture || '' });
     // Watermark pictures, by id.
     case 'mark_pic_get': { const r = { type: 'mark_pic', id: msg.id, picture: (window.__markPics || {})[msg.id] || '' }; if (window.__markDelay) { setTimeout(() => reply(r), window.__markDelay); return; } return reply(r); }
+    case 'sound_delete': window.__sounds = window.__sounds.filter((x) => x.id !== msg.id); return reply({ type: 'sounds', sounds: window.__sounds });
     case 'sticker_get': return reply({ type: 'sticker', id: msg.id, picture: (window.__stickers || {})[msg.id] || '' });
     case 'sticker_put': window.__stickers = Object.assign(window.__stickers || {}, { [msg.id]: msg.picture || '' }); return reply({ type: 'sticker', id: msg.id, ok: true });
     case 'mark_pic_put': window.__markPics = Object.assign(window.__markPics || {}, { [msg.id]: msg.picture || '' }); return reply({ type: 'mark_pic', id: msg.id, ok: true });
@@ -538,6 +539,11 @@ async function wsSec(page, title) {
 }
 
 async function showTab(page, id) {
+  // The Studio covers the drawer while it is open, so it is closed first.
+  if (await page.locator("[data-af-ws]").count()) {
+    await page.click('[data-af-ws="close"]');
+    await page.waitForTimeout(350);
+  }
   await page.click(`.af-tab[data-tab="${id}"]`);
   await page.waitForTimeout(320);
   // Every closed row opens, so its contents are measured too.
@@ -6774,6 +6780,103 @@ if (section("scene moods")) {
     const back = await page.evaluate(() => ({ list: window.__settings.sceneMoodList, n: document.querySelectorAll("[data-af-scenemood]").length, asked: window.__asked }));
     check(back.list.length === 0 && back.n === 10 && back.asked === 2, size.name + ": Back to built-in asks first, and puts the ten built-in moods back");
     check(!errors.length, size.name + ": no page errors. " + errors.slice(0, 2).join(" | "));
+    await context.close();
+  }
+}
+
+if (section("leaving rows")) {
+  console.log("Anything deleted leaves smoothly: its height and strength fall over several frames and the row under it moves up with it. With Reduce motion it goes at once.");
+  const SHAPE = (id, x) => ({ id, kind: "rect", x, y: 0.5, w: 200, h: 120, rot: 0, fill: "#ff0000", grad: "none", stops: [], dir: "down", clear: 0, text: "" });
+  const KINDS = [
+    { name: "a scene mood", tab: "sounds", fold: "Scene moods", item: '[data-af-scenemood="cozy"]', next: '[data-af-scenemood="happy"]', press: '[data-af-scenemood="cozy"] [data-af-scenemood-act="delete"]' },
+    { name: "a mood for pictures", tab: "cast", fold: "Moods for pictures", item: '[data-af-mood="sad"]', next: '[data-af-mood="angry"]', press: '[data-af-mood="sad"] [data-af-mood-act="delete"]' },
+    { name: "a sound", tab: "sounds", item: ".af-sounds > .af-sound", next: ".af-sounds > .af-sound:nth-child(2)", press: ".af-sounds > .af-sound .af-danger" },
+    { name: "a person", tab: "cast", item: '[data-person="b"]', next: '[data-person="c"]', before: '[data-person="b"] .af-person-head', pressText: { within: '[data-person="b"]', text: "Remove" } },
+    { name: "a note", ws: "Notes", pre: `window.__settings.videoNotes = [{ text: "First note", when: "all", from: 0, secs: 4, place: "bottom" }, { text: "Second note", when: "all", from: 0, secs: 4, place: "bottom" }];`, item: "[data-af-videonote]", next: "[data-af-videonote]:nth-of-type(2)", pressText: { within: "[data-af-videonote]", text: "Remove this note" } },
+    { name: "a watermark", ws: "Watermarks", pre: `window.__settings.videoMarks = [{ id: "w1", text: "ONE", pic: false, place: "br", size: 64, strength: 50, when: "all", from: 0, secs: 4, backs: [] }, { id: "w2", text: "TWO", pic: false, place: "bl", size: 64, strength: 50, when: "all", from: 0, secs: 4, backs: [] }];`, item: { closestOf: '[data-af-markdel="w1"]', up: ".af-card, .af-col.af-mark, [data-af-mark]" }, next: { closestOf: '[data-af-markdel="w2"]', up: ".af-card, .af-col.af-mark, [data-af-mark]" }, press: '[data-af-markdel="w1"]' },
+    { name: "a saved look", ws: "Saved looks", pre: `window.__settings.videoLooks = [{ id: "l1", name: "Harbor", look: {} }, { id: "l2", name: "Lantern", look: {} }];`, item: "[data-af-look]", next: "[data-af-look]:nth-of-type(2)", pressText: { within: "[data-af-look]", text: "Delete" } },
+    { name: "a project", ws: "Projects", pre: `window.__projIndex = [{ id: "p1", name: "Quay", folder: "", at: 2, keptKey: "" }, { id: "p2", name: "Mill", folder: "", at: 1, keptKey: "" }]; window.__projects = { p1: { look: {} }, p2: { look: {} } };`, item: '[data-af-project-row][data-af-id="p1"]', next: '[data-af-project-row][data-af-id="p2"]', press: '[data-af-project-row][data-af-id="p1"] [data-af-projectdel]' },
+    { name: "a saved performance", ws: "Saved audio", pre: `window.__keptList = [{ key: "k1", messageId: "m1", chatId: "chat1", author: "Ysolde", keptAt: 3, lines: 3, first: "The quay was empty." }, { key: "k2", messageId: "m2", chatId: "chat1", author: "Wyn", keptAt: 2, lines: 2, first: "The mill was loud." }];`, item: '[data-af-saved-row][data-af-key="k1"]', next: '[data-af-saved-row][data-af-key="k2"]', pressText: { within: '[data-af-saved-row][data-af-key="k1"]', text: "Delete" } },
+    { name: "a shape", ws: "Background", pre: `window.__settings.videoBacks = [{ id: "main", name: "Main", kind: "design", color: "#000000", fill: "solid", stops: [], dir: "down", dim: 40, blur: 0, shapes: [${JSON.stringify(SHAPE("s1", 0.3))}, ${JSON.stringify(SHAPE("s2", 0.7))}], use: "match", moods: [], places: [] }]; window.__settings.videoBackPick = "main";`, item: '[data-af-shape="s1"]', next: '[data-af-shape="s2"]', before: '[data-af-shape="s1"]', press: '[data-af-shape-act="delete"]' },
+    { name: "a group", tab: "cast", pre: `window.__settings.groups = [{ id: "g1", name: "Lighthouse crew", open: false }, { id: "g2", name: "Mill hands", open: false }];`, item: '.af-group[data-group="g1"]', next: '.af-group[data-group="g2"]', pressText: { within: '.af-group[data-group="g1"] .af-group-head', text: "Delete" } },
+    { name: "a folder", ws: "Projects", pre: `window.__settings.projectFolders = [{ id: "f1", name: "Old", open: true }, { id: "f2", name: "New", open: true }];`, item: '[data-af-savedfolder][data-af-folderid="f1"]', next: '[data-af-savedfolder][data-af-folderid="f2"]', pressText: { within: '[data-af-savedfolder][data-af-folderid="f1"]', text: "Delete the folder" } },
+    { name: "a sticker", ws: "Stickers", pre: `window.__settings.videoStickers = [{ id: "k1", x: 0.3, y: 0.5, w: 200, h: 100, rot: 0, clear: 0, blend: "normal", layer: "top", when: "all", from: 0, secs: 4, backs: [] }, { id: "k2", x: 0.7, y: 0.5, w: 200, h: 100, rot: 0, clear: 0, blend: "normal", layer: "top", when: "all", from: 0, secs: 4, backs: [] }];`, item: '[data-af-sticker="k1"]', next: '[data-af-sticker="k2"]', before: '[data-af-sticker="k1"]', press: '[data-af-sticker-act="delete"]' },
+  ];
+  const record = (page, k) => page.evaluate(async (k) => {
+    const find = (s) => (typeof s === "string" ? document.querySelector(s) : s && document.querySelector(s.closestOf) ? document.querySelector(s.closestOf).closest(s.up) : null);
+    const item = find(k.item);
+    const next = k.next ? find(k.next) : null;
+    if (!item) return { missing: "item" };
+    item.scrollIntoView({ block: "center" });
+    await new Promise((r) => setTimeout(r, 200));
+    const h0 = item.offsetHeight;
+    const frames = [];
+    let on = true;
+    const tick = () => {
+      const live = item.isConnected;
+      frames.push({ live, h: live ? item.offsetHeight : 0, o: live ? parseFloat(getComputedStyle(item).opacity) : 0, top: next && next.isConnected && item.parentElement ? next.getBoundingClientRect().top - item.parentElement.getBoundingClientRect().top : null });
+      if (on) requestAnimationFrame(tick);
+    };
+    const btn = k.press ? document.querySelector(k.press) : [...document.querySelector(k.pressText.within).querySelectorAll("button")].find((b) => b.textContent.trim() === k.pressText.text);
+    if (!btn) return { missing: "button" };
+    requestAnimationFrame(tick);
+    btn.click();
+    await new Promise((r) => setTimeout(r, 1000));
+    on = false;
+    return { h0, frames, sent: (window.__sent || []).slice(-3).map((m) => m.type), asked: window.__asked, btn: btn.outerHTML.slice(0, 80) };
+  }, k);
+  const judge = (r) => {
+    if (r.missing) return { ok: false, why: "no " + r.missing };
+    const f = r.frames;
+    const mid = f.filter((x) => x.live && x.h > 0.5 && x.h < r.h0 - 0.5).length;
+    const fading = f.filter((x) => x.live && x.o > 0.05 && x.o < 0.95).length;
+    const lastLive = [...f].reverse().find((x) => x.live && x.h >= 0);
+    const vanish = lastLive ? lastLive.h : r.h0;
+    const tops = f.map((x) => x.top).filter((x) => x !== null);
+    let step = 0;
+    for (let i = 1; i < tops.length; i++) step = Math.max(step, Math.abs(tops[i] - tops[i - 1]));
+    const travel = tops.length ? Math.abs(tops[tops.length - 1] - tops[0]) : 0;
+    if (process.env.UI_DEBUG) console.log(JSON.stringify({ sent: r.sent, asked: r.asked, btn: r.btn }));
+    return { ok: mid >= 4 && fading >= 3 && vanish <= 2 && (!tops.length || step <= Math.max(6, travel * 0.4)), why: JSON.stringify({ h0: r.h0, mid, fading, vanish, step: Math.round(step), travel: Math.round(travel) }) };
+  };
+  const goTo = async (page, k) => {
+    if (k.ws) {
+      await openWs(page);
+      await page.waitForTimeout(500);
+      await wsSec(page, k.ws);
+    } else {
+      await page.click('.af-tab[data-tab="' + k.tab + '"]');
+      await page.waitForTimeout(350);
+      if (k.fold) await page.evaluate((t) => [...document.querySelectorAll(".af-fold")].find((b) => b.textContent.includes(t)).click(), k.fold);
+    }
+    await page.waitForTimeout(500);
+    if (k.before) {
+      await page.evaluate((s) => document.querySelector(s).click(), k.before);
+      await page.waitForTimeout(500);
+    }
+  };
+  const only = process.env.UI_LEAVE || "";
+  for (const k of KINDS.filter((x) => !only || x.name.includes(only))) {
+    for (const size of SIZES) {
+      for (const z of [1, 1.25, 0.85]) {
+        const say = size.name + " at " + z + ", " + k.name;
+        const { context, page, errors } = await open(THEMES[0], size, z, (k.pre || "") + (k.ws ? scale(z) + ";" : ""));
+        await goTo(page, k);
+        const j = judge(await record(page, k));
+        check(j.ok, say + ": leaves over several frames, and the next row moves up smoothly " + j.why);
+        check(!errors.length, say + ": no page errors. " + errors.slice(0, 2).join(" | "));
+        await context.close();
+      }
+    }
+    // Reduce motion: gone in one step.
+    const size = SIZES.find((x) => !x.touch) || SIZES[0];
+    const { context, page, errors } = await open(THEMES[0], size, 1, (k.pre || "") + "window.__settings.reduceMotion = true;");
+    await goTo(page, k);
+    const r = await record(page, k);
+    const mid = r.frames ? r.frames.filter((x) => x.live && x.h > 0.5 && x.h < r.h0 - 0.5).length : -1;
+    const gone = r.frames ? r.frames.findIndex((x) => !x.live || x.h === 0) : -1;
+    check(mid === 0 && gone >= 0, size.name + " with Reduce motion, " + k.name + ": it is taken out in one step (" + JSON.stringify({ mid, gone }) + ")");
+    check(!errors.length, size.name + " with Reduce motion, " + k.name + ": no page errors. " + errors.slice(0, 2).join(" | "));
     await context.close();
   }
 }
