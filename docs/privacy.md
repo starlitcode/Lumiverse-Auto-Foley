@@ -68,6 +68,8 @@ With **Save the performance to the message** on, the finished audio is saved to 
 
 Refusing **UI panels** stops only the floating player. Refusing **App manipulation** opens the Studio in Lumiverse's extension window instead of over the whole screen. Refusing **CORS proxy** stops new sound effects and a Chatterbox server reached directly. Refusing **Decision models** turns the Decision model off. Refusing **Generation** turns the Director off, and messages are read as written.
 
+A refused permission is said where it is needed: at the top of each tab while something that needs it is on, and for **App manipulation**, on the **Studio** tab and in the Studio's window. The notice goes as soon as Lumiverse grants the permission, and comes back if it is taken away, with no reload. The Log says each change.
+
 ## What it never does
 
 - It never changes the words of a message. Only the copy sent to the voice gets tags.

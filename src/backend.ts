@@ -5965,6 +5965,19 @@ try {
   logWarn('could not listen to the panel: ' + String((e && e.message) || e));
 }
 
+// A permission granted or taken away in Lumiverse's Extensions panel is
+// passed on to every open panel, so its notices change at once.
+try {
+  const perms: any = (spindle as any).permissions;
+  if (perms && typeof perms.onChanged === 'function')
+    perms.onChanged((d: any) => {
+      const list = Array.isArray(d && d.allGranted) ? d.allGranted.map((x: any) => str(x, 40)) : [];
+      send(undefined, { type: 'permissions', granted: list });
+    });
+} catch (e: any) {
+  logWarn('could not listen for permission changes: ' + String((e && e.message) || e));
+}
+
 try {
   spindle.log.info('Auto Foley ' + VERSION + ' loaded.');
 } catch (_) {}

@@ -414,7 +414,7 @@ window.__ctx = {
       return [{ name: 'face.png', mimeType: 'image/png', bytes: new Uint8Array(await b.arrayBuffer()) }];
     },
   },
-  permissions: { getGranted: async () => ['generation', 'decisions'] },
+  permissions: { getGranted: async () => (window.__granted || ['generation', 'decisions', 'ui_panels', 'app_manipulation']).slice() },
   events: { on(name, fn) { (listeners[name] = listeners[name] || []).push(fn); return () => { listeners[name] = listeners[name].filter((f) => f !== fn); }; } },
   sendToBackend(msg) { window.__sent.push(msg); answer(msg); },
   onBackendMessage(fn) { backendFns.add(fn); return () => backendFns.delete(fn); },
@@ -422,6 +422,8 @@ window.__ctx = {
 };
 window.__counts = () => ({ backend: backendFns.size, listeners: Object.values(listeners).reduce((n, l) => n + l.length, 0) });
 window.__emit = (name, p) => (listeners[name] || []).forEach((fn) => fn(p));
+// Lumiverse changing a permission: the backend passes the new list on.
+window.__permChange = (list) => { window.__granted = list.slice(); backendFns.forEach((fn) => fn({ type: 'permissions', granted: list.slice() })); };
 `;
 
 // A message row as Lumiverse draws it: the host's own buttons, with an empty
@@ -6383,6 +6385,44 @@ if (section("video matches preview")) {
       }, b64);
       check(!got.err && got.best < 8, size.name + ", " + tpl + ": a frame of the saved video matches the preview at the same time (" + JSON.stringify(got) + ")");
     }
+    check(!errors.length, size.name + ": no page errors. " + errors.slice(0, 2).join(" | "));
+    await context.close();
+  }
+}
+
+if (section("permission notices")) {
+  console.log("Each permission refused is said where it is needed, and the notice follows a grant or a refusal at once");
+  const ALL = ["generation", "decisions", "cors_proxy", "ui_panels", "app_manipulation"];
+  for (const size of SIZES) {
+    const { context, page, errors } = await open(THEMES[0], size, 1, `window.__granted = ${JSON.stringify(ALL)}; window.__noApp = true; Object.assign(window.__settings, { directorOn: true, decisionsOn: true, soundsOn: true, makeSounds: true, widgetOn: true });`);
+    await page.waitForTimeout(500);
+    const text = () => page.evaluate(() => document.body.innerText);
+    const NAMES = { generation: /Generation permission is refused/, decisions: /Decision models permission is refused/, cors_proxy: /CORS proxy permission is refused/, ui_panels: /UI panels permission is refused/ };
+    for (const p of Object.keys(NAMES)) {
+      await page.evaluate((l) => window.__permChange(l), ALL.filter((x) => x !== p));
+      await page.waitForTimeout(300);
+      const shown = NAMES[p].test(await text());
+      await page.evaluate((l) => window.__permChange(l), ALL);
+      await page.waitForTimeout(300);
+      const gone = !NAMES[p].test(await text());
+      check(shown && gone, size.name + ": " + p + " refused is said in the panel, and the notice goes once it is granted, with no reload");
+    }
+    // App manipulation: on the Studio tab and in the windowed Studio.
+    const APP = /The Studio opens in a window\. Grant App manipulation to Auto Foley in Lumiverse’s Extensions panel to open it full screen\./;
+    await toTab(page, "studio");
+    await page.waitForTimeout(300);
+    await page.evaluate((l) => window.__permChange(l), ALL.filter((x) => x !== "app_manipulation"));
+    await page.waitForTimeout(300);
+    const onTab = APP.test(await page.textContent('[data-af-card="studio-summary"]'));
+    await openWs(page);
+    await page.waitForTimeout(400);
+    const inWs = APP.test(await page.textContent("[data-af-ws]"));
+    await page.evaluate((l) => window.__permChange(l), ALL);
+    await page.waitForTimeout(400);
+    const wsGone = !APP.test(await page.textContent("[data-af-ws]"));
+    check(onTab && inWs && wsGone, size.name + ": App manipulation refused is said on the Studio tab and in the window, and goes when it is granted (" + [onTab, inWs, wsGone].join(", ") + ")");
+    const m = await page.evaluate(MEASURE, size.touch);
+    check(!m.overflow.length && !m.small.length, size.name + ": it fits. " + m.overflow.concat(m.small).slice(0, 2).join("; "));
     check(!errors.length, size.name + ": no page errors. " + errors.slice(0, 2).join(" | "));
     await context.close();
   }

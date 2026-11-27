@@ -2300,7 +2300,17 @@ export function setup(ctx: Ctx, overrides?: any) {
   }
 
   function onPush(msg: any) {
-    if (msg.type === 'sounds' && Array.isArray(msg.sounds)) {
+    if (msg.type === 'permissions' && Array.isArray(msg.granted)) {
+      // Lumiverse changed a permission: every notice follows at once, and
+      // the Log says which.
+      const was = granted || [];
+      const now: string[] = msg.granted.map((x: any) => String(x));
+      for (const p of now) if (was.indexOf(p) < 0) log('Lumiverse granted the ' + p + ' permission.', '', 'setting');
+      for (const p of was) if (now.indexOf(p) < 0) log('Lumiverse took away the ' + p + ' permission.', 'bad', 'setting');
+      granted = now;
+      if (alive) renderTab();
+      if (ws && !ws.closing) paintPermissionNotes();
+    } else if (msg.type === 'sounds' && Array.isArray(msg.sounds)) {
       sounds = msg.sounds;
       if (tab === 'sounds') renderTab();
     } else if (msg.type === 'directing') {
@@ -16979,9 +16989,9 @@ export function setup(ctx: Ctx, overrides?: any) {
     const stage = main.querySelector('[data-af-ws-stage]') as HTMLElement;
     const panel = main.querySelector('[data-af-ws-panel]') as HTMLElement;
     const secs = new Map<string, { title: string; build: (b: HTMLElement) => void; toggle?: (open: boolean) => void }>();
-    for (const n of permissionWarnings()) stage.appendChild(notice('bad', n));
+    const notes = el('<div class="af-col" data-af-ws-perms></div>');
+    stage.appendChild(notes);
     if (openProject && projectGone) stage.appendChild(projectGoneBox());
-    if (w.how === 'modal') stage.appendChild(hint('Full screen needs App manipulation. Turn it on for Auto Foley in Lumiverse’s Extensions panel.'));
     renderStudio((id, title, build, toggle) => secs.set(id, { title, build, toggle }), stage, acts);
     secs.set('keys', { title: 'Keyboard shortcuts', build: (b) => drawKeyHelp(b) });
     secs.set('projects', { title: 'Projects', build: (b) => b.appendChild(projectsCard()) });
@@ -17027,6 +17037,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     paintProjectName();
     w.box.appendChild(main);
     for (const region of [panel, rail, stage]) overlayBar(main, region);
+    paintPermissionNotes();
     wsDraw = { panel, rail, picker: pickRow.querySelector('select') as HTMLSelectElement | null, secs, undo: undoBtn, redo: redoBtn };
     paintUndo();
     // Each button's key, in its hover text, on a computer with a mouse.
@@ -17655,6 +17666,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     const what = el('<p class="af-status" data-af-studio-what></p>');
     setText(what, sh ? 'Loaded: ' + String(sh.fileTitle || sh.title || 'the last message played') + '.' : 'Nothing is loaded. Play a message, or open one from Saved audio in the Studio.');
     c.appendChild(what);
+    if (appWarning()) c.appendChild(notice('warn', appWarning()));
     const row = el('<div class="af-row"></div>');
     if (ws && !ws.closing) {
       // While the Studio is open, this brings it to the front.
@@ -19396,6 +19408,21 @@ export function setup(ctx: Ctx, overrides?: any) {
     return out;
   }
 
+  // The notices in the workspace, drawn again when a permission changes.
+  function paintPermissionNotes() {
+    const box = ws && (ws.box.querySelector('[data-af-ws-perms]') as HTMLElement | null);
+    if (!box) return;
+    box.replaceChildren();
+    for (const n of permissionWarnings()) box.appendChild(notice('bad', n));
+    if (ws && ws.how === 'modal' && appWarning()) box.appendChild(notice('warn', appWarning()));
+    box.hidden = !box.childElementCount;
+  }
+  // Without App manipulation the Studio opens in Lumiverse's window. Said on
+  // the drawer's Studio tab and in the window, where it shows.
+  function appWarning(): string {
+    if (!granted || granted.indexOf('app_manipulation') >= 0) return '';
+    return 'The Studio opens in a window. Grant App manipulation to Auto Foley in Lumiverse\u2019s Extensions panel to open it full screen.';
+  }
   function permissionWarnings(): string[] {
     if (!granted || !S.enabled) return [];
     const has = (p: string) => (granted as string[]).indexOf(p) >= 0;
@@ -19641,7 +19668,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       if (!Array.isArray(granted)) lines.push('permissions: not reported by this build');
       else {
         lines.push('permissions:');
-        for (const p of ['generation', 'decisions', 'cors_proxy', 'ui_panels']) lines.push('  ' + p + ' = ' + (granted.indexOf(p) >= 0 ? 'granted' : 'MISSING'));
+        for (const p of ['generation', 'decisions', 'cors_proxy', 'ui_panels', 'app_manipulation']) lines.push('  ' + p + ' = ' + (granted.indexOf(p) >= 0 ? 'granted' : 'MISSING'));
       }
       // Each TTS connection by its service and model only, not its name.
       lines.push('tts connections: ' + (ttsListed < 0 ? 'not read' : ttsListed + ' listed by Lumiverse, ' + ttsConnections.filter((c) => c.id !== CBX_ID).length + ' usable'));
