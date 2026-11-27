@@ -547,3 +547,17 @@ describe("the mood of a line, for a mood picture", () => {
     for (const mood of ["calm", "cozy", "happy", "playful", "romantic", "sad", "tense", "scary", "action", "mysterious"]) expect(all).toContain(mood);
   });
 });
+
+describe("templates", () => {
+  test("every template gives a value for every look setting, so nothing is left from the look before", () => {
+    const src = readFileSync(new URL("../src/frontend.ts", import.meta.url), "utf8");
+    const look = (src.match(/const LOOK_KEYS = \[([\s\S]*?)\];/) as RegExpMatchArray)[1].match(/'(\w+)'/g)!.map((x) => x.slice(1, -1));
+    const want = look.filter((k) => k !== "videoByline" && k !== "videoMarks" && k !== "videoShape").concat(["studioMusic"]).sort();
+    const found = [...src.matchAll(/\n      id: '([a-z]+)',\n[^\n]*\n[^\n]*\n      look: (\{[\s\S]*?\n      \}),\n/g)];
+    expect(found.length).toBeGreaterThanOrEqual(8);
+    for (const m of found) {
+      const keys = Object.keys(new Function("return " + m[2])()).sort();
+      expect({ id: m[1], keys }).toEqual({ id: m[1], keys: want });
+    }
+  });
+});

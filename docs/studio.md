@@ -281,19 +281,22 @@ With no performance in the Studio, the preview shows an example clip, about 25 s
 
 Leaving **Templates** while you try one puts your look back.
 
-| Template | What it suits |
-| --- | --- |
-| **Soft dark blue** | Any story. The built-in look: quiet and easy to read. |
-| **Plain and clean** | Dialogue you want read with nothing around it. |
-| **Paper page** | Fairy tales and gentle stories read aloud. |
-| **Film bars** | Drama and tense scenes, like a film with subtitles, with bars above and below. |
-| **Neon glow** | City nights, science fiction and parties, with glowing words in a gradient. |
-| **Pastel blush** | Romance and soft, warm moments. Words blur in. |
-| **Cold and dark** | Horror and dread. Slow, through black, with dark edges. |
-| **Bright comic** | Comedy, games and playful scenes, with bright shapes. |
-| **Typewriter page** | Letters, diaries and old mysteries. |
-| **Warm lamp** | Cozy talks by a fire, taverns and homes. |
-| **Dreamy sky** | Dreams, memories and soft fantasy. |
+| Template | What it suits | Transition |
+| --- | --- | --- |
+| **The built-in look** | The look Auto Foley starts with. Quiet and easy to read. | Fade and rise, 0.5 seconds |
+| **Plain text on dark gray** | Words only, for dialogue with nothing around it. | Dissolve, 0.3 seconds |
+| **Storybook page** | Fairy tales and bedtime stories. | Fade and rise, 0.6 seconds |
+| **Film subtitles** | Drama and tense scenes, with the words at the bottom like subtitles. | Dissolve, 0.7 seconds |
+| **Eighties sunset** | Science fiction, city nights and stories set in the 1980s. | Gentle zoom, 0.5 seconds |
+| **Pink stationery** | Romance and soft, warm scenes. | Dissolve, 0.6 seconds |
+| **Horror, black and gray** | Horror. Slow, with a fade through black between lines. | Through black, 0.9 seconds |
+| **Comic panel** | Comedy, games and silly scenes. | Slide across, 0.4 seconds |
+| **Typed on lined paper** | Letters, diaries and mysteries. | Fade out, then in, 0.5 seconds |
+| **By the fire** | Quiet talks indoors: kitchens, taverns, a fire at night. | Fade and rise, 0.5 seconds |
+| **Stars and moon** | Dreams, memories and night scenes. | Soft focus, 0.7 seconds |
+| **Terminal** | Hackers, robots and anything that happens on a screen. | Cut, with no movement |
+
+Each template sets every setting that changes the drawn frame, and **Music** under **The performance**, so nothing is left from the look before. Templates use only built-in transitions. Switching templates fades the preview from one frame to the next over 0.2 seconds, which Reduce motion turns off.
 
 If a later update changes the templates, **Templates** says so.
 

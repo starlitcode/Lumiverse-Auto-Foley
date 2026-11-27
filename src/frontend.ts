@@ -4075,6 +4075,20 @@ export function setup(ctx: Ctx, overrides?: any) {
     return ask;
   }
 
+  // Pictures already read, by address, so a stage built again for the same
+  // look draws at once. The oldest go first past 60.
+  const imageCache = new Map<string, HTMLImageElement>();
+  async function cachedImage(src: string): Promise<HTMLImageElement | null> {
+    if (!src) return null;
+    const had = imageCache.get(src);
+    if (had) return had;
+    const im = await loadImage(src);
+    if (im) {
+      imageCache.set(src, im);
+      if (imageCache.size > 60) imageCache.delete(imageCache.keys().next().value as string);
+    }
+    return im;
+  }
   function loadImage(src: string): Promise<HTMLImageElement | null> {
     return new Promise((done) => {
       if (!src) return done(null);
@@ -4216,7 +4230,41 @@ export function setup(ctx: Ctx, overrides?: any) {
       if (bk.kind === 'design') drawShapes(b, W, H, bk.shapes || [], st.font);
     } else dark();
     drawEdges(b, W, H);
+    // A soft gradient on a screen with 256 steps a color can show bands. A
+    // very light grain, drawn once into the kept background, hides them. A
+    // picture has grain of its own.
+    if (!wall) dither(b, W, H);
     b.restore();
+  }
+  // A tile of gray grain around the middle gray, laid over with Overlay,
+  // which leaves middle gray as it is. It moves each pixel by a step or two
+  // at most.
+  let grainTile: any = null;
+  function dither(b: CanvasRenderingContext2D, W: number, H: number) {
+    try {
+      if (!grainTile) {
+        grainTile = canvasOf(128, 128);
+        const g = grainTile.getContext('2d') as CanvasRenderingContext2D;
+        const img = g.createImageData(128, 128);
+        let seed = 7;
+        for (let i = 0; i < img.data.length; i += 4) {
+          seed = (seed * 1103515245 + 12345) & 0x7fffffff;
+          const v = 128 + ((seed >> 8) % 25) - 12;
+          img.data[i] = img.data[i + 1] = img.data[i + 2] = v;
+          img.data[i + 3] = 255;
+        }
+        g.putImageData(img, 0, 0);
+      }
+      const pat = b.createPattern(grainTile, 'repeat');
+      if (!pat) return;
+      b.save();
+      b.setTransform(1, 0, 0, 1, 0, 0);
+      b.globalAlpha = 0.5;
+      b.globalCompositeOperation = 'overlay';
+      b.fillStyle = pat;
+      b.fillRect(0, 0, W, H);
+      b.restore();
+    } catch (_) {}
   }
 
   // How much larger than the frame a moving picture is drawn, so it can
@@ -4343,16 +4391,45 @@ export function setup(ctx: Ctx, overrides?: any) {
   // only, when set, draws that one background behind the whole video, for
   // the preview while it is being changed.
   // fixed, when given, is the scenes' timeline, for the example clip.
-  async function videoStage(parts: VideoPart[], sh: Show | null = null, only = '', fixed: { t: number; id: string }[] | null = null): Promise<VideoStage> {
-    const { w: W, h: H } = videoSize();
-    // Only a font of your own is waited on. The built-in ones need nothing.
-    const fontsUsed = [String(S.videoFont), nameFontChoice(), String(S.videoBylineFont || '')].concat(marksNow().map((m) => String(m.font || '')));
-    if (fontsUsed.some((f) => /^own:/.test(f))) {
-      await loadOwnFonts().catch(() => {});
-      await Promise.all(fontsUsed.map((f) => ensureFont(f)));
+  // A stage is built in two steps. stageAssets reads everything that has
+  // to be waited for: fonts, pictures and watermark pictures. stageNow then
+  // builds the stage at once from what was read, with nothing to wait for,
+  // so the settings cannot change while it is built.
+  // scale draws the stage smaller than the video, for the preview: every
+  // size in a frame is drawn in proportion to the frame, so a smaller stage
+  // draws the same frame with fewer pixels.
+  async function videoStage(parts: VideoPart[], sh: Show | null = null, only = '', fixed: { t: number; id: string }[] | null = null, scale = 1): Promise<VideoStage> {
+    await stageAssets(parts, sh, only, fixed);
+    return stageNow(parts, sh, only, fixed, scale);
+  }
+  // The preview's size: as many pixels as the screen shows it with, at the
+  // screen's pixel ratio, so it is sharp, and no more, so it plays smoothly
+  // on a phone. In steps of a quarter. It is worked out once each time the
+  // workspace opens, so every frame in one visit is drawn at the same size
+  // and a change can be compared with the frame before it.
+  let keptScale = 0;
+  function previewScale(): number {
+    // The browser checks can draw the preview at full size, so a check
+    // that counts pixels reads the same frame as a saved video.
+    if (typeof opts.previewScale === 'number') return opts.previewScale;
+    if (keptScale && ws) return keptScale;
+    try {
+      const box = (ws && ws.box.querySelector('[data-af-ws-stage]')) as HTMLElement | null;
+      // Before the workspace is laid out, the window's width stands in.
+      const wide = (box && box.getBoundingClientRect().width) || window.innerWidth;
+      if (!wide) return 1;
+      const { w, h } = videoSize();
+      const shown = Math.min(wide, (window.innerHeight * 0.7 * w) / h);
+      const want = (shown * Math.max(1, window.devicePixelRatio || 1)) / w;
+      keptScale = Math.min(1, Math.max(0.25, Math.ceil(want * 4) / 4));
+      return keptScale;
+    } catch (_) {
+      return 1;
     }
-    // The scenes, with the time each starts: the start of its first part
-    // in the video. A scene with no part in the video is left out.
+  }
+  // The scenes, with the time each starts: the start of its first part in
+  // the video. A scene with no part in the video is left out.
+  function stageScenes(parts: VideoPart[], sh: Show | null, only: string, fixed: { t: number; id: string }[] | null): { times: { t: number; id: string }[]; backs: VideoBack[] } {
     const dflt = backDefault().id;
     const times: { t: number; id: string }[] = [];
     for (const sc of scenesOf(sh)) {
@@ -4366,8 +4443,33 @@ export function setup(ctx: Ctx, overrides?: any) {
     if (!times.length) times.push({ t: 0, id: dflt });
     times[0].t = 0;
     const used = Array.from(new Set(times.map((x) => x.id)));
-    const backs = used.map((id) => backList().find((b) => b.id === id) || backDefault());
-    const walls = new Map<string, HTMLImageElement>();
+    return { times, backs: used.map((id) => backList().find((b) => b.id === id) || backDefault()) };
+  }
+  // The fonts a look draws with, ready before a frame is drawn, so the
+  // first frame is not drawn in a stand-in font. A font of your own is
+  // read from the account. A built-in one may be a web font the page has
+  // not loaded yet.
+  async function fontsReady(choices: string[]): Promise<void> {
+    if (choices.some((f) => /^own:/.test(f))) {
+      await loadOwnFonts().catch(() => {});
+      await Promise.all(choices.map((f) => ensureFont(f)));
+    }
+    try {
+      const fonts: any = (document as any).fonts;
+      if (!fonts || typeof fonts.load !== 'function') return;
+      const stacks = Array.from(new Set(choices.map((f) => fontStack(f))));
+      await Promise.race([
+        Promise.all(stacks.map((st) => fonts.load('48px ' + st).catch(() => null))),
+        new Promise((r) => setTimeout(r, 1500)),
+      ]);
+    } catch (_) {}
+  }
+  function stageFonts(): string[] {
+    return [String(S.videoFont), nameFontChoice(), String(S.videoBylineFont || S.videoFont || 'book')].concat(marksNow().map((m) => String(m.font || '')).filter(Boolean));
+  }
+  async function stageAssets(parts: VideoPart[], sh: Show | null, only: string, fixed: { t: number; id: string }[] | null): Promise<void> {
+    await fontsReady(stageFonts());
+    const { backs } = stageScenes(parts, sh, only, fixed);
     // A picture that cannot be read is said, and the plain color is used.
     let wallMiss = '';
     for (const bk of backs)
@@ -4377,14 +4479,36 @@ export function setup(ctx: Ctx, overrides?: any) {
           asked = false;
         });
         const src = videoBgs.get(bk.id) || '';
-        const im = await loadImage(src);
-        if (im) walls.set(bk.id, im);
-        else if (src || !asked) wallMiss = bk.name;
+        const im = await cachedImage(src);
+        if (!im && (src || !asked)) wallMiss = bk.name;
       }
     if (wallMiss) {
       log('The background picture of ' + wallMiss + ' could not be read, so the video uses its plain color.', 'bad');
       if (!keepLine) keepSaid('The background picture for this scene could not be read, so the video uses the plain color.');
     }
+    // A picture for the feeling of each line, for a person who has one.
+    if (S.videoPics !== false && S.videoMoodPics !== false)
+      for (const p of parts) {
+        const mem = p.member ? (S.cast || []).find((m: Member) => String(m.id) === p.member) : null;
+        if (mem && p.feeling && (mem.moodPics || []).indexOf(p.feeling) >= 0) {
+          const pic = await moodPicture(String(mem.id), p.feeling);
+          if (pic) p.picture = pic;
+        }
+      }
+    for (const p of parts) if (p.picture) await cachedImage(p.picture);
+    for (const m of marksNow()) if (m.pic) await loadMarkPic(m.id).catch(() => {});
+  }
+  function stageNow(parts: VideoPart[], sh: Show | null, only: string, fixed: { t: number; id: string }[] | null, scale = 1): VideoStage {
+    const full = videoSize();
+    const W = Math.round(full.w * scale);
+    const H = Math.round(full.h * scale);
+    const { times, backs } = stageScenes(parts, sh, only, fixed);
+    const walls = new Map<string, HTMLImageElement>();
+    for (const bk of backs)
+      if (bk.kind === 'picture') {
+        const im = imageCache.get(videoBgs.get(bk.id) || '');
+        if (im) walls.set(bk.id, im);
+      }
     const layers = new Map<string, any>();
     for (const bk of backs) layers.set(bk.id, canvasOf(W, H));
     const edges = canvasOf(W, H);
@@ -4396,23 +4520,12 @@ export function setup(ctx: Ctx, overrides?: any) {
       bylineFont: fontStack(String(S.videoBylineFont || S.videoFont || 'book')),
     };
     for (const bk of backs) paintBack(st, bk, layers.get(bk.id));
-    // A picture for the feeling of each line, for a person who has one.
-    if (S.videoPics !== false && S.videoMoodPics !== false)
-      for (const p of parts) {
-        const mem = p.member ? (S.cast || []).find((m: Member) => String(m.id) === p.member) : null;
-        if (mem && p.feeling && (mem.moodPics || []).indexOf(p.feeling) >= 0) {
-          const pic = await moodPicture(String(mem.id), p.feeling);
-          if (pic) p.picture = pic;
-        }
-      }
-    const pics = st.pics;
     if (S.videoPics !== false)
       for (const p of parts)
-        if (p.picture && !pics.has(p.picture)) {
-          const im = await loadImage(p.picture);
-          if (im) pics.set(p.picture, im);
+        if (p.picture && !st.pics.has(p.picture)) {
+          const im = imageCache.get(p.picture);
+          if (im) st.pics.set(p.picture, im);
         }
-    for (const m of marksNow()) if (m.pic) await loadMarkPic(m.id).catch(() => {});
     pairUp(st, parts);
     return st;
   }
@@ -4787,43 +4900,51 @@ export function setup(ctx: Ctx, overrides?: any) {
   // and how blurred it starts, in pixels at 1080 high.
   const WORD_IN_S = 0.35;
   const WORD_BLUR = 14;
-  // Whether this browser blurs what is drawn on a canvas. One that does not
-  // keeps the setting as written and draws nothing different, so it is
-  // tested by writing it and reading it back.
-  let canvasBlur: boolean | null = null;
-  function blursCanvas(g: CanvasRenderingContext2D): boolean {
-    if (canvasBlur !== null) return canvasBlur;
-    try {
-      const was = (g as any).filter;
-      (g as any).filter = 'blur(2px)';
-      canvasBlur = (g as any).filter === 'blur(2px)';
-      (g as any).filter = was === undefined ? 'none' : was;
-    } catch (_) {
-      canvasBlur = false;
-    }
-    return canvasBlur;
-  }
-  // A word drawn blurred by r pixels. Without a canvas blur, it is drawn
-  // several times, spread around its place at a low opacity, which looks
-  // much the same.
+  // A word drawn blurred by r pixels. It is drawn small on a canvas of its
+  // own and stretched back to size, which softens it as a blur does. A
+  // canvas blur filter on the whole frame for each word is too slow to
+  // play smoothly, and some browsers have none.
+  let wordTmp: any = null;
   function blurWord(g: CanvasRenderingContext2D, word: string, x: number, base: number, ink: string | CanvasGradient, a: number, r: number) {
     g.save();
     g.fillStyle = ink;
-    if (r < 0.5) {
+    if (r < 1.5) {
       g.globalAlpha = a;
       g.fillText(word, x, base);
-    } else if (blursCanvas(g)) {
-      (g as any).filter = 'blur(' + r.toFixed(1) + 'px)';
-      g.globalAlpha = a;
-      g.fillText(word, x, base);
-    } else {
-      const STEPS = 8;
-      g.globalAlpha = (a * 1.6) / STEPS;
-      for (let i = 0; i < STEPS; i++) {
-        const t = (i / STEPS) * Math.PI * 2;
-        g.fillText(word, x + Math.cos(t) * r * 0.6, base + Math.sin(t) * r * 0.6);
-      }
+      g.restore();
+      return;
     }
+    const m = g.measureText(word);
+    const sb = Number(g.shadowBlur) || 0;
+    const pad = r * 2 + sb * 2 + Math.abs(Number(g.shadowOffsetX) || 0) + Math.abs(Number(g.shadowOffsetY) || 0) + 2;
+    const bx = x - (m.actualBoundingBoxLeft || 0) - pad;
+    const by = base - (m.actualBoundingBoxAscent || 0) - pad;
+    const bw = (m.actualBoundingBoxLeft || 0) + (m.actualBoundingBoxRight || m.width) + pad * 2;
+    const bh = (m.actualBoundingBoxAscent || 0) + (m.actualBoundingBoxDescent || 0) + pad * 2;
+    const sc = Math.min(1, 3 / r);
+    const tw = Math.max(1, Math.ceil(bw * sc));
+    const th = Math.max(1, Math.ceil(bh * sc));
+    if (!wordTmp) wordTmp = canvasOf(tw, th);
+    if (wordTmp.width < tw) wordTmp.width = tw;
+    if (wordTmp.height < th) wordTmp.height = th;
+    const tg = wordTmp.getContext('2d') as CanvasRenderingContext2D;
+    tg.setTransform(1, 0, 0, 1, 0, 0);
+    tg.clearRect(0, 0, tw + 1, th + 1);
+    tg.setTransform(sc, 0, 0, sc, -bx * sc, -by * sc);
+    tg.font = g.font;
+    tg.textAlign = g.textAlign;
+    tg.textBaseline = g.textBaseline;
+    tg.fillStyle = ink;
+    tg.shadowColor = g.shadowColor;
+    tg.shadowBlur = sb * sc;
+    tg.shadowOffsetX = (Number(g.shadowOffsetX) || 0) * sc;
+    tg.shadowOffsetY = (Number(g.shadowOffsetY) || 0) * sc;
+    tg.fillText(word, x, base);
+    g.shadowColor = 'transparent';
+    g.globalAlpha = a;
+    g.imageSmoothingEnabled = true;
+    g.imageSmoothingQuality = 'high';
+    g.drawImage(wordTmp, 0, 0, tw, th, bx, by, tw / sc, th / sc);
     g.restore();
   }
 
@@ -13503,13 +13624,14 @@ export function setup(ctx: Ctx, overrides?: any) {
     // The example clip, with no performance, or when it is picked.
     if (!sh || !mix || studioExample) {
       const ex = exampleClip();
-      const st = await videoStage(ex.parts, null, previewBack, ex.scenes);
+      const st = await videoStage(ex.parts, null, previewBack, ex.scenes, previewScale());
       if (ask !== studioAsk) return;
       const length = titleSecs(ex.title) + ex.total + Math.min(5, Math.max(0, numOr(S.videoFadeOut, 1.5)));
       // The same moment in the clip, so a change is seen where it was made.
       const at = studioView.example ? Math.min(studioView.at, length) : titleSecs(ex.title) + 0.8;
       studioView = { sh: null, mix: null, parts: ex.parts, st, title: ex.title, total: ex.total, length, at, example: true };
       paintPreview();
+      if (fadeWanted) previewFadeGo();
       paintStudio();
       trimSaid();
       return;
@@ -13517,7 +13639,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     const parts = videoParts(sh, mix);
     const title = videoTitle(sh);
     const total = mix.channels[0].length / mix.rate;
-    const st = await videoStage(parts, sh, previewBack);
+    const st = await videoStage(parts, sh, previewBack, null, previewScale());
     if (ask !== studioAsk) return;
     const intro = titleSecs(title);
     const length = intro + total + Math.min(5, Math.max(0, numOr(S.videoFadeOut, 1.5)));
@@ -13526,6 +13648,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     const at = Math.min(studioView.sh === sh && studioView.at > 0 ? studioView.at : intro + 0.8, length);
     studioView = { sh, mix, parts, st, title, total, length, at };
     paintPreview();
+    if (fadeWanted) previewFadeGo();
     paintStudio();
     trimSaid();
   }
@@ -15162,24 +15285,69 @@ export function setup(ctx: Ctx, overrides?: any) {
   const TEMPLATES: Template[] = [
     {
       id: 'calm',
-      name: 'Soft dark blue',
-      suits: 'Any story. The built-in look: quiet, easy to read.',
-      look: {},
+      name: 'The built-in look',
+      suits: 'The look Auto Foley starts with. Quiet and easy to read.',
+      look: {
+        videoFont: 'book', videoSize: 100, videoInk: '', videoWords: 'fade', videoPlace: 'middle', videoQuotes: true, videoWordFill: 'solid',
+        videoWordStops: ['#f2b880'], videoWordDir: 'down', videoWordShadow: true, videoWordShadowInk: '', videoWordShadowDark: 55,
+        videoWordShadowSoft: 14, videoWordShadowFar: 2,
+        videoCaptions: true, videoCaptionInk: '', videoCapFill: 'solid', videoCapStops: ['#f2b880'], videoCapDir: 'right',
+        videoNameFont: 'clean', videoNameSize: 100, videoNameColor: 'kind', videoNameFill: 'solid', videoNameStops: ['#f2b880'],
+        videoNameDir: 'right', videoNameShadow: true, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18,
+        videoNameShadowFar: 2,
+        videoPicShape: 'circle', videoPicSize: 150, videoPicRing: true, videoPicRingWidth: 3, videoPicMove: true, videoTwo: true,
+        videoMoodPics: true,
+        videoEdges: 35, videoEdgeColor: '', videoMove: 'rise', videoMoveSecs: 0.5,
+        videoTitleOn: true, videoFadeOut: 1.5, videoBylineInk: '', videoBylineFont: '', videoBylineFill: 'solid', videoBylineStops: ['#f2b880'],
+        videoBylineDir: 'right', videoBylineShadow: true, videoBylineShadowInk: '', videoBylineShadowDark: 65, videoBylineShadowSoft: 18,
+        videoBylineShadowFar: 0,
+        studioMusic: true,
+      },
       back: DEFAULTS.videoBacks[0] as VideoBack,
     },
     {
       id: 'plain',
-      name: 'Plain and clean',
-      suits: 'Dialogue you want read with nothing around it.',
-      look: Object.assign({ videoFont: 'clean', videoNameFont: 'clean', videoInk: '#f2f2f2', videoWords: 'all', videoMove: 'dissolve', videoMoveSecs: 0.3, videoEdges: 0, videoPicShape: 'rounded', videoPicRing: false, videoNameColor: 'words', videoNameSize: 90 }, noShadow),
-      back: backOf('Plain', { color: '#121214' }),
+      name: 'Plain text on dark gray',
+      suits: 'Words only, for dialogue with nothing around it.',
+      look: {
+        videoFont: 'clean', videoSize: 104, videoInk: '#f4f1ea', videoWords: 'all', videoPlace: 'middle', videoQuotes: true, videoWordFill: 'solid',
+        videoWordStops: ['#f2b880'], videoWordDir: 'down', videoWordShadow: false, videoWordShadowInk: '', videoWordShadowDark: 55,
+        videoWordShadowSoft: 14, videoWordShadowFar: 2,
+        videoCaptions: true, videoCaptionInk: '#a9a49a', videoCapFill: 'solid', videoCapStops: ['#f2b880'], videoCapDir: 'right',
+        videoNameFont: 'clean', videoNameSize: 92, videoNameColor: 'words', videoNameFill: 'solid', videoNameStops: ['#f2b880'],
+        videoNameDir: 'right', videoNameShadow: false, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18,
+        videoNameShadowFar: 2,
+        videoPicShape: 'rounded', videoPicSize: 132, videoPicRing: false, videoPicRingWidth: 3, videoPicMove: false, videoTwo: true,
+        videoMoodPics: true,
+        videoEdges: 0, videoEdgeColor: '', videoMove: 'dissolve', videoMoveSecs: 0.3,
+        videoTitleOn: true, videoFadeOut: 1, videoBylineInk: '#a9a49a', videoBylineFont: '', videoBylineFill: 'solid', videoBylineStops: ['#f2b880'],
+        videoBylineDir: 'right', videoBylineShadow: false, videoBylineShadowInk: '', videoBylineShadowDark: 65, videoBylineShadowSoft: 18,
+        videoBylineShadowFar: 0,
+        studioMusic: false,
+      },
+      back: backOf('Plain text', { color: '#141416' }),
     },
     {
       id: 'paper',
-      name: 'Paper page',
-      suits: 'Fairy tales and gentle stories read aloud.',
-      look: Object.assign({ videoFont: 'book', videoNameFont: 'book', videoInk: '#3b2a1a', videoCaptionInk: '#8a4b20', videoWords: 'fade', videoMove: 'dissolve', videoMoveSecs: 0.6, videoEdges: 30, videoEdgeColor: '#6b4a24', videoNameColor: 'words', videoPicRingWidth: 2, videoSize: 104 }, noShadow),
-      back: backOf('Paper page', {
+      name: 'Storybook page',
+      suits: 'Fairy tales and bedtime stories.',
+      look: {
+        videoFont: 'book', videoSize: 106, videoInk: '#3b2a1a', videoWords: 'fade', videoPlace: 'middle', videoQuotes: true, videoWordFill: 'solid',
+        videoWordStops: ['#f2b880'], videoWordDir: 'down', videoWordShadow: false, videoWordShadowInk: '', videoWordShadowDark: 55,
+        videoWordShadowSoft: 14, videoWordShadowFar: 2,
+        videoCaptions: true, videoCaptionInk: '#9a4a1c', videoCapFill: 'solid', videoCapStops: ['#f2b880'], videoCapDir: 'right',
+        videoNameFont: 'book', videoNameSize: 118, videoNameColor: 'words', videoNameFill: 'solid', videoNameStops: ['#f2b880'],
+        videoNameDir: 'right', videoNameShadow: false, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18,
+        videoNameShadowFar: 2,
+        videoPicShape: 'circle', videoPicSize: 140, videoPicRing: true, videoPicRingWidth: 2, videoPicMove: true, videoTwo: true,
+        videoMoodPics: true,
+        videoEdges: 30, videoEdgeColor: '#6b4a24', videoMove: 'rise', videoMoveSecs: 0.6,
+        videoTitleOn: true, videoFadeOut: 2, videoBylineInk: '#9a4a1c', videoBylineFont: '', videoBylineFill: 'solid', videoBylineStops: ['#f2b880'],
+        videoBylineDir: 'right', videoBylineShadow: false, videoBylineShadowInk: '', videoBylineShadowDark: 65, videoBylineShadowSoft: 18,
+        videoBylineShadowFar: 0,
+        studioMusic: true,
+      },
+      back: backOf('Storybook page', {
         kind: 'design', color: '#f1e6cc', fill: 'radial', stops: ['#dcc89f'],
         shapes: [
           shape('rect', 0.5, 0.06, 1500, 3, '#8a6a40', { clear: 30 }),
@@ -15190,78 +15358,290 @@ export function setup(ctx: Ctx, overrides?: any) {
     },
     {
       id: 'film',
-      name: 'Film bars',
-      suits: 'Drama and tense scenes, like a film with subtitles.',
-      look: { videoFont: 'clean', videoNameFont: 'clean', videoInk: '#e8e6e1', videoCaptionInk: '#f0c36a', videoWords: 'all', videoPlace: 'lower', videoMove: 'dissolve', videoMoveSecs: 0.7, videoEdges: 70, videoPicSize: 130, videoPicRingWidth: 2, videoNameSize: 85, videoWordShadowDark: 80, videoWordShadowSoft: 10, videoWordShadowFar: 2 },
-      back: backOf('Film bars', {
-        kind: 'design', color: '#22303a', fill: 'linear', stops: ['#0e1418'], dir: 'down',
+      name: 'Film subtitles',
+      suits: 'Drama and tense scenes, with the words at the bottom like subtitles.',
+      look: {
+        videoFont: 'clean', videoSize: 100, videoInk: '#f5f3ee', videoWords: 'all', videoPlace: 'lower', videoQuotes: true, videoWordFill: 'solid',
+        videoWordStops: ['#f2b880'], videoWordDir: 'down', videoWordShadow: true, videoWordShadowInk: '#000000', videoWordShadowDark: 90,
+        videoWordShadowSoft: 6, videoWordShadowFar: 2,
+        videoCaptions: true, videoCaptionInk: '#f0c36a', videoCapFill: 'solid', videoCapStops: ['#f2b880'], videoCapDir: 'right',
+        videoNameFont: 'clean', videoNameSize: 82, videoNameColor: 'words', videoNameFill: 'solid', videoNameStops: ['#f2b880'],
+        videoNameDir: 'right', videoNameShadow: true, videoNameShadowInk: '#000000', videoNameShadowDark: 90, videoNameShadowSoft: 6,
+        videoNameShadowFar: 2,
+        videoPicShape: 'rounded', videoPicSize: 120, videoPicRing: true, videoPicRingWidth: 2, videoPicMove: true, videoTwo: true,
+        videoMoodPics: true,
+        videoEdges: 60, videoEdgeColor: '#000000', videoMove: 'dissolve', videoMoveSecs: 0.7,
+        videoTitleOn: true, videoFadeOut: 2, videoBylineInk: '#f0c36a', videoBylineFont: '', videoBylineFill: 'solid', videoBylineStops: ['#f2b880'],
+        videoBylineDir: 'right', videoBylineShadow: true, videoBylineShadowInk: '#000000', videoBylineShadowDark: 90, videoBylineShadowSoft: 6,
+        videoBylineShadowFar: 0,
+        studioMusic: true,
+      },
+      back: backOf('Film subtitles', {
+        kind: 'design', color: '#1c1f22', fill: 'linear', stops: ['#0f1113'], dir: 'down',
         shapes: [shape('rect', 0.5, 0.055, 2400, 125, '#000000'), shape('rect', 0.5, 0.945, 2400, 125, '#000000')],
       }),
     },
     {
       id: 'neon',
-      name: 'Neon glow',
-      suits: 'City nights, science fiction and parties.',
-      look: { videoFont: 'round', videoNameFont: 'clean', videoInk: '#7df9ff', videoCaptionInk: '#ff7ad9', videoWordFill: 'linear', videoWordStops: ['#ff5fd2', '#b08cff'], videoWordDir: 'right', videoWords: 'light', videoMove: 'zoom', videoMoveSecs: 0.5, videoEdges: 40, videoEdgeColor: '#12002a', videoPicRingWidth: 4, videoWordShadowInk: '#ff3df5', videoWordShadowDark: 85, videoWordShadowSoft: 26, videoWordShadowFar: 0, videoNameShadowInk: '#33e6ff', videoNameShadowSoft: 20, videoNameShadowFar: 0 },
-      back: backOf('Neon glow', {
-        kind: 'design', color: '#1a0638', fill: 'linear', stops: ['#090016', '#02010a'], dir: 'down',
-        shapes: [shape('line', 0.5, 0.8, 1300, 4, '#ff3df5', { clear: 40 }), shape('line', 0.5, 0.83, 900, 3, '#33e6ff', { clear: 50 })],
+      name: 'Eighties sunset',
+      suits: 'Science fiction, city nights and stories set in the 1980s.',
+      look: {
+        videoFont: 'clean', videoSize: 104, videoInk: '#7df9ff', videoWords: 'light', videoPlace: 'middle', videoQuotes: true,
+        videoWordFill: 'solid', videoWordStops: ['#f2b880'], videoWordDir: 'down', videoWordShadow: true, videoWordShadowInk: '#00c8ff',
+        videoWordShadowDark: 70, videoWordShadowSoft: 18, videoWordShadowFar: 0,
+        videoCaptions: true, videoCaptionInk: '#ff7ad9', videoCapFill: 'solid', videoCapStops: ['#f2b880'], videoCapDir: 'right',
+        videoNameFont: 'clean', videoNameSize: 110, videoNameColor: 'words', videoNameFill: 'solid', videoNameStops: ['#f2b880'],
+        videoNameDir: 'right', videoNameShadow: false, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18,
+        videoNameShadowFar: 2,
+        videoPicShape: 'circle', videoPicSize: 150, videoPicRing: true, videoPicRingWidth: 3, videoPicMove: true, videoTwo: true,
+        videoMoodPics: true,
+        videoEdges: 30, videoEdgeColor: '#05010f', videoMove: 'zoom', videoMoveSecs: 0.5,
+        videoTitleOn: true, videoFadeOut: 1.5, videoBylineInk: '#ff7ad9', videoBylineFont: '', videoBylineFill: 'solid',
+        videoBylineStops: ['#f2b880'], videoBylineDir: 'right', videoBylineShadow: false, videoBylineShadowInk: '', videoBylineShadowDark: 65,
+        videoBylineShadowSoft: 18, videoBylineShadowFar: 0,
+        studioMusic: true,
+      },
+      back: backOf('Eighties sunset', {
+        kind: 'design', color: '#070b1f', fill: 'linear', stops: ['#1b0b2e'], dir: 'down',
+        shapes: [
+          shape('ellipse', 0.5, 0.9, 440, 440, '#ffb03d', { grad: 'linear', stops: ['#ff2e88'], dir: 'down' }),
+          shape('rect', 0.5, 0.96, 2400, 240, '#0a0618'),
+          shape('rect', 0.5, 0.85, 2400, 4, '#ff2e88', { clear: 20 }),
+          shape('rect', 0.5, 0.875, 2400, 3, '#ff2e88', { clear: 35 }),
+          shape('rect', 0.5, 0.91, 2400, 3, '#ff2e88', { clear: 45 }),
+          shape('rect', 0.5, 0.95, 2400, 2, '#ff2e88', { clear: 55 }),
+          shape('rect', 0.5, 0.995, 2400, 2, '#ff2e88', { clear: 65 }),
+        ],
       }),
     },
     {
       id: 'blush',
-      name: 'Pastel blush',
-      suits: 'Romance and soft, warm moments.',
-      look: Object.assign({ videoFont: 'round', videoNameFont: 'round', videoInk: '#5a2346', videoCaptionInk: '#9a3d6e', videoWords: 'blur', videoMove: 'focus', videoMoveSecs: 0.6, videoEdges: 15, videoEdgeColor: '#f6c1d6', videoNameColor: 'words', videoPicShape: 'circle', videoPicRingWidth: 3 }, noShadow),
-      back: backOf('Pastel blush', { color: '#fde8ef', fill: 'radial', stops: ['#f9d4c8', '#e7d3f5'] }),
+      name: 'Pink stationery',
+      suits: 'Romance and soft, warm scenes.',
+      look: {
+        videoFont: 'round', videoSize: 104, videoInk: '#4a1d3a', videoWords: 'blur', videoPlace: 'middle', videoQuotes: true, videoWordFill: 'solid',
+        videoWordStops: ['#f2b880'], videoWordDir: 'down', videoWordShadow: false, videoWordShadowInk: '', videoWordShadowDark: 55,
+        videoWordShadowSoft: 14, videoWordShadowFar: 2,
+        videoCaptions: true, videoCaptionInk: '#c25b7d', videoCapFill: 'solid', videoCapStops: ['#f2b880'], videoCapDir: 'right',
+        videoNameFont: 'round', videoNameSize: 112, videoNameColor: 'words', videoNameFill: 'solid', videoNameStops: ['#f2b880'],
+        videoNameDir: 'right', videoNameShadow: false, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18,
+        videoNameShadowFar: 2,
+        videoPicShape: 'circle', videoPicSize: 150, videoPicRing: true, videoPicRingWidth: 3, videoPicMove: true, videoTwo: true,
+        videoMoodPics: true,
+        videoEdges: 0, videoEdgeColor: '', videoMove: 'dissolve', videoMoveSecs: 0.6,
+        videoTitleOn: true, videoFadeOut: 1.5, videoBylineInk: '#c25b7d', videoBylineFont: '', videoBylineFill: 'solid',
+        videoBylineStops: ['#f2b880'], videoBylineDir: 'right', videoBylineShadow: false, videoBylineShadowInk: '', videoBylineShadowDark: 65,
+        videoBylineShadowSoft: 18, videoBylineShadowFar: 0,
+        studioMusic: true,
+      },
+      back: backOf('Pink stationery', {
+        kind: 'design', color: '#fbeee8', fill: 'solid',
+        shapes: [shape('rect', 0.5, 0.16, 560, 2, '#c25b7d', { clear: 20 }), shape('rect', 0.5, 0.84, 560, 2, '#c25b7d', { clear: 20 }), shape('ellipse', 0.5, 0.16, 10, 10, '#c25b7d'), shape('ellipse', 0.5, 0.84, 10, 10, '#c25b7d')],
+      }),
     },
     {
       id: 'cold',
-      name: 'Cold and dark',
-      suits: 'Horror and dread. Slow and quiet.',
-      look: { videoFont: 'book', videoNameFont: 'type', videoInk: '#cfd9d6', videoCaptionInk: '#9fb7b0', videoWords: 'fade', videoMove: 'black', videoMoveSecs: 0.9, videoEdges: 85, videoEdgeColor: '#061414', videoPicRingWidth: 1, videoNameSize: 85, videoWordShadowDark: 90, videoWordShadowSoft: 22, videoWordShadowFar: 0 },
-      back: backOf('Cold and dark', { color: '#1b2629', fill: 'radial', stops: ['#030506'] }),
+      name: 'Horror, black and gray',
+      suits: 'Horror. Slow, with a fade through black between lines.',
+      look: {
+        videoFont: 'book', videoSize: 98, videoInk: '#d9dcd8', videoWords: 'fade', videoPlace: 'lower', videoQuotes: true, videoWordFill: 'solid',
+        videoWordStops: ['#f2b880'], videoWordDir: 'down', videoWordShadow: true, videoWordShadowInk: '#000000', videoWordShadowDark: 90,
+        videoWordShadowSoft: 20, videoWordShadowFar: 0,
+        videoCaptions: true, videoCaptionInk: '#c0504d', videoCapFill: 'solid', videoCapStops: ['#f2b880'], videoCapDir: 'right',
+        videoNameFont: 'type', videoNameSize: 82, videoNameColor: 'words', videoNameFill: 'solid', videoNameStops: ['#f2b880'],
+        videoNameDir: 'right', videoNameShadow: false, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18,
+        videoNameShadowFar: 2,
+        videoPicShape: 'rounded', videoPicSize: 124, videoPicRing: true, videoPicRingWidth: 1, videoPicMove: true, videoTwo: true,
+        videoMoodPics: true,
+        videoEdges: 85, videoEdgeColor: '#000000', videoMove: 'black', videoMoveSecs: 0.9,
+        videoTitleOn: true, videoFadeOut: 3, videoBylineInk: '#c0504d', videoBylineFont: '', videoBylineFill: 'solid', videoBylineStops: ['#f2b880'],
+        videoBylineDir: 'right', videoBylineShadow: true, videoBylineShadowInk: '#000000', videoBylineShadowDark: 90, videoBylineShadowSoft: 20,
+        videoBylineShadowFar: 0,
+        studioMusic: true,
+      },
+      back: backOf('Horror', { color: '#161b1c', fill: 'linear', stops: ['#040505'], dir: 'down' }),
     },
     {
       id: 'comic',
-      name: 'Bright comic',
-      suits: 'Comedy, games and playful scenes.',
-      look: Object.assign({ videoFont: 'round', videoNameFont: 'round', videoSize: 110, videoInk: '#1c1c1c', videoCaptionInk: '#c2185b', videoWords: 'light', videoMove: 'slide', videoMoveSecs: 0.4, videoEdges: 0, videoPicShape: 'rounded', videoPicRingWidth: 6, videoNameColor: 'kind', videoNameSize: 110 }, noShadow),
-      back: backOf('Bright comic', {
+      name: 'Comic panel',
+      suits: 'Comedy, games and silly scenes.',
+      look: {
+        videoFont: 'round', videoSize: 112, videoInk: '#1c1c1c', videoWords: 'light', videoPlace: 'middle', videoQuotes: true,
+        videoWordFill: 'solid', videoWordStops: ['#f2b880'], videoWordDir: 'down', videoWordShadow: false, videoWordShadowInk: '',
+        videoWordShadowDark: 55, videoWordShadowSoft: 14, videoWordShadowFar: 2,
+        videoCaptions: true, videoCaptionInk: '#c2185b', videoCapFill: 'solid', videoCapStops: ['#f2b880'], videoCapDir: 'right',
+        videoNameFont: 'round', videoNameSize: 128, videoNameColor: 'kind', videoNameFill: 'solid', videoNameStops: ['#f2b880'],
+        videoNameDir: 'right', videoNameShadow: false, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18,
+        videoNameShadowFar: 2,
+        videoPicShape: 'rounded', videoPicSize: 170, videoPicRing: true, videoPicRingWidth: 6, videoPicMove: true, videoTwo: true,
+        videoMoodPics: true,
+        videoEdges: 0, videoEdgeColor: '', videoMove: 'slide', videoMoveSecs: 0.4,
+        videoTitleOn: true, videoFadeOut: 1, videoBylineInk: '#c2185b', videoBylineFont: '', videoBylineFill: 'solid', videoBylineStops: ['#f2b880'],
+        videoBylineDir: 'right', videoBylineShadow: false, videoBylineShadowInk: '', videoBylineShadowDark: 65, videoBylineShadowSoft: 18,
+        videoBylineShadowFar: 0,
+        studioMusic: true,
+      },
+      back: backOf('Comic panel', {
         kind: 'design', color: '#ffd84a', fill: 'solid',
         shapes: [shape('ellipse', 0.1, 0.18, 420, 420, '#ff6f61'), shape('ellipse', 0.92, 0.85, 520, 520, '#2ec4b6'), shape('round', 0.5, 0.5, 1500, 560, '#fffbea', { clear: 10 })],
       }),
     },
     {
       id: 'typewriter',
-      name: 'Typewriter page',
-      suits: 'Letters, diaries and old mysteries.',
-      look: Object.assign({ videoFont: 'type', videoNameFont: 'type', videoInk: '#2b2b2b', videoCaptionInk: '#7a2e1f', videoWords: 'appear', videoMove: 'fade', videoMoveSecs: 0.5, videoEdges: 25, videoEdgeColor: '#5a4a30', videoQuotes: true, videoNameColor: 'words', videoPicShape: 'rounded', videoPicRing: false, videoSize: 96 }, noShadow),
-      back: backOf('Typewriter page', { color: '#ebe3d2', fill: 'solid' }),
+      name: 'Typed on lined paper',
+      suits: 'Letters, diaries and mysteries.',
+      look: {
+        videoFont: 'type', videoSize: 96, videoInk: '#1f2a44', videoWords: 'appear', videoPlace: 'middle', videoQuotes: true, videoWordFill: 'solid',
+        videoWordStops: ['#f2b880'], videoWordDir: 'down', videoWordShadow: false, videoWordShadowInk: '', videoWordShadowDark: 55,
+        videoWordShadowSoft: 14, videoWordShadowFar: 2,
+        videoCaptions: true, videoCaptionInk: '#b03a2e', videoCapFill: 'solid', videoCapStops: ['#f2b880'], videoCapDir: 'right',
+        videoNameFont: 'type', videoNameSize: 104, videoNameColor: 'words', videoNameFill: 'solid', videoNameStops: ['#f2b880'],
+        videoNameDir: 'right', videoNameShadow: false, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18,
+        videoNameShadowFar: 2,
+        videoPicShape: 'rounded', videoPicSize: 120, videoPicRing: false, videoPicRingWidth: 3, videoPicMove: false, videoTwo: true,
+        videoMoodPics: true,
+        videoEdges: 0, videoEdgeColor: '', videoMove: 'fade', videoMoveSecs: 0.5,
+        videoTitleOn: true, videoFadeOut: 1.5, videoBylineInk: '#b03a2e', videoBylineFont: 'type', videoBylineFill: 'solid',
+        videoBylineStops: ['#f2b880'], videoBylineDir: 'right', videoBylineShadow: false, videoBylineShadowInk: '', videoBylineShadowDark: 65,
+        videoBylineShadowSoft: 18, videoBylineShadowFar: 0,
+        studioMusic: true,
+      },
+      back: backOf('Lined paper', {
+        kind: 'design', color: '#f6f3ec', fill: 'solid',
+        shapes: [
+          shape('rect', 0.5, 0.12, 2400, 2, '#9db7d6', { clear: 55 }),
+          shape('rect', 0.5, 0.24, 2400, 2, '#9db7d6', { clear: 55 }),
+          shape('rect', 0.5, 0.36, 2400, 2, '#9db7d6', { clear: 55 }),
+          shape('rect', 0.5, 0.76, 2400, 2, '#9db7d6', { clear: 55 }),
+          shape('rect', 0.5, 0.88, 2400, 2, '#9db7d6', { clear: 55 }),
+          shape('rect', 0.09, 0.5, 3, 2400, '#d0605e', { clear: 25 }),
+        ],
+      }),
     },
     {
       id: 'lamp',
-      name: 'Warm lamp',
-      suits: 'Cozy talks by a fire, taverns and homes.',
-      look: { videoFont: 'book', videoNameFont: 'clean', videoInk: '#ffeccc', videoWordFill: 'linear', videoWordStops: ['#ffd58a'], videoWordDir: 'down', videoCaptionInk: '#ffb36b', videoWords: 'fade', videoMove: 'rise', videoMoveSecs: 0.5, videoEdges: 55, videoEdgeColor: '#1a0b02', videoPicRingWidth: 3, videoWordShadowDark: 70, videoWordShadowSoft: 16 },
-      back: backOf('Warm lamp', { color: '#4a2a12', fill: 'radial', stops: ['#1a0d05'] }),
+      name: 'By the fire',
+      suits: 'Quiet talks indoors: kitchens, taverns, a fire at night.',
+      look: {
+        videoFont: 'book', videoSize: 102, videoInk: '#ffe7c2', videoWords: 'fade', videoPlace: 'middle', videoQuotes: true, videoWordFill: 'solid',
+        videoWordStops: ['#f2b880'], videoWordDir: 'down', videoWordShadow: true, videoWordShadowInk: '#1a0b02', videoWordShadowDark: 70,
+        videoWordShadowSoft: 16, videoWordShadowFar: 2,
+        videoCaptions: true, videoCaptionInk: '#ff9f4a', videoCapFill: 'solid', videoCapStops: ['#f2b880'], videoCapDir: 'right',
+        videoNameFont: 'clean', videoNameSize: 90, videoNameColor: 'words', videoNameFill: 'solid', videoNameStops: ['#f2b880'],
+        videoNameDir: 'right', videoNameShadow: true, videoNameShadowInk: '#1a0b02', videoNameShadowDark: 65, videoNameShadowSoft: 18,
+        videoNameShadowFar: 2,
+        videoPicShape: 'circle', videoPicSize: 150, videoPicRing: true, videoPicRingWidth: 3, videoPicMove: true, videoTwo: true,
+        videoMoodPics: true,
+        videoEdges: 55, videoEdgeColor: '#0d0602', videoMove: 'rise', videoMoveSecs: 0.5,
+        videoTitleOn: true, videoFadeOut: 2, videoBylineInk: '#ff9f4a', videoBylineFont: '', videoBylineFill: 'solid', videoBylineStops: ['#f2b880'],
+        videoBylineDir: 'right', videoBylineShadow: true, videoBylineShadowInk: '#1a0b02', videoBylineShadowDark: 70, videoBylineShadowSoft: 16,
+        videoBylineShadowFar: 0,
+        studioMusic: true,
+      },
+      back: backOf('By the fire', { color: '#5a3214', fill: 'radial', stops: ['#120903'] }),
     },
     {
       id: 'dream',
-      name: 'Dreamy sky',
-      suits: 'Dreams, memories and soft fantasy.',
-      look: { videoFont: 'round', videoNameFont: 'round', videoInk: '#ffffff', videoCaptionInk: '#fff3b0', videoWords: 'blur', videoMove: 'focus', videoMoveSecs: 0.7, videoEdges: 20, videoEdgeColor: '#6b5ca8', videoPicRingWidth: 2, videoWordShadowInk: '#4b3c8a', videoWordShadowDark: 60, videoWordShadowSoft: 20, videoWordShadowFar: 0 },
-      back: backOf('Dreamy sky', {
-        kind: 'design', color: '#4c3f9a', fill: 'linear', stops: ['#3f63a8', '#9a4f7c'], dir: 'down',
-        shapes: [shape('ellipse', 0.18, 0.22, 520, 300, '#ffffff', { clear: 86 }), shape('ellipse', 0.84, 0.78, 640, 360, '#ffffff', { clear: 88 })],
+      name: 'Stars and moon',
+      suits: 'Dreams, memories and night scenes.',
+      look: {
+        videoFont: 'round', videoSize: 100, videoInk: '#f4f1ff', videoWords: 'blur', videoPlace: 'middle', videoQuotes: true, videoWordFill: 'solid',
+        videoWordStops: ['#f2b880'], videoWordDir: 'down', videoWordShadow: true, videoWordShadowInk: '#0b1638', videoWordShadowDark: 60,
+        videoWordShadowSoft: 16, videoWordShadowFar: 0,
+        videoCaptions: true, videoCaptionInk: '#f6d98b', videoCapFill: 'solid', videoCapStops: ['#f2b880'], videoCapDir: 'right',
+        videoNameFont: 'round', videoNameSize: 108, videoNameColor: 'words', videoNameFill: 'solid', videoNameStops: ['#f2b880'],
+        videoNameDir: 'right', videoNameShadow: false, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18,
+        videoNameShadowFar: 2,
+        videoPicShape: 'circle', videoPicSize: 150, videoPicRing: true, videoPicRingWidth: 2, videoPicMove: true, videoTwo: true,
+        videoMoodPics: true,
+        videoEdges: 25, videoEdgeColor: '#050a1f', videoMove: 'focus', videoMoveSecs: 0.7,
+        videoTitleOn: true, videoFadeOut: 2, videoBylineInk: '#f6d98b', videoBylineFont: '', videoBylineFill: 'solid', videoBylineStops: ['#f2b880'],
+        videoBylineDir: 'right', videoBylineShadow: true, videoBylineShadowInk: '#0b1638', videoBylineShadowDark: 60, videoBylineShadowSoft: 16,
+        videoBylineShadowFar: 0,
+        studioMusic: true,
+      },
+      back: backOf('Stars and moon', {
+        kind: 'design', color: '#0b1638', fill: 'linear', stops: ['#2d2350'], dir: 'down',
+        shapes: [
+          shape('ellipse', 0.84, 0.2, 150, 150, '#f4ecd0'),
+          shape('ellipse', 0.08, 0.12, 5, 5, '#ffffff', { clear: 30 }),
+          shape('ellipse', 0.17, 0.31, 4, 4, '#ffffff', { clear: 50 }),
+          shape('ellipse', 0.27, 0.08, 6, 6, '#ffffff', { clear: 20 }),
+          shape('ellipse', 0.36, 0.2, 4, 4, '#ffffff', { clear: 55 }),
+          shape('ellipse', 0.12, 0.62, 4, 4, '#ffffff', { clear: 55 }),
+          shape('ellipse', 0.06, 0.86, 5, 5, '#ffffff', { clear: 40 }),
+          shape('ellipse', 0.22, 0.78, 4, 4, '#ffffff', { clear: 60 }),
+          shape('ellipse', 0.64, 0.1, 5, 5, '#ffffff', { clear: 35 }),
+          shape('ellipse', 0.72, 0.36, 4, 4, '#ffffff', { clear: 55 }),
+          shape('ellipse', 0.93, 0.44, 6, 6, '#ffffff', { clear: 30 }),
+          shape('ellipse', 0.88, 0.7, 4, 4, '#ffffff', { clear: 50 }),
+          shape('ellipse', 0.95, 0.9, 5, 5, '#ffffff', { clear: 40 }),
+          shape('ellipse', 0.58, 0.9, 4, 4, '#ffffff', { clear: 60 }),
+          shape('ellipse', 0.44, 0.06, 4, 4, '#ffffff', { clear: 45 }),
+          shape('ellipse', 0.78, 0.84, 6, 6, '#ffffff', { clear: 25 }),
+        ],
+      }),
+    },
+    {
+      id: 'code',
+      name: 'Terminal',
+      suits: 'Hackers, robots and anything that happens on a screen.',
+      look: {
+        videoFont: 'type', videoSize: 100, videoInk: '#4dff7c', videoWords: 'appear', videoPlace: 'middle', videoQuotes: false,
+        videoWordFill: 'solid', videoWordStops: ['#f2b880'], videoWordDir: 'down', videoWordShadow: true, videoWordShadowInk: '#00ff55',
+        videoWordShadowDark: 45, videoWordShadowSoft: 10, videoWordShadowFar: 0,
+        videoCaptions: true, videoCaptionInk: '#b8ffcb', videoCapFill: 'solid', videoCapStops: ['#f2b880'], videoCapDir: 'right',
+        videoNameFont: 'type', videoNameSize: 100, videoNameColor: 'words', videoNameFill: 'solid', videoNameStops: ['#f2b880'],
+        videoNameDir: 'right', videoNameShadow: false, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18,
+        videoNameShadowFar: 2,
+        videoPicShape: 'rounded', videoPicSize: 120, videoPicRing: true, videoPicRingWidth: 1, videoPicMove: false, videoTwo: true,
+        videoMoodPics: true,
+        videoEdges: 20, videoEdgeColor: '#000000', videoMove: 'cut', videoMoveSecs: 0.3,
+        videoTitleOn: true, videoFadeOut: 1, videoBylineInk: '#b8ffcb', videoBylineFont: 'type', videoBylineFill: 'solid',
+        videoBylineStops: ['#f2b880'], videoBylineDir: 'right', videoBylineShadow: true, videoBylineShadowInk: '#00ff55', videoBylineShadowDark: 45,
+        videoBylineShadowSoft: 10, videoBylineShadowFar: 0,
+        studioMusic: true,
+      },
+      back: backOf('Terminal', {
+        kind: 'design', color: '#040a06', fill: 'solid',
+        shapes: [
+          shape('rect', 0.5, 0.06, 2400, 2, '#0f3a1c', { clear: 45 }),
+          shape('rect', 0.5, 0.105, 2400, 2, '#0f3a1c', { clear: 45 }),
+          shape('rect', 0.5, 0.15, 2400, 2, '#0f3a1c', { clear: 45 }),
+          shape('rect', 0.5, 0.195, 2400, 2, '#0f3a1c', { clear: 45 }),
+          shape('rect', 0.5, 0.24, 2400, 2, '#0f3a1c', { clear: 45 }),
+          shape('rect', 0.5, 0.285, 2400, 2, '#0f3a1c', { clear: 45 }),
+          shape('rect', 0.5, 0.33, 2400, 2, '#0f3a1c', { clear: 45 }),
+          shape('rect', 0.5, 0.375, 2400, 2, '#0f3a1c', { clear: 45 }),
+          shape('rect', 0.5, 0.42, 2400, 2, '#0f3a1c', { clear: 45 }),
+          shape('rect', 0.5, 0.465, 2400, 2, '#0f3a1c', { clear: 45 }),
+          shape('rect', 0.5, 0.51, 2400, 2, '#0f3a1c', { clear: 45 }),
+          shape('rect', 0.5, 0.555, 2400, 2, '#0f3a1c', { clear: 45 }),
+          shape('rect', 0.5, 0.6, 2400, 2, '#0f3a1c', { clear: 45 }),
+          shape('rect', 0.5, 0.645, 2400, 2, '#0f3a1c', { clear: 45 }),
+          shape('rect', 0.5, 0.69, 2400, 2, '#0f3a1c', { clear: 45 }),
+          shape('rect', 0.5, 0.735, 2400, 2, '#0f3a1c', { clear: 45 }),
+          shape('rect', 0.5, 0.78, 2400, 2, '#0f3a1c', { clear: 45 }),
+          shape('rect', 0.5, 0.825, 2400, 2, '#0f3a1c', { clear: 45 }),
+          shape('rect', 0.5, 0.87, 2400, 2, '#0f3a1c', { clear: 45 }),
+          shape('rect', 0.5, 0.915, 2400, 2, '#0f3a1c', { clear: 45 }),
+          shape('rect', 0.5, 0.96, 2400, 2, '#0f3a1c', { clear: 45 }),
+          shape('rect', 0.5, 0.03, 2400, 64, '#0b1f12'),
+          shape('ellipse', 0.03, 0.03, 16, 16, '#1f6b3a'),
+          shape('ellipse', 0.05, 0.03, 16, 16, '#1f6b3a'),
+          shape('ellipse', 0.07, 0.03, 16, 16, '#1f6b3a'),
+          shape('text', 0.06, 0.93, 60, 44, '#4dff7c', { text: '>' }),
+          shape('rect', 0.09, 0.93, 22, 40, '#4dff7c', { clear: 15 }),
+        ],
       }),
     },
   ];
-  // Every look setting but the reader's own content: the line under the
-  // title and the watermarks stay as they are.
-  // The shape of the video is the reader's choice for where it goes, so a
-  // template keeps it too.
-  const TEMPLATE_KEYS = LOOK_KEYS.filter((k) => !/^videoByline/.test(k) && k !== 'videoMarks' && k !== 'videoShape');
+  // Every setting that changes the drawn frame, and music on or off. The
+  // reader's own content stays: the words of the line under the title and
+  // the watermarks. The shape of the video is the reader's choice for where
+  // it goes, so a template keeps it too. Each template gives a value for
+  // every one of these, so nothing is left from the look before.
+  const TEMPLATE_KEYS = LOOK_KEYS.filter((k) => k !== 'videoByline' && k !== 'videoMarks' && k !== 'videoShape').concat(['studioMusic']);
   const TEMPLATES_MARK = markText(JSON.stringify(TEMPLATES.map((t) => [t.id, t.look, t.back])));
   function templateLook(t: Template): Record<string, any> {
     const patch: Record<string, any> = {};
@@ -15288,7 +15668,60 @@ export function setup(ctx: Ctx, overrides?: any) {
       undoing = false;
     }
   }
+  // A template change fades the frame before it into the new one over
+  // 200 ms: a copy of the frame on screen lies over the preview and fades
+  // once the new frame is drawn under it. Reduce motion leaves it out.
+  let fadeLayer: HTMLCanvasElement | null = null;
+  let fadeWanted = false;
+  function previewFadeStart() {
+    const r = studioRefs;
+    if (!r || calm() || !r.canvas.width || !r.canvas.isConnected) return;
+    const parent = r.canvas.parentElement;
+    if (!parent) return;
+    const c = canvasOf(r.canvas.width, r.canvas.height) as HTMLCanvasElement;
+    const g = c.getContext('2d') as CanvasRenderingContext2D;
+    g.drawImage(r.canvas, 0, 0);
+    // A change while one still fades starts from what shows now.
+    if (fadeLayer) {
+      g.globalAlpha = Math.max(0, Math.min(1, Number(getComputedStyle(fadeLayer).opacity) || 0));
+      g.drawImage(fadeLayer, 0, 0);
+      fadeLayer.remove();
+    }
+    if (getComputedStyle(parent).position === 'static') parent.style.position = 'relative';
+    c.style.cssText = 'position:absolute;pointer-events:none;margin:0;left:' + r.canvas.offsetLeft + 'px;top:' + r.canvas.offsetTop + 'px;width:' + r.canvas.offsetWidth + 'px;height:' + r.canvas.offsetHeight + 'px;border-radius:' + getComputedStyle(r.canvas).borderRadius;
+    c.setAttribute('data-af-fadeframe', '');
+    c.setAttribute('aria-hidden', 'true');
+    parent.appendChild(c);
+    fadeLayer = c;
+    fadeWanted = true;
+    // Taken away in any case, if no new frame is drawn.
+    const mine = c;
+    setTimeout(() => {
+      if (fadeLayer === mine) {
+        mine.remove();
+        fadeLayer = null;
+        fadeWanted = false;
+      }
+    }, 2000);
+  }
+  function previewFadeGo() {
+    const c = fadeLayer;
+    fadeWanted = false;
+    if (!c) return;
+    const done = () => {
+      c.remove();
+      if (fadeLayer === c) fadeLayer = null;
+    };
+    try {
+      const a = c.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 200, easing: 'ease-out', fill: 'forwards' });
+      a.onfinish = done;
+      setTimeout(done, 260);
+    } catch (_) {
+      done();
+    }
+  }
   function tryTemplate(t: Template) {
+    previewFadeStart();
     if (!trying) trying = { id: t.id, before: lookSnapshot() };
     else trying.id = t.id;
     quietSet(templateLook(t));
@@ -15296,6 +15729,7 @@ export function setup(ctx: Ctx, overrides?: any) {
   }
   function stopTrying() {
     if (!trying) return;
+    previewFadeStart();
     const was = trying.before;
     trying = null;
     quietSet(was);
@@ -15335,15 +15769,20 @@ export function setup(ctx: Ctx, overrides?: any) {
     const key = t.id + ':' + TEMPLATES_MARK;
     const had = templateThumbs.get(key);
     if (had) return had;
-    const real = S;
     let url = '';
-    // The settings are swapped for the template only while it is drawn.
-    // A save in that time saves the reader's own, kept in realS.
+    // What has to be read is read first, with the reader's own settings in
+    // place. The template's settings are then put in place only while the
+    // frame is drawn, with nothing to wait for, so nothing else can run in
+    // between and see them.
+    const look = templateLook(t);
+    const ex = exampleClip();
+    await fontsReady([look.videoFont, look.videoNameFont, look.videoBylineFont || look.videoFont]);
+    await stageAssets(ex.parts, null, '', ex.scenes);
+    const real = S;
     realS = real;
-    S = Object.assign({}, real, templateLook(t), { videoShape: 'wide' });
+    S = Object.assign({}, real, look, { videoShape: 'wide' });
     try {
-      const ex = exampleClip();
-      const st = await videoStage(ex.parts, null, '', ex.scenes);
+      const st = stageNow(ex.parts, null, '', ex.scenes, 0.25);
       const c = canvasOf(st.w, st.h);
       const g = c.getContext('2d') as CanvasRenderingContext2D;
       // Late in a line, when all its words show.
@@ -16210,6 +16649,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     const w = ws;
     if (!w) return;
     ws = null;
+    keptScale = 0;
     wsDraw = null;
     clearInterval(w.watch);
     w.box.removeEventListener('keydown', wsKey);

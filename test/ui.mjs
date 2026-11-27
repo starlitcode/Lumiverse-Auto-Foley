@@ -36,6 +36,14 @@ if (!existsSync(bundle)) {
   console.error("dist/frontend.js is missing. Run `bun run build` first.");
   process.exit(1);
 }
+// Each built-in template's look, read from the source, for the checks
+// that compare a template's settings or use its transition.
+const TEMPLATE_LOOKS = (() => {
+  const src = readFileSync(new URL("../src/frontend.ts", import.meta.url), "utf8");
+  const out = [];
+  for (const m of src.matchAll(/\n      id: '([a-z]+)',\n[^\n]*\n[^\n]*\n      look: (\{[\s\S]*?\n      \}),\n/g)) out.push({ id: m[1], look: new Function("return " + m[2])() });
+  return out;
+})();
 const SOURCE = readFileSync(bundle, "utf8").replace(/^export /gm, "") + "\nwindow.__setup = setup;\n";
 
 // Lumiverse's own page-wide rules, from its reset.css and global.css. Every
@@ -205,7 +213,7 @@ function answer(msg) {
     case 'video_bg_get': return reply({ type: 'video_bg', id: msg.id || 'main', picture: (window.__videoBgs || {})[msg.id || 'main'] || ((msg.id || 'main') === 'main' ? window.__videoBg || '' : '') });
     case 'video_bg_put': window.__videoBgs = Object.assign(window.__videoBgs || {}, { [msg.id || 'main']: msg.picture || '' }); if ((msg.id || 'main') === 'main') window.__videoBg = msg.picture || ''; return reply({ type: 'video_bg', id: msg.id || 'main', ok: true, picture: msg.picture || '' });
     // Watermark pictures, by id.
-    case 'mark_pic_get': return reply({ type: 'mark_pic', id: msg.id, picture: (window.__markPics || {})[msg.id] || '' });
+    case 'mark_pic_get': { const r = { type: 'mark_pic', id: msg.id, picture: (window.__markPics || {})[msg.id] || '' }; if (window.__markDelay) { setTimeout(() => reply(r), window.__markDelay); return; } return reply(r); }
     case 'mark_pic_put': window.__markPics = Object.assign(window.__markPics || {}, { [msg.id]: msg.picture || '' }); return reply({ type: 'mark_pic', id: msg.id, ok: true });
     // Mood pictures, by person and feeling.
     case 'mood_pic_get': return reply({ type: 'mood_pic', member: msg.member, feeling: msg.feeling, picture: (window.__moodPics || {})[msg.member + ':' + msg.feeling] || '' });
@@ -465,7 +473,7 @@ async function open(theme, size, zoom = 1, pre = null) {
   if (pre) await page.evaluate(pre);
   await page.addScriptTag({ content: SOURCE });
   await page.evaluate(() => {
-    window.__teardown = window.__setup(window.__ctx, { fetch: window.__fetch, Audio: window.__Audio, directWaitMs: window.__directWait });
+    window.__teardown = window.__setup(window.__ctx, { fetch: window.__fetch, Audio: window.__Audio, directWaitMs: window.__directWait, previewScale: window.__previewScale === undefined ? 1 : window.__previewScale === null ? undefined : window.__previewScale });
   });
   await page.waitForTimeout(120);
   return { context, page, errors };
@@ -5700,7 +5708,7 @@ if (section("templates")) {
     await page.evaluate(() => { window.__confirmNo = false; });
     await page.click("[data-af-tpluse]");
     await page.waitForTimeout(700);
-    check(await page.evaluate(() => window.__settings.videoFont === "round" && window.__settings.videoMove === "zoom"), size.name + ": Use this template uses it");
+    check(await page.evaluate(() => window.__settings.videoFont === "clean" && window.__settings.videoMove === "zoom" && window.__settings.videoInk === "#7df9ff"), size.name + ": Use this template uses it");
     await page.click('[data-af-ws="undo"]');
     await page.waitForTimeout(700);
     check(await page.evaluate(() => window.__settings.videoFont === "book" && window.__settings.videoMove === "rise"), size.name + ": and one Undo puts the look back");
@@ -5855,7 +5863,7 @@ if (section("projects")) {
     await useTpl("neon");
     await page.waitForTimeout(1600);
     const saved1 = await page.evaluate(() => ({ puts: window.__projPuts || 0, font: window.__projects.pj1.look.videoFont, key: window.__projects.pj1.keptKey, sub: document.querySelector("[data-af-ws-sub]").textContent }));
-    check(saved1.puts > puts0 && saved1.font === "round" && saved1.key === "k", say + ": a change is saved to the project on its own, with its saved performance (" + JSON.stringify(saved1) + ")");
+    check(saved1.puts > puts0 && saved1.font === "clean" && saved1.key === "k", say + ": a change is saved to the project on its own, with its saved performance (" + JSON.stringify(saved1) + ")");
     check(saved1.sub === "Project, saved", say + ": the top says it is saved, with no notification (" + saved1.sub + ")");
     check(!(await page.evaluate(() => (window.__sent || []).some((m) => m.type === "notify" && /saved/i.test(m.text)))), say + ": saving sends no notification");
     const A = await frame();
@@ -5864,7 +5872,7 @@ if (section("projects")) {
     await page.click("[data-af-projectnew]");
     await page.waitForTimeout(800);
     const from2 = await page.evaluate(() => window.__projects.pj2.look.videoFont);
-    check(from2 === "round", say + ": New project starts from the current look");
+    check(from2 === "clean", say + ": New project starts from the current look");
     await useTpl("paper");
     await page.waitForTimeout(1600);
     const B = await frame();
@@ -5875,9 +5883,9 @@ if (section("projects")) {
     await page.waitForTimeout(1500);
     const A2 = await frame();
     const back = await page.evaluate(() => ({ font: window.__settings.videoFont, name: document.querySelector("[data-af-ws-name]").textContent, two: window.__projects.pj2.look.videoFont }));
-    check(back.font === "round" && back.name === "Project 1", say + ": Open puts its look back (" + JSON.stringify(back) + ")");
+    check(back.font === "clean" && back.name === "Project 1", say + ": Open puts its look back (" + JSON.stringify(back) + ")");
     check(differ(A, A2) < 0.01, say + ": and the preview shows the same frame (" + differ(A, A2).toFixed(4) + " differ)");
-    check(back.two !== "round", say + ": the project open before was saved first (" + back.two + ")");
+    check(back.two !== "clean", say + ": the project open before was saved first (" + back.two + ")");
     // Rename, Move to a folder, Duplicate and Delete.
     await wsSec(page, "Projects");
     const more = async (id) => { await page.locator('[data-af-project-row][data-af-id="' + id + '"] [data-af-projectmore]').click(); await page.waitForTimeout(400); };
@@ -5903,7 +5911,7 @@ if (section("projects")) {
     await page.locator('[data-af-project-row][data-af-id="pj1"] [data-af-projectdup]').click();
     await page.waitForTimeout(500);
     const dup = await page.evaluate(() => window.__projIndex.map((x) => x.name));
-    check(dup.indexOf("Harbor at night copy") >= 0 && (await page.evaluate(() => window.__projects.pj3.look.videoFont)) === "round", say + ": Duplicate makes a copy with the same recipe (" + dup.join(", ") + ")");
+    check(dup.indexOf("Harbor at night copy") >= 0 && (await page.evaluate(() => window.__projects.pj3.look.videoFont)) === "clean", say + ": Duplicate makes a copy with the same recipe (" + dup.join(", ") + ")");
     await page.evaluate(() => { window.__confirmNo = true; window.__asked = 0; });
     await page.locator('[data-af-project-row][data-af-id="pj1"] [data-af-projectdel]').click();
     await page.waitForTimeout(400);
@@ -5964,6 +5972,156 @@ if (section("studio over the drawer")) {
       await page.evaluate(() => document.querySelector('[data-af-ws="close"]').click());
       await page.waitForTimeout(700);
       check(!!(await page.$("[data-af-studio-open]")) && !(await page.$("[data-af-studio-isopen]")), say + ": closing the Studio puts the tab back to Open the Studio");
+      check(!errors.length, say + ": no page errors. " + errors.slice(0, 2).join(" | "));
+      await context.close();
+    }
+  }
+}
+
+if (section("template switching")) {
+  console.log("Templates: switching shows at once and cleanly, nothing is left from the template before, Undo puts the frame back, and play is smooth");
+  const OUT = process.env.UI_TEMPLATES || "";
+  const fs = await import("node:fs");
+  // A frame at one moment, as samples of its pixels.
+  const frameAt = (page, at) => page.evaluate(async (at) => {
+    const r = document.querySelector("[data-af-scrub] input");
+    r.step = "any";
+    r.value = String(at);
+    r.dispatchEvent(new Event("input", { bubbles: true }));
+    await new Promise((x) => requestAnimationFrame(() => requestAnimationFrame(x)));
+    const c = document.querySelector("[data-af-videopreview]");
+    const d = c.getContext("2d").getImageData(0, 0, c.width, c.height).data;
+    const out = [];
+    for (let i = 0; i < d.length; i += 4 * 53) out.push(d[i], d[i + 1], d[i + 2]);
+    return out;
+  }, at);
+  const differ = (a, b) => { let n = 0; for (let i = 0; i < Math.max(a.length, b.length); i++) if (Math.abs((a[i] || 0) - (b[i] || 0)) > 2) n++; return n / Math.max(1, a.length); };
+  // UI_TPL_IDS limits the templates pressed, for a run against an older
+  // build with fewer templates.
+  const ids = TEMPLATE_LOOKS.map((t) => t.id).filter((id) => !process.env.UI_TPL_IDS || process.env.UI_TPL_IDS.split(",").includes(id));
+  for (const size of SIZES) {
+    const say = size.name;
+    // slow: a watermark picture that takes a while to read, so the
+    // templates' own pictures are still being drawn when the presses come.
+    const SLOW = `window.__markDelay = 1500; window.__markPics = { wslow: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==" }; window.__settings.videoMarks = [{ id: "wslow", text: "", pic: true, place: "tr", size: 60, strength: 100, when: "all", from: 0, secs: 4, backs: [] }];`;
+    // The preview at the size it shows, as in Lumiverse.
+    const fresh = async (tap, now, slow) => {
+      const o = await open(THEMES[0], size, 1, "window.__previewScale = null;" + (slow ? SLOW : ""));
+      await openWs(o.page);
+      await wsSec(o.page, "Templates");
+      if (!now) await o.page.waitForTimeout(800);
+      if (tap) {
+        await o.page.click('[data-af-tpl="' + tap + '"]');
+        await o.page.waitForTimeout(1800);
+      }
+      return o;
+    };
+    // Every template pressed in a row, with no wait, then the frame
+    // compared with a fresh page that pressed only the last.
+    const last = ids[ids.length - 1];
+    {
+      const ref = await fresh(last, false, true);
+      const R = await frameAt(ref.page, 9.6);
+      await ref.context.close();
+      // Pressed at once, while the templates' own pictures are still being
+      // drawn.
+      const { context, page, errors } = await fresh(null, true, true);
+      await page.evaluate((ids) => { for (const id of ids) document.querySelector('[data-af-tpl="' + id + '"]').click(); }, ids);
+      await page.waitForTimeout(1800);
+      const F = await frameAt(page, 9.6);
+      check(differ(R, F) < 0.002, say + ": after every template pressed in a row, the frame is exactly the last one's (" + (differ(R, F) * 100).toFixed(2) + "% differ)");
+      check(!errors.length, say + ": no page errors. " + errors.slice(0, 2).join(" | "));
+      await context.close();
+    }
+    // Use this template, then Undo: the frame is the old look's again.
+    {
+      const { context, page, errors } = await fresh(null);
+      const before = await frameAt(page, 9.6);
+      await page.click('[data-af-tpl="neon"]');
+      await page.waitForTimeout(150);
+      const fading = await page.evaluate(() => { const f = document.querySelector("[data-af-fadeframe]"); return f ? f.getAnimations().length : -1; });
+      check(fading >= 0, say + ": a template change fades from the frame before (" + fading + ")");
+      await page.waitForTimeout(1200);
+      check(!(await page.$("[data-af-fadeframe]")), say + ": and the fade is gone once it ends");
+      const neon = await frameAt(page, 9.6);
+      check(differ(before, neon) > 0.2, say + ": the template changes the frame");
+      await page.click("[data-af-tpluse]");
+      await page.waitForTimeout(800);
+      await page.click('[data-af-ws="undo"]');
+      await page.waitForTimeout(1500);
+      const after = await frameAt(page, 9.6);
+      check(differ(before, after) < 0.002, say + ": Use this template, then Undo, draws the old look exactly (" + (differ(before, after) * 100).toFixed(2) + "% differ, " + before.length + " and " + after.length + " samples)");
+      check(!errors.length, say + ": no page errors. " + errors.slice(0, 2).join(" | "));
+      await context.close();
+    }
+    // Nothing is left from the template before: Plain text, which turns
+    // music off and colors the line under the title, then Pink stationery,
+    // gives the same settings as Pink stationery alone.
+    {
+      const useOne = async (page, id) => {
+        await page.click('[data-af-tpl="' + id + '"]');
+        await page.waitForTimeout(500);
+        await page.click("[data-af-tpluse]");
+        await page.waitForTimeout(700);
+      };
+      const a = await fresh(null);
+      await useOne(a.page, "blush");
+      const only = await a.page.evaluate(() => JSON.parse(JSON.stringify(window.__settings)));
+      await a.context.close();
+      const b = await fresh(null);
+      await useOne(b.page, "plain");
+      await useOne(b.page, "blush");
+      const both = await b.page.evaluate(() => JSON.parse(JSON.stringify(window.__settings)));
+      await b.context.close();
+      const keys = Object.keys(TEMPLATE_LOOKS[0].look).concat(["videoBacks", "videoBackPick"]);
+      const left = keys.filter((k) => JSON.stringify(only[k]) !== JSON.stringify(both[k]));
+      check(!left.length, say + ": after Plain text then Pink stationery, every look setting is Pink stationery's. Left over: " + left.join(", "));
+    }
+    // Smooth play: each template's example plays with no frame over 50 ms
+    // once it is under way. With UI_TEMPLATES, a strip of frames of each.
+    {
+      const { context, page, errors } = await fresh(null);
+      const slow = [];
+      for (const id of ids) {
+        await page.click('[data-af-tpl="' + id + '"]');
+        await page.waitForTimeout(900);
+        const times = await page.evaluate(async () => {
+          const r = document.querySelector("[data-af-scrub] input");
+          r.value = "8";
+          r.dispatchEvent(new Event("input", { bubbles: true }));
+          document.querySelector('[data-af-studio="play"]').click();
+          const out = [];
+          let last = performance.now();
+          await new Promise((done) => {
+            const step = (t) => { out.push(t - last); last = t; if (out.length < 150) requestAnimationFrame(step); else done(); };
+            requestAnimationFrame(step);
+          });
+          document.querySelector('[data-af-studio="play"]').click();
+          return out.slice(20);
+        });
+        const worst = Math.max(...times);
+        if (worst > 51) slow.push(id + " " + Math.round(worst) + " ms");
+        if (OUT && !size.touch) {
+          const strip = await page.evaluate(async () => {
+            const r = document.querySelector("[data-af-scrub] input");
+            const c = document.querySelector("[data-af-videopreview]");
+            const w = 320, h = Math.round((320 * c.height) / c.width);
+            const s = document.createElement("canvas");
+            s.width = w * 8;
+            s.height = h;
+            const g = s.getContext("2d");
+            for (let k = 0; k < 8; k++) {
+              r.value = String(9.6 + k * 0.12);
+              r.dispatchEvent(new Event("input", { bubbles: true }));
+              await new Promise((x) => requestAnimationFrame(() => requestAnimationFrame(x)));
+              g.drawImage(c, k * w, 0, w, h);
+            }
+            return s.toDataURL("image/png").split(",")[1];
+          });
+          fs.writeFileSync(OUT + "/strip-" + id + ".png", Buffer.from(strip, "base64"));
+        }
+      }
+      check(!slow.length, say + ": every template plays with no frame over 50 ms. Slow: " + slow.join(", "));
       check(!errors.length, say + ": no page errors. " + errors.slice(0, 2).join(" | "));
       await context.close();
     }
@@ -6239,9 +6397,19 @@ if (section("transition sweep")) {
     { name: "two backgrounds", size: SIZES[0], set: { two: true }, quick: true },
     { name: "still pictures, no moods", size: SIZES[0], set: { videoPicMove: false, videoMoodPics: false }, quick: true },
   ];
+  // Each template's own transition, its time, its pictures, its fonts and
+  // where its words sit, with the colors kept that the sweep measures by.
+  // The words show all at once here too, since a template's words that
+  // come in as they are said are not part of the transition: the template
+  // switching checks look at those. The names take the words' color, so
+  // larger names are not counted as pictures.
+  for (const t of TEMPLATE_LOOKS) {
+    const l = t.look;
+    VARIANTS.push({ name: "template " + t.id, size: SIZES[0], move: l.videoMove, set: { videoMoveSecs: l.videoMoveSecs, videoPlace: l.videoPlace, videoPicShape: l.videoPicShape, videoPicSize: l.videoPicSize, videoPicRing: l.videoPicRing, videoPicRingWidth: l.videoPicRingWidth, videoFont: l.videoFont, videoNameFont: l.videoNameFont, videoSize: l.videoSize, videoNameSize: l.videoNameSize, videoNameColor: "words" }, templ: true });
+  }
   // The words all at once, so the only change in light is the transition.
-  for (const variant of VARIANTS.filter((v) => !process.env.UI_VARIANTS || process.env.UI_VARIANTS.split(",").includes(v.name))) {
-    for (const move of MOVES.filter((m) => !process.env.UI_MOVES || process.env.UI_MOVES.split(",").includes(m))) {
+  for (const variant of VARIANTS.filter((v) => (!process.env.UI_VARIANTS && !v.templ) || (process.env.UI_VARIANTS && process.env.UI_VARIANTS.split(",").some((x) => x === v.name || (x === "templates" && v.templ))))) {
+    for (const move of MOVES.filter((m) => (!process.env.UI_MOVES || process.env.UI_MOVES.split(",").includes(m)) && (!variant.move || m === variant.move))) {
       if (variant.quick && !["rise", "black", "slide", "cut"].includes(move)) continue;
       const { context, page, errors } = await open(THEMES[0], variant.size, 1, `(() => {
         const set = ${JSON.stringify(variant.set)};
@@ -6263,7 +6431,7 @@ if (section("transition sweep")) {
         if (variant.quick && !ch.people && ch.name !== "a new scene" && ch.name !== "caption to a line") continue;
         // From just before the change to just after it, every 1/60 s.
         const times = [];
-        for (let t = ch.t - 2 / 60; t <= ch.t + D + 2 / 60 + 1e-6; t += 1 / 60) times.push(Math.round(t * 1000) / 1000);
+        for (let t = ch.t - 2 / 60; t <= ch.t + (variant.set.videoMoveSecs || D) + 2 / 60 + 1e-6; t += 1 / 60) times.push(Math.round(t * 1000) / 1000);
         const f = await page.evaluate(async ([times, sheet]) => {
           const r = document.querySelector("[data-af-scrub] input");
           r.step = "any";
