@@ -7139,17 +7139,21 @@ if (section("built-in animations")) {
   const ids = (process.env.UI_ANIM_IDS || "fade,rise,drop,slide-l,focus,wipe-l,grow,iris,thru-circle,thru-heart,thru-star,box,diamond,clock,wipe-angle,blur-rise,slide-angle,words-rise,letters-fall,type,words").split(",");
   // Every calm built-in, as the opening and as lines, has no fast change
   // between light and dark.
-  for (const id of ids) {
-    for (const place of ["open", "lines"]) {
-      if (place === "open" && ["words-rise", "letters-fall", "type", "words"].includes(id)) continue;
+  const cases = [];
+  for (const id of ids) for (const place of ["open", "lines"]) if (!(place === "open" && ["words-rise", "letters-fall", "type", "words"].includes(id))) cases.push([id, place]);
+  // The glitches between two lines too, where the old part and the new one
+  // meet.
+  for (const id of (process.env.UI_ANIM_BETWEEN || "split,slice,wobble,shuffle,lost").split(",").filter(Boolean)) cases.push([id, "between"]);
+  for (const [id, place] of cases) {
+    {
       const p = await open(THEMES[0], laptop, 1, PLAIN + `window.__settings.videoAnims = { ${place}: { id: "${id}", secs: 1, delay: 0 } };`);
       await openWs(p.page);
       await p.page.waitForTimeout(400);
-      const r = await p.page.evaluate(async () => {
+      const r = await p.page.evaluate(async (until) => {
         const s = document.querySelector("[data-af-scrub] input");
         s.step = "any";
         const means = [];
-        for (let t = 0; t <= 3; t += 1 / 30) {
+        for (let t = 0; t <= until; t += 1 / 30) {
           s.value = String(t); s.dispatchEvent(new Event("input", { bubbles: true }));
           await new Promise((x) => requestAnimationFrame(() => requestAnimationFrame(x)));
           const c = document.querySelector("[data-af-videopreview]");
@@ -7166,7 +7170,7 @@ if (section("built-in animations")) {
           if (i + 3 < means.length && Math.abs(dl) > 8 && Math.sign(means[i + 3] - means[i]) === -Math.sign(dl) && Math.abs(means[i + 3] - means[i]) > 8) flashes++;
         }
         return { jump, flashes };
-      });
+      }, place === "between" ? 8 : 3);
       check(r.jump < 14 && r.flashes === 0, id + " as " + place + ": no fast change between light and dark (step " + r.jump.toFixed(1) + ", " + r.flashes + " flashes)");
       check(!p.errors.length, id + " as " + place + ": no page errors. " + p.errors.slice(0, 2).join(" | "));
       await p.context.close();
@@ -7265,6 +7269,97 @@ if (section("studio tour shots")) {
       await context.close();
     }
     check(true, "the pictures are saved in " + dir);
+  }
+}
+
+if (section("animation audit")) {
+  // Contact sheets of every built-in animation and every template, wide and
+  // tall, with the largest step in brightness between frames, made only
+  // when UI_AUDIT names a folder.
+  const dir = process.env.UI_AUDIT;
+  if (dir) {
+    console.log("The animation audit: contact sheets in " + dir);
+    const fs = await import("node:fs");
+    const laptop = SIZES.find((x) => !x.touch) || SIZES[0];
+    const report = [];
+    const grab = (page, times) => page.evaluate(async (times) => {
+      const r = document.querySelector("[data-af-scrub] input");
+      r.step = "any";
+      const out = [];
+      let prev = null, step = 0;
+      for (const t of times) {
+        r.value = String(t); r.dispatchEvent(new Event("input", { bubbles: true }));
+        await new Promise((x) => requestAnimationFrame(() => requestAnimationFrame(x)));
+        const c = document.querySelector("[data-af-videopreview]");
+        const w = c.width >= c.height ? 160 : 90, h = c.width >= c.height ? 90 : 160;
+        const k = document.createElement("canvas"); k.width = w; k.height = h;
+        const g = k.getContext("2d"); g.drawImage(c, 0, 0, w, h);
+        const d = g.getImageData(0, 0, w, h).data;
+        let sum = 0; for (let i = 0; i < d.length; i += 4) sum += (d[i] + d[i + 1] + d[i + 2]) / 3;
+        const mean = sum / (d.length / 4);
+        if (prev !== null) step = Math.max(step, Math.abs(mean - prev));
+        prev = mean;
+        out.push(k.toDataURL("image/png"));
+      }
+      return { frames: out, step };
+    }, times);
+    const sheet = async (page, rows, file) => {
+      const png = await page.evaluate(async (rows) => {
+        const first = new Image(); first.src = rows[0].frames[0]; await first.decode();
+        const fw = first.width, fh = first.height, cols = rows[0].frames.length;
+        const out = document.createElement("canvas");
+        out.width = 150 + cols * (fw + 4); out.height = rows.length * (fh + 4) + 4;
+        const g = out.getContext("2d");
+        g.fillStyle = "#111"; g.fillRect(0, 0, out.width, out.height);
+        for (let r = 0; r < rows.length; r++) {
+          g.fillStyle = rows[r].step > 14 ? "#ff8080" : "#dddddd"; g.font = "12px system-ui";
+          g.fillText(rows[r].name, 6, r * (fh + 4) + fh / 2);
+          g.fillText("step " + rows[r].step.toFixed(1), 6, r * (fh + 4) + fh / 2 + 16);
+          for (let c = 0; c < cols; c++) { const im = new Image(); im.src = rows[r].frames[c]; await im.decode(); g.drawImage(im, 150 + c * (fw + 4), 4 + r * (fh + 4)); }
+        }
+        return out.toDataURL("image/png").split(",")[1];
+      }, rows);
+      fs.writeFileSync(dir + "/" + file, Buffer.from(png, "base64"));
+    };
+    const ids = ["fade", "rise", "drop", "slide-l", "slide-r", "slide-t", "slide-b", "focus", "wipe-l", "wipe-r", "wipe-t", "wipe-b", "grow", "iris", "thru-circle", "thru-heart", "thru-star", "box", "diamond", "clock", "wipe-angle", "blur-rise", "slide-angle", "split", "slice", "wobble", "shuffle", "lost", "words-rise", "letters-fall", "type", "words", "none"];
+    const times = Array.from({ length: 14 }, (_, i) => 0.15 + i * 0.3);
+    for (const shape of ["wide", "tall"]) {
+      for (const place of ["open", "between", "lines", "words", "title"]) {
+        const rows = [];
+        for (const id of ids) {
+          if ((place === "open" || place === "between") && ["words-rise", "letters-fall", "type", "words"].includes(id)) continue;
+          if (place !== "open" && place !== "between" && id === "lost") continue;
+          const { context, page } = await open(THEMES[0], laptop, 1, `window.__settings.videoShape = "${shape}"; window.__settings.videoTitleOn = ${place === "title"}; window.__settings.videoAnims = { ${place}: { id: "${id}", secs: 1, delay: 0 } };`);
+          await openWs(page);
+          await page.waitForTimeout(300);
+          const g = await grab(page, times);
+          rows.push({ name: id, frames: g.frames, step: g.step });
+          if (g.step > 14) report.push(shape + " " + place + " " + id + ": step " + g.step.toFixed(1));
+          await context.close();
+        }
+        const { context, page } = await open(THEMES[0], laptop, 1);
+        await sheet(page, rows, "anims-" + shape + "-" + place + ".png");
+        await context.close();
+      }
+      // Every template, on its way through the example: the opening, the
+      // first lines, a change of speaker and the end.
+      const { context: tc, page: tp } = await open(THEMES[0], laptop, 1, `window.__settings.videoShape = "${shape}";`);
+      await openWs(tp);
+      await wsSec(tp, "Templates");
+      await tp.waitForTimeout(500);
+      const tids = await tp.evaluate(() => [...document.querySelectorAll("[data-af-tpl]")].map((x) => x.getAttribute("data-af-tpl")));
+      const rows = [];
+      for (const id of tids) {
+        await tp.evaluate((id) => document.querySelector('[data-af-tpl="' + id + '"]').click(), id);
+        await tp.waitForTimeout(450);
+        const g = await grab(tp, [0.3, 1.2, 2.5, 4, 6, 9, 12, 16, 20, -1].map((t) => (t < 0 ? 21.6 : t)));
+        rows.push({ name: id, frames: g.frames, step: g.step });
+      }
+      await sheet(tp, rows, "templates-" + shape + ".png");
+      await tc.close();
+    }
+    fs.writeFileSync(dir + "/audit-report.txt", report.length ? report.join("\n") + "\n" : "No frame changed brightness by more than 14 of 255 from the one before.\n");
+    check(true, "the audit is saved in " + dir + ". " + (report.length ? report.length + " to look at: " + report.slice(0, 4).join("; ") : "Nothing over the step limit."));
   }
 }
 

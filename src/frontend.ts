@@ -1956,7 +1956,10 @@ const BUILT_IN_ANIMS: AnimDef[] = [
   builtIn('slice', 'Slice shift', 'any', FADE_IN, FADE_OUT, { secs: 0.6, fx: 'slice' }),
   builtIn('wobble', 'Scanline wobble', 'any', FADE_IN, FADE_OUT, { secs: 0.7, fx: 'wobble' }),
   builtIn('shuffle', 'Pixel shuffle', 'any', [], [], { secs: 0.7, ease: [0, 0, 1, 1], fx: 'shuffle' }),
-  builtIn('lost', 'Signal lost', 'frame', [], [], { secs: 1.2, ease: [0, 0, 1, 1], fx: 'lost' }),
+  // The card shows between the two parts: the old one fades into it, then
+  // it fades into the new one, one after the other, so it never appears at
+  // once.
+  builtIn('lost', 'Signal lost', 'frame', [], [], { secs: 1.2, ease: [0, 0, 1, 1], fx: 'lost', overlap: 0 }),
   // Effects that flash, offered only behind their switch.
   builtIn('film', 'Film flicker', 'any', FADE_IN, FADE_OUT, { secs: 1, fx: 'film', flash: true }),
   builtIn('candle', 'Candle flicker', 'any', FADE_IN, FADE_OUT, { secs: 1.2, fx: 'candle', flash: true }),
@@ -6854,8 +6857,13 @@ export function setup(ctx: Ctx, overrides?: any) {
         facesOf(facesB)(gg, al, x, y);
         withText(textB, tu, 'in', kIn, 3)(gg, al, x, y);
       };
-      if (a || title) runAnim(g, st, fu, 'out', kOut, allA, 0);
-      runAnim(g, st, fu, 'in', kIn, allB, 1);
+      // With less than full overlap, the old part goes first and the new
+      // one comes after, each drawn only during its own track.
+      const showA = kOut < 1 || ov >= 1;
+      const showB = k >= 1 - span || ov >= 1;
+      // An effect such as Signal lost fades in over the empty frame too.
+      if ((a || title || fu.def.fx) && showA) runAnim(g, st, fu, 'out', kOut, allA, 0);
+      if (showB) runAnim(g, st, fu, 'in', kIn, allB, 1);
       return true;
     }
     if (tu || tuA) {
