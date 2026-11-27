@@ -1955,6 +1955,7 @@ const DEFAULTS = {
     videoWordShadowFar: 2,
     videoBox: false,
     videoOwnColors: false,
+    videoBackRules: true,
     videoKindColors: {},
     videoPersonColors: {},
     videoBoxColor: '#000000',
@@ -4007,6 +4008,10 @@ export function setup(ctx, overrides) {
     // mood or a word of its place, or else the one for every other scene.
     function sceneBack(placeText, mood) {
         const dflt = backDefault().id;
+        // Off, every scene uses the background for every other scene. A
+        // template turns it off, so it shows on its own.
+        if (S.videoBackRules === false)
+            return dflt;
         const place = ' ' + placeText.toLowerCase().replace(/[^a-z0-9' ]+/g, ' ') + ' ';
         const hit = backList().find((b) => b.id !== dflt && b.use !== 'hand' &&
             ((!!mood && (b.moods || []).indexOf(mood) >= 0) ||
@@ -15843,7 +15848,7 @@ export function setup(ctx, overrides) {
         'videoBylineShadow', 'videoBylineShadowInk', 'videoBylineShadowDark', 'videoBylineShadowSoft', 'videoBylineShadowFar', 'videoMarks',
         'videoWordFill', 'videoWordStops', 'videoWordDir', 'videoNameFill', 'videoNameStops', 'videoNameDir', 'videoCapFill', 'videoCapStops', 'videoCapDir',
         'videoWordShadow', 'videoWordShadowInk', 'videoWordShadowDark', 'videoWordShadowSoft', 'videoWordShadowFar',
-        'videoBox', 'videoBoxColor', 'videoBoxClear', 'videoBoxRound', 'videoBoxWidth', 'videoOwnColors', 'videoKindColors',
+        'videoBox', 'videoBoxColor', 'videoBoxClear', 'videoBoxRound', 'videoBoxWidth', 'videoOwnColors', 'videoKindColors', 'videoBackRules',
         'videoNameShadow', 'videoNameShadowInk', 'videoNameShadowDark', 'videoNameShadowSoft', 'videoNameShadowFar', 'videoEdges', 'videoEdgeColor', 'videoMove', 'videoMoveSecs',
         'videoTitleOn', 'videoFadeOut', 'videoCaptions',
     ];
@@ -16254,7 +16259,8 @@ export function setup(ctx, overrides) {
                 videoWordStops: ['#f2b880'], videoWordDir: 'down', videoWordShadow: true, videoWordShadowInk: '', videoWordShadowDark: 55,
                 videoWordShadowSoft: 14, videoWordShadowFar: 2,
                 videoBox: false, videoBoxColor: '#000000', videoBoxClear: 40, videoBoxRound: 16, videoBoxWidth: 'fit',
-                videoOwnColors: false, videoKindColors: {},
+                videoOwnColors: true, videoKindColors: { narrator: '#8b9cb8', character: '#a78bfa', persona: '#2dd4bf', npc: '#f472b6' },
+                videoBackRules: false,
                 videoCaptions: true, videoCaptionInk: '', videoCapFill: 'solid', videoCapStops: ['#f2b880'], videoCapDir: 'right',
                 videoNameFont: 'clean', videoNameSize: 100, videoNameColor: 'kind', videoNameFill: 'solid', videoNameStops: ['#f2b880'],
                 videoNameDir: 'right', videoNameShadow: true, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18,
@@ -16279,7 +16285,8 @@ export function setup(ctx, overrides) {
                 videoWordStops: ['#f2b880'], videoWordDir: 'down', videoWordShadow: false, videoWordShadowInk: '', videoWordShadowDark: 55,
                 videoWordShadowSoft: 14, videoWordShadowFar: 2,
                 videoBox: false, videoBoxColor: '#000000', videoBoxClear: 40, videoBoxRound: 16, videoBoxWidth: 'fit',
-                videoOwnColors: false, videoKindColors: {},
+                videoOwnColors: true, videoKindColors: { narrator: '#8b9cb8', character: '#a78bfa', persona: '#2dd4bf', npc: '#f472b6' },
+                videoBackRules: false,
                 videoCaptions: true, videoCaptionInk: '#a9a49a', videoCapFill: 'solid', videoCapStops: ['#f2b880'], videoCapDir: 'right',
                 videoNameFont: 'clean', videoNameSize: 92, videoNameColor: 'words', videoNameFill: 'solid', videoNameStops: ['#f2b880'],
                 videoNameDir: 'right', videoNameShadow: false, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18,
@@ -16304,7 +16311,8 @@ export function setup(ctx, overrides) {
                 videoWordStops: ['#f2b880'], videoWordDir: 'down', videoWordShadow: false, videoWordShadowInk: '', videoWordShadowDark: 55,
                 videoWordShadowSoft: 14, videoWordShadowFar: 2,
                 videoBox: false, videoBoxColor: '#000000', videoBoxClear: 40, videoBoxRound: 16, videoBoxWidth: 'fit',
-                videoOwnColors: false, videoKindColors: {},
+                videoOwnColors: true, videoKindColors: { narrator: '#8b9cb8', character: '#a78bfa', persona: '#2dd4bf', npc: '#f472b6' },
+                videoBackRules: false,
                 videoCaptions: true, videoCaptionInk: '#9a4a1c', videoCapFill: 'solid', videoCapStops: ['#f2b880'], videoCapDir: 'right',
                 videoNameFont: 'book', videoNameSize: 118, videoNameColor: 'words', videoNameFill: 'solid', videoNameStops: ['#f2b880'],
                 videoNameDir: 'right', videoNameShadow: false, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18,
@@ -16336,7 +16344,8 @@ export function setup(ctx, overrides) {
                 videoWordStops: ['#f2b880'], videoWordDir: 'down', videoWordShadow: true, videoWordShadowInk: '#000000', videoWordShadowDark: 90,
                 videoWordShadowSoft: 6, videoWordShadowFar: 2,
                 videoBox: false, videoBoxColor: '#000000', videoBoxClear: 40, videoBoxRound: 16, videoBoxWidth: 'fit',
-                videoOwnColors: false, videoKindColors: {},
+                videoOwnColors: true, videoKindColors: { narrator: '#8b9cb8', character: '#a78bfa', persona: '#2dd4bf', npc: '#f472b6' },
+                videoBackRules: false,
                 videoCaptions: true, videoCaptionInk: '#f0c36a', videoCapFill: 'solid', videoCapStops: ['#f2b880'], videoCapDir: 'right',
                 videoNameFont: 'clean', videoNameSize: 82, videoNameColor: 'words', videoNameFill: 'solid', videoNameStops: ['#f2b880'],
                 videoNameDir: 'right', videoNameShadow: true, videoNameShadowInk: '#000000', videoNameShadowDark: 90, videoNameShadowSoft: 6,
@@ -16364,7 +16373,8 @@ export function setup(ctx, overrides) {
                 videoWordFill: 'solid', videoWordStops: ['#f2b880'], videoWordDir: 'down', videoWordShadow: true, videoWordShadowInk: '#00c8ff',
                 videoWordShadowDark: 70, videoWordShadowSoft: 18, videoWordShadowFar: 0,
                 videoBox: false, videoBoxColor: '#000000', videoBoxClear: 40, videoBoxRound: 16, videoBoxWidth: 'fit',
-                videoOwnColors: false, videoKindColors: {},
+                videoOwnColors: true, videoKindColors: { narrator: '#8b9cb8', character: '#a78bfa', persona: '#2dd4bf', npc: '#f472b6' },
+                videoBackRules: false,
                 videoCaptions: true, videoCaptionInk: '#ff7ad9', videoCapFill: 'solid', videoCapStops: ['#f2b880'], videoCapDir: 'right',
                 videoNameFont: 'clean', videoNameSize: 110, videoNameColor: 'words', videoNameFill: 'solid', videoNameStops: ['#f2b880'],
                 videoNameDir: 'right', videoNameShadow: false, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18,
@@ -16400,7 +16410,8 @@ export function setup(ctx, overrides) {
                 videoWordStops: ['#f2b880'], videoWordDir: 'down', videoWordShadow: false, videoWordShadowInk: '', videoWordShadowDark: 55,
                 videoWordShadowSoft: 14, videoWordShadowFar: 2,
                 videoBox: false, videoBoxColor: '#000000', videoBoxClear: 40, videoBoxRound: 16, videoBoxWidth: 'fit',
-                videoOwnColors: false, videoKindColors: {},
+                videoOwnColors: true, videoKindColors: { narrator: '#8b9cb8', character: '#a78bfa', persona: '#2dd4bf', npc: '#f472b6' },
+                videoBackRules: false,
                 videoCaptions: true, videoCaptionInk: '#c25b7d', videoCapFill: 'solid', videoCapStops: ['#f2b880'], videoCapDir: 'right',
                 videoNameFont: 'round', videoNameSize: 112, videoNameColor: 'words', videoNameFill: 'solid', videoNameStops: ['#f2b880'],
                 videoNameDir: 'right', videoNameShadow: false, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18,
@@ -16428,7 +16439,8 @@ export function setup(ctx, overrides) {
                 videoWordStops: ['#f2b880'], videoWordDir: 'down', videoWordShadow: true, videoWordShadowInk: '#000000', videoWordShadowDark: 90,
                 videoWordShadowSoft: 20, videoWordShadowFar: 0,
                 videoBox: false, videoBoxColor: '#000000', videoBoxClear: 40, videoBoxRound: 16, videoBoxWidth: 'fit',
-                videoOwnColors: false, videoKindColors: {},
+                videoOwnColors: true, videoKindColors: { narrator: '#8b9cb8', character: '#a78bfa', persona: '#2dd4bf', npc: '#f472b6' },
+                videoBackRules: false,
                 videoCaptions: true, videoCaptionInk: '#c0504d', videoCapFill: 'solid', videoCapStops: ['#f2b880'], videoCapDir: 'right',
                 videoNameFont: 'type', videoNameSize: 82, videoNameColor: 'words', videoNameFill: 'solid', videoNameStops: ['#f2b880'],
                 videoNameDir: 'right', videoNameShadow: false, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18,
@@ -16453,7 +16465,8 @@ export function setup(ctx, overrides) {
                 videoWordFill: 'solid', videoWordStops: ['#f2b880'], videoWordDir: 'down', videoWordShadow: false, videoWordShadowInk: '',
                 videoWordShadowDark: 55, videoWordShadowSoft: 14, videoWordShadowFar: 2,
                 videoBox: false, videoBoxColor: '#000000', videoBoxClear: 40, videoBoxRound: 16, videoBoxWidth: 'fit',
-                videoOwnColors: false, videoKindColors: {},
+                videoOwnColors: true, videoKindColors: { narrator: '#8b9cb8', character: '#a78bfa', persona: '#2dd4bf', npc: '#f472b6' },
+                videoBackRules: false,
                 videoCaptions: true, videoCaptionInk: '#c2185b', videoCapFill: 'solid', videoCapStops: ['#f2b880'], videoCapDir: 'right',
                 videoNameFont: 'round', videoNameSize: 128, videoNameColor: 'kind', videoNameFill: 'solid', videoNameStops: ['#f2b880'],
                 videoNameDir: 'right', videoNameShadow: false, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18,
@@ -16481,7 +16494,8 @@ export function setup(ctx, overrides) {
                 videoWordStops: ['#f2b880'], videoWordDir: 'down', videoWordShadow: false, videoWordShadowInk: '', videoWordShadowDark: 55,
                 videoWordShadowSoft: 14, videoWordShadowFar: 2,
                 videoBox: false, videoBoxColor: '#000000', videoBoxClear: 40, videoBoxRound: 16, videoBoxWidth: 'fit',
-                videoOwnColors: false, videoKindColors: {},
+                videoOwnColors: true, videoKindColors: { narrator: '#8b9cb8', character: '#a78bfa', persona: '#2dd4bf', npc: '#f472b6' },
+                videoBackRules: false,
                 videoCaptions: true, videoCaptionInk: '#b03a2e', videoCapFill: 'solid', videoCapStops: ['#f2b880'], videoCapDir: 'right',
                 videoNameFont: 'type', videoNameSize: 104, videoNameColor: 'words', videoNameFill: 'solid', videoNameStops: ['#f2b880'],
                 videoNameDir: 'right', videoNameShadow: false, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18,
@@ -16516,7 +16530,8 @@ export function setup(ctx, overrides) {
                 videoWordStops: ['#f2b880'], videoWordDir: 'down', videoWordShadow: true, videoWordShadowInk: '#1a0b02', videoWordShadowDark: 70,
                 videoWordShadowSoft: 16, videoWordShadowFar: 2,
                 videoBox: false, videoBoxColor: '#000000', videoBoxClear: 40, videoBoxRound: 16, videoBoxWidth: 'fit',
-                videoOwnColors: false, videoKindColors: {},
+                videoOwnColors: true, videoKindColors: { narrator: '#8b9cb8', character: '#a78bfa', persona: '#2dd4bf', npc: '#f472b6' },
+                videoBackRules: false,
                 videoCaptions: true, videoCaptionInk: '#ff9f4a', videoCapFill: 'solid', videoCapStops: ['#f2b880'], videoCapDir: 'right',
                 videoNameFont: 'clean', videoNameSize: 90, videoNameColor: 'words', videoNameFill: 'solid', videoNameStops: ['#f2b880'],
                 videoNameDir: 'right', videoNameShadow: true, videoNameShadowInk: '#1a0b02', videoNameShadowDark: 65, videoNameShadowSoft: 18,
@@ -16541,7 +16556,8 @@ export function setup(ctx, overrides) {
                 videoWordStops: ['#f2b880'], videoWordDir: 'down', videoWordShadow: true, videoWordShadowInk: '#0b1638', videoWordShadowDark: 60,
                 videoWordShadowSoft: 16, videoWordShadowFar: 0,
                 videoBox: false, videoBoxColor: '#000000', videoBoxClear: 40, videoBoxRound: 16, videoBoxWidth: 'fit',
-                videoOwnColors: false, videoKindColors: {},
+                videoOwnColors: true, videoKindColors: { narrator: '#8b9cb8', character: '#a78bfa', persona: '#2dd4bf', npc: '#f472b6' },
+                videoBackRules: false,
                 videoCaptions: true, videoCaptionInk: '#f6d98b', videoCapFill: 'solid', videoCapStops: ['#f2b880'], videoCapDir: 'right',
                 videoNameFont: 'round', videoNameSize: 108, videoNameColor: 'words', videoNameFill: 'solid', videoNameStops: ['#f2b880'],
                 videoNameDir: 'right', videoNameShadow: false, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18,
@@ -16587,6 +16603,7 @@ export function setup(ctx, overrides) {
                 videoWordShadowDark: 45, videoWordShadowSoft: 10, videoWordShadowFar: 0,
                 videoBox: false, videoBoxColor: '#000000', videoBoxClear: 40, videoBoxRound: 16, videoBoxWidth: 'fit',
                 videoOwnColors: true, videoKindColors: { narrator: '#2fbf5c', character: '#4dff7c', persona: '#9dffb8', npc: '#1fa84a' },
+                videoBackRules: false,
                 videoCaptions: true, videoCaptionInk: '#b8ffcb', videoCapFill: 'solid', videoCapStops: ['#f2b880'], videoCapDir: 'right',
                 videoNameFont: 'type', videoNameSize: 100, videoNameColor: 'words', videoNameFill: 'solid', videoNameStops: ['#f2b880'],
                 videoNameDir: 'right', videoNameShadow: false, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18,
@@ -16642,7 +16659,8 @@ export function setup(ctx, overrides) {
                 videoWordFill: 'solid', videoWordStops: ['#f2b880'], videoWordDir: 'down', videoWordShadow: false, videoWordShadowInk: '',
                 videoWordShadowDark: 55, videoWordShadowSoft: 14, videoWordShadowFar: 2,
                 videoBox: true, videoBoxColor: '#141026', videoBoxClear: 12, videoBoxRound: 14, videoBoxWidth: 'wide',
-                videoOwnColors: false, videoKindColors: {},
+                videoOwnColors: true, videoKindColors: { narrator: '#8b9cb8', character: '#a78bfa', persona: '#2dd4bf', npc: '#f472b6' },
+                videoBackRules: false,
                 videoCaptions: true, videoCaptionInk: '#c9bfff', videoCapFill: 'solid', videoCapStops: ['#f2b880'], videoCapDir: 'right',
                 videoNameFont: 'clean', videoNameSize: 110, videoNameColor: 'words', videoNameFill: 'solid', videoNameStops: ['#f2b880'],
                 videoNameDir: 'right', videoNameShadow: false, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18,
@@ -16667,7 +16685,8 @@ export function setup(ctx, overrides) {
                 videoWordStops: ['#f2b880'], videoWordDir: 'down', videoWordShadow: true, videoWordShadowInk: '#1c252d', videoWordShadowDark: 60,
                 videoWordShadowSoft: 14, videoWordShadowFar: 2,
                 videoBox: false, videoBoxColor: '#000000', videoBoxClear: 40, videoBoxRound: 16, videoBoxWidth: 'fit',
-                videoOwnColors: false, videoKindColors: {},
+                videoOwnColors: true, videoKindColors: { narrator: '#8b9cb8', character: '#a78bfa', persona: '#2dd4bf', npc: '#f472b6' },
+                videoBackRules: false,
                 videoCaptions: true, videoCaptionInk: '#bcd3e3', videoCapFill: 'solid', videoCapStops: ['#f2b880'], videoCapDir: 'right',
                 videoNameFont: 'clean', videoNameSize: 96, videoNameColor: 'words', videoNameFill: 'solid', videoNameStops: ['#f2b880'],
                 videoNameDir: 'right', videoNameShadow: true, videoNameShadowInk: '#1c252d', videoNameShadowDark: 65, videoNameShadowSoft: 18,
@@ -16720,6 +16739,7 @@ export function setup(ctx, overrides) {
                 videoWordShadowSoft: 14, videoWordShadowFar: 2,
                 videoBox: false, videoBoxColor: '#000000', videoBoxClear: 40, videoBoxRound: 16, videoBoxWidth: 'fit',
                 videoOwnColors: true, videoKindColors: { narrator: '#6b4a24', character: '#8a5a2b', persona: '#5a3a18', npc: '#a0703a' },
+                videoBackRules: false,
                 videoCaptions: true, videoCaptionInk: '#5a3a18', videoCapFill: 'solid', videoCapStops: ['#f2b880'], videoCapDir: 'right',
                 videoNameFont: 'book', videoNameSize: 104, videoNameColor: 'words', videoNameFill: 'solid', videoNameStops: ['#f2b880'],
                 videoNameDir: 'right', videoNameShadow: false, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18,
@@ -16758,7 +16778,8 @@ export function setup(ctx, overrides) {
                 videoWordFill: 'solid', videoWordStops: ['#f2b880'], videoWordDir: 'down', videoWordShadow: true, videoWordShadowInk: '',
                 videoWordShadowDark: 55, videoWordShadowSoft: 14, videoWordShadowFar: 2,
                 videoBox: false, videoBoxColor: '#000000', videoBoxClear: 40, videoBoxRound: 16, videoBoxWidth: 'fit',
-                videoOwnColors: false, videoKindColors: {},
+                videoOwnColors: true, videoKindColors: { narrator: '#8b9cb8', character: '#a78bfa', persona: '#2dd4bf', npc: '#f472b6' },
+                videoBackRules: false,
                 videoCaptions: true, videoCaptionInk: '#e0a030', videoCapFill: 'solid', videoCapStops: ['#f2b880'], videoCapDir: 'right',
                 videoNameFont: 'clean', videoNameSize: 104, videoNameColor: 'words', videoNameFill: 'solid', videoNameStops: ['#f2b880'],
                 videoNameDir: 'right', videoNameShadow: false, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18,
@@ -16800,7 +16821,8 @@ export function setup(ctx, overrides) {
                 videoWordStops: ['#f2b880'], videoWordDir: 'down', videoWordShadow: true, videoWordShadowInk: '#12030a', videoWordShadowDark: 60,
                 videoWordShadowSoft: 16, videoWordShadowFar: 0,
                 videoBox: false, videoBoxColor: '#000000', videoBoxClear: 40, videoBoxRound: 16, videoBoxWidth: 'fit',
-                videoOwnColors: false, videoKindColors: {},
+                videoOwnColors: true, videoKindColors: { narrator: '#8b9cb8', character: '#a78bfa', persona: '#2dd4bf', npc: '#f472b6' },
+                videoBackRules: false,
                 videoCaptions: true, videoCaptionInk: '#f4a6a0', videoCapFill: 'solid', videoCapStops: ['#f2b880'], videoCapDir: 'right',
                 videoNameFont: 'book', videoNameSize: 104, videoNameColor: 'words', videoNameFill: 'solid', videoNameStops: ['#f2b880'],
                 videoNameDir: 'right', videoNameShadow: false, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18,
@@ -16838,6 +16860,7 @@ export function setup(ctx, overrides) {
                 videoWordShadowSoft: 14, videoWordShadowFar: 2,
                 videoBox: false, videoBoxColor: '#000000', videoBoxClear: 40, videoBoxRound: 16, videoBoxWidth: 'fit',
                 videoOwnColors: true, videoKindColors: { narrator: '#ff6b6b', character: '#ff6b6b', persona: '#ff6b6b', npc: '#ff6b6b' },
+                videoBackRules: false,
                 videoCaptions: true, videoCaptionInk: '#ff6b6b', videoCapFill: 'solid', videoCapStops: ['#f2b880'], videoCapDir: 'right',
                 videoNameFont: 'clean', videoNameSize: 100, videoNameColor: 'kind', videoNameFill: 'solid', videoNameStops: ['#f2b880'],
                 videoNameDir: 'right', videoNameShadow: true, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18,
@@ -16863,6 +16886,7 @@ export function setup(ctx, overrides) {
                 videoWordShadowSoft: 14, videoWordShadowFar: 2,
                 videoBox: false, videoBoxColor: '#000000', videoBoxClear: 40, videoBoxRound: 16, videoBoxWidth: 'fit',
                 videoOwnColors: true, videoKindColors: { narrator: '#ffa25c', character: '#ffa25c', persona: '#ffa25c', npc: '#ffa25c' },
+                videoBackRules: false,
                 videoCaptions: true, videoCaptionInk: '#ffa25c', videoCapFill: 'solid', videoCapStops: ['#f2b880'], videoCapDir: 'right',
                 videoNameFont: 'clean', videoNameSize: 100, videoNameColor: 'kind', videoNameFill: 'solid', videoNameStops: ['#f2b880'],
                 videoNameDir: 'right', videoNameShadow: true, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18,
@@ -16888,6 +16912,7 @@ export function setup(ctx, overrides) {
                 videoWordShadowSoft: 14, videoWordShadowFar: 2,
                 videoBox: false, videoBoxColor: '#000000', videoBoxClear: 40, videoBoxRound: 16, videoBoxWidth: 'fit',
                 videoOwnColors: true, videoKindColors: { narrator: '#ffd84a', character: '#ffd84a', persona: '#ffd84a', npc: '#ffd84a' },
+                videoBackRules: false,
                 videoCaptions: true, videoCaptionInk: '#ffd84a', videoCapFill: 'solid', videoCapStops: ['#f2b880'], videoCapDir: 'right',
                 videoNameFont: 'clean', videoNameSize: 100, videoNameColor: 'kind', videoNameFill: 'solid', videoNameStops: ['#f2b880'],
                 videoNameDir: 'right', videoNameShadow: true, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18,
@@ -16913,6 +16938,7 @@ export function setup(ctx, overrides) {
                 videoWordShadowSoft: 14, videoWordShadowFar: 2,
                 videoBox: false, videoBoxColor: '#000000', videoBoxClear: 40, videoBoxRound: 16, videoBoxWidth: 'fit',
                 videoOwnColors: true, videoKindColors: { narrator: '#5ee08a', character: '#5ee08a', persona: '#5ee08a', npc: '#5ee08a' },
+                videoBackRules: false,
                 videoCaptions: true, videoCaptionInk: '#5ee08a', videoCapFill: 'solid', videoCapStops: ['#f2b880'], videoCapDir: 'right',
                 videoNameFont: 'clean', videoNameSize: 100, videoNameColor: 'kind', videoNameFill: 'solid', videoNameStops: ['#f2b880'],
                 videoNameDir: 'right', videoNameShadow: true, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18,
@@ -16938,6 +16964,7 @@ export function setup(ctx, overrides) {
                 videoWordShadowSoft: 14, videoWordShadowFar: 2,
                 videoBox: false, videoBoxColor: '#000000', videoBoxClear: 40, videoBoxRound: 16, videoBoxWidth: 'fit',
                 videoOwnColors: true, videoKindColors: { narrator: '#6aa8ff', character: '#6aa8ff', persona: '#6aa8ff', npc: '#6aa8ff' },
+                videoBackRules: false,
                 videoCaptions: true, videoCaptionInk: '#6aa8ff', videoCapFill: 'solid', videoCapStops: ['#f2b880'], videoCapDir: 'right',
                 videoNameFont: 'clean', videoNameSize: 100, videoNameColor: 'kind', videoNameFill: 'solid', videoNameStops: ['#f2b880'],
                 videoNameDir: 'right', videoNameShadow: true, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18,
@@ -16963,6 +16990,7 @@ export function setup(ctx, overrides) {
                 videoWordShadowSoft: 14, videoWordShadowFar: 2,
                 videoBox: false, videoBoxColor: '#000000', videoBoxClear: 40, videoBoxRound: 16, videoBoxWidth: 'fit',
                 videoOwnColors: true, videoKindColors: { narrator: '#9a97ff', character: '#9a97ff', persona: '#9a97ff', npc: '#9a97ff' },
+                videoBackRules: false,
                 videoCaptions: true, videoCaptionInk: '#9a97ff', videoCapFill: 'solid', videoCapStops: ['#f2b880'], videoCapDir: 'right',
                 videoNameFont: 'clean', videoNameSize: 100, videoNameColor: 'kind', videoNameFill: 'solid', videoNameStops: ['#f2b880'],
                 videoNameDir: 'right', videoNameShadow: true, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18,
@@ -16988,6 +17016,7 @@ export function setup(ctx, overrides) {
                 videoWordShadowSoft: 14, videoWordShadowFar: 2,
                 videoBox: false, videoBoxColor: '#000000', videoBoxClear: 40, videoBoxRound: 16, videoBoxWidth: 'fit',
                 videoOwnColors: true, videoKindColors: { narrator: '#c18bff', character: '#c18bff', persona: '#c18bff', npc: '#c18bff' },
+                videoBackRules: false,
                 videoCaptions: true, videoCaptionInk: '#c18bff', videoCapFill: 'solid', videoCapStops: ['#f2b880'], videoCapDir: 'right',
                 videoNameFont: 'clean', videoNameSize: 100, videoNameColor: 'kind', videoNameFill: 'solid', videoNameStops: ['#f2b880'],
                 videoNameDir: 'right', videoNameShadow: true, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18,
@@ -17013,6 +17042,7 @@ export function setup(ctx, overrides) {
                 videoWordShadowSoft: 14, videoWordShadowFar: 2,
                 videoBox: false, videoBoxColor: '#000000', videoBoxClear: 40, videoBoxRound: 16, videoBoxWidth: 'fit',
                 videoOwnColors: true, videoKindColors: { narrator: '#ff8ccf', character: '#ff8ccf', persona: '#ff8ccf', npc: '#ff8ccf' },
+                videoBackRules: false,
                 videoCaptions: true, videoCaptionInk: '#ff8ccf', videoCapFill: 'solid', videoCapStops: ['#f2b880'], videoCapDir: 'right',
                 videoNameFont: 'clean', videoNameSize: 100, videoNameColor: 'kind', videoNameFill: 'solid', videoNameStops: ['#f2b880'],
                 videoNameDir: 'right', videoNameShadow: true, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18,
@@ -17192,7 +17222,9 @@ export function setup(ctx, overrides) {
         realS = real;
         S = Object.assign({}, real, look, { videoShape: 'wide' });
         try {
-            const st = stageNow(ex.parts, null, '', ex.scenes, 0.25);
+            // The scenes' backgrounds, worked out with the template in place.
+            const scenes = exampleClip().scenes;
+            const st = stageNow(ex.parts, null, '', scenes, 0.25);
             const c = canvasOf(st.w, st.h);
             const g = c.getContext('2d');
             // Late in a line, when all its words show.
@@ -19555,6 +19587,7 @@ export function setup(ctx, overrides) {
                 outer.replaceChildren();
                 const b = outer;
                 b.appendChild(backManager(draw));
+                b.appendChild(toggle('Use backgrounds for scenes', 'On by default. Each scene uses the background its Use it for matches. Off, every scene uses the one for every other scene. A template turns it off.', 'videoBackRules', () => look()));
                 const bk = backNow();
                 const colorBox = el('<div class="af-sub"><div class="af-under"></div></div>');
                 colorBox.firstElementChild.appendChild(colorRow('backColor', 'Background color', 'A very dark gray by default. A design is drawn over it.', '--af-none', '#141218', 'Use the built-in color', look, {

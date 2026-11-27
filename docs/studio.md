@@ -320,7 +320,7 @@ The chips above the templates show one group at a time: **All**, **Moods**, **Sc
 
 Red, Orange, Yellow, Green, Blue, Indigo, Violet and Pink share one simple layout: a soft gradient of the color, light words, and rings and names in the color. Each uses Fade out, then in, 0.5 seconds.
 
-Each template sets every setting that changes the drawn frame, and **Music** under **The performance**, so nothing is left from the look before. Templates use only built-in transitions. Switching templates fades the preview from one frame to the next over 0.2 seconds, which Reduce motion turns off.
+Each template sets every setting that changes the drawn frame, and **Music** under **The performance**, so nothing is left from the look before. It also turns on **Colors of their own in the video** with its own colors, and turns off **Use backgrounds for scenes**, so a template looks the same on every account, whatever your general colors and other backgrounds are. Templates use only built-in transitions. Switching templates fades the preview from one frame to the next over 0.2 seconds, which Reduce motion turns off.
 
 If a later update changes the templates, **Templates** says so, to someone who used a template before. **Got it** puts that notice away.
 
@@ -596,6 +596,8 @@ She picks **Dock** for the first scene too. Now the whole video is blue, and reo
 
 ### Details
 
+
+- **Use backgrounds for scenes**, under the list of backgrounds, is on by default. Off, every scene uses the background for every other scene, and your other backgrounds and their **Use it for** stay as they are. A template turns it off, so the template shows the same in every scene. Turn it on to use your other backgrounds again.
 - A background is picked for a scene in this order: one you picked by hand, then the first background in the list whose moods or place words match, then the one for every other scene.
 - Place words match whole words in the Director's place, with capitals and punctuation left out. `dock` matches "ferry dock", and not "docker".
 - A mood comes from the Director's scene mark, or else from the mood the music last had.

@@ -331,6 +331,7 @@ interface Settings {
   videoWordShadowFar: number;
   videoBox: boolean;
   videoOwnColors: boolean;
+  videoBackRules: boolean;
   videoKindColors: Record<string, string>;
   videoPersonColors: Record<string, string>;
   videoBoxColor: string;
@@ -617,6 +618,7 @@ const DEFAULT_SETTINGS: Settings = {
   videoWordShadowFar: 2,
   videoBox: false,
   videoOwnColors: false,
+  videoBackRules: true,
   videoKindColors: {},
   videoPersonColors: {},
   videoBoxColor: '#000000',
@@ -1153,7 +1155,7 @@ const LOOK_KEYS = [
   'videoBylineShadow', 'videoBylineShadowInk', 'videoBylineShadowDark', 'videoBylineShadowSoft', 'videoBylineShadowFar', 'videoMarks',
   'videoWordFill', 'videoWordStops', 'videoWordDir', 'videoNameFill', 'videoNameStops', 'videoNameDir', 'videoCapFill', 'videoCapStops', 'videoCapDir',
   'videoWordShadow', 'videoWordShadowInk', 'videoWordShadowDark', 'videoWordShadowSoft', 'videoWordShadowFar',
-  'videoBox', 'videoBoxColor', 'videoBoxClear', 'videoBoxRound', 'videoBoxWidth', 'videoOwnColors', 'videoKindColors',
+  'videoBox', 'videoBoxColor', 'videoBoxClear', 'videoBoxRound', 'videoBoxWidth', 'videoOwnColors', 'videoKindColors', 'videoBackRules',
   'videoNameShadow', 'videoNameShadowInk', 'videoNameShadowDark', 'videoNameShadowSoft', 'videoNameShadowFar', 'videoEdges', 'videoEdgeColor', 'videoMove', 'videoMoveSecs',
   'videoTitleOn', 'videoFadeOut', 'videoCaptions',
 ];
@@ -1347,6 +1349,7 @@ function cleanSettings(raw: any): Settings {
     videoWordShadowFar: Math.round(num(r.videoWordShadowFar, 0, 20, d.videoWordShadowFar)),
     videoBox: bool(r.videoBox, d.videoBox),
     videoOwnColors: bool(r.videoOwnColors, d.videoOwnColors),
+    videoBackRules: bool(r.videoBackRules, d.videoBackRules),
     videoKindColors: cleanColorMap(r.videoKindColors, (k) => (['narrator', 'character', 'persona', 'npc'].indexOf(k) >= 0 ? k : ''), 4),
     videoPersonColors: cleanColorMap(r.videoPersonColors, (k) => str(k, 40).replace(/[^a-z0-9_-]/gi, ''), 60),
     videoBoxColor: hexColor(r.videoBoxColor) || d.videoBoxColor,

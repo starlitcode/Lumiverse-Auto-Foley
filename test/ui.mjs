@@ -6597,6 +6597,63 @@ if (section("new shapes")) {
   }
 }
 
+if (section("template use matches")) {
+  console.log("With a long-used account, Use this template draws exactly what trying it drew, in every scene, for every template");
+  // A long-time reader's settings.
+  const PIC = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAFklEQVR42mP8z8DwnwEJMDKgASYGBAAk1QH/a1UJMAAAAABJRU5ErkJggg==";
+  const OLD = (shape) => `Object.assign(window.__settings, {
+    colorCharacter: "#ff8800", colorNpc: "#00aaff", colorPersona: "#33ff99", colorNarrator: "#aaaaaa", videoOwnColors: false, videoShape: "${shape}",
+    videoByline: "by Someone", videoMarks: [{ id: "w1", text: "MINE", pic: false, place: "br", size: 80, strength: 100, when: "all", from: 0, secs: 4, backs: [] }],
+    videoBacks: [
+      { id: "main", name: "Main", kind: "picture", color: "#203040", fill: "solid", stops: [], dir: "down", dim: 40, blur: 0, shapes: [], use: "match", moods: [], places: [] },
+      { id: "b2", name: "Shop", kind: "design", color: "#402010", fill: "solid", stops: [], dir: "down", dim: 40, blur: 0, shapes: [{ id: "s1", kind: "ellipse", x: 0.2, y: 0.2, w: 300, h: 300, rot: 0, fill: "#00ff00", grad: "none", stops: [], dir: "down", clear: 0, text: "" }], use: "match", moods: ["calm"], places: ["shop"] },
+      { id: "b3", name: "Tense", kind: "color", color: "#600000", fill: "solid", stops: [], dir: "down", dim: 40, blur: 0, shapes: [], use: "match", moods: ["tense"], places: [] },
+    ],
+    videoBackPick: "main",
+    videoLooks: [{ id: "lk1", name: "Mine", look: { videoFont: "type", videoInk: "#ff00ff" } }],
+    videoWords: "light", videoFont: "type", videoInk: "#ff00ff",
+  }); window.__videoBgs = { main: "${PIC}" };`;
+  const frame = (page, at) => page.evaluate(async (at) => {
+    const r = document.querySelector("[data-af-scrub] input");
+    r.step = "any";
+    r.value = String(at);
+    r.dispatchEvent(new Event("input", { bubbles: true }));
+    await new Promise((x) => setTimeout(x, 120));
+    await new Promise((x) => requestAnimationFrame(() => requestAnimationFrame(x)));
+    const c = document.querySelector("[data-af-videopreview]");
+    const s = document.createElement("canvas"); s.width = 192; s.height = Math.round((192 * c.height) / c.width);
+    const g = s.getContext("2d"); g.drawImage(c, 0, 0, s.width, s.height);
+    return Array.from(g.getImageData(0, 0, s.width, s.height).data);
+  }, at);
+  const differ = (a, b) => { let n = 0; for (let i = 0; i < a.length; i += 4) if (Math.abs(a[i] - b[i]) + Math.abs(a[i + 1] - b[i + 1]) + Math.abs(a[i + 2] - b[i + 2]) > 30) n++; return n / (a.length / 4); };
+  const OUT = process.env.UI_TEMPLATES || "";
+  for (const [size, shape] of [[SIZES.find((x) => !x.touch) || SIZES[0], "wide"], [SIZES[0], "tall"]]) {
+    const { context, page, errors } = await open(THEMES[0], size, 1, OLD(shape));
+    await openWs(page);
+    // A project open, as a reader working on one would have.
+    await wsSec(page, "Projects");
+    await page.click("[data-af-projectnew]");
+    await page.waitForTimeout(700);
+    await wsSec(page, "Templates");
+    await page.waitForTimeout(1200);
+    const bad = [];
+    for (const t of TEMPLATE_LOOKS) {
+      await page.click('[data-af-tpl="' + t.id + '"]');
+      await page.waitForTimeout(900);
+      const a1 = await frame(page, 9.0), a2 = await frame(page, 20.2);
+      await page.click("[data-af-tpluse]");
+      await page.waitForTimeout(1200);
+      const b1 = await frame(page, 9.0), b2 = await frame(page, 20.2);
+      const left = await page.evaluate((look) => Object.keys(look).filter((k) => JSON.stringify(window.__settings[k]) !== JSON.stringify(look[k])), t.look);
+      const d1 = differ(a1, b1), d2 = differ(a2, b2);
+      if (d1 > 0.002 || d2 > 0.002 || left.length) bad.push(t.id + " (" + (d1 * 100).toFixed(1) + "%, " + (d2 * 100).toFixed(1) + "%" + (left.length ? ", settings " + left.join(" ") : "") + ")");
+    }
+    check(!bad.length, size.name + ", " + shape + ": after Use this template, both scenes draw what trying it drew, and every setting is the template's. Not: " + bad.join("; "));
+    check(!errors.length, size.name + ": no page errors. " + errors.slice(0, 2).join(" | "));
+    await context.close();
+  }
+}
+
 if (section("snapping")) {
   console.log("A shape snaps to the middle with a guide, moves freely with the switch off or Alt held, and turns onto 90 degrees");
   for (const size of SIZES) for (const zoom of [1, 1.25, 0.85]) {
