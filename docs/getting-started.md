@@ -272,7 +272,7 @@ The colors are saved with your settings, under your account.
 
 ## Saved audio
 
-**Saved audio**, at the top of the **Studio** tab, is a gallery of every message with a saved script.
+**Saved audio**, a part of the Studio, is a gallery of every message with a saved script.
 
 - Each tile shows its name, the day it was saved, how many lines it has, its first line, and the name its files are saved under.
 - **Play** plays the saved audio of its lines, joined. Press it again to stop. Sounds and the cheer are not in it.
@@ -291,7 +291,9 @@ The colors are saved with your settings, under your account.
 
 ## Downloads and videos
 
-Everything to keep what you heard is in the **Studio** tab: downloading the audio, a part, or a video. **Download or make a video**, under **Now playing**, goes there. For an older message, press **Open in the Studio** on it under **Saved audio**, in the Studio. See [The Studio](studio.md).
+Everything to keep what you heard is in the Studio: downloading the audio, a part, or a video. **Open the Studio**, on the drawer's **Studio** tab, opens it, and so does **Download or make a video**, under **Now playing**. For an older message, press **Open in the Studio** on it under **Saved audio**, in the Studio. See [The Studio](studio.md).
+
+For a file in one tap, **Quick shortcuts** on the **Studio** tab has **Download audio** and **Make a video**, with your current look. See [Quick shortcuts](studio.md#quick-shortcuts).
 
 ## What it costs
 

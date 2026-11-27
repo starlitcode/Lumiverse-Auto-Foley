@@ -92,6 +92,16 @@ Tamsin edits a video on a laptop, with **App manipulation** granted.
 4. She changes her mind, and presses Ctrl and Z until the copy is gone.
 5. She presses Escape. The Studio closes, and the drawer shows it as it was.
 
+### Quick shortcuts
+
+The drawer's **Studio** tab has **Open the Studio**, and under it **Quick shortcuts**, for a file in one tap without opening the Studio.
+
+- **Download audio** saves the audio, the same as in the Studio, with your current audio settings.
+- **Make a video** makes the video with your current look, the same as in the Studio. The line under it counts the time, and **Stop the video** stops it.
+- Both use the performance that is loaded. With nothing loaded, they use the newest saved performance in the open chat, and the line above them says which, such as "For: the latest performance in this chat, 3 minutes ago". **Pick another from Saved audio** opens the Studio on **Saved audio**.
+- With nothing saved in the chat, or no chat open, they wait, and the line says to play a message first.
+- To change the look first, open the Studio.
+
 ### Keyboard shortcuts
 
 On a computer, these keys work while the Studio is open and you are not typing in a box. On a Mac, use Cmd in place of Ctrl.
@@ -271,10 +281,10 @@ A fill is part of your settings, a saved look, and each background in the list.
 | Transition | What it does |
 | --- | --- |
 | **Fade and rise** | The default. The line fades out as it moves up a little, while the next fades in from a little below, at the same time. |
-| **Fade out, then in** | The line fades out, then the next fades in, with no movement. The two overlap a little, so no frame is empty. |
+| **Fade out, then in** | The line fades out, then the next fades in, with no movement. The two overlap, so no frame is empty: half way, the screen is darker, not black. |
 | **Dissolve** | The two lines fade into each other. |
 | **Through black** | The whole frame fades to black and back. |
-| **Slide across** | The line slides out to the left as the next slides in from the right. |
+| **Slide across** | The line slides out to the left as the next slides in from the right. One fades as the other comes in, so the screen does not go dark between them. |
 | **Soft wipe** | A soft edge moves across, taking the line away and showing the next. |
 | **Soft focus** | The line goes soft as it fades, and the next comes into focus. |
 | **Gentle zoom** | The two lines fade into each other, with a small zoom. |

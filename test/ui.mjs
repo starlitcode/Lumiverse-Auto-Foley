@@ -4925,6 +4925,45 @@ if (section("workspace")) {
     await context.close();
   }
 
+  // Nothing behind the workspace shows through, even with a theme whose
+  // page color is see-through: large red words in the drawer are not seen
+  // anywhere on the workspace's own surface.
+  for (const theme of THEMES.slice(0, 2)) for (const size of SIZES) {
+    const { context, page, errors } = await open(theme, size, 1, () => {
+      document.documentElement.style.setProperty("--lumiverse-bg", "rgba(30,26,40,0.45)");
+      const words = document.createElement("div");
+      words.id = "behind";
+      words.style.cssText = "position:fixed;inset:0;z-index:1;pointer-events:none;color:#ff0000;font:900 64px/1 sans-serif;overflow:hidden;word-break:break-all";
+      words.textContent = "BEHIND ".repeat(200);
+      document.body.appendChild(words);
+    });
+    await openWs(page);
+    await page.waitForTimeout(400);
+    const shot = await page.screenshot();
+    const red = await page.evaluate(async (b64) => {
+      const im = new Image();
+      await new Promise((ok) => { im.onload = ok; im.src = "data:image/png;base64," + b64; });
+      const c = document.createElement("canvas");
+      c.width = im.width;
+      c.height = im.height;
+      const g = c.getContext("2d");
+      g.drawImage(im, 0, 0);
+      const d = g.getImageData(0, 0, c.width, c.height).data;
+      // The preview is left out, since it draws its own colors.
+      const pv = document.querySelector("[data-af-videopreview]").getBoundingClientRect();
+      let n = 0;
+      for (let y = 0; y < c.height; y += 2) for (let x = 0; x < c.width; x += 2) {
+        if (x >= pv.left && x <= pv.right && y >= pv.top && y <= pv.bottom) continue;
+        const i = (y * c.width + x) * 4;
+        if (d[i] > 120 && d[i] > d[i + 1] * 2.2 && d[i] > d[i + 2] * 2.2) n++;
+      }
+      return n;
+    }, shot.toString("base64"));
+    check(red < 30, theme.name + ", " + size.name + ": nothing behind the Studio shows through it (" + red + " red pixels)");
+    check(!errors.length, theme.name + ", " + size.name + ": no page errors. " + errors.slice(0, 2).join(" | "));
+    await context.close();
+  }
+
   // Without App manipulation: Lumiverse's own window, as large as it goes,
   // with a note on how to get full screen.
   for (const size of SIZES) {
@@ -5162,6 +5201,180 @@ if (section("workspace")) {
   }
 }
 
+if (section("workspace motion")) {
+  console.log("The Studio fades in and out smoothly, drawn in full before it shows, with nothing moving inside it");
+  for (const how of ["app", "modal"]) for (const size of SIZES) for (const zoom of [1, 1.25, 0.85]) {
+    const { context, page, errors } = await open(THEMES[0], size, zoom, scale(zoom) + (how === "modal" ? ";window.__noApp = true;" : ""));
+    const say = (how === "app" ? "full screen" : "Lumiverse's window") + ", " + size.name + " at " + zoom;
+    await page.click('.af-tab[data-tab="studio"]');
+    await page.waitForTimeout(300);
+    // A phone is slower than the machine running the checks, so on the
+    // phone size the processor is slowed four times.
+    if (size.touch) {
+      const cdp = await context.newCDPSession(page);
+      await cdp.send("Emulation.setCPUThrottlingRate", { rate: 4 });
+    }
+    // Every frame from the press: how solid it is, where it is, the boxes
+    // inside it, and whether the preview has drawn.
+    const sample = (press) => page.evaluate(async ([how, press]) => {
+      const out = [];
+      const drawer = document.querySelector(".af-tabs").getBoundingClientRect();
+      document.querySelector(press).click();
+      const t0 = performance.now();
+      let gone = 0;
+      while (performance.now() - t0 < 650) {
+        await new Promise((r) => requestAnimationFrame(r));
+        const box = document.querySelector("[data-af-ws]");
+        const tabs = document.querySelector(".af-tabs").getBoundingClientRect();
+        const still = Math.abs(tabs.left - drawer.left) < 0.5 && Math.abs(tabs.top - drawer.top) < 0.5;
+        if (!box) {
+          out.push({ t: performance.now() - t0, op: 0, gone: ++gone, still });
+          continue;
+        }
+        let shell = box;
+        if (how === "modal") while (shell.parentElement && shell.parentElement !== document.body) shell = shell.parentElement;
+        const op = Number(getComputedStyle(shell).opacity) * Number(getComputedStyle(box).opacity);
+        const tf = getComputedStyle(box).transform;
+        const y = tf && tf !== "none" ? new DOMMatrix(tf).f : 0;
+        const boxes = [".af-ws-top", "[data-af-ws-stage]", "[data-af-ws-panel]", "[data-af-videopreview]"].map((q) => {
+          const e = box.querySelector(q);
+          if (!e) return "none";
+          const r = e.getBoundingClientRect();
+          return [r.left, r.width, r.height, r.top - box.getBoundingClientRect().top].map((v) => Math.round(v)).join(",");
+        }).join(" ");
+        const c = box.querySelector("[data-af-videopreview]");
+        let drawn = false;
+        if (c && c.width) {
+          const d = c.getContext("2d").getImageData(Math.floor(c.width / 2), Math.floor(c.height / 2), 1, 1).data;
+          drawn = d[3] > 0;
+        }
+        out.push({ t: performance.now() - t0, op, y, boxes, drawn, still });
+      }
+      return out;
+    }, [how, press]);
+    const opening = await sample("[data-af-studio-open]");
+    const seen = opening.filter((f) => f.op > 0.01);
+    const ups = seen.slice(1).map((f, n) => f.op - seen[n].op);
+    const fading = seen.filter((f) => f.op < 0.98).length;
+    check(seen.length > 0 && seen[0].drawn && seen[0].boxes.indexOf("none") < 0, say + ": it shows only once it is drawn, with its preview in it");
+    check(ups.every((d) => d > -0.01 && d < 0.25) && fading >= 6 && seen[seen.length - 1].op > 0.99, say + ": it fades in over several frames, a little more each frame (" + fading + " frames, largest step " + Math.max(0, ...ups).toFixed(2) + ")");
+    const ys = seen.map((f) => f.y);
+    check(ys.every((v, n) => n === 0 || v <= ys[n - 1] + 0.01) && Math.max(...ys) <= 9 && Math.abs(ys[ys.length - 1]) < 0.01, say + ": it slides up a few pixels into place (" + ys.slice(0, 4).map((v) => v.toFixed(1)).join(" ") + ")");
+    // No frame is held up while it fades: work done as it shows makes the
+    // fade jump, however smooth its timing is.
+    const moving = seen.filter((f) => f.op < 0.99);
+    const gaps = moving.slice(1).map((f, n) => f.t - moving[n].t);
+    // With the processor slowed, one frame of up to 50 ms is allowed.
+    const most = size.touch ? 50 : 40;
+    check(gaps.every((g) => g < most), say + ": no frame is held up while it fades in (longest " + Math.round(Math.max(0, ...gaps)) + " ms)");
+    // Within a pixel, since a box moved by a part of a pixel rounds either
+    // way at some UI Scales.
+    const nums = (b) => b.split(/[ ,]/).map(Number);
+    const moved = seen.filter((f) => nums(f.boxes).some((v, n) => Math.abs(v - nums(seen[0].boxes)[n]) > 1)).length;
+    check(moved === 0, say + ": nothing inside it moves or changes size while it fades in (" + moved + " frames differ)");
+    check(opening.every((f) => f.still), say + ": the drawer under it does not move");
+    await page.waitForTimeout(300);
+    const closing = await sample('[data-af-ws="close"]');
+    const fall = closing.filter((f) => !f.gone);
+    const downs = fall.slice(1).map((f, n) => fall[n].op - f.op);
+    const gone = closing.find((f) => f.gone);
+    check(downs.every((d) => d > -0.01 && d < 0.3) && fall.filter((f) => f.op > 0.02 && f.op < 0.98).length >= 4, say + ": it fades out over several frames (" + fall.length + " frames)");
+    check(!!gone && gone.t < 320, say + ": closing is quicker than opening, gone in " + (gone ? Math.round(gone.t) : "never") + " ms");
+    check(closing.every((f) => f.still), say + ": the drawer under it does not move as it closes");
+    check(!errors.length, say + ": no page errors. " + errors.slice(0, 2).join(" | "));
+    await context.close();
+  }
+  // Reduce motion: shown and taken away at once.
+  {
+    const { context, page, errors } = await open(THEMES[0], SIZES[1], 1, () => { window.__settings.reduceMotion = true; });
+    await page.click('.af-tab[data-tab="studio"]');
+    await page.waitForTimeout(200);
+    const first = await page.evaluate(async () => {
+      document.querySelector("[data-af-studio-open]").click();
+      await new Promise((r) => requestAnimationFrame(r));
+      await new Promise((r) => requestAnimationFrame(r));
+      const b = document.querySelector("[data-af-ws]");
+      return b ? Number(getComputedStyle(b).opacity) : -1;
+    });
+    check(first === 1, "with Reduce motion, it shows at once (" + first + ")");
+    check(!errors.length, "no page errors. " + errors.slice(0, 2).join(" | "));
+    await context.close();
+  }
+}
+
+if (section("quick shortcuts")) {
+  console.log("Quick shortcuts in the drawer's Studio tab make a file in one tap");
+  for (const size of SIZES) {
+    const say = size.name;
+    // Nothing saved and nothing played: both wait, with the reason.
+    {
+      const { context, page, errors } = await open(THEMES[0], size);
+      await page.click('.af-tab[data-tab="studio"]');
+      await page.waitForTimeout(500);
+      const q = await page.evaluate(() => ({
+        audio: !!document.querySelector("[data-af-quickaudio]"), video: !!document.querySelector("[data-af-quickvideo]"),
+        off: document.querySelector("[data-af-quickaudio]").disabled && document.querySelector("[data-af-quickvideo]").disabled,
+        line: document.querySelector("[data-af-quickfor]").textContent,
+        mains: document.querySelectorAll('[data-af-card="studio-summary"] .af-primary').length,
+      }));
+      check(q.audio && q.video && q.mains === 1, say + ": the tab has Open the Studio as its one main button, and Quick shortcuts with Download audio and Make a video");
+      check(q.off && /Play a message first, then it can be downloaded here\./.test(q.line), say + ": with nothing saved, both wait, and say why (" + q.line + ")");
+      const m = await page.evaluate(MEASURE, size.touch);
+      check(!m.overflow.length && !m.small.length, say + ": the tab fits. " + m.overflow.concat(m.small).slice(0, 2).join("; "));
+      check(!errors.length, say + ": no page errors. " + errors.slice(0, 2).join(" | "));
+      await context.close();
+    }
+    // A performance played: each makes its file.
+    let clips = null;
+    {
+      const { context, page, errors } = await open(THEMES[0], size);
+      await page.evaluate(() => { window.__clipMs = 300; window.__wav = [0.05, 0.25]; });
+      await pressMessage(page);
+      await page.waitForFunction(() => document.querySelector('#mount [data-af-slot="message"]').getAttribute("aria-busy") === null && (window.__synth || []).length > 0, null, { timeout: 10000 });
+      await page.waitForTimeout(600);
+      clips = await page.evaluate(() => window.__clips || {});
+      await page.click('.af-tab[data-tab="studio"]');
+      await page.waitForTimeout(400);
+      check(/which is loaded/.test(await page.textContent("[data-af-quickfor]")), say + ": with a performance loaded, it says it is for that one");
+      const dl = page.waitForEvent("download", { timeout: 15000 }).catch(() => null);
+      await page.click("[data-af-quickaudio]");
+      const f = await dl;
+      check(!!f && /\.wav$/.test(f.suggestedFilename()), say + ": Download audio saves the audio (" + (f && f.suggestedFilename()) + ")");
+      await page.click("[data-af-quickvideo]");
+      await page.waitForFunction(() => /Stop the video/.test(document.querySelector("[data-af-quickvideo]").textContent || ""), null, { timeout: 15000 }).catch(() => {});
+      const t1 = await page.textContent("[data-af-quicksaid]");
+      await page.waitForTimeout(1200);
+      const t2 = await page.textContent("[data-af-quicksaid]");
+      check(/Stop the video/.test(await page.textContent("[data-af-quickvideo]")) && /Making the video/.test(t2) && t1 !== t2, say + ": Make a video makes it in the tab, with a count that moves and a Stop (" + t2 + ")");
+      await page.click("[data-af-quickvideo]");
+      await page.waitForTimeout(600);
+      check(/Make a video/.test(await page.textContent("[data-af-quickvideo]")), say + ": and Stop stops it");
+      check(!(await page.locator("[data-af-ws]").count()), say + ": the Studio was not opened for it");
+      check(!errors.length, say + ": no page errors. " + errors.slice(0, 2).join(" | "));
+      await context.close();
+    }
+    // Nothing loaded, with a saved performance in this chat: it is used,
+    // and the line says so.
+    {
+      const { context, page, errors } = await open(THEMES[0], size, 1, `(() => {
+        window.__clips = ${JSON.stringify(clips)};
+        window.__keptList = [{ key: "k1", messageId: "m1", chatId: "chat1", author: "Ysolde", keptAt: Date.now() - 3 * 60000, lines: 3, first: "The quay was empty but for the ferry." }];
+        window.__wav = [0.05, 0.25];
+      })()`);
+      await page.click('.af-tab[data-tab="studio"]');
+      await page.waitForTimeout(700);
+      const line = await page.textContent("[data-af-quickfor]");
+      check(/For: the latest performance in this chat, 3 minutes ago\./.test(line) && (await page.isVisible("[data-af-quickpick]")), say + ": with nothing loaded, it uses the newest saved one and says so, with a way to pick another (" + line + ")");
+      const dl = page.waitForEvent("download", { timeout: 15000 }).catch(() => null);
+      await page.click("[data-af-quickaudio]");
+      const f = await dl;
+      check(!!f && /Ysolde/.test(f.suggestedFilename()), say + ": and Download audio saves that one (" + (f && f.suggestedFilename()) + ")");
+      check(!errors.length, say + ": no page errors. " + errors.slice(0, 2).join(" | "));
+      await context.close();
+    }
+  }
+}
+
 if (section("hint places")) {
   console.log("Each description opens right by its ?, in an open fold far down a scrolled drawer, at each UI Scale");
   // Where the description is against its ?: it sits just above the row the
@@ -5324,6 +5537,226 @@ if (section("hint places")) {
     }
     check(!errors.length, say + ": no page errors. " + errors.slice(0, 2).join(" | "));
     await context.close();
+  }
+}
+
+if (section("transition sweep")) {
+  console.log("Every transition, frame by frame at 60 frames a second, for every kind of change in the example");
+  const SHEETS = process.env.UI_SHEETS || "";
+  const MOVES = ["rise", "fade", "dissolve", "black", "slide", "wipe", "focus", "zoom", "cut"];
+  const D = 0.5;
+  // The example's changes, by when they start in the video.
+  const CHANGES = [
+    { name: "title to the first line", t: 2.4 },
+    { name: "narration to a caption", t: 5.0, track: "in-caption" },
+    { name: "caption to caption", t: 6.4 },
+    { name: "caption to a line", t: 7.8, track: "caption-line" },
+    { name: "the same person twice", t: 10.0 },
+    { name: "one person to two", t: 12.0, people: [1, 2] },
+    { name: "two to two, the other speaking", t: 14.4, people: [2, 2] },
+    { name: "two to one, a third speaking", t: 16.6, people: [2, 1] },
+    { name: "a new scene", t: 18.6 },
+    { name: "narration to a line", t: 21.2 },
+  ];
+  const VARIANTS = [
+    { name: "wide", size: SIZES.find((x) => !x.touch) || SIZES[0], set: {} },
+    { name: "tall", size: SIZES.find((x) => !x.touch) || SIZES[0], set: { videoShape: "tall" } },
+    { name: "two speakers off", size: SIZES[0], set: { videoTwo: false }, quick: true },
+    { name: "pictures off", size: SIZES[0], set: { videoPics: false }, quick: true },
+    { name: "two backgrounds", size: SIZES[0], set: { two: true }, quick: true },
+    { name: "still pictures, no moods", size: SIZES[0], set: { videoPicMove: false, videoMoodPics: false }, quick: true },
+  ];
+  // The words all at once, so the only change in light is the transition.
+  for (const variant of VARIANTS.filter((v) => !process.env.UI_VARIANTS || process.env.UI_VARIANTS.split(",").includes(v.name))) {
+    for (const move of MOVES.filter((m) => !process.env.UI_MOVES || process.env.UI_MOVES.split(",").includes(m))) {
+      if (variant.quick && !["rise", "black", "slide", "cut"].includes(move)) continue;
+      const { context, page, errors } = await open(THEMES[0], variant.size, 1, `(() => {
+        const set = ${JSON.stringify(variant.set)};
+        Object.assign(window.__settings, { videoCaptionInk: "#ffd400", videoInk: "#30ff30", videoEdges: 0, videoMove: ${JSON.stringify(move)}, videoMoveSecs: ${D}, videoWords: "all", videoWordShadow: false, videoNameShadow: false });
+        const one = (id, name, color) => ({ id, name, kind: "color", color, fill: "solid", stops: ["#2a1f3d"], dir: "down", dim: 40, blur: 0, shapes: [], use: "match", moods: [], places: [] });
+        window.__settings.videoBacks = [one("main", "Main", "#000000")];
+        window.__settings.videoBackPick = "main";
+        if (set.two) window.__settings.videoBacks.push(one("b2", "Morning", "#202838"));
+        const rest = Object.assign({}, set); delete rest.two;
+        Object.assign(window.__settings, rest);
+      })()`);
+      await openWs(page);
+      await page.waitForTimeout(900);
+      const say = variant.name + ", " + move;
+      for (const ch of CHANGES) {
+        if (variant.quick && !ch.people && ch.name !== "a new scene" && ch.name !== "caption to a line") continue;
+        // From just before the change to just after it, every 1/60 s.
+        const times = [];
+        for (let t = ch.t - 2 / 60; t <= ch.t + D + 2 / 60 + 1e-6; t += 1 / 60) times.push(Math.round(t * 1000) / 1000);
+        const f = await page.evaluate(async ([times, sheet]) => {
+          const r = document.querySelector("[data-af-scrub] input");
+          r.step = "any";
+          const c = document.querySelector("[data-af-videopreview]");
+          const w = Math.round(c.width / 4), h = Math.round(c.height / 4);
+          const small = document.createElement("canvas");
+          small.width = w;
+          small.height = h;
+          const sg = small.getContext("2d", { willReadFrequently: true });
+          const out = [];
+          const shots = [];
+          for (const t of times) {
+            r.value = String(t);
+            r.dispatchEvent(new Event("input", { bubbles: true }));
+            await new Promise((x) => requestAnimationFrame(x));
+            sg.drawImage(c, 0, 0, w, h);
+            if (sheet) {
+              const big = document.createElement("canvas");
+              big.width = 480;
+              big.height = Math.round((480 * c.height) / c.width);
+              big.getContext("2d").drawImage(c, 0, 0, big.width, big.height);
+              shots.push(big.toDataURL("image/png"));
+            }
+            const d = sg.getImageData(0, 0, w, h).data;
+            const blank = () => ({ sum: 0, n: 0, x: 0, y: 0, lo: w, hi: 0, strong: 0 });
+            const yel = blank(), cy = blank();
+            let total = 0;
+            for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+              const i = (y * w + x) * 4;
+              const [R, G, B] = [d[i], d[i + 1], d[i + 2]];
+              total += R + G + B;
+              const yv = R > B + 20 && G > B + 14 ? Math.min(R, G) - B : 0;
+              const cv = G > R + 40 && G > B + 40 ? G - Math.max(R, B) : 0;
+              for (const [o, v, strong] of [[yel, yv, R > 200 && G > 160 && B < 80], [cy, cv, G > 200 && R < 90 && B < 90]]) {
+                if (v <= 0) continue;
+                o.sum += v; o.n++; o.x += x * v; o.y += y * v;
+                if (x < o.lo) o.lo = x;
+                if (x > o.hi) o.hi = x;
+                if (strong) o.strong++;
+              }
+            }
+            const fin = (o) => ({ sum: o.sum, cx: o.sum ? o.x / o.sum / w : 0, cy: o.sum ? o.y / o.sum / h : 0, width: o.n ? (o.hi - o.lo) / w : 0, strong: o.n ? o.strong / o.n : 0 });
+            // The pictures, by their darker tints: violet, pink and teal.
+            const tint = (i) => {
+              const [R, G, B] = [d[i], d[i + 1], d[i + 2]];
+              const m = Math.max(R, G, B);
+              if (m < 25 || m > 185) return false;
+              return (B > R + 8 && B > G + 14) || (R > G + 14 && R > B && B > G) || (G > R + 20 && B > R + 14 && Math.abs(G - B) < 30);
+            };
+            let best = -1, bestN = 0;
+            for (let y = 0; y < h; y++) {
+              let n = 0;
+              for (let x = 0; x < w; x++) if (tint((y * w + x) * 4)) n++;
+              if (n > bestN) { bestN = n; best = y; }
+            }
+            // A picture is a solid run along that row. The edges of letters
+            // can share a tint, but only in short pieces.
+            const long = Math.max(6, Math.round(w * 0.025));
+            // The letter on a picture leaves a gap, so close gaps of a few
+            // pixels, and count a run only when most of it is tinted.
+            const gap = Math.max(3, Math.round(w * 0.035));
+            let pics = 0, from = -1, last = -1, got = 0;
+            const end = () => { if (from >= 0 && last - from >= long && got >= (last - from + 1) * 0.6) pics++; };
+            if (best >= 0 && bestN > 4) {
+              for (let x = 0; x < w; x++) if (tint((best * w + x) * 4)) {
+                if (from < 0 || x - last > gap) { end(); from = x; got = 0; }
+                last = x;
+                got++;
+              }
+              end();
+            }
+            out.push({ t, total, y: fin(yel), c: fin(cy), pics });
+          }
+          return { out, shots };
+        }, [times, !!SHEETS && (variant.name === "wide" || process.env.UI_SHEETS_ALL)]);
+        const fr = f.out;
+        const first = fr[0], last = fr[fr.length - 1];
+        const lo = Math.min(first.total, last.total);
+        const mid = fr.slice(2, -2);
+        const tag = say + ", " + ch.name;
+        // No dark gap, except Through black, which goes near black once, in
+        // the middle. Fade out, then in, has its dip by design, never empty.
+        const least = Math.min(...mid.map((x) => x.total));
+        const leastAt = mid.findIndex((x) => x.total === least) / Math.max(1, mid.length - 1);
+        const bgOnly = Math.min(...fr.map((x) => x.total));
+        if (move === "black") check(least < lo * 0.2 && leastAt > 0.3 && leastAt < 0.7, tag + ": goes to black once, in the middle (" + Math.round((least / lo) * 100) + "% at " + leastAt.toFixed(2) + ")");
+        else if (move === "fade") check(least >= lo * 0.3, tag + ": dips between the two, and is never empty (" + Math.round((least / lo) * 100) + "%)");
+        else check(least >= lo * 0.85 || least === bgOnly && lo === bgOnly, tag + ": no dark gap (" + Math.round((least / lo) * 100) + "% of the darker end)");
+        // No jump: a cut changes once; every other change in small steps.
+        const steps = fr.slice(1).map((x, n) => Math.abs(x.total - fr[n].total));
+        // Against how much the change moves, or a third of the light on
+        // screen, so two lines of the same length are not measured
+        // against almost nothing.
+        const range = Math.max(1, 0.3 * Math.max(first.total, last.total), Math.abs(last.total - first.total), ...fr.map((x) => Math.abs(x.total - first.total)));
+        const big = steps.filter((x) => x > range * 0.2).length;
+        if (move === "cut") check(big <= 1, tag + ": a cut changes in one frame (" + big + " big steps)");
+        else check(big === 0, tag + ": changes in small steps, with no jump (" + Math.round((Math.max(...steps) / range) * 100) + "% at most)");
+        // No ghost: never more pictures than at either end.
+        if (variant.set.videoPics !== false) {
+          const most = Math.max(...fr.map((x) => x.pics));
+          const ends = Math.max(first.pics, last.pics);
+          check(most <= ends, tag + ": never more pictures than at either end (" + most + " at most, " + first.pics + " then " + last.pics + ")");
+        }
+        // The caption out and the line in, each one way, and the movement.
+        if (ch.track === "caption-line" && variant.name !== "tall") {
+          const ys = fr.map((x) => x.y.sum), cs = fr.map((x) => x.c.sum);
+          const yFull = ys[0], cFull = cs[cs.length - 1];
+          const ups = ys.slice(1).filter((v, n) => v > ys[n] + yFull * 0.08).length;
+          const downs = cs.slice(1).filter((v, n) => v < cs[n] - cFull * 0.08).length;
+          if (move !== "black") check(ups === 0 && downs === 0, tag + ": the caption only fades out and the line only comes in (" + ups + ", " + downs + ")");
+          const at = (k) => fr[Math.min(fr.length - 1, 2 + Math.round(k * (fr.length - 5)))];
+          if (move === "rise") check(at(0.4).y.cy < fr[0].y.cy - 0.002 && at(0.4).c.cy > at(1).c.cy + 0.001, tag + ": the caption rises as it goes, and the line rises into place (" + [fr[0].y.cy, at(0.4).y.cy, at(0.4).c.cy, at(1).c.cy].map((v) => v.toFixed(3)).join(" ") + ")");
+          if (move === "slide") check(at(0.3).y.cx < fr[0].y.cx - 0.03 && at(0.6).c.cx > at(1).c.cx + 0.02, tag + ": the caption slides out to the left, and the line in from the right (" + [fr[0].y.cx, at(0.3).y.cx, at(0.6).c.cx, at(1).c.cx].map((v) => v.toFixed(3)).join(" ") + ")");
+          if (move === "zoom") check(at(0.5).y.width > fr[0].y.width * 1.005 && at(0.3).c.width < at(1).c.width * 0.995, tag + ": the caption grows a little as it goes, and the line grows into place (" + [fr[0].y.width, at(0.5).y.width, at(0.3).c.width, at(1).c.width].map((v) => v.toFixed(3)).join(" ") + ")");
+          if (move === "focus") check(at(0.5).y.strong < fr[0].y.strong * 0.7 && at(0.5).c.strong < at(1).c.strong * 0.7, tag + ": both are soft in the middle and sharp at the ends (" + [fr[0].y.strong, at(0.5).y.strong, at(0.5).c.strong, at(1).c.strong].map((v) => v.toFixed(2)).join(" ") + ")");
+          if (move === "wipe") check(at(0.5).y.cx > at(0.5).c.cx + 0.05, tag + ": half way, the line has taken the left and the caption keeps the right (" + [at(0.5).c.cx, at(0.5).y.cx].map((v) => v.toFixed(3)).join(" ") + ")");
+          if (move === "dissolve" || move === "rise") check(at(0.5).y.sum > yFull * 0.15 && at(0.5).c.sum > cFull * 0.15, tag + ": half way, both are there, fading into each other");
+        }
+        if (f.shots.length) {
+          // A contact sheet: every third frame, left to right, in rows of
+          // four, each with its time.
+          const png = await page.evaluate(async (shots) => {
+            const ims = await Promise.all(shots.filter((_, n) => n % 3 === 0).map((src) => new Promise((ok) => { const im = new Image(); im.onload = () => ok(im); im.src = src; })));
+            const w = ims[0].width, h = ims[0].height, per = 4;
+            const c = document.createElement("canvas");
+            c.width = w * per + (per - 1) * 4;
+            c.height = Math.ceil(ims.length / per) * (h + 4);
+            const g = c.getContext("2d");
+            g.fillStyle = "#808080";
+            g.fillRect(0, 0, c.width, c.height);
+            ims.forEach((im, n) => {
+              const x = (n % per) * (w + 4), y = Math.floor(n / per) * (h + 4);
+              g.drawImage(im, x, y);
+              g.fillStyle = "#ffffff";
+              g.font = "12px sans-serif";
+              g.fillText(String(n * 3), x + 4, y + 14);
+            });
+            return c.toDataURL("image/png").split(",")[1];
+          }, f.shots);
+          const { writeFileSync, mkdirSync } = await import("node:fs");
+          const kind = ch.track === "caption-line" ? "caption-to-line" : ch.people && ch.people[0] === 1 ? "one-to-two" : "";
+          const dir = kind && variant.name === "wide" ? SHEETS : SHEETS + "/all/" + variant.name.replace(/[^a-z]+/g, "-");
+          mkdirSync(dir, { recursive: true });
+          writeFileSync(dir + "/" + move + "-" + (kind || ch.name.replace(/[^a-z]+/g, "-")) + ".png", Buffer.from(png, "base64"));
+        }
+      }
+      // The last line into the fade at the end: darker every frame, to black.
+      const end = await page.evaluate(async () => {
+        const r = document.querySelector("[data-af-scrub] input");
+          r.step = "any";
+        const c = document.querySelector("[data-af-videopreview]");
+        const g = c.getContext("2d");
+        const out = [];
+        for (let t = 23.15; t <= Number(r.max); t += 1 / 30) {
+          r.value = String(t);
+          r.dispatchEvent(new Event("input", { bubbles: true }));
+          await new Promise((x) => requestAnimationFrame(x));
+          const d = g.getImageData(0, 0, c.width, c.height).data;
+          let n = 0;
+          for (let i = 0; i < d.length; i += 4 * 7) n += d[i] + d[i + 1] + d[i + 2];
+          out.push(n);
+        }
+        return out;
+      });
+      const brighter = end.slice(1).filter((v, n) => v > end[n] * 1.02 + 50).length;
+      check(brighter === 0 && end[end.length - 1] < end[0] * 0.1, say + ", the end: fades to black, darker every frame (" + brighter + " brighter frames)");
+      check(!errors.length, say + ": no page errors. " + errors.slice(0, 2).join(" | "));
+      await context.close();
+    }
   }
 }
 

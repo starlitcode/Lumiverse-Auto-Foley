@@ -1586,12 +1586,18 @@ html[data-af-still] [class^="af-"], html[data-af-still] [class*=" af-"], html[da
 }
 
 /* The Studio's workspace. It fills the screen, or Lumiverse's extension
-   window, and lays itself out by its own size: a list of parts, the
-   preview and the settings side by side when wide, the preview over the
-   settings when narrow. */
-.af.af-ws { position: relative; display: flex; flex-direction: column; gap: 0; width: 100%; max-width: none; height: 100%; min-height: 0; margin: 0; padding: 0; background: var(--lumiverse-bg, #1b1a22); container: afws / size; opacity: 0; transform: translateY(6px); transition: opacity .2s ease-out, transform .2s ease-out; outline: none; overflow: hidden; }
+   window, with a solid color under the theme's own, which can be
+   see-through, so nothing behind it shows. It lays itself out by its own
+   size: a list of parts, the preview and the settings side by side when
+   wide, the preview over the settings when narrow. */
+.af.af-ws { position: relative; display: flex; flex-direction: column; gap: 0; width: 100%; max-width: none; height: 100%; min-height: 0; margin: 0; padding: 0; background-color: var(--lumiverse-card-bg-solid, rgb(24,20,34)); background-image: linear-gradient(var(--lumiverse-bg, #1b1a22), var(--lumiverse-bg, #1b1a22)); container: afws / size; opacity: 0; transform: translateY(8px); transition: opacity 180ms ease-in, transform 180ms ease-in; pointer-events: none; outline: none; overflow: hidden; }
 .af.af-ws[data-af-how="app"] { position: fixed; top: 0; left: 0; z-index: 9990; width: var(--app-scaled-viewport-width, calc(100vw / var(--lumiverse-ui-scale, 1))); height: var(--app-scaled-viewport-height, calc(100vh / var(--lumiverse-ui-scale, 1))); }
-.af.af-ws[data-af-open] { opacity: 1; transform: none; }
+.af.af-ws[data-af-open] { opacity: 1; transform: none; pointer-events: auto; transition: opacity 240ms ease-out, transform 240ms cubic-bezier(.2,.8,.3,1); }
+/* In Lumiverse's window, the window itself fades, and the workspace only
+   slides. */
+.af.af-ws[data-af-how="modal"] { opacity: 1; }
+.af.af-ws[data-af-how="modal"][data-af-open] { transition: transform 240ms cubic-bezier(.2,.8,.3,1); }
+.af-ws-dim { position: fixed; top: 0; left: 0; z-index: 9989; width: var(--app-scaled-viewport-width, calc(100vw / var(--lumiverse-ui-scale, 1))); height: var(--app-scaled-viewport-height, calc(100vh / var(--lumiverse-ui-scale, 1))); background: rgba(0,0,0,.5); pointer-events: none; }
 .af.af-ws[data-af-still], html[data-af-still] .af.af-ws { transition: none; transform: none; }
 @media (prefers-reduced-motion: reduce) { .af.af-ws { transition: none; transform: none; } }
 .af-ws-top { flex: none; display: flex; align-items: center; gap: 10px; min-width: 0; padding: 8px 12px; padding-top: calc(8px + env(safe-area-inset-top, 0px)); border-bottom: 1px solid var(--af-line); background: var(--af-fill-subtle); }
@@ -1609,6 +1615,8 @@ html[data-af-still] [class^="af-"], html[data-af-still] [class*=" af-"], html[da
 html[data-af-still] .af-ws-sec.af-ws-in, .af-ws[data-af-still] .af-ws-sec.af-ws-in { animation: none; }
 @media (prefers-reduced-motion: reduce) { .af-ws-sec.af-ws-in { animation: none; } }
 .af-ws-h { margin: 0; font-size: 15px; font-weight: 650; color: var(--af-text); }
+.af-quick { gap: 8px; padding-top: 10px; border-top: 1px solid var(--af-line); }
+.af-quickh { margin: 0; font-size: 13px; font-weight: 600; color: var(--af-text); }
 .af-ws-sec > .af-card > .af-cardh { display: none; }
 .af-ws-sec-btn { display: block; width: 100%; min-height: 34px; padding: 7px 10px; border: 0; border-radius: var(--af-r); background: transparent; color: var(--af-muted); font: 13px var(--lumiverse-font-family, system-ui); text-align: left; cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .af-ws-sec-btn[aria-current="true"] { color: var(--af-text); background: var(--af-accent-soft); }
@@ -1622,7 +1630,7 @@ html[data-af-still] .af-ws-sec.af-ws-in, .af-ws[data-af-still] .af-ws-sec.af-ws-
 .af-ws-part[data-kind="sound"] { background: var(--af-sound); }
 .af-ws-part[aria-current="true"] { opacity: 1; }
 /* The list of keys, over the workspace. */
-.af-ws-pop { position: absolute; z-index: 6; top: 56px; right: 12px; display: flex; flex-direction: column; gap: 10px; width: min(440px, calc(100% - 24px)); max-height: calc(100% - 72px); overflow: auto; padding: 14px; border: 1px solid var(--af-line); border-radius: var(--af-r-md); background: var(--lumiverse-bg-elevated, var(--lumiverse-bg, #1b1a22)); box-shadow: 0 10px 30px rgba(0,0,0,.35); opacity: 0; transform: translateY(4px); transition: opacity .18s ease-out, transform .18s ease-out; outline: none; }
+.af-ws-pop { position: absolute; z-index: 6; top: 56px; right: 12px; display: flex; flex-direction: column; gap: 10px; width: min(440px, calc(100% - 24px)); max-height: calc(100% - 72px); overflow: auto; padding: 14px; border: 1px solid var(--af-line); border-radius: var(--af-r-md); background-color: var(--lumiverse-card-bg-solid, rgb(24,20,34)); background-image: linear-gradient(var(--lumiverse-bg-elevated, rgba(35,30,48,.98)), var(--lumiverse-bg-elevated, rgba(35,30,48,.98))); box-shadow: 0 10px 30px rgba(0,0,0,.35); opacity: 0; transform: translateY(4px); transition: opacity .18s ease-out, transform .18s ease-out; outline: none; }
 .af-ws-pop[data-af-open] { opacity: 1; transform: none; }
 html[data-af-still] .af-ws-pop, .af-ws[data-af-still] .af-ws-pop { transition: none; transform: none; }
 @media (prefers-reduced-motion: reduce) { .af-ws-pop { transition: none; transform: none; } }
@@ -3159,6 +3167,7 @@ export function setup(ctx: Ctx, overrides?: any) {
   function keepSaid(text: string) {
     keepLine = text;
     if (studioRefs && ws) setText(studioRefs.said, text);
+    paintQuick();
   }
   let keepLine = '';
 
@@ -5136,10 +5145,10 @@ export function setup(ctx: Ctx, overrides?: any) {
       drawA(g, 1 - k, 0, -lift * k);
       B(g, k, 0, lift * (1 - k));
     } else if (move === 'fade') {
-      // Out, then in, with the two halves overlapping a little, so no frame
-      // is left empty.
-      drawA(g, Math.max(0, 1 - k / 0.55), 0, 0);
-      B(g, Math.max(0, (k - 0.45) / 0.55), 0, 0);
+      // Out, then in, with the two halves overlapping, so no frame is left
+      // empty: half way, each is at a sixth of its strength.
+      drawA(g, Math.max(0, 1 - k / 0.6), 0, 0);
+      B(g, Math.max(0, (k - 0.4) / 0.6), 0, 0);
     } else if (move === 'dissolve') {
       g.globalAlpha = 1 - k;
       g.drawImage(layer(st.a, drawA), 0, 0);
@@ -5155,10 +5164,11 @@ export function setup(ctx: Ctx, overrides?: any) {
       g.globalAlpha = 1;
     } else if (move === 'slide') {
       // A third of the frame, so the two lines pass each other rather than
-      // sit on top of each other.
+      // sit on top of each other. One fades as the other comes in, so the
+      // frame is never darker between them.
       const far = W * 0.34;
-      drawA(g, Math.max(0, 1 - k * 1.6), -far * k, 0);
-      B(g, Math.max(0, k * 1.6 - 0.6), far * (1 - k), 0);
+      drawA(g, 1 - k, -far * k, 0);
+      B(g, k, far * (1 - k), 0);
     } else if (move === 'wipe') {
       // A soft edge moves across: the old part is taken away behind it and
       // the new one shown in front of it.
@@ -6475,7 +6485,7 @@ export function setup(ctx: Ctx, overrides?: any) {
   // it in the Studio. Voices come from Keep made audio and sounds from the
   // sound library. Nothing is made, found or directed, so nothing is spent.
   // Says what could not be included, or nothing when all of it was.
-  async function openSaved(e: any): Promise<string> {
+  async function openSaved(e: any, open = true): Promise<string> {
     let sc: Script | null = null;
     let hand: Show['sceneHand'] = undefined;
     try {
@@ -6557,7 +6567,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         sounds ? sounds + (sounds === 1 ? ' sound is' : ' sounds are') + ' not in your library, so ' + (sounds === 1 ? 'it is' : 'they are') + ' left out.' : '',
       ].filter(Boolean).join(' '),
     );
-    openStudio('show');
+    if (open) openStudio('show');
     return '';
   }
 
@@ -14118,10 +14128,14 @@ export function setup(ctx: Ctx, overrides?: any) {
     canvas.addEventListener('pointercancel', end);
   }
 
+  // How many frames the preview has drawn, so the workspace shows only
+  // once its first frame is there.
+  let previewPaints = 0;
   function paintPreview() {
     const r = studioRefs;
     const v = studioView;
     if (!r || !v.st) return;
+    previewPaints++;
     if (r.canvas.width !== v.st.w || r.canvas.height !== v.st.h) {
       r.canvas.width = v.st.w;
       r.canvas.height = v.st.h;
@@ -14158,6 +14172,7 @@ export function setup(ctx: Ctx, overrides?: any) {
   // new part heard is added to the preview and the downloads.
   let studioForN = 0;
   function paintStudio() {
+    paintQuick();
     const r = studioRefs;
     if (!r || !ws) return;
     const now = keptShow();
@@ -14820,6 +14835,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       if (ctx.ui && typeof ctx.ui.mountApp === 'function') {
         handle = ctx.ui.mountApp({ position: 'app-overlay', className: 'af-ws-mount' });
         if (handle && handle.root) {
+          handle.root.appendChild(el('<div class="af-ws-dim" data-af-ws-dim aria-hidden="true"></div>'));
           handle.root.appendChild(box);
           how = 'app';
         }
@@ -14869,14 +14885,61 @@ export function setup(ctx: Ctx, overrides?: any) {
     }, 1000);
     ws = { box, how, handle, closing: false, watch };
     undoStart();
+    // Built in full, and its first preview frame drawn, before it shows,
+    // so it never shows half laid out. Then it fades in and slides up a
+    // few pixels while the page behind dims. A preview that takes longer
+    // than 700 ms is not waited for.
+    const shell = wsShell(box);
+    if (shell && !calm()) {
+      // Not quite 0, so its contents are drawn while it waits, and its
+      // first frame of fading has nothing left to draw.
+      shell.style.opacity = '0.001';
+      shell.style.transition = 'none';
+      // Drawn as a layer of its own before it shows, so its first frame of
+      // fading is not held up making that layer.
+      shell.style.willChange = 'opacity';
+      box.style.willChange = 'opacity, transform';
+    }
     renderWorkspace();
-    if (tab === 'studio') renderTab();
-    requestAnimationFrame(() => {
-      void box.offsetWidth;
+    const paints = previewPaints;
+    const from = performance.now();
+    const show = () => {
+      if (!ws || ws.box !== box || ws.closing) return;
+      if (previewPaints === paints && performance.now() - from < 700) {
+        requestAnimationFrame(show);
+        return;
+      }
+      requestAnimationFrame(() => {
+        void box.offsetWidth;
+        box.setAttribute('data-af-open', '');
+        if (shell) {
+          shell.style.transition = calm() ? 'none' : 'opacity 240ms ease-out';
+          shell.style.opacity = '1';
+        }
+        const t = setTimeout(() => {
+          timers.delete(t);
+          if (shell) shell.style.willChange = '';
+          box.style.willChange = '';
+        }, 320);
+        timers.add(t);
+        focusWs();
+        if (then) then();
+      });
+    };
+    if (calm()) {
       box.setAttribute('data-af-open', '');
-    });
-    focusWs();
-    if (then) requestAnimationFrame(() => then());
+      if (shell) shell.style.opacity = '1';
+      focusWs();
+      if (then) requestAnimationFrame(() => then());
+    } else requestAnimationFrame(show);
+  }
+  // What dims the page behind the workspace: Auto Foley's own layer over a
+  // full-screen workspace, or the back of Lumiverse's window.
+  function wsShell(box: HTMLElement): HTMLElement | null {
+    if (box.getAttribute('data-af-how') === 'app') return box.previousElementSibling && (box.previousElementSibling as HTMLElement).hasAttribute('data-af-ws-dim') ? (box.previousElementSibling as HTMLElement) : null;
+    let at: HTMLElement | null = box.parentElement;
+    while (at && at.parentElement && at.parentElement !== document.body) at = at.parentElement;
+    return at && at.parentElement === document.body ? at : null;
   }
   function focusWs() {
     try {
@@ -14915,7 +14978,12 @@ export function setup(ctx: Ctx, overrides?: any) {
     }
     if (ws !== w) return;
     w.closing = true;
-    w.box.removeAttribute('data-af-open');
+    const shell = wsShell(w.box);
+    if (w.how === 'app') w.box.removeAttribute('data-af-open');
+    if (shell && !calm() && !fromHost) {
+      shell.style.transition = 'opacity 180ms ease-in';
+      shell.style.opacity = '0';
+    }
     const done = () => {
       w.closing = fromHost;
       if (ws === w) dropWs();
@@ -14926,14 +14994,13 @@ export function setup(ctx: Ctx, overrides?: any) {
         } catch (_) {}
         w.box.remove();
       }
-      if (alive && tab === 'studio') renderTab();
     };
     if (calm() || fromHost) done();
     else {
       const t = setTimeout(() => {
         timers.delete(t);
         done();
-      }, 220);
+      }, 200);
       timers.add(t);
     }
   }
@@ -15404,7 +15471,66 @@ export function setup(ctx: Ctx, overrides?: any) {
   // Teardown takes the workspace away at once.
   disposers.push(() => dropWs());
 
-  // The drawer's Studio tab: what is loaded, and the way into the workspace.
+  // The drawer's Studio tab: what is loaded, the way into the workspace,
+  // and Quick shortcuts, which make a file in one tap with the look as it
+  // is now.
+  let quickRefs: { box: HTMLElement; forLine: HTMLElement; pick: HTMLButtonElement; audio: HTMLButtonElement; video: HTMLButtonElement; said: HTMLElement } | null = null;
+  // The newest saved performance in the open chat, used when nothing is
+  // loaded.
+  let quickSaved: any = null;
+  let quickBusy = false;
+  function agoText(at: number): string {
+    const s2 = Math.max(0, (Date.now() - at) / 1000);
+    if (s2 < 60) return 'just now';
+    const m = Math.round(s2 / 60);
+    if (m < 60) return m + (m === 1 ? ' minute ago' : ' minutes ago');
+    const h = Math.round(m / 60);
+    if (h < 24) return h + (h === 1 ? ' hour ago' : ' hours ago');
+    const d = Math.round(h / 24);
+    return d + (d === 1 ? ' day ago' : ' days ago');
+  }
+  function paintQuick() {
+    const q = quickRefs;
+    if (!q || !q.box.isConnected) return;
+    const sh = keptShow();
+    const none = !sh && !quickSaved;
+    setText(
+      q.forLine,
+      sh
+        ? 'For: ' + String(sh.fileTitle || sh.title || 'the last message played') + ', which is loaded.'
+        : quickSaved
+          ? 'For: the latest performance in this chat, ' + agoText(Number(quickSaved.keptAt) || Date.now()) + '.'
+          : 'Play a message first, then it can be downloaded here.',
+    );
+    q.pick.hidden = !!sh || !quickSaved;
+    const making = !!videoRun || videoPreparing;
+    q.audio.disabled = none || quickBusy || making;
+    q.video.disabled = (none || quickBusy || !!previewRun) && !videoRun;
+    const vWords = videoRun ? 'Stop the video' : 'Make a video';
+    const vText = q.video.querySelector('span:last-child') || q.video;
+    if (vText.textContent !== vWords) vText.textContent = vWords;
+    setText(q.said, keepLine);
+  }
+  // Loads the newest saved performance when nothing is loaded, then runs.
+  async function quickRun(run: () => Promise<void> | void) {
+    if (quickBusy) return;
+    quickBusy = true;
+    paintQuick();
+    try {
+      if (!keptShow() && quickSaved) {
+        keepSaid('Reading the saved audio');
+        const why = await openSaved(quickSaved, false);
+        if (why || !keptShow()) {
+          keepSaid(why || 'The saved performance could not be loaded.');
+          return;
+        }
+      }
+      await run();
+    } finally {
+      quickBusy = false;
+      paintQuick();
+    }
+  }
   function renderStudioSummary() {
     const sh = keptShow();
     const c = card('Studio', 'Make a video of a performance, or download its audio. The Studio opens over Lumiverse, with the preview large and every choice beside it.');
@@ -15412,19 +15538,55 @@ export function setup(ctx: Ctx, overrides?: any) {
     const what = el('<p class="af-status" data-af-studio-what></p>');
     setText(what, sh ? 'Loaded: ' + String(sh.fileTitle || sh.title || 'the last message played') + '.' : 'Nothing is loaded. Play a message, or open one from Saved audio in the Studio.');
     c.appendChild(what);
-    if (ws) c.appendChild(hint('The Studio is open.'));
     const row = el('<div class="af-row"></div>');
     const open = button('Open the Studio', () => openStudio(), 'af-primary', ICON_VIDEO);
     open.setAttribute('data-af-studio-open', '');
     row.appendChild(open);
-    const make = button('Make a video', () => openStudio('show', () => {
-      if (!videoRun && keptShow()) makeVideo();
-    }), '', ICON_VIDEO);
-    make.setAttribute('data-af-studio-make', '');
-    make.disabled = !sh;
-    row.appendChild(make);
     c.appendChild(row);
+    // Quick shortcuts.
+    const box = el('<div class="af-col af-quick" data-af-quick><h4 class="af-quickh">Quick shortcuts</h4></div>');
+    box.appendChild(hint('For a file in one tap, with your current look. Open the Studio to change the look first.'));
+    const forLine = el('<p class="af-status" data-af-quickfor></p>');
+    box.appendChild(forLine);
+    const pick = button('Pick another from Saved audio', () => openStudio('saved'));
+    pick.setAttribute('data-af-quickpick', '');
+    const acts = el('<div class="af-row af-wrap"></div>');
+    const audio = button('Download audio', () => void quickRun(() => downloadPerformance()), '', ICON_DOWNLOAD);
+    audio.setAttribute('data-af-quickaudio', '');
+    const video = button('Make a video', () => {
+      if (videoRun) return videoRun.cancel();
+      void quickRun(() => makeVideo());
+    }, '', ICON_VIDEO);
+    video.setAttribute('data-af-quickvideo', '');
+    acts.appendChild(audio);
+    acts.appendChild(video);
+    box.appendChild(acts);
+    box.appendChild(pick);
+    const said = el('<p class="af-note" role="status" aria-live="polite" data-af-quicksaid></p>');
+    box.appendChild(said);
+    c.appendChild(box);
     page.appendChild(c);
+    quickRefs = { box, forLine, pick, audio, video, said };
+    paintQuick();
+    // With nothing loaded, the newest saved performance in this chat.
+    if (!sh) {
+      const chat = chatInfo.kind !== 'none' ? chatInfo.id : '';
+      const pickNewest = (list: any[]) => {
+        quickSaved = chat ? list.filter((e) => e && e.chatId === chat && e.lines > 0).sort((a, b) => (b.keptAt || 0) - (a.keptAt || 0))[0] || null : null;
+        paintQuick();
+      };
+      if (savedList) pickNewest(savedList);
+      rpc({ type: 'kept_list' }, 15000).then(
+        (r: any) => {
+          const got = r && Array.isArray(r.list) ? r.list : [];
+          savedList = got.filter((e: any) => e && e.lines > 0);
+          pickNewest(savedList || []);
+        },
+        () => {
+          if (!quickSaved) setText(forLine, 'Your saved audio could not be read: the backend did not answer.');
+        },
+      );
+    }
   }
 
   // The Studio, drawn into the workspace: each part of it is a section with
