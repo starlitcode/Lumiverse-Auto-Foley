@@ -134,7 +134,7 @@ On a computer, these keys work while the Studio is open and you are not typing i
 | Arrow keys, with the preview pressed | Move the shape picked 1 pixel, or 10 with Shift |
 | Ctrl and S | Say that everything is saved |
 | ? | The list of keys |
-| Escape | Close a pop-up, then full screen, then the Studio |
+| Escape | Close a pop-up, then full screen, then the Studio. In a text box or a number box, it only leaves the box. |
 
 - **Keyboard shortcuts**, a part of the Studio, turns them off if a key clashes with something else you use. Every action also has a button. Escape still closes the Studio.
 - **Keyboard shortcuts** at the top opens the same list. On a computer with a mouse, each button's hover text says its key.
@@ -281,7 +281,7 @@ With no performance in the Studio, the preview shows an example clip, about 25 s
 2. Press another to compare, or **Go back to my look**.
 3. Press **Use this template** to keep it. If your look now is not saved under **Saved looks**, it asks first, and saves your look as "My look before" the template's name. **Undo** puts your look back in one step.
 
-Leaving **Templates** while you try one puts your look back.
+Leaving **Templates** or closing the Studio while you try one puts your look back. A template you try is not saved, to your account or to the open project, until you press **Use this template**.
 
 The chips above the templates show one group at a time: **All**, **Moods**, **Scenes**, **Styles**, **Colors**, **Pets**, **Aesthetics**, **Pride** and **Holidays**.
 

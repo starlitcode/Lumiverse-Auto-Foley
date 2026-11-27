@@ -7436,6 +7436,91 @@ if (section("sharing files")) {
   }
 }
 
+if (section("leaving while trying")) {
+  console.log("Leaving the Studio while a template is tried puts the look back, and nothing tried is kept; Escape in a box only leaves the box");
+  const STORE = "lv-auto-foley:settings:v1";
+  for (const size of SIZES) {
+    const { context, page, errors } = await open(THEMES[0], size);
+    const frame = () => page.evaluate(async () => {
+      const r = document.querySelector("[data-af-scrub] input");
+      r.step = "any";
+      r.value = "9";
+      r.dispatchEvent(new Event("input", { bubbles: true }));
+      await new Promise((x) => requestAnimationFrame(() => requestAnimationFrame(x)));
+      return document.querySelector("[data-af-videopreview]").toDataURL("image/png");
+    });
+    // The test page has no storage of its own, so the browser's copy is
+    // read only where there is one.
+    const kept = () => page.evaluate((k) => { let local = null; try { local = localStorage.getItem(k); } catch (_) {} return { local, account: window.__settings ? JSON.stringify(window.__settings) : null }; }, STORE);
+    const lookOf = (json) => {
+      if (!json) return "";
+      const o = JSON.parse(json);
+      return JSON.stringify([o.videoFont, o.videoInk, o.videoBacks, o.videoBackPick, o.videoAnims, o.videoWords, o.videoMove]);
+    };
+    await openWs(page);
+    await wsSec(page, "Templates");
+    await page.waitForTimeout(500);
+    // A look of the reader's own, kept in this browser and on the account.
+    await page.click('[data-af-tpl="neon"]');
+    await page.waitForTimeout(300);
+    await page.click("[data-af-tplback]");
+    await page.waitForTimeout(900);
+    const mine = await kept();
+    const mineFrame = await frame();
+    // A template tried is never kept, in this browser or on the account.
+    await page.click('[data-af-tpl="neon"]');
+    await page.waitForTimeout(900);
+    const during = await kept();
+    check(lookOf(during.local) === lookOf(mine.local) && lookOf(during.account) === lookOf(mine.account), size.name + ": a template being tried is not kept in this browser or on the account");
+    check((await frame()) !== mineFrame, size.name + ": the preview shows the template tried");
+    // Close leaves the Studio and puts the look back.
+    await page.click('[data-af-ws="close"]');
+    await page.waitForTimeout(500);
+    await openWs(page);
+    await page.waitForTimeout(400);
+    check((await frame()) === mineFrame, size.name + ": after Close while trying, the Studio opens with the reader's own look");
+    // Escape in a text box only leaves the box, and Escape outside one
+    // closes the Studio, with the look put back.
+    await wsSec(page, "Templates");
+    await page.waitForTimeout(400);
+    await page.click('[data-af-tpl="neon"]');
+    await page.waitForTimeout(500);
+    const boxed = await page.evaluate(() => {
+      const ws = document.querySelector("[data-af-ws]");
+      const sel = ws.querySelector(".af-ws-picker select");
+      for (const o of [...sel.options]) {
+        sel.value = o.value;
+        sel.dispatchEvent(new Event("change", { bubbles: true }));
+        const box = [...ws.querySelectorAll('input[type="text"], input[type="number"], input:not([type]), textarea')].find((x) => x.offsetParent && !x.disabled);
+        if (box) {
+          box.setAttribute("data-test-escbox", "");
+          return o.textContent;
+        }
+      }
+      return "";
+    });
+    check(!!boxed, size.name + ": a text box is found in the Studio (" + boxed + ")");
+    await page.focus("[data-test-escbox]");
+    await page.keyboard.press("Escape");
+    await page.waitForTimeout(400);
+    const after = await page.evaluate(() => ({ open: !!document.querySelector("[data-af-ws] [data-af-videopreview]"), focused: document.activeElement && document.activeElement.hasAttribute("data-test-escbox") }));
+    check(after.open, size.name + ": Escape in a text box does not close the Studio");
+    if (!size.touch) check(!after.focused, size.name + ": with a mouse, Escape in a text box leaves the box");
+    await page.evaluate(() => document.querySelector("[data-af-ws] [data-af-videopreview]").focus());
+    await page.evaluate(() => { const ws = document.querySelector("[data-af-ws]"); ws.focus && ws.focus(); });
+    await page.keyboard.press("Escape");
+    await page.waitForTimeout(500);
+    check(!(await page.locator("[data-af-ws] [data-af-videopreview]").count()), size.name + ": Escape outside a box closes the Studio");
+    await openWs(page);
+    await page.waitForTimeout(400);
+    check((await frame()) === mineFrame, size.name + ": after Escape while trying, the Studio opens with the reader's own look");
+    const end = await kept();
+    check(lookOf(end.local) === lookOf(mine.local) && lookOf(end.account) === lookOf(mine.account), size.name + ": the template tried was never kept");
+    check(!errors.length, size.name + ": no page errors. " + errors.slice(0, 2).join(" | "));
+    await context.close();
+  }
+}
+
 if (section("light opening")) {
   console.log("A light template opens from a darker tint of its own background, gently; a dark one still opens from black");
   const size = SIZES.find((x) => !x.touch) || SIZES[0];

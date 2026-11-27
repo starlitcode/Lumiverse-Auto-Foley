@@ -2411,9 +2411,19 @@ export function setup(ctx: Ctx, overrides?: any) {
   let backendVersion = '';
   let saveTimer: any = null;
 
+  // A template tried on the preview: the look from before it, so it can
+  // be put back, and which template it is.
+  let trying: { id: string; before: Record<string, any> } | null = null;
+  // The settings as they are kept, in this browser, on the account and in
+  // the open project. A template being tried is left out, with the look
+  // from before it in its place, so only Use this template keeps it.
+  function keptS(): any {
+    const src = realS || S;
+    return trying ? Object.assign({}, src, trying.before) : src;
+  }
   function keepLocal() {
     try {
-      localStorage.setItem(STORE_KEY, JSON.stringify(realS || S));
+      localStorage.setItem(STORE_KEY, JSON.stringify(keptS()));
     } catch (_) {}
   }
 
@@ -2433,7 +2443,7 @@ export function setup(ctx: Ctx, overrides?: any) {
           notify('warning', why);
         }
       };
-      rpc({ type: 'save', settings: realS || S }, 15000).then(
+      rpc({ type: 'save', settings: keptS() }, 15000).then(
         (r: any) => {
           if (r && r.type === 'failed') lost(String(r.error || 'Your settings could not be saved to your account.'));
           else if (!r || !r.ok) log('Your settings could not be saved to your account.', 'bad');
@@ -20133,9 +20143,6 @@ export function setup(ctx: Ctx, overrides?: any) {
     out.videoBackPick = S.videoBackPick;
     return out;
   }
-  // A template tried on the preview: the look from before it, so it can
-  // be put back, and which template it is.
-  let trying: { id: string; before: Record<string, any> } | null = null;
   function quietSet(patch: Record<string, any>) {
     undoing = true;
     try {
@@ -20202,6 +20209,15 @@ export function setup(ctx: Ctx, overrides?: any) {
     else trying.id = t.id;
     quietSet(templateLook(t));
     studioBuild(false);
+  }
+  // Leaving the Studio in any way while a template is tried puts the look
+  // from before it back. Nothing tried was kept anywhere, so nothing is
+  // saved.
+  function leaveTrying() {
+    if (!trying) return;
+    const was = trying.before;
+    trying = null;
+    Object.assign(S, JSON.parse(JSON.stringify(was)));
   }
   function stopTrying() {
     if (!trying) return;
@@ -20662,7 +20678,7 @@ export function setup(ctx: Ctx, overrides?: any) {
   }
   // What the open project holds now.
   function projectBody(keptKey: string): any {
-    const src = realS || S;
+    const src = keptS();
     const look: Record<string, any> = {};
     for (const k of Object.keys(DEFAULTS).concat(Object.keys(src))) if (studioKey(k) && !(k in look)) look[k] = src[k] === undefined ? DEFAULTS[k] : src[k];
     const sh = keptShow();
@@ -21288,6 +21304,7 @@ export function setup(ctx: Ctx, overrides?: any) {
   function dropWs() {
     const w = ws;
     if (!w) return;
+    leaveTrying();
     ws = null;
     keptScale = 0;
     wsFocus = false;
@@ -22105,6 +22122,16 @@ export function setup(ctx: Ctx, overrides?: any) {
     const extra = IS_MAC ? e.ctrlKey : e.metaKey;
     const key = e.key;
     const act = (): boolean => {
+      // Escape in a text box, a text area or a number box only leaves
+      // the box. With a mouse the box loses focus. On a touch screen
+      // nothing else happens, so the keyboard is left as it is.
+      if (key === 'Escape') {
+        const box = t.closest('textarea, [contenteditable=""], [contenteditable="true"], input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="button"]):not([type="submit"]):not([type="reset"]):not([type="color"]):not([type="file"])') as HTMLElement | null;
+        if (box) {
+          if (!matchMedia('(pointer: coarse)').matches) box.blur();
+          return true;
+        }
+      }
       // Escape closes the newest thing first. It works with the
       // shortcuts off, since it is how the Studio is closed.
       if (key === 'Escape') {
