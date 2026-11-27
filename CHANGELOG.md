@@ -6,6 +6,16 @@ Versions follow [Semantic Versioning](https://semver.org). A new major version m
 
 ---
 
+## 1.10.1
+
+_2026-11-27_
+
+### Changed
+
+- **A clearer hint for Make a video.** Under **Quick shortcuts** on the drawer's **Studio** tab, the hint said **Make a video** "uses the look in the Studio's preview". It now says it "uses the look you set up in the Studio", which is the template and the settings you picked there. [The Studio](docs/studio.md) says the same.
+
+---
+
 ## 1.10.0
 
 _2026-11-27_

@@ -109,7 +109,7 @@ Tamsin edits a video on a laptop, with **App manipulation** granted.
 The drawer's **Studio** tab has **Open the Studio**, and under it **Quick shortcuts**, for a file in one tap without opening the Studio.
 
 - **Download audio** saves the whole performance in one file, whatever **Save as** says, with any parts you cut or trimmed on the timeline left out. The Studio's own **Download audio** follows **Save as**.
-- **Make a video** uses the look in the Studio's preview, with every setting, and the cuts you made on the timeline. It is the same video the Studio makes. The line under it counts the time, and **Stop the video** stops it.
+- **Make a video** uses the look you set up in the Studio, such as the template and every setting, and the cuts you made on the timeline. It is the same video the Studio makes. The line under it counts the time, and **Stop the video** stops it.
 - Both use the performance that is loaded. With nothing loaded, they use the newest saved performance in the open chat, and the line above them says which, such as "For: the latest performance in this chat, 3 minutes ago". **Pick another from Saved audio** opens the Studio on **Saved audio**.
 - With nothing saved in the chat, or no chat open, they wait, and the line says to play a message first.
 - To change the look first, open the Studio.

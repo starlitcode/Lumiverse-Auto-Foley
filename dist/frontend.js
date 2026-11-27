@@ -10,7 +10,7 @@
 // The key for speech stays in Lumiverse. Lines are spoken through
 // Lumiverse's own TTS route, as the signed-in reader, so this file never sees
 // that key.
-const VERSION = '1.10.0';
+const VERSION = '1.10.1';
 // The marks Lumiverse puts on another extension's part of the page. Nothing
 // inside one is read, written or pressed.
 const OTHER_UI = '[data-spindle-extension-root],[data-spindle-ext],[data-spindle-modal]';
@@ -23362,7 +23362,7 @@ export function setup(ctx, overrides) {
         c.appendChild(hint('New to the Studio? The <a href="https://github.com/starlitcode/Lumiverse-Auto-Foley/blob/stable/docs/studio-tour.md" target="_blank" rel="noopener" data-af-tourlink>Studio tour</a> on GitHub shows each part, on a laptop and a phone.'));
         // Quick shortcuts.
         const box = el('<div class="af-col af-quick" data-af-quick><h4 class="af-quickh">Quick shortcuts</h4></div>');
-        box.appendChild(hint('Make a video uses the look in the Studio\u2019s preview. Download audio saves the whole performance in one file, with any cuts you made in the Studio.'));
+        box.appendChild(hint('Make a video uses the look you set up in the Studio. Download audio saves the whole performance in one file, with any cuts you made in the Studio.'));
         const forLine = el('<p class="af-status" data-af-quickfor></p>');
         box.appendChild(forLine);
         const pick = button('Pick another from Saved audio', () => openStudio('saved'));

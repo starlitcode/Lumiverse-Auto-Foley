@@ -6402,7 +6402,7 @@ if (section("video matches preview")) {
     await toTab(page, "studio");
     await page.waitForTimeout(400);
     const line = await page.textContent("[data-af-quick]");
-    check(/Make a video uses the look in the Studio’s preview\./.test(line) && /Download audio saves the whole performance in one file, with any cuts you made in the Studio\./.test(line), size.name + ": Quick shortcuts says what each button uses");
+    check(/Make a video uses the look you set up in the Studio\./.test(line) && /Download audio saves the whole performance in one file, with any cuts you made in the Studio\./.test(line), size.name + ": Quick shortcuts says what each button uses");
     const grab = async (sel) => { const dl = page.waitForEvent("download", { timeout: 20000 }).catch(() => null); await page.click(sel); const f = await dl; return f ? { name: f.suggestedFilename(), path: await f.path() } : null; };
     const whole = await grab("[data-af-quickaudio]");
     check(!!whole && /\.wav$/.test(whole.name), size.name + ": Download audio in Quick shortcuts saves one WAV, whatever Save as says (" + (whole && whole.name) + ")");
