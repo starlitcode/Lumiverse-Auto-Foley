@@ -207,7 +207,9 @@ Two skills are available. Load them before starting work.
   **Show effects that flash** switch. That switch is off by default and asks
   first, with a warning about eyes and seizures. Built-in templates never use a
   flashing effect. Every calm built-in passes the frame-by-frame transition
-  check. An animation a user makes is their own choice.
+  check.
+- The Studio is for fun and ease. It offers built-in choices with a few simple
+  settings each, not tools to build animations from scratch.
 - Make a video uses the look the preview shows, and the two match frame for
   frame.
 - A shared file never holds keys, chat text, persona or character names,
