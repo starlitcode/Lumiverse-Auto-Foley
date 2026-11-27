@@ -78,6 +78,7 @@ interface CastMember {
 interface VideoShapeDef {
   id: string;
   kind: (typeof SHAPE_KINDS)[number];
+  own?: string;
   x: number;
   y: number;
   w: number;
@@ -307,6 +308,8 @@ interface Settings {
   videoAnims: Record<string, { id: string; secs: number; delay: number }>;
   // The reader's own animations, made in the advanced editor.
   videoAnimsOwn: any[];
+  // Your reveals, used by animations and as shapes.
+  videoReveals: any[];
   // The line under the title, and its color. Empty color is the title's.
   videoByline: string;
   videoBylineInk: string;
@@ -613,6 +616,7 @@ const DEFAULT_SETTINGS: Settings = {
   sceneMoodList: [],
   videoAnims: {},
   videoAnimsOwn: [],
+  videoReveals: [],
   videoByline: '',
   videoBylineInk: '',
   videoBylineFont: '',
@@ -878,7 +882,7 @@ function cleanStops(v: any, dflt: string, max = 5): string[] {
 // At most 12 backgrounds, and 40 shapes in each.
 const BACKS_MAX = 12;
 const SHAPES_MAX = 40;
-const SHAPE_KINDS = ['rect', 'round', 'ellipse', 'tri', 'line', 'text', 'heart', 'star', 'poly', 'diamond', 'arrow', 'bubble', 'ring', 'moon', 'cloud', 'sparkle', 'cat', 'dog', 'bunny', 'paw', 'bone', 'fish', 'carrot', 'bat', 'rose', 'checker', 'broken', 'stripes', 'snowflake', 'ornament', 'holly', 'pumpkin', 'ghost', 'leaf', 'firework', 'lantern', 'diya', 'menorah', 'shamrock', 'egg', 'flower'] as const;
+const SHAPE_KINDS = ['rect', 'round', 'ellipse', 'tri', 'line', 'text', 'heart', 'star', 'poly', 'diamond', 'arrow', 'bubble', 'ring', 'moon', 'cloud', 'sparkle', 'cat', 'dog', 'bunny', 'paw', 'bone', 'fish', 'carrot', 'bat', 'rose', 'checker', 'broken', 'stripes', 'snowflake', 'ornament', 'holly', 'pumpkin', 'ghost', 'leaf', 'firework', 'lantern', 'diya', 'menorah', 'shamrock', 'egg', 'flower', 'own'] as const;
 function cleanShape(v: any): VideoShapeDef | null {
   if (!v || typeof v !== 'object') return null;
   const kind = pick(v.kind, SHAPE_KINDS, 'rect');
@@ -913,6 +917,8 @@ function cleanShape(v: any): VideoShapeDef | null {
     ink: hexColor(v.ink),
     blush: v.blush !== false,
     lock: v.lock === true,
+    // Your own shape: a drawn reveal, by its id.
+    ...(kind === 'own' ? { own: backId(v.own) } : {}),
   };
 }
 // The backgrounds and the one picked. Settings saved before there was a
@@ -1017,7 +1023,7 @@ function cleanAnimTrack(t: any): any {
   }
   const m = (t && t.mask) || {};
   // The reveal of a track, kept under its saved name, mask.
-  const mask: any = { type: pick(m.type, ['none', 'linear', 'radial', 'iris', 'box', 'diamond', 'clock', 'shape'] as const, 'none'), angle: Math.round(num(m.angle, -360, 360, 0)), feather: Math.round(num(m.feather, 0, 100, 0)) };
+  const mask: any = { type: pick(m.type, ['none', 'linear', 'radial', 'iris', 'box', 'diamond', 'clock', 'shape', 'own'] as const, 'none'), angle: Math.round(num(m.angle, -360, 360, 0)), feather: Math.round(num(m.feather, 0, 100, 0)) };
   const has = (k: string) => m[k] != null && m[k] !== '' && Number.isFinite(Number(m[k]));
   if (has('cx')) mask.cx = Math.round(num(m.cx, 0, 1, 0.5) * 1000) / 1000;
   if (has('cy')) mask.cy = Math.round(num(m.cy, 0, 1, 0.5) * 1000) / 1000;
@@ -1030,6 +1036,7 @@ function cleanAnimTrack(t: any): any {
   if (m.invert === true) mask.invert = true;
   if (m.dir === 'ccw') mask.dir = 'ccw';
   if (typeof m.shape === 'string' && /^[a-z]{2,16}$/.test(m.shape)) mask.shape = m.shape;
+  if (mask.type === 'own') mask.own = backId(m.own);
   if (Array.isArray(m.ease) && m.ease.length === 4 && m.ease.every((x: any) => Number.isFinite(Number(x)))) mask.ease = m.ease.map((x: any, i: number) => Math.round(num(x, i % 2 ? -2 : 0, i % 2 ? 3 : 1, 0) * 1000) / 1000);
   // The simple editor's effect the track was made from, with its settings.
   const out: any = { keys, mask };
@@ -1039,10 +1046,45 @@ function cleanAnimTrack(t: any): any {
     if (['l', 'r', 't', 'b'].indexOf(pr.dir) >= 0) keep.dir = pr.dir;
     for (const k of ['soft', 'size']) if (Number.isFinite(Number(pr[k])) && pr[k] !== '' && pr[k] != null) keep[k] = Math.round(num(pr[k], 0, 400, 0));
     for (const k of ['cx', 'cy']) if (Number.isFinite(Number(pr[k])) && pr[k] !== '' && pr[k] != null) keep[k] = Math.round(num(pr[k], 0, 1, 0.5) * 1000) / 1000;
-    if (['iris', 'box', 'diamond', 'clock', 'shape'].indexOf(pr.through) >= 0) keep.through = pr.through;
+    if (['iris', 'box', 'diamond', 'clock', 'shape', 'own'].indexOf(pr.through) >= 0) keep.through = pr.through;
+    if (pr.through === 'own') keep.own = backId(pr.own);
     if (typeof pr.kind === 'string' && /^[a-z]{2,16}$/.test(pr.kind)) keep.kind = pr.kind;
     if (pr.invert === true) keep.invert = true;
     out.preset = keep;
+  }
+  return out;
+}
+// Your reveals: shapes of the reader's own to show a layer through. A drawn
+// one is its points, each from -1 to 1 of its box, with a bend for the line
+// that arrives at it. A text one is its words and font. A picture one keeps
+// its picture in a file of its own, the same as a sticker's, by its id.
+const REVEALS_MAX = 20;
+function cleanReveals(v: any): any[] {
+  const out: any[] = [];
+  for (const r of Array.isArray(v) ? v.slice(0, REVEALS_MAX) : []) {
+    if (!r || typeof r !== 'object') continue;
+    const id = backId(r.id);
+    if (!/^r/.test(id) || out.some((x) => x.id === id)) continue;
+    const kind = pick(r.kind, ['draw', 'picture', 'text'] as const, 'draw');
+    const pts: any[] = [];
+    for (const q of Array.isArray(r.pts) ? r.pts.slice(0, 64) : []) {
+      if (!q || typeof q !== 'object') continue;
+      const one: any = { x: Math.round(num(q.x, -1, 1, 0) * 1000) / 1000, y: Math.round(num(q.y, -1, 1, 0) * 1000) / 1000 };
+      if (Number.isFinite(Number(q.bx)) && Number.isFinite(Number(q.by)) && q.bx !== null && q.by !== null) {
+        one.bx = Math.round(num(q.bx, -2, 2, 0) * 1000) / 1000;
+        one.by = Math.round(num(q.by, -2, 2, 0) * 1000) / 1000;
+      }
+      pts.push(one);
+    }
+    out.push({
+      id,
+      name: str(r.name, 40).replace(/[\u0000-\u001f]/g, ' ').trim() || 'My reveal',
+      kind,
+      pts: kind === 'draw' ? pts : [],
+      text: kind === 'text' ? str(r.text, 40).replace(/[\u0000-\u001f]/g, ' ').trim() : '',
+      font: kind === 'text' ? fontChoice(r.font, 'clean') : '',
+      by: pick(r.by, ['alpha', 'bright'] as const, 'alpha'),
+    });
   }
   return out;
 }
@@ -1346,7 +1388,7 @@ const LOOK_KEYS = [
   'videoWordShadow', 'videoWordShadowInk', 'videoWordShadowDark', 'videoWordShadowSoft', 'videoWordShadowFar',
   'videoBox', 'videoBoxColor', 'videoBoxClear', 'videoBoxRound', 'videoBoxWidth', 'videoOwnColors', 'videoKindColors', 'videoBackRules', 'videoQuiet', 'videoQuietStrength',
   'videoNameShadow', 'videoNameShadowInk', 'videoNameShadowDark', 'videoNameShadowSoft', 'videoNameShadowFar', 'videoEdges', 'videoEdgeColor', 'videoMove', 'videoMoveSecs',
-  'videoTitleOn', 'videoFadeOut', 'videoCaptions', 'videoAnims', 'videoAnimsOwn',
+  'videoTitleOn', 'videoFadeOut', 'videoCaptions', 'videoAnims', 'videoAnimsOwn', 'videoReveals',
 ];
 // At most 20 looks, each cleaned the same way the settings are.
 function cleanLooks(v: any): Settings['videoLooks'] {
@@ -1515,6 +1557,7 @@ function cleanSettings(raw: any): Settings {
     sceneMoodList: cleanSceneMoods(r.sceneMoodList),
     videoAnims: cleanAnimPlaces(r.videoAnims),
     videoAnimsOwn: cleanOwnAnims(r.videoAnimsOwn),
+    videoReveals: cleanReveals(r.videoReveals),
     videoByline: str(r.videoByline, 80).replace(/[\u0000-\u001f]/g, ' ').trim(),
     videoBylineInk: hexColor(r.videoBylineInk),
     videoBylineFont: r.videoBylineFont === '' ? '' : fontChoice(r.videoBylineFont, ''),
@@ -4570,8 +4613,9 @@ async function dropLeftBgs(s: Settings, userId: string | undefined): Promise<voi
   for (const id of await markIndex(userId)) if (marks.indexOf(id) < 0) await dropMarkPic(id, userId);
   // A sticker's picture stays while the settings, a project or a saved
   // look uses it.
-  const stickers = s.videoStickers.map((k) => k.id).concat(uses.stickers);
-  for (const l of s.videoLooks) for (const k of (l.look && l.look.videoStickers) || []) if (k && k.id) stickers.push(String(k.id));
+  // A picture reveal keeps its picture the same way, by its id.
+  const stickers = s.videoStickers.map((k) => k.id).concat(uses.stickers).concat(s.videoReveals.filter((r) => r.kind === 'picture').map((r) => r.id));
+  for (const l of s.videoLooks) for (const k of ((l.look && l.look.videoStickers) || []).concat((l.look && l.look.videoReveals) || [])) if (k && k.id) stickers.push(String(k.id));
   let have: string[] = [];
   try {
     have = await stickerIndex(userId);
@@ -5817,7 +5861,7 @@ async function onPanel(p: any, userId: string | undefined) {
         const entry: ProjectEntry = {
           id, name: was ? was.name : name, folder: typeof p.folder === 'string' ? str(p.folder, 40).replace(/[^a-z0-9_-]/gi, '') : was ? was.folder : '', at: Date.now(), keptKey: body.keptKey,
           backs: (body.look.videoBacks || []).map((b: any) => b.id), marks: (body.look.videoMarks || []).map((m: any) => m.id),
-          stickers: (body.look.videoStickers || []).map((k: any) => k.id),
+          stickers: (body.look.videoStickers || []).map((k: any) => k.id).concat((body.look.videoReveals || []).filter((r: any) => r.kind === 'picture').map((r: any) => r.id)),
         };
         const next = list.filter((x) => x.id !== id).concat([entry]);
         if (!(await writeJson(PROJECT_INDEX, next, userId))) return answer({ type: 'project_saved', ok: false, error: 'The list of projects could not be saved to your account.' });

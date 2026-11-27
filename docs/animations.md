@@ -117,12 +117,35 @@ A reveal shows the layer bit by bit, through a shape: a wipe across, or a circle
 
 **Wipe**, **Iris** and **Through a shape** use a reveal. Its settings:
 
-- **The shape it shows through**: **Circle**, **Box** (a rectangle that opens from its middle), **Diamond**, **Clock** (a sweep around its middle), or **A shape** from the shape picker, such as a heart or a star.
+- **The shape it shows through**: **Circle**, **Box** (a rectangle that opens from its middle), **Diamond**, **Clock** (a sweep around its middle), **A shape** from the shape picker, such as a heart or a star, or one of [Your reveals](#your-reveals).
 - **Direction**, for a wipe: from the left, the right, the top or the bottom. On the timeline, any angle in degrees.
 - **Middle across** and **Middle down**, in percent of the frame. Or press and drag on the preview. It snaps to the middle and the thirds.
 - **Size**, in percent: 100 opens to cover the frame. Less stops part of the way. More opens past the edge.
 - **Soft edge**: from sharp to very soft, set by eye on the preview.
 - **Turn the other way**: hides through the shape, in place of showing.
+
+### Your reveals
+
+**Through a shape** can also show the layer through a shape of your own. Under the shapes, three buttons make one:
+
+- **Draw your own**: draw an outline with the pen.
+- **Use a picture**: a PNG or WebP picture, or one of your stickers. **Shows through** picks **Its solid parts** (see-through parts hide the layer) or **Its light parts** (dark parts hide it).
+- **Use text**: a word or two, in a font from the font picker. The layer shows through the letters.
+
+Each is saved as you change it, under its **Name**, and is then one of the shapes to pick. It has every reveal setting: the middle, **Size**, **Soft edge**, **Turn the other way**, and on the timeline, how open it is at the start and the end. **Duplicate** makes a copy. **Delete** asks first, and an animation that used it shows through a circle in its place. Up to 20.
+
+#### Drawing one
+
+Ada Quill wants a word to come in through a triangle.
+
+1. She makes an animation, and under **Coming in** presses **Through a shape**, then **Draw your own**. The pen is over the preview.
+2. She taps the top middle of the preview, then the bottom right, then the bottom left. A dashed line joins the points.
+3. She taps the first point, which is larger and yellow. The shape closes, and the line is solid.
+4. She drags the small square in the middle of the bottom line down a little. That line bends into a curve.
+5. She drags the bottom right point a little further out.
+6. **Undo a point** takes the last point out, and **Start the shape again** clears them all. **Draw on the preview** turns the pen off and on.
+
+The preview shows the layer through the triangle as it opens. Points snap to a grid and to the lines of the other points, so a straight edge is easy to make. A drawn shape is also **Your own shape** in a design's shapes, under **Background**.
 
 ### The timeline
 

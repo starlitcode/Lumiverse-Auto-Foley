@@ -2418,6 +2418,23 @@ describe("animations", () => {
   });
 });
 
+describe("your reveals", () => {
+  test("reveals are cleaned and kept, and a picture reveal keeps its picture", async () => {
+    const h = host();
+    const pic = "data:image/png;base64,AAAA";
+    await h.ask({ type: "sticker_put", id: "rpic1", picture: pic }, "u1");
+    await h.ask({ type: "sticker_put", id: "rgone", picture: pic }, "u1");
+    await h.ask({ type: "save", settings: { videoReveals: [{ id: "rtri", name: "Tri", kind: "draw", pts: [{ x: 0, y: -5 }, { x: 0.8, y: 0.7, bx: 0.5, by: 9 }, { x: -0.8, y: 0.7 }] }, { id: "rpic1", name: "Pic", kind: "picture", by: "bright" }, { id: "nope", kind: "text" }] } }, "u1");
+    const s = (await h.ask({ type: "load" }, "u1")).find((m: any) => m.type === "state").settings;
+    expect(s.videoReveals.map((r: any) => r.id)).toEqual(["rtri", "rpic1"]);
+    expect(s.videoReveals[0].pts[0]).toEqual({ x: 0, y: -1 });
+    expect(s.videoReveals[0].pts[1]).toEqual({ x: 0.8, y: 0.7, bx: 0.5, by: 2 });
+    expect(s.videoReveals[1].by).toBe("bright");
+    expect(h.files.has("u1/video-stickers/rpic1.json")).toBe(true);
+    expect(h.files.has("u1/video-stickers/rgone.json")).toBe(false);
+  });
+});
+
 describe("stickers", () => {
   test("a sticker's picture stays while the settings, a saved look or a project uses it, and goes on Start again", async () => {
     const h = host();

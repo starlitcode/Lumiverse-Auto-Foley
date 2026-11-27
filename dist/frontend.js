@@ -1700,8 +1700,11 @@ html[data-af-still] .af-ws-sec.af-ws-in, .af-ws[data-af-still] .af-ws-sec.af-ws-
 .af-ws-morebtn { display: none; }
 .af-anim-canvas { display: block; width: 100%; max-width: 480px; height: auto; aspect-ratio: 16 / 9; border-radius: var(--af-r); border: 1px solid var(--af-line); }
 .af-ease-canvas { flex: none; width: 96px; height: 96px; }
+.af-pen-wrap { position: relative; grid-area: view; max-width: 240px; }
+.af-pen-wrap > canvas { display: block; width: 100%; }
+.af-pen { position: absolute; inset: 0; height: 100%; touch-action: none; cursor: crosshair; }
 .af-anim-sticky { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "view btns" "scrub scrub"; align-items: center; column-gap: 10px; row-gap: 4px; position: sticky; top: 0; z-index: 3; padding: 6px 0; background-color: var(--lumiverse-card-bg-solid, rgb(24,20,34)); background-image: linear-gradient(var(--lumiverse-bg-elevated, rgba(35,30,48,.98)), var(--lumiverse-bg-elevated, rgba(35,30,48,.98))); box-shadow: 0 6px 8px -8px rgba(0,0,0,.6); }
-.af-anim-sticky > canvas { grid-area: view; max-width: 240px; }
+.af-anim-sticky > canvas, .af-anim-sticky > .af-pen-wrap { grid-area: view; max-width: 240px; }
 .af-anim-sticky > .af-anim-btns { grid-area: btns; flex-direction: column; align-items: stretch; gap: 6px; }
 .af-anim-sticky > .af-anim-scrub { grid-area: scrub; gap: 2px; }
 @container afws (max-width: 639.98px) { .af-anim-sticky > canvas { max-width: 176px; } }
@@ -1918,6 +1921,8 @@ function presetTrack(which, pr) {
             mask.size = keyOr(pr.size, 100);
         if (pr.through === 'shape')
             mask.shape = pr.kind || 'heart';
+        if (pr.through === 'own')
+            mask.own = pr.own || '';
         if (pr.invert)
             mask.invert = true;
     }
@@ -2156,6 +2161,7 @@ const DEFAULTS = {
     videoWords: 'fade',
     videoAnims: {},
     videoAnimsOwn: [],
+    videoReveals: [],
     videoPlace: 'middle',
     videoQuotes: true,
     videoNames: true,
@@ -4543,6 +4549,16 @@ export function setup(ctx, overrides) {
     function shapePath(g, sh, w, h) {
         g.beginPath();
         const k = sh.kind;
+        if (k === 'own') {
+            // Your own shape: a drawn reveal, stretched to the box. With none
+            // drawn yet, a plain box.
+            const rv = revealsNow().find((r) => r.id === sh.own);
+            if (rv && rv.kind === 'draw' && rv.pts.length >= 3)
+                revealOutline(g, rv, 0, 0, w / 2, h / 2);
+            else
+                g.rect(-w / 2, -h / 2, w, h);
+            return;
+        }
         const poly = (pts) => {
             pts.forEach(([x, y], i) => (i ? g.lineTo(x, y) : g.moveTo(x, y)));
             g.closePath();
@@ -5188,6 +5204,9 @@ export function setup(ctx, overrides) {
                 await loadMarkPic(m.id).catch(() => { });
         for (const k of stickersNow())
             await loadStickerPic(k.id).catch(() => { });
+        for (const r of revealsNow())
+            if (r.kind === 'picture')
+                await loadStickerPic(r.id).catch(() => { });
     }
     function stageNow(parts, sh, only, fixed, scale = 1) {
         const full = videoSize();
@@ -6390,9 +6409,87 @@ export function setup(ctx, overrides) {
     // Typewriter and Word by word: how much of the text drawn now is shown,
     // from 0 to 1. Read by drawPart and drawTitle while it is set.
     let textReveal = null;
-    // The reveal, as a picture of its own: solid where the layer shows.
-    // Drawn on its own canvas, then laid over the layer, so the reveal itself
-    // is never drawn.
+    const REVEALS_MAX = 20;
+    const revealsNow = () => (Array.isArray(S.videoReveals) ? S.videoReveals : []);
+    // The outline of a drawn reveal. A point with a bend reaches it along a
+    // curve through the bend; the first point's bend is the closing line's.
+    function revealOutline(g, rv, x, y, hw, hh) {
+        const p = rv.pts;
+        if (!p.length)
+            return;
+        g.moveTo(x + p[0].x * hw, y + p[0].y * hh);
+        for (let i = 1; i <= p.length; i++) {
+            const q = p[i % p.length];
+            if (q.bx != null && q.by != null)
+                g.quadraticCurveTo(x + q.bx * hw, y + q.by * hh, x + q.x * hw, y + q.y * hh);
+            else
+                g.lineTo(x + q.x * hw, y + q.y * hh);
+        }
+        g.closePath();
+    }
+    // A picture used by brightness: light parts show and dark parts hide.
+    const brightPics = new Map();
+    function revealPicture(rv) {
+        const pic = stickerPics.get(rv.id);
+        if (!pic || !pic.width)
+            return null;
+        if (rv.by !== 'bright')
+            return pic;
+        let c = brightPics.get(rv.id);
+        if (c && c._pic === pic)
+            return c;
+        c = canvasOf(pic.width, pic.height);
+        const g = c.getContext('2d');
+        g.drawImage(pic, 0, 0);
+        try {
+            const d = g.getImageData(0, 0, c.width, c.height);
+            for (let i = 0; i < d.data.length; i += 4) {
+                const lum = (d.data[i] * 0.2126 + d.data[i + 1] * 0.7152 + d.data[i + 2] * 0.0722) * (d.data[i + 3] / 255);
+                d.data[i] = d.data[i + 1] = d.data[i + 2] = 0;
+                d.data[i + 3] = lum;
+            }
+            g.putImageData(d, 0, 0);
+        }
+        catch (_) { }
+        c._pic = pic;
+        brightPics.set(rv.id, c);
+        return c;
+    }
+    // A reveal filled solid, as large as half (its half side), around x, y.
+    function revealFill(g, rv, x, y, half) {
+        if (half <= 0)
+            return;
+        if (rv.kind === 'draw') {
+            if (rv.pts.length < 3)
+                return;
+            g.beginPath();
+            revealOutline(g, rv, x, y, half, half);
+            g.fill();
+        }
+        else if (rv.kind === 'text') {
+            const words = String(rv.text || '').trim();
+            if (!words)
+                return;
+            g.save();
+            g.textAlign = 'center';
+            g.textBaseline = 'middle';
+            let size = half * 0.9;
+            g.font = '800 ' + Math.max(1, Math.round(size)) + 'px ' + fontStack(rv.font || 'clean');
+            const w = g.measureText(words).width;
+            if (w > half * 1.9)
+                size *= (half * 1.9) / w;
+            g.font = '800 ' + Math.max(1, Math.round(size)) + 'px ' + fontStack(rv.font || 'clean');
+            g.fillText(words, x, y);
+            g.restore();
+        }
+        else {
+            const pic = revealPicture(rv);
+            if (!pic)
+                return;
+            const k = (half * 2) / Math.max(pic.width, pic.height);
+            g.drawImage(pic, x - (pic.width * k) / 2, y - (pic.height * k) / 2, pic.width * k, pic.height * k);
+        }
+    }
     let revealCanvas = null;
     function revealOpen(s) {
         const m = s.mask;
@@ -6501,6 +6598,26 @@ export function setup(ctx, overrides) {
                 mg.fillRect(0, 0, W, H);
             else if (p > 0)
                 mg.fill();
+        }
+        else if (m.type === 'own') {
+            // One of Your reveals: drawn, a picture or text, grown from its
+            // middle the same way, with the soft edge made the same way.
+            const rv = revealsNow().find((r) => r.id === m.own);
+            if (!rv)
+                mg.fillRect(0, 0, W, H);
+            else {
+                const cx = keyOr(m.cx, 0.5) * W;
+                const cy = keyOr(m.cy, 0.5) * H;
+                const ext = Math.hypot(Math.max(cx, W - cx), Math.max(cy, H - cy)) * 1.7 * (Math.max(0, keyOr(m.size, 100)) / 100);
+                const steps = f > 0 ? 12 : 1;
+                mg.globalCompositeOperation = 'lighter';
+                for (let i = 0; i < steps; i++) {
+                    mg.globalAlpha = 1 / steps;
+                    revealFill(mg, rv, cx, cy, Math.max(0, ext * open * (1 + (f * i) / Math.max(1, steps - 1))));
+                }
+                mg.globalCompositeOperation = 'source-over';
+                mg.globalAlpha = 1;
+            }
         }
         else if (m.type === 'box' || m.type === 'diamond' || m.type === 'shape') {
             // A soft edge is the shape drawn a few times, each a little larger and
@@ -16595,6 +16712,7 @@ export function setup(ctx, overrides) {
         { id: 'shamrock', label: 'Shamrock' },
         { id: 'egg', label: 'Egg' },
         { id: 'flower', label: 'Flower' },
+        { id: 'own', label: 'Your own shape' },
     ];
     const SHAPES_MAX = 40;
     // Whether the Background is set to a design while the Studio is drawn, so
@@ -16678,7 +16796,7 @@ export function setup(ctx, overrides) {
     });
     function newShape(kind) {
         const n = shapesNow().length;
-        const size = { rect: [520, 300], round: [520, 300], ellipse: [360, 360], tri: [420, 360], line: [640, 14], text: [760, 120], heart: [340, 320], star: [360, 360], poly: [360, 360], diamond: [300, 380], arrow: [480, 220], bubble: [520, 340], ring: [360, 360], moon: [300, 300], cloud: [520, 300], sparkle: [260, 260], cat: [300, 300], dog: [320, 300], bunny: [280, 340], paw: [240, 240], bone: [300, 120], fish: [300, 180], carrot: [160, 320], bat: [420, 220], rose: [260, 260], checker: [900, 80], broken: [320, 300], stripes: [900, 120], snowflake: [260, 260], ornament: [220, 260], holly: [300, 200], pumpkin: [300, 260], ghost: [240, 300], leaf: [220, 280], firework: [320, 320], lantern: [220, 300], diya: [300, 200], menorah: [420, 300], shamrock: [240, 280], egg: [200, 260], flower: [260, 260] };
+        const size = { rect: [520, 300], round: [520, 300], ellipse: [360, 360], tri: [420, 360], line: [640, 14], text: [760, 120], heart: [340, 320], star: [360, 360], poly: [360, 360], diamond: [300, 380], arrow: [480, 220], bubble: [520, 340], ring: [360, 360], moon: [300, 300], cloud: [520, 300], sparkle: [260, 260], cat: [300, 300], dog: [320, 300], bunny: [280, 340], paw: [240, 240], bone: [300, 120], fish: [300, 180], carrot: [160, 320], bat: [420, 220], rose: [260, 260], checker: [900, 80], broken: [320, 300], stripes: [900, 120], snowflake: [260, 260], ornament: [220, 260], holly: [300, 200], pumpkin: [300, 260], ghost: [240, 300], leaf: [220, 280], firework: [320, 320], lantern: [220, 300], diya: [300, 200], menorah: [420, 300], shamrock: [240, 280], egg: [200, 260], flower: [260, 260], own: [300, 300] };
         const [w, h] = size[kind] || [400, 240];
         return {
             id: rid('sh').replace(/[^a-z0-9]/gi, '').slice(0, 24),
@@ -16854,6 +16972,21 @@ export function setup(ctx, overrides) {
             row.setAttribute('data-af-shape-num', key);
             r.editor.appendChild(row);
         };
+        if (sh.kind === 'own') {
+            const drawn = revealsNow().filter((r) => r.kind === 'draw' && r.pts.length >= 3);
+            if (!drawn.length)
+                r.editor.appendChild(hint('Draw a shape first: under Animations, make an animation, pick Through a shape, then Draw your own.'));
+            else {
+                if (!drawn.some((x) => x.id === sh.own))
+                    sh.own = drawn[0].id;
+                const pickOwn = select('Which of your shapes', drawn.map((x) => ({ id: x.id, label: x.name })), sh.own || drawn[0].id, (v) => {
+                    sh.own = v;
+                    changed();
+                }, 'Shapes you drew as reveals.');
+                pickOwn.querySelector('select').setAttribute('data-af-shapeown', '');
+                r.editor.appendChild(pickOwn);
+            }
+        }
         if (sh.kind === 'star') {
             own('Points', 'points', 5, 4, 12, '5 by default, from 4 to 12.');
             own('How deep the points are, in percent', 'depth', 50, 10, 90, '50 by default. More makes thinner points.');
@@ -17976,7 +18109,7 @@ export function setup(ctx, overrides) {
         'videoWordShadow', 'videoWordShadowInk', 'videoWordShadowDark', 'videoWordShadowSoft', 'videoWordShadowFar',
         'videoBox', 'videoBoxColor', 'videoBoxClear', 'videoBoxRound', 'videoBoxWidth', 'videoOwnColors', 'videoKindColors', 'videoBackRules', 'videoQuiet', 'videoQuietStrength',
         'videoNameShadow', 'videoNameShadowInk', 'videoNameShadowDark', 'videoNameShadowSoft', 'videoNameShadowFar', 'videoEdges', 'videoEdgeColor', 'videoMove', 'videoMoveSecs',
-        'videoAnims', 'videoAnimsOwn', 'videoTitleOn', 'videoFadeOut', 'videoCaptions',
+        'videoAnims', 'videoAnimsOwn', 'videoReveals', 'videoTitleOn', 'videoFadeOut', 'videoCaptions',
     ];
     const LOOKS_MAX = 20;
     // A look holds one background: the one in use, with its design and
@@ -18683,7 +18816,7 @@ export function setup(ctx, overrides) {
     }
     // A small picture of a reveal, part of the way through: the shown part
     // light, the rest dim.
-    function revealIcon(c, type) {
+    function revealIcon(c, type, own) {
         const g = c.getContext('2d');
         if (!g)
             return;
@@ -18703,10 +18836,470 @@ export function setup(ctx, overrides) {
         lg.fillStyle = ink;
         lg.fillRect(8, 12, 40, 32);
         if (type !== 'none')
-            maskOn(lg, N, N, { mask: { type, angle: 0, feather: type === 'linear' ? 20 : 4, shape: 'heart' }, p: 0.6, k: 0.6, hide: false });
+            maskOn(lg, N, N, { mask: { type, angle: 0, feather: type === 'linear' ? 20 : 4, shape: 'heart', own, size: type === 'own' ? 40 : 100 }, p: type === 'own' ? 1 : 0.6, k: type === 'own' ? 1 : 0.6, hide: false });
         void st;
         g.globalAlpha = 1;
         g.drawImage(layer, 0, 0);
+    }
+    // ---- Your reveals: drawn, from a picture, or from text ----
+    let revealSave = null;
+    function saveReveals(now) {
+        if (revealSave)
+            clearTimeout(revealSave);
+        revealSave = null;
+        const go = () => {
+            revealSave = null;
+            set({ videoReveals: revealsNow().slice() });
+        };
+        if (now)
+            go();
+        else
+            revealSave = setTimeout(go, 400);
+    }
+    disposers.push(() => {
+        if (revealSave) {
+            clearTimeout(revealSave);
+            revealSave = null;
+            try {
+                set({ videoReveals: revealsNow().slice() });
+            }
+            catch (_) { }
+        }
+    });
+    function newReveal(kind) {
+        if (!Array.isArray(S.videoReveals))
+            S.videoReveals = [];
+        const list = S.videoReveals;
+        if (list.length >= REVEALS_MAX)
+            return null;
+        let id = '';
+        do
+            id = 'r' + Math.random().toString(36).replace(/[^a-z0-9]/g, '').slice(0, 9);
+        while (list.some((x) => x.id === id));
+        const n = list.length + 1;
+        const rv = { id, name: (kind === 'draw' ? 'My shape ' : kind === 'text' ? 'My words ' : 'My picture ') + n, kind, pts: [], text: kind === 'text' ? 'Hello' : '', font: kind === 'text' ? 'clean' : '', by: 'alpha' };
+        list.push(rv);
+        saveReveals(true);
+        return rv;
+    }
+    // The pen: a layer over the preview, for drawing a reveal's outline.
+    // A tap adds a point. Dragging a point moves it. Dragging the small
+    // square in the middle of a line bends that line into a curve. A tap on
+    // the first point closes the shape. Points snap to a grid and to each
+    // other's lines.
+    let penNow = null;
+    function penOver(preview, rv, changed) {
+        if (penNow)
+            penNow.stop();
+        const view = preview.querySelector('canvas');
+        const wrap = el('<div class="af-pen-wrap"></div>');
+        view.parentElement.insertBefore(wrap, view);
+        wrap.appendChild(view);
+        const pen = canvasOf(view.width, view.height);
+        pen.className = 'af-pen';
+        pen.setAttribute('data-af-pen', '');
+        pen.setAttribute('role', 'img');
+        pen.setAttribute('aria-label', 'Draw the shape here');
+        wrap.appendChild(pen);
+        const W = pen.width;
+        const H = pen.height;
+        const half = Math.min(W, H) * 0.45;
+        const toPx = (x, y) => [W / 2 + x * half, H / 2 + y * half];
+        let closed = rv.pts.length >= 3;
+        let drag = null;
+        const at = (e) => {
+            const rc = pen.getBoundingClientRect();
+            const px = ((e.clientX - rc.left) / Math.max(1, rc.width)) * W;
+            const py = ((e.clientY - rc.top) / Math.max(1, rc.height)) * H;
+            return { px, py, x: (px - W / 2) / half, y: (py - H / 2) / half, reach: (14 * W) / Math.max(1, rc.width) };
+        };
+        const snap = (x, y, skip) => {
+            const g = (v) => {
+                const r = Math.round(v * 8) / 8;
+                return Math.abs(r - v) < 0.04 ? r : v;
+            };
+            let sx = g(x);
+            let sy = g(y);
+            rv.pts.forEach((q, i) => {
+                if (i === skip)
+                    return;
+                if (Math.abs(q.x - sx) < 0.04)
+                    sx = q.x;
+                if (Math.abs(q.y - sy) < 0.04)
+                    sy = q.y;
+            });
+            return { x: Math.max(-1, Math.min(1, sx)), y: Math.max(-1, Math.min(1, sy)) };
+        };
+        const mids = () => rv.pts.map((q, i) => {
+            if (!closed && i === 0)
+                return null;
+            const p0 = rv.pts[(i - 1 + rv.pts.length) % rv.pts.length];
+            return q.bx != null && q.by != null ? { x: (p0.x + 2 * q.bx + q.x) / 4, y: (p0.y + 2 * q.by + q.y) / 4 } : { x: (p0.x + q.x) / 2, y: (p0.y + q.y) / 2 };
+        });
+        const paint = () => {
+            const g = pen.getContext('2d');
+            if (!g)
+                return;
+            g.clearRect(0, 0, W, H);
+            if (!rv.pts.length)
+                return;
+            g.save();
+            g.lineWidth = 2;
+            g.strokeStyle = '#ffd166';
+            g.setLineDash(closed ? [] : [6, 4]);
+            g.beginPath();
+            const [x0, y0] = toPx(rv.pts[0].x, rv.pts[0].y);
+            g.moveTo(x0, y0);
+            const n = closed ? rv.pts.length : rv.pts.length - 1;
+            for (let i = 1; i <= n; i++) {
+                const q = rv.pts[i % rv.pts.length];
+                const [x, y] = toPx(q.x, q.y);
+                if (q.bx != null && q.by != null) {
+                    const [bx, by] = toPx(q.bx, q.by);
+                    g.quadraticCurveTo(bx, by, x, y);
+                }
+                else
+                    g.lineTo(x, y);
+            }
+            g.stroke();
+            g.setLineDash([]);
+            rv.pts.forEach((q, i) => {
+                const [x, y] = toPx(q.x, q.y);
+                g.beginPath();
+                g.arc(x, y, i === 0 ? 7 : 5, 0, Math.PI * 2);
+                g.fillStyle = i === 0 ? '#ffd166' : '#ffffff';
+                g.fill();
+                g.strokeStyle = 'rgba(0,0,0,.6)';
+                g.stroke();
+            });
+            mids().forEach((m) => {
+                if (!m)
+                    return;
+                const [x, y] = toPx(m.x, m.y);
+                g.fillStyle = '#ffd166';
+                g.fillRect(x - 3.5, y - 3.5, 7, 7);
+            });
+            g.restore();
+        };
+        const near = (p) => {
+            for (let i = 0; i < rv.pts.length; i++) {
+                const [x, y] = toPx(rv.pts[i].x, rv.pts[i].y);
+                if (Math.hypot(x - p.px, y - p.py) <= p.reach)
+                    return { kind: 'point', i };
+            }
+            const ms = mids();
+            for (let i = 0; i < ms.length; i++) {
+                const m = ms[i];
+                if (!m)
+                    continue;
+                const [x, y] = toPx(m.x, m.y);
+                if (Math.hypot(x - p.px, y - p.py) <= p.reach)
+                    return { kind: 'bend', i };
+            }
+            return null;
+        };
+        pen.addEventListener('pointerdown', (e) => {
+            e.preventDefault();
+            const p = at(e);
+            const hit = near(p);
+            try {
+                pen.setPointerCapture(e.pointerId);
+            }
+            catch (_) { }
+            if (hit) {
+                drag = { kind: hit.kind, i: hit.i, moved: false, x0: p.px, y0: p.py };
+                return;
+            }
+            if (closed)
+                return;
+            const q = snap(p.x, p.y, -1);
+            if (rv.pts.length >= 64)
+                return;
+            rv.pts.push({ x: q.x, y: q.y });
+            changed();
+            paint();
+        });
+        pen.addEventListener('pointermove', (e) => {
+            if (!drag)
+                return;
+            const p = at(e);
+            if (!drag.moved && Math.hypot(p.px - drag.x0, p.py - drag.y0) < p.reach / 2)
+                return;
+            drag.moved = true;
+            const q = rv.pts[drag.i];
+            if (drag.kind === 'point') {
+                const sn = snap(p.x, p.y, drag.i);
+                q.x = sn.x;
+                q.y = sn.y;
+            }
+            else {
+                // The curve passes through where the finger is, half way along.
+                const p0 = rv.pts[(drag.i - 1 + rv.pts.length) % rv.pts.length];
+                q.bx = Math.max(-2, Math.min(2, 2 * p.x - (p0.x + q.x) / 2));
+                q.by = Math.max(-2, Math.min(2, 2 * p.y - (p0.y + q.y) / 2));
+            }
+            changed();
+            paint();
+        });
+        const up = () => {
+            if (!drag)
+                return;
+            // A tap on the first point closes the shape.
+            if (!drag.moved && drag.kind === 'point' && drag.i === 0 && !closed && rv.pts.length >= 3)
+                closed = true;
+            drag = null;
+            changed();
+            paint();
+        };
+        pen.addEventListener('pointerup', up);
+        pen.addEventListener('pointercancel', up);
+        paint();
+        const api = {
+            undo: () => {
+                rv.pts.pop();
+                closed = false;
+                changed();
+                paint();
+            },
+            clear: () => {
+                rv.pts = [];
+                closed = false;
+                changed();
+                paint();
+            },
+            stop: () => {
+                if (!wrap.isConnected && !view.isConnected)
+                    return;
+                if (wrap.parentElement)
+                    wrap.parentElement.insertBefore(view, wrap);
+                wrap.remove();
+                if (penNow === api)
+                    penNow = null;
+            },
+        };
+        penNow = api;
+        return api;
+    }
+    // The settings of one of Your reveals, under the shape picker.
+    function revealEditorBox(rv, preview, changed, gone) {
+        const box = el('<div class="af-col af-moodedit" data-af-reveal-edit></div>');
+        box.setAttribute('data-af-reveal-edit', rv.id);
+        const touched = () => {
+            saveReveals();
+            changed();
+        };
+        const nameId = rid('rn');
+        box.appendChild(labelRow('Name', '', nameId));
+        const name = el('<input type="text" class="af-field" maxlength="40" autocomplete="off" id="' + nameId + '" data-af-revealname>');
+        name.value = rv.name;
+        name.addEventListener('change', () => {
+            const v = name.value.trim().slice(0, 40);
+            if (!v) {
+                name.value = rv.name;
+                return;
+            }
+            rv.name = v;
+            saveReveals(true);
+            changed();
+        });
+        box.appendChild(name);
+        const said = el('<p class="af-status" role="status"></p>');
+        if (rv.kind === 'draw') {
+            box.appendChild(hint('Tap the preview to add points. Drag a point to move it, or the square in a line to bend it. Tap the first point to close the shape.'));
+            const tools = el('<div class="af-row af-wrap"></div>');
+            let pen = null;
+            const drawBtn = button('Draw on the preview', () => {
+                if (pen) {
+                    pen.stop();
+                    pen = null;
+                    drawBtn.setAttribute('aria-pressed', 'false');
+                    return;
+                }
+                if (!preview)
+                    return;
+                pen = penOver(preview, rv, touched);
+                drawBtn.setAttribute('aria-pressed', 'true');
+            });
+            drawBtn.setAttribute('aria-pressed', 'false');
+            drawBtn.setAttribute('data-af-pendraw', '');
+            const undo = button('Undo a point', () => {
+                if (pen)
+                    pen.undo();
+                else {
+                    rv.pts.pop();
+                    touched();
+                }
+            });
+            undo.setAttribute('data-af-penundo', '');
+            const clear = button('Start the shape again', () => {
+                if (pen)
+                    pen.clear();
+                else {
+                    rv.pts = [];
+                    touched();
+                }
+            });
+            tools.appendChild(drawBtn);
+            tools.appendChild(undo);
+            tools.appendChild(clear);
+            box.appendChild(tools);
+            // Drawing starts at once for a new shape.
+            if (!rv.pts.length && preview) {
+                pen = penOver(preview, rv, touched);
+                drawBtn.setAttribute('aria-pressed', 'true');
+            }
+            disposers.push(() => {
+                if (pen)
+                    pen.stop();
+            });
+            box._stop = () => {
+                if (pen)
+                    pen.stop();
+                pen = null;
+            };
+        }
+        else if (rv.kind === 'text') {
+            const tid = rid('rt');
+            box.appendChild(labelRow('Words', 'A word or two. The layer shows through the letters.', tid));
+            const words = el('<input type="text" class="af-field" maxlength="40" autocomplete="off" id="' + tid + '" data-af-revealtext>');
+            words.value = rv.text;
+            words.addEventListener('input', () => {
+                rv.text = words.value.slice(0, 40);
+                touched();
+            });
+            box.appendChild(words);
+            box.appendChild(fontPicker('revealFont' + rv.id, 'Font', 'Clean by default.', false, () => touched(), {
+                get: () => rv.font || 'clean',
+                set: (v) => {
+                    rv.font = v;
+                },
+            }));
+        }
+        else {
+            const keepPic = async (picture) => {
+                let r = null;
+                try {
+                    r = await rpc({ type: 'sticker_put', id: rv.id, picture }, 60000);
+                }
+                catch (_) { }
+                if (!r || !r.ok) {
+                    said.textContent = (r && r.error) || 'The picture could not be saved to your account. Try again.';
+                    said.dataset.kind = 'bad';
+                    return;
+                }
+                said.textContent = '';
+                stickerPics.set(rv.id, await loadImage(picture));
+                stickerAsked.set(rv.id, Promise.resolve());
+                brightPics.delete(rv.id);
+                touched();
+            };
+            const pickRow = el('<div class="af-row af-wrap"></div>');
+            const choose = button('Choose a picture', async () => {
+                let files = [];
+                try {
+                    files = await ctx.uploads.pickFile({ accept: ['image/png', 'image/webp', '.png', '.webp'], multiple: false, maxSizeBytes: 20 * 1024 * 1024 });
+                }
+                catch (e) {
+                    said.textContent = 'The file picker could not open: ' + String((e && e.message) || e).slice(0, 200);
+                    said.dataset.kind = 'bad';
+                    return;
+                }
+                const f = files && files[0];
+                if (!f)
+                    return;
+                const url = URL.createObjectURL(new Blob([f.bytes], { type: f.mimeType || 'image/png' }));
+                const im = await loadImage(url);
+                URL.revokeObjectURL(url);
+                if (!im || !im.width) {
+                    said.textContent = 'That file is not a picture Auto Foley can read. Use PNG or WebP.';
+                    said.dataset.kind = 'bad';
+                    return;
+                }
+                const picture = await stickerPicture(im);
+                if (!picture) {
+                    said.textContent = 'That picture is too large to keep. Pick a smaller one.';
+                    said.dataset.kind = 'bad';
+                    return;
+                }
+                await keepPic(picture);
+            });
+            choose.setAttribute('data-af-revealpic', '');
+            pickRow.appendChild(choose);
+            box.appendChild(pickRow);
+            if (stickersNow().length) {
+                const use = select('Or use a sticker', [{ id: '', label: 'Pick a sticker' }].concat(stickersNow().map((k, n) => ({ id: k.id, label: 'Sticker ' + (n + 1) }))), '', async (v) => {
+                    if (!v)
+                        return;
+                    let got = null;
+                    try {
+                        got = await rpc({ type: 'sticker_get', id: v }, 15000);
+                    }
+                    catch (_) { }
+                    if (!got || !got.picture) {
+                        said.textContent = 'That sticker’s picture could not be read from your account.';
+                        said.dataset.kind = 'bad';
+                        return;
+                    }
+                    await keepPic(String(got.picture));
+                });
+                use.querySelector('select').setAttribute('data-af-revealsticker', '');
+                box.appendChild(use);
+            }
+            box.appendChild(segmented('Shows through', [
+                { id: 'alpha', label: 'Its solid parts' },
+                { id: 'bright', label: 'Its light parts' },
+            ], rv.by === 'bright' ? 'bright' : 'alpha', (v) => {
+                rv.by = v === 'bright' ? 'bright' : 'alpha';
+                touched();
+            }, 'Solid parts by default: see-through parts hide the layer.'));
+            void loadStickerPic(rv.id).then(() => changed());
+        }
+        box.appendChild(said);
+        const acts = el('<div class="af-row af-wrap"></div>');
+        const dup = button('Duplicate', async () => {
+            const c = newReveal(rv.kind);
+            if (!c)
+                return;
+            Object.assign(c, JSON.parse(JSON.stringify(Object.assign({}, rv, { id: c.id, name: (rv.name.slice(0, 33) + ' (copy)').slice(0, 40) }))));
+            if (rv.kind === 'picture') {
+                let got = null;
+                try {
+                    got = await rpc({ type: 'sticker_get', id: rv.id }, 15000);
+                    if (got && got.picture)
+                        await rpc({ type: 'sticker_put', id: c.id, picture: got.picture }, 60000);
+                }
+                catch (_) { }
+            }
+            saveReveals(true);
+            changed();
+        });
+        dup.setAttribute('data-af-revealact', 'dup');
+        const del = button('Delete', async () => {
+            const uses = ownAnims().filter((a) => [a.inT, a.outT].some((t) => t && t.mask && t.mask.own === rv.id)).map((a) => a.name);
+            if (!(await askSure('Delete ' + rv.name, 'Delete the reveal ' + rv.name + '?' + (uses.length ? ' ' + uses.join(', ') + ' show through a circle in its place.' : '') + ' There is no undo.', 'Delete', true)))
+                return;
+            if (box._stop)
+                box._stop();
+            await leave(box);
+            for (const a of ownAnims())
+                for (const w of ['in', 'out']) {
+                    const t = w === 'in' ? a.inT : a.outT;
+                    if (t && t.mask && t.mask.own === rv.id) {
+                        t.mask.type = 'iris';
+                        delete t.mask.own;
+                        if (t.preset)
+                            t.preset = Object.assign({}, t.preset, { through: 'iris', own: undefined });
+                    }
+                }
+            S.videoReveals = revealsNow().filter((x) => x.id !== rv.id);
+            set({ videoReveals: S.videoReveals.slice(), videoAnimsOwn: ownAnims().slice() });
+            gone();
+        });
+        del.setAttribute('data-af-revealact', 'delete');
+        acts.appendChild(dup);
+        acts.appendChild(del);
+        box.appendChild(acts);
+        return box;
     }
     function drawOwnAnims(box, changed, redrawPlaces) {
         box.replaceChildren();
@@ -19073,7 +19666,7 @@ export function setup(ctx, overrides) {
                     return r;
                 };
                 if (m.type === 'shape') {
-                    const sp = select('Shape', SHAPE_KINDS.filter((k) => k.id !== 'text' && k.id !== 'line').map((k) => ({ id: k.id, label: k.label })), m.shape || 'heart', (v) => {
+                    const sp = select('Shape', SHAPE_KINDS.filter((k) => k.id !== 'text' && k.id !== 'line' && k.id !== 'own').map((k) => ({ id: k.id, label: k.label })), m.shape || 'heart', (v) => {
                         m.shape = v;
                         touched();
                     }, 'Any shape from the shape picker, such as a heart or a star.');
@@ -19162,6 +19755,8 @@ export function setup(ctx, overrides) {
         function paintSimple() {
             if (!a)
                 return;
+            if (penNow)
+                penNow.stop();
             simple.replaceChildren();
             for (const which of ['in', 'out']) {
                 const tr = which === 'in' ? a.inT : a.outT;
@@ -19248,10 +19843,39 @@ export function setup(ctx, overrides) {
                         });
                         picks.appendChild(bt);
                     }
+                    for (const rv of revealsNow()) {
+                        const bt = el('<button type="button" class="af-shape-kind" aria-pressed="false"><canvas width="56" height="56" aria-hidden="true"></canvas><span></span></button>');
+                        bt.setAttribute('data-af-reveal-own', rv.id);
+                        bt.setAttribute('aria-pressed', pr.through === 'own' && pr.own === rv.id ? 'true' : 'false');
+                        setText(bt.querySelector('span'), rv.name);
+                        revealIcon(bt.querySelector('canvas'), 'own', rv.id);
+                        bt.addEventListener('click', () => {
+                            set2({ through: 'own', own: rv.id });
+                            paintSimple();
+                        });
+                        picks.appendChild(bt);
+                    }
                     ctl.appendChild(labelRow('The shape it shows through', ''));
                     ctl.appendChild(picks);
+                    // Your own: drawn, a picture, or text.
+                    const mk = el('<div class="af-row af-wrap" data-af-revealmake></div>');
+                    for (const [kind, label] of [['draw', 'Draw your own'], ['picture', 'Use a picture'], ['text', 'Use text']]) {
+                        const bt = button(label, () => {
+                            const rv = newReveal(kind);
+                            if (!rv)
+                                return;
+                            set2({ through: 'own', own: rv.id });
+                            paintSimple();
+                        });
+                        bt.setAttribute('data-af-revealnew', kind);
+                        bt.disabled = revealsNow().length >= REVEALS_MAX;
+                        if (!bt.disabled)
+                            mk.appendChild(bt);
+                    }
+                    if (mk.childNodes.length)
+                        ctl.appendChild(mk);
                     if (pr.through === 'shape') {
-                        const sp = select('Shape', SHAPE_KINDS.filter((k) => k.id !== 'text' && k.id !== 'line').map((k) => ({ id: k.id, label: k.label })), pr.kind || 'heart', (v) => set2({ kind: v }), 'Any shape from the shape picker, such as a heart or a star.');
+                        const sp = select('Shape', SHAPE_KINDS.filter((k) => k.id !== 'text' && k.id !== 'line' && k.id !== 'own').map((k) => ({ id: k.id, label: k.label })), pr.kind || 'heart', (v) => set2({ kind: v }), 'Any shape from the shape picker, such as a heart or a star.');
                         sp.querySelector('select').setAttribute('data-af-revealshape', '');
                         ctl.appendChild(sp);
                     }
@@ -19291,6 +19915,11 @@ export function setup(ctx, overrides) {
                 }
                 if (ctl.childNodes.length)
                     inner.appendChild(ctl);
+                if (pr.id === 'shape' && pr.through === 'own') {
+                    const rv = revealsNow().find((x) => x.id === pr.own);
+                    if (rv)
+                        inner.appendChild(revealEditorBox(rv, preview, () => touched(), () => paintSimple()));
+                }
                 void tr;
             }
         }
@@ -21326,7 +21955,7 @@ export function setup(ctx, overrides) {
     // the watermarks. The shape of the video is the reader's choice for where
     // it goes, so a template keeps it too. Each template gives a value for
     // every one of these, so nothing is left from the look before.
-    const TEMPLATE_KEYS = LOOK_KEYS.filter((k) => k !== 'videoByline' && k !== 'videoMarks' && k !== 'videoStickers' && k !== 'videoShape' && k !== 'videoAnimsOwn').concat(['studioMusic']);
+    const TEMPLATE_KEYS = LOOK_KEYS.filter((k) => k !== 'videoByline' && k !== 'videoMarks' && k !== 'videoStickers' && k !== 'videoShape' && k !== 'videoAnimsOwn' && k !== 'videoReveals').concat(['studioMusic']);
     const TEMPLATES_MARK = markText(JSON.stringify(TEMPLATES.map((t) => [t.id, t.look, t.back])));
     function templateLook(t) {
         const patch = {};

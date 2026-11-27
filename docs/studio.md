@@ -531,7 +531,7 @@ Every choice in the Studio is a setting, kept on your account. **Start again** i
 
 ### In short
 
-- **A design of your own** is a background made of shapes: rectangles, rounded rectangles, ellipses, triangles, lines, text boxes, hearts, stars, polygons, diamonds, arrows, speech bubbles, rings, crescent moons, clouds, sparkles, cat, dog and bunny faces, paw prints, bones, fish, carrots, bats, roses, checkerboard strips, broken hearts, stripes, snowflakes, ornaments, holly, pumpkins, ghosts, autumn leaves, fireworks, lanterns, diya lamps, menorahs, shamrocks, eggs and flowers.
+- **A design of your own** is a background made of shapes: rectangles, rounded rectangles, ellipses, triangles, lines, text boxes, hearts, stars, polygons, diamonds, arrows, speech bubbles, rings, crescent moons, clouds, sparkles, cat, dog and bunny faces, paw prints, bones, fish, carrots, bats, roses, checkerboard strips, broken hearts, stripes, snowflakes, ornaments, holly, pumpkins, ghosts, autumn leaves, fireworks, lanterns, diya lamps, menorahs, shamrocks, eggs, flowers, and **Your own shape**, an outline you drew under [Your reveals](animations.md#your-reveals).
 - The shapes stay where you put them for the whole video.
 - You place them on the preview with a finger or the mouse, or type exact numbers.
 - Each shape has its own color, an optional gradient, and how see-through it is.

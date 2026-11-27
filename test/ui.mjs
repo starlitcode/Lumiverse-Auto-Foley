@@ -6610,7 +6610,7 @@ if (section("new shapes")) {
     await wsSec(page, "Background");
     await page.waitForTimeout(400);
     const kinds = await page.evaluate(() => [...document.querySelectorAll("[data-af-shapekind]")].map((b) => ({ id: b.getAttribute("data-af-shapekind"), h: b.getBoundingClientRect().height, cut: b.scrollWidth > b.clientWidth + 1 })));
-    check(kinds.length === 41 && kinds.every((k) => k.h >= 32 && !k.cut), sz2.name + ": the shape picker shows all 41 shapes with their names, each 32 pixels tall or more");
+    check(kinds.length === 42 && kinds.every((k) => k.h >= 32 && !k.cut), sz2.name + ": the shape picker shows all 42 shapes with their names, each 32 pixels tall or more");
     await page.click('[data-af-shapekind="star"]');
     await page.click("[data-af-shape-add]");
     await page.waitForTimeout(600);
@@ -7376,6 +7376,109 @@ if (section("reveal")) {
     }
     check(gaps.every((g) => g === 0), "zoom " + zoom + ": the preview slider fills to its knob at 10%, 50% and 90% (" + gaps.join(", ") + " dark pixels)");
     check(!errors.length, "zoom " + zoom + ": no page errors. " + errors.slice(0, 2).join(" | "));
+    await context.close();
+  }
+}
+
+if (section("your reveals")) {
+  console.log("Your reveals: a drawn triangle, a picture and text each show the layer only through themselves; the pen draws, moves, bends and undoes points on a phone and a laptop");
+  const PLAIN = `window.__settings.videoBacks = [{ id: "main", name: "Main", kind: "color", color: "#808080", fill: "solid", stops: [], dir: "down", dim: 40, blur: 0, shapes: [], use: "match", moods: [], places: [] }]; window.__settings.videoBackPick = "main"; window.__settings.videoEdges = 0; window.__settings.videoTitleOn = false; window.__settings.videoPics = false; window.__settings.videoNames = false; window.__settings.videoCaptions = false; window.__settings.videoInk = "#808080";`;
+  const laptop = SIZES.find((x) => !x.touch) || SIZES[0];
+  const maker = await browser.newPage();
+  const HALF = await maker.evaluate(() => { const c = document.createElement("canvas"); c.width = 100; c.height = 100; const g = c.getContext("2d"); g.fillStyle = "#ffffff"; g.fillRect(0, 0, 50, 100); return c.toDataURL("image/png"); });
+  await maker.close();
+  const shot = async (rv, extra = {}) => {
+    const own = [{ id: "u1", name: "Held", kind: "any", secs: 3, delay: 0, ease: [0, 0, 1, 1], inT: { keys: [], mask: Object.assign({ type: "own", own: rv.id, angle: 0, feather: 0, from: 100, to: 100, size: 25 }, extra) }, outT: { keys: [], mask: { type: "none", angle: 0, feather: 0 } }, overlap: 1, stagger: 0, anchor: "center", reveal: "" }];
+    const o = await open(THEMES[0], laptop, 1, PLAIN + `window.__settings.videoReveals = ${JSON.stringify([rv])}; window.__stickers = ${JSON.stringify({ [rv.id]: HALF })}; window.__settings.videoAnimsOwn = ${JSON.stringify(own)}; window.__settings.videoAnims = { open: { id: "u1", secs: 3, delay: 0 } };`);
+    await openWs(o.page);
+    await o.page.waitForTimeout(700);
+    const f = await o.page.evaluate(async () => {
+      const r = document.querySelector("[data-af-scrub] input");
+      r.step = "any"; r.value = "1.5"; r.dispatchEvent(new Event("input", { bubbles: true }));
+      await new Promise((x) => setTimeout(x, 160));
+      await new Promise((x) => requestAnimationFrame(() => requestAnimationFrame(x)));
+      const c = document.querySelector("[data-af-videopreview]");
+      const d = c.getContext("2d").getImageData(0, 0, c.width, c.height).data;
+      const at = (fx, fy) => d[(Math.round(fy * (c.height - 1)) * c.width + Math.round(fx * (c.width - 1))) * 4];
+      let lit = 0, n = 0;
+      for (let i = 0; i < d.length; i += 64) { n++; if (d[i] > 60) lit++; }
+      return { at: { mid: at(0.5, 0.5), top: at(0.5, 0.1), left: at(0.2, 0.5), l40: at(0.4, 0.5), r60: at(0.6, 0.5) }, share: lit / n };
+    });
+    await o.context.close();
+    return f;
+  };
+  const tri = await shot({ id: "rtri", name: "Triangle", kind: "draw", pts: [{ x: 0, y: -0.8 }, { x: 0.8, y: 0.7 }, { x: -0.8, y: 0.7 }], text: "", font: "", by: "alpha" });
+  check(tri.at.mid > 100 && tri.at.top < 20 && tri.at.left < 20, "a drawn triangle shows the layer only inside the triangle (" + JSON.stringify(tri.at) + ")");
+  const pic = await shot({ id: "rpic", name: "Half", kind: "picture", pts: [], text: "", font: "", by: "alpha" });
+  check(pic.at.l40 > 100 && pic.at.r60 < 20 && pic.at.left < 20, "a picture reveal shows through its solid half and not its see-through half (" + JSON.stringify(pic.at) + ")");
+  const txt = await shot({ id: "rtxt", name: "Words", kind: "text", pts: [], text: "HI", font: "clean", by: "alpha" });
+  const inv = await shot({ id: "rtxt", name: "Words", kind: "text", pts: [], text: "HI", font: "clean", by: "alpha" }, { invert: true });
+  check(txt.share > 0.005 && txt.share < 0.2 && inv.share > 0.8, "a text reveal shows the layer only inside the letters, and the other way round shows all but them (" + [txt.share, inv.share].map((x) => x.toFixed(3)).join(", ") + ")");
+  for (const size of SIZES) {
+    const { context, page, errors } = await open(THEMES[0], size, 1, PLAIN);
+    await openWs(page);
+    await wsSec(page, "Animations");
+    await page.waitForTimeout(300);
+    const press = async (sel) => {
+      await page.evaluate((sel) => document.querySelector(sel).scrollIntoView({ block: "center" }), sel);
+      await page.waitForTimeout(60);
+      await page.click(sel);
+      await page.waitForTimeout(250);
+    };
+    await press("[data-af-animmake]");
+    await press('[data-af-animside="in"] [data-af-effect="shape"]');
+    await press('[data-af-revealnew="draw"]');
+    const penOn = await page.evaluate(() => !!document.querySelector("[data-af-pen]"));
+    check(penOn, size.name + ": Draw your own puts the pen over the preview");
+    await page.evaluate(() => document.querySelector("[data-af-pen]").scrollIntoView({ block: "center" }));
+    await page.waitForTimeout(150);
+    const bx = await page.locator("[data-af-pen]").boundingBox();
+    const tap = async (fx, fy) => {
+      if (size.touch) await page.touchscreen.tap(bx.x + bx.width * fx, bx.y + bx.height * fy);
+      else await page.mouse.click(bx.x + bx.width * fx, bx.y + bx.height * fy);
+      await page.waitForTimeout(120);
+    };
+    await tap(0.5, 0.15);
+    await tap(0.72, 0.8);
+    await tap(0.28, 0.8);
+    await tap(0.5, 0.15);
+    const pts = await page.evaluate(() => window.__settings.videoReveals[0].pts.length);
+    check(pts === 3, size.name + ": three taps make three points, and a tap on the first closes the shape (" + pts + ")");
+    // Drag the second point, then bend the first line.
+    const drag = async (x0, y0, x1, y1) => {
+      await page.mouse.move(bx.x + bx.width * x0, bx.y + bx.height * y0);
+      await page.mouse.down();
+      for (let k = 1; k <= 5; k++) await page.mouse.move(bx.x + bx.width * (x0 + ((x1 - x0) * k) / 5), bx.y + bx.height * (y0 + ((y1 - y0) * k) / 5));
+      await page.mouse.up();
+      await page.waitForTimeout(150);
+    };
+    const was = await page.evaluate(() => JSON.stringify(window.__settings.videoReveals[0].pts[1]));
+    await drag(0.72, 0.8, 0.8, 0.7);
+    const moved = await page.evaluate(() => JSON.stringify(window.__settings.videoReveals[0].pts[1]));
+    check(moved !== was, size.name + ": dragging a point moves it");
+    await drag(0.5, 0.8, 0.5, 0.95);
+    const bent = await page.evaluate(() => window.__settings.videoReveals[0].pts.some((q) => q.bx != null));
+    check(bent, size.name + ": dragging the square in a line bends it into a curve");
+    await press("[data-af-penundo]");
+    check((await page.evaluate(() => window.__settings.videoReveals[0].pts.length)) === 2, size.name + ": Undo a point takes the last one out");
+    const m = await page.evaluate(MEASURE, size.touch);
+    check(!m.overflow.length && !m.small.length, size.name + ": the reveal editor fits. " + m.overflow.concat(m.small).slice(0, 2).join("; "));
+    // Text and a picture.
+    await press('[data-af-revealnew="text"]');
+    await page.fill("[data-af-revealtext]", "Ok");
+    await page.waitForTimeout(500);
+    check(await page.evaluate(() => window.__settings.videoReveals.some((r) => r.kind === "text" && r.text === "Ok")), size.name + ": a text reveal keeps its words");
+    await page.evaluate((url) => (window.__pickPic = { url, name: "half.png" }), HALF);
+    await press('[data-af-revealnew="picture"]');
+    await press("[data-af-revealpic]");
+    await page.waitForTimeout(600);
+    const keptPic = await page.evaluate(() => { const r = window.__settings.videoReveals.find((x) => x.kind === "picture"); return !!(r && (window.__stickers || {})[r.id]); });
+    check(keptPic, size.name + ": a picture reveal keeps its picture on the account");
+    await page.evaluate(() => (window.__asked = 0));
+    await press('[data-af-revealact="delete"]');
+    await page.waitForTimeout(600);
+    check(await page.evaluate(() => window.__asked === 1 && !window.__settings.videoReveals.some((x) => x.kind === "picture")), size.name + ": Delete asks first, then takes the reveal out");
+    check(!errors.length, size.name + ": no page errors. " + errors.slice(0, 2).join(" | "));
     await context.close();
   }
 }
