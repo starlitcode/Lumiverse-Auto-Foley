@@ -1630,6 +1630,10 @@ html[data-af-still] .af-ws-sec.af-ws-in, .af-ws[data-af-still] .af-ws-sec.af-ws-
 @media (prefers-reduced-motion: reduce) { .af-ws-sec.af-ws-in { animation: none; } }
 .af-ws-h { margin: 0; font-size: 15px; font-weight: 650; color: var(--af-text); }
 .af-tpl-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+.af-tpl-cats { gap: 6px; }
+.af-tpl-cat { min-height: 32px; padding: 4px 12px; border-radius: 999px; border: 1px solid var(--af-line); background: transparent; color: var(--af-text); font: inherit; font-size: 13px; cursor: pointer; white-space: normal; }
+.af-tpl-cat[aria-pressed="true"] { background: var(--af-accent-soft, rgba(147,112,219,.18)); border-color: var(--af-accent, #9370db); font-weight: 600; }
+@media (hover: hover) { .af-tpl-cat:hover { border-color: var(--af-line-hover); } }
 .af-tpl { display: flex; flex-direction: column; gap: 4px; min-width: 0; padding: 6px; border: 1px solid var(--af-line); border-radius: var(--af-r-md); background: var(--af-fill-subtle); color: var(--af-text); font: inherit; text-align: left; cursor: pointer; }
 .af-tpl[aria-pressed="true"] { border-color: var(--af-accent); box-shadow: 0 0 0 1px var(--af-accent); }
 .af-tpl-pic { display: block; aspect-ratio: 16 / 9; border-radius: var(--af-r-sm); overflow: hidden; background: #0b0a0f; }
@@ -15403,7 +15407,16 @@ export function setup(ctx: Ctx, overrides?: any) {
   // the reader's own: the line under the title, watermarks, pictures, fonts
   // they added, the title's words or notes. A template that is meant to be
   // plain stays plain.
-  type Template = { id: string; name: string; suits: string; look: Record<string, any>; back: VideoBack };
+  type Template = { id: string; name: string; suits: string; look: Record<string, any>; back: VideoBack; cat: string };
+  // The groups the templates are listed in, each picked with a chip.
+  const TEMPLATE_CATS = [
+    { id: 'all', label: 'All' },
+    { id: 'moods', label: 'Moods' },
+    { id: 'scenes', label: 'Scenes' },
+    { id: 'styles', label: 'Styles' },
+    { id: 'colors', label: 'Colors' },
+  ];
+  let tplCat = 'all';
   const shape = (kind: VideoShapeDef['kind'], x: number, y: number, w: number, h: number, fill: string, more: Partial<VideoShapeDef> = {}): VideoShapeDef =>
     Object.assign({ id: 'tp' + kind + Math.round(x * 100) + Math.round(y * 100) + w, kind, x, y, w, h, rot: 0, fill, grad: 'none', stops: [], dir: 'down', clear: 0, text: '' }, more) as VideoShapeDef;
   const backOf = (name: string, more: Partial<VideoBack>): VideoBack =>
@@ -15433,6 +15446,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         studioMusic: true,
       },
       back: DEFAULTS.videoBacks[0] as VideoBack,
+      cat: 'styles',
     },
     {
       id: 'plain',
@@ -15457,6 +15471,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         studioMusic: false,
       },
       back: backOf('Plain text', { color: '#141416' }),
+      cat: 'styles',
     },
     {
       id: 'paper',
@@ -15488,6 +15503,7 @@ export function setup(ctx: Ctx, overrides?: any) {
           shape('ellipse', 0.5, 0.94, 18, 18, '#8a6a40', { clear: 20 }),
         ],
       }),
+      cat: 'styles',
     },
     {
       id: 'film',
@@ -15515,6 +15531,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         kind: 'design', color: '#1c1f22', fill: 'linear', stops: ['#0f1113'], dir: 'down',
         shapes: [shape('rect', 0.5, 0.055, 2400, 125, '#000000'), shape('rect', 0.5, 0.945, 2400, 125, '#000000')],
       }),
+      cat: 'styles',
     },
     {
       id: 'neon',
@@ -15550,6 +15567,7 @@ export function setup(ctx: Ctx, overrides?: any) {
           shape('rect', 0.5, 0.995, 2400, 2, '#ff2e88', { clear: 65 }),
         ],
       }),
+      cat: 'styles',
     },
     {
       id: 'blush',
@@ -15577,6 +15595,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         kind: 'design', color: '#fbeee8', fill: 'solid',
         shapes: [shape('rect', 0.5, 0.16, 560, 2, '#c25b7d', { clear: 20 }), shape('rect', 0.5, 0.84, 560, 2, '#c25b7d', { clear: 20 }), shape('ellipse', 0.5, 0.16, 10, 10, '#c25b7d'), shape('ellipse', 0.5, 0.84, 10, 10, '#c25b7d')],
       }),
+      cat: 'moods',
     },
     {
       id: 'cold',
@@ -15601,6 +15620,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         studioMusic: true,
       },
       back: backOf('Horror', { color: '#161b1c', fill: 'linear', stops: ['#040505'], dir: 'down' }),
+      cat: 'moods',
     },
     {
       id: 'comic',
@@ -15628,6 +15648,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         kind: 'design', color: '#ffd84a', fill: 'solid',
         shapes: [shape('ellipse', 0.1, 0.18, 420, 420, '#ff6f61'), shape('ellipse', 0.92, 0.85, 520, 520, '#2ec4b6'), shape('round', 0.5, 0.5, 1500, 560, '#fffbea', { clear: 10 })],
       }),
+      cat: 'styles',
     },
     {
       id: 'typewriter',
@@ -15662,6 +15683,7 @@ export function setup(ctx: Ctx, overrides?: any) {
           shape('rect', 0.09, 0.5, 3, 2400, '#d0605e', { clear: 25 }),
         ],
       }),
+      cat: 'styles',
     },
     {
       id: 'lamp',
@@ -15686,6 +15708,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         studioMusic: true,
       },
       back: backOf('By the fire', { color: '#5a3214', fill: 'radial', stops: ['#120903'] }),
+      cat: 'scenes',
     },
     {
       id: 'dream',
@@ -15730,6 +15753,7 @@ export function setup(ctx: Ctx, overrides?: any) {
           shape('ellipse', 0.78, 0.84, 6, 6, '#ffffff', { clear: 25 }),
         ],
       }),
+      cat: 'moods',
     },
     {
       id: 'code',
@@ -15785,6 +15809,7 @@ export function setup(ctx: Ctx, overrides?: any) {
           shape('rect', 0.09, 0.93, 22, 40, '#4dff7c', { clear: 15 }),
         ],
       }),
+      cat: 'scenes',
     },
     {
       id: 'dialogue',
@@ -15809,6 +15834,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         studioMusic: true,
       },
       back: backOf('Dialogue box', { color: '#3d4a6b', fill: 'linear', stops: ['#1c2238'], dir: 'down' }),
+      cat: 'scenes',
     },
     {
       id: 'rain',
@@ -15860,6 +15886,7 @@ export function setup(ctx: Ctx, overrides?: any) {
           shape('rect', 0.47, 0.92, 3, 100, '#d6e2ec', { clear: 72 }),
         ],
       }),
+      cat: 'scenes',
     },
     {
       id: 'sepia',
@@ -15898,6 +15925,7 @@ export function setup(ctx: Ctx, overrides?: any) {
           shape('ellipse', 0.14, 0.45, 7, 7, '#2a1d10', { clear: 55 }),
         ],
       }),
+      cat: 'styles',
     },
     {
       id: 'radio',
@@ -15939,6 +15967,7 @@ export function setup(ctx: Ctx, overrides?: any) {
           shape('rect', 0.6, 0.86, 18, 60, '#e0a030', { clear: 15 }),
         ],
       }),
+      cat: 'scenes',
     },
     {
       id: 'night',
@@ -15975,6 +16004,207 @@ export function setup(ctx: Ctx, overrides?: any) {
           shape('ellipse', 0.64, 0.06, 80, 80, '#ff7a6b', { clear: 88 }),
         ],
       }),
+      cat: 'moods',
+    },
+    {
+      id: 'red',
+      name: 'Red',
+      suits: 'A simple look in red.',
+      look: {
+        videoFont: 'clean', videoSize: 104, videoInk: '#fff1ef', videoWords: 'fade', videoPlace: 'middle', videoQuotes: true, videoWordFill: 'solid',
+        videoWordStops: ['#f2b880'], videoWordDir: 'down', videoWordShadow: true, videoWordShadowInk: '', videoWordShadowDark: 55,
+        videoWordShadowSoft: 14, videoWordShadowFar: 2,
+        videoBox: false, videoBoxColor: '#000000', videoBoxClear: 40, videoBoxRound: 16, videoBoxWidth: 'fit',
+        videoOwnColors: true, videoKindColors: { narrator: '#ff6b6b', character: '#ff6b6b', persona: '#ff6b6b', npc: '#ff6b6b' },
+        videoCaptions: true, videoCaptionInk: '#ff6b6b', videoCapFill: 'solid', videoCapStops: ['#f2b880'], videoCapDir: 'right',
+        videoNameFont: 'clean', videoNameSize: 100, videoNameColor: 'kind', videoNameFill: 'solid', videoNameStops: ['#f2b880'],
+        videoNameDir: 'right', videoNameShadow: true, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18,
+        videoNameShadowFar: 2,
+        videoPicShape: 'circle', videoPicSize: 150, videoPicRing: true, videoPicRingWidth: 3, videoPicMove: true, videoTwo: true,
+        videoMoodPics: true,
+        videoEdges: 30, videoEdgeColor: '#000000', videoMove: 'fade', videoMoveSecs: 0.5,
+        videoTitleOn: true, videoFadeOut: 1.5, videoBylineInk: '#ff6b6b', videoBylineFont: '', videoBylineFill: 'solid',
+        videoBylineStops: ['#f2b880'], videoBylineDir: 'right', videoBylineShadow: true, videoBylineShadowInk: '', videoBylineShadowDark: 65,
+        videoBylineShadowSoft: 18, videoBylineShadowFar: 0,
+        studioMusic: true,
+      },
+      back: backOf('Red', { color: '#6b1520', fill: 'radial', stops: ['#2a070c'] }),
+      cat: 'colors',
+    },
+    {
+      id: 'orange',
+      name: 'Orange',
+      suits: 'A simple look in orange.',
+      look: {
+        videoFont: 'clean', videoSize: 104, videoInk: '#fff4ea', videoWords: 'fade', videoPlace: 'middle', videoQuotes: true, videoWordFill: 'solid',
+        videoWordStops: ['#f2b880'], videoWordDir: 'down', videoWordShadow: true, videoWordShadowInk: '', videoWordShadowDark: 55,
+        videoWordShadowSoft: 14, videoWordShadowFar: 2,
+        videoBox: false, videoBoxColor: '#000000', videoBoxClear: 40, videoBoxRound: 16, videoBoxWidth: 'fit',
+        videoOwnColors: true, videoKindColors: { narrator: '#ffa25c', character: '#ffa25c', persona: '#ffa25c', npc: '#ffa25c' },
+        videoCaptions: true, videoCaptionInk: '#ffa25c', videoCapFill: 'solid', videoCapStops: ['#f2b880'], videoCapDir: 'right',
+        videoNameFont: 'clean', videoNameSize: 100, videoNameColor: 'kind', videoNameFill: 'solid', videoNameStops: ['#f2b880'],
+        videoNameDir: 'right', videoNameShadow: true, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18,
+        videoNameShadowFar: 2,
+        videoPicShape: 'circle', videoPicSize: 150, videoPicRing: true, videoPicRingWidth: 3, videoPicMove: true, videoTwo: true,
+        videoMoodPics: true,
+        videoEdges: 30, videoEdgeColor: '#000000', videoMove: 'fade', videoMoveSecs: 0.5,
+        videoTitleOn: true, videoFadeOut: 1.5, videoBylineInk: '#ffa25c', videoBylineFont: '', videoBylineFill: 'solid',
+        videoBylineStops: ['#f2b880'], videoBylineDir: 'right', videoBylineShadow: true, videoBylineShadowInk: '', videoBylineShadowDark: 65,
+        videoBylineShadowSoft: 18, videoBylineShadowFar: 0,
+        studioMusic: true,
+      },
+      back: backOf('Orange', { color: '#7a3410', fill: 'radial', stops: ['#2e1305'] }),
+      cat: 'colors',
+    },
+    {
+      id: 'yellow',
+      name: 'Yellow',
+      suits: 'A simple look in yellow.',
+      look: {
+        videoFont: 'clean', videoSize: 104, videoInk: '#fffbe6', videoWords: 'fade', videoPlace: 'middle', videoQuotes: true, videoWordFill: 'solid',
+        videoWordStops: ['#f2b880'], videoWordDir: 'down', videoWordShadow: true, videoWordShadowInk: '', videoWordShadowDark: 55,
+        videoWordShadowSoft: 14, videoWordShadowFar: 2,
+        videoBox: false, videoBoxColor: '#000000', videoBoxClear: 40, videoBoxRound: 16, videoBoxWidth: 'fit',
+        videoOwnColors: true, videoKindColors: { narrator: '#ffd84a', character: '#ffd84a', persona: '#ffd84a', npc: '#ffd84a' },
+        videoCaptions: true, videoCaptionInk: '#ffd84a', videoCapFill: 'solid', videoCapStops: ['#f2b880'], videoCapDir: 'right',
+        videoNameFont: 'clean', videoNameSize: 100, videoNameColor: 'kind', videoNameFill: 'solid', videoNameStops: ['#f2b880'],
+        videoNameDir: 'right', videoNameShadow: true, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18,
+        videoNameShadowFar: 2,
+        videoPicShape: 'circle', videoPicSize: 150, videoPicRing: true, videoPicRingWidth: 3, videoPicMove: true, videoTwo: true,
+        videoMoodPics: true,
+        videoEdges: 30, videoEdgeColor: '#000000', videoMove: 'fade', videoMoveSecs: 0.5,
+        videoTitleOn: true, videoFadeOut: 1.5, videoBylineInk: '#ffd84a', videoBylineFont: '', videoBylineFill: 'solid',
+        videoBylineStops: ['#f2b880'], videoBylineDir: 'right', videoBylineShadow: true, videoBylineShadowInk: '', videoBylineShadowDark: 65,
+        videoBylineShadowSoft: 18, videoBylineShadowFar: 0,
+        studioMusic: true,
+      },
+      back: backOf('Yellow', { color: '#5c4a08', fill: 'radial', stops: ['#221b02'] }),
+      cat: 'colors',
+    },
+    {
+      id: 'green',
+      name: 'Green',
+      suits: 'A simple look in green.',
+      look: {
+        videoFont: 'clean', videoSize: 104, videoInk: '#effff4', videoWords: 'fade', videoPlace: 'middle', videoQuotes: true, videoWordFill: 'solid',
+        videoWordStops: ['#f2b880'], videoWordDir: 'down', videoWordShadow: true, videoWordShadowInk: '', videoWordShadowDark: 55,
+        videoWordShadowSoft: 14, videoWordShadowFar: 2,
+        videoBox: false, videoBoxColor: '#000000', videoBoxClear: 40, videoBoxRound: 16, videoBoxWidth: 'fit',
+        videoOwnColors: true, videoKindColors: { narrator: '#5ee08a', character: '#5ee08a', persona: '#5ee08a', npc: '#5ee08a' },
+        videoCaptions: true, videoCaptionInk: '#5ee08a', videoCapFill: 'solid', videoCapStops: ['#f2b880'], videoCapDir: 'right',
+        videoNameFont: 'clean', videoNameSize: 100, videoNameColor: 'kind', videoNameFill: 'solid', videoNameStops: ['#f2b880'],
+        videoNameDir: 'right', videoNameShadow: true, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18,
+        videoNameShadowFar: 2,
+        videoPicShape: 'circle', videoPicSize: 150, videoPicRing: true, videoPicRingWidth: 3, videoPicMove: true, videoTwo: true,
+        videoMoodPics: true,
+        videoEdges: 30, videoEdgeColor: '#000000', videoMove: 'fade', videoMoveSecs: 0.5,
+        videoTitleOn: true, videoFadeOut: 1.5, videoBylineInk: '#5ee08a', videoBylineFont: '', videoBylineFill: 'solid',
+        videoBylineStops: ['#f2b880'], videoBylineDir: 'right', videoBylineShadow: true, videoBylineShadowInk: '', videoBylineShadowDark: 65,
+        videoBylineShadowSoft: 18, videoBylineShadowFar: 0,
+        studioMusic: true,
+      },
+      back: backOf('Green', { color: '#14532d', fill: 'radial', stops: ['#06210f'] }),
+      cat: 'colors',
+    },
+    {
+      id: 'blue',
+      name: 'Blue',
+      suits: 'A simple look in blue.',
+      look: {
+        videoFont: 'clean', videoSize: 104, videoInk: '#eef5ff', videoWords: 'fade', videoPlace: 'middle', videoQuotes: true, videoWordFill: 'solid',
+        videoWordStops: ['#f2b880'], videoWordDir: 'down', videoWordShadow: true, videoWordShadowInk: '', videoWordShadowDark: 55,
+        videoWordShadowSoft: 14, videoWordShadowFar: 2,
+        videoBox: false, videoBoxColor: '#000000', videoBoxClear: 40, videoBoxRound: 16, videoBoxWidth: 'fit',
+        videoOwnColors: true, videoKindColors: { narrator: '#6aa8ff', character: '#6aa8ff', persona: '#6aa8ff', npc: '#6aa8ff' },
+        videoCaptions: true, videoCaptionInk: '#6aa8ff', videoCapFill: 'solid', videoCapStops: ['#f2b880'], videoCapDir: 'right',
+        videoNameFont: 'clean', videoNameSize: 100, videoNameColor: 'kind', videoNameFill: 'solid', videoNameStops: ['#f2b880'],
+        videoNameDir: 'right', videoNameShadow: true, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18,
+        videoNameShadowFar: 2,
+        videoPicShape: 'circle', videoPicSize: 150, videoPicRing: true, videoPicRingWidth: 3, videoPicMove: true, videoTwo: true,
+        videoMoodPics: true,
+        videoEdges: 30, videoEdgeColor: '#000000', videoMove: 'fade', videoMoveSecs: 0.5,
+        videoTitleOn: true, videoFadeOut: 1.5, videoBylineInk: '#6aa8ff', videoBylineFont: '', videoBylineFill: 'solid',
+        videoBylineStops: ['#f2b880'], videoBylineDir: 'right', videoBylineShadow: true, videoBylineShadowInk: '', videoBylineShadowDark: 65,
+        videoBylineShadowSoft: 18, videoBylineShadowFar: 0,
+        studioMusic: true,
+      },
+      back: backOf('Blue', { color: '#16407a', fill: 'radial', stops: ['#07192e'] }),
+      cat: 'colors',
+    },
+    {
+      id: 'indigo',
+      name: 'Indigo',
+      suits: 'A simple look in indigo.',
+      look: {
+        videoFont: 'clean', videoSize: 104, videoInk: '#f1f0ff', videoWords: 'fade', videoPlace: 'middle', videoQuotes: true, videoWordFill: 'solid',
+        videoWordStops: ['#f2b880'], videoWordDir: 'down', videoWordShadow: true, videoWordShadowInk: '', videoWordShadowDark: 55,
+        videoWordShadowSoft: 14, videoWordShadowFar: 2,
+        videoBox: false, videoBoxColor: '#000000', videoBoxClear: 40, videoBoxRound: 16, videoBoxWidth: 'fit',
+        videoOwnColors: true, videoKindColors: { narrator: '#9a97ff', character: '#9a97ff', persona: '#9a97ff', npc: '#9a97ff' },
+        videoCaptions: true, videoCaptionInk: '#9a97ff', videoCapFill: 'solid', videoCapStops: ['#f2b880'], videoCapDir: 'right',
+        videoNameFont: 'clean', videoNameSize: 100, videoNameColor: 'kind', videoNameFill: 'solid', videoNameStops: ['#f2b880'],
+        videoNameDir: 'right', videoNameShadow: true, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18,
+        videoNameShadowFar: 2,
+        videoPicShape: 'circle', videoPicSize: 150, videoPicRing: true, videoPicRingWidth: 3, videoPicMove: true, videoTwo: true,
+        videoMoodPics: true,
+        videoEdges: 30, videoEdgeColor: '#000000', videoMove: 'fade', videoMoveSecs: 0.5,
+        videoTitleOn: true, videoFadeOut: 1.5, videoBylineInk: '#9a97ff', videoBylineFont: '', videoBylineFill: 'solid',
+        videoBylineStops: ['#f2b880'], videoBylineDir: 'right', videoBylineShadow: true, videoBylineShadowInk: '', videoBylineShadowDark: 65,
+        videoBylineShadowSoft: 18, videoBylineShadowFar: 0,
+        studioMusic: true,
+      },
+      back: backOf('Indigo', { color: '#2c2a7a', fill: 'radial', stops: ['#100f2e'] }),
+      cat: 'colors',
+    },
+    {
+      id: 'violet',
+      name: 'Violet',
+      suits: 'A simple look in violet.',
+      look: {
+        videoFont: 'clean', videoSize: 104, videoInk: '#f7efff', videoWords: 'fade', videoPlace: 'middle', videoQuotes: true, videoWordFill: 'solid',
+        videoWordStops: ['#f2b880'], videoWordDir: 'down', videoWordShadow: true, videoWordShadowInk: '', videoWordShadowDark: 55,
+        videoWordShadowSoft: 14, videoWordShadowFar: 2,
+        videoBox: false, videoBoxColor: '#000000', videoBoxClear: 40, videoBoxRound: 16, videoBoxWidth: 'fit',
+        videoOwnColors: true, videoKindColors: { narrator: '#c18bff', character: '#c18bff', persona: '#c18bff', npc: '#c18bff' },
+        videoCaptions: true, videoCaptionInk: '#c18bff', videoCapFill: 'solid', videoCapStops: ['#f2b880'], videoCapDir: 'right',
+        videoNameFont: 'clean', videoNameSize: 100, videoNameColor: 'kind', videoNameFill: 'solid', videoNameStops: ['#f2b880'],
+        videoNameDir: 'right', videoNameShadow: true, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18,
+        videoNameShadowFar: 2,
+        videoPicShape: 'circle', videoPicSize: 150, videoPicRing: true, videoPicRingWidth: 3, videoPicMove: true, videoTwo: true,
+        videoMoodPics: true,
+        videoEdges: 30, videoEdgeColor: '#000000', videoMove: 'fade', videoMoveSecs: 0.5,
+        videoTitleOn: true, videoFadeOut: 1.5, videoBylineInk: '#c18bff', videoBylineFont: '', videoBylineFill: 'solid',
+        videoBylineStops: ['#f2b880'], videoBylineDir: 'right', videoBylineShadow: true, videoBylineShadowInk: '', videoBylineShadowDark: 65,
+        videoBylineShadowSoft: 18, videoBylineShadowFar: 0,
+        studioMusic: true,
+      },
+      back: backOf('Violet', { color: '#4c1d7a', fill: 'radial', stops: ['#1d0b2e'] }),
+      cat: 'colors',
+    },
+    {
+      id: 'pink',
+      name: 'Pink',
+      suits: 'A simple look in pink.',
+      look: {
+        videoFont: 'clean', videoSize: 104, videoInk: '#fff0f8', videoWords: 'fade', videoPlace: 'middle', videoQuotes: true, videoWordFill: 'solid',
+        videoWordStops: ['#f2b880'], videoWordDir: 'down', videoWordShadow: true, videoWordShadowInk: '', videoWordShadowDark: 55,
+        videoWordShadowSoft: 14, videoWordShadowFar: 2,
+        videoBox: false, videoBoxColor: '#000000', videoBoxClear: 40, videoBoxRound: 16, videoBoxWidth: 'fit',
+        videoOwnColors: true, videoKindColors: { narrator: '#ff8ccf', character: '#ff8ccf', persona: '#ff8ccf', npc: '#ff8ccf' },
+        videoCaptions: true, videoCaptionInk: '#ff8ccf', videoCapFill: 'solid', videoCapStops: ['#f2b880'], videoCapDir: 'right',
+        videoNameFont: 'clean', videoNameSize: 100, videoNameColor: 'kind', videoNameFill: 'solid', videoNameStops: ['#f2b880'],
+        videoNameDir: 'right', videoNameShadow: true, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18,
+        videoNameShadowFar: 2,
+        videoPicShape: 'circle', videoPicSize: 150, videoPicRing: true, videoPicRingWidth: 3, videoPicMove: true, videoTwo: true,
+        videoMoodPics: true,
+        videoEdges: 30, videoEdgeColor: '#000000', videoMove: 'fade', videoMoveSecs: 0.5,
+        videoTitleOn: true, videoFadeOut: 1.5, videoBylineInk: '#ff8ccf', videoBylineFont: '', videoBylineFill: 'solid',
+        videoBylineStops: ['#f2b880'], videoBylineDir: 'right', videoBylineShadow: true, videoBylineShadowInk: '', videoBylineShadowDark: 65,
+        videoBylineShadowSoft: 18, videoBylineShadowFar: 0,
+        studioMusic: true,
+      },
+      back: backOf('Pink', { color: '#7a1f55', fill: 'radial', stops: ['#2e0b20'] }),
+      cat: 'colors',
     },
   ];
   // Every setting that changes the drawn frame, and music on or off. The
@@ -16145,8 +16375,43 @@ export function setup(ctx: Ctx, overrides?: any) {
   }
   function drawTemplates(box: HTMLElement) {
     box.appendChild(hint('Each one sets the whole look. Your line under the title, watermarks, pictures and fonts stay. Press one to try it on the preview.'));
-    if (S.templatesSeen && S.templatesSeen !== TEMPLATES_MARK) box.appendChild(notice('warn', 'The built-in templates changed in this update. A template you used before may look a little different if you use it again.'));
+    // Said only to someone who used a template before. Got it keeps it away,
+    // on the account.
+    if (S.templatesSeen && S.templatesSeen !== TEMPLATES_MARK) {
+      const row = el('<div class="af-row"></div>');
+      const n = noticeWithButtons('warn', 'The built-in templates changed in this update. A template you used before may look a little different if you use it again.', row);
+      n.setAttribute('data-af-tplmoved', '');
+      const wrap = el('<div class="af-sub"><div class="af-col af-under"></div></div>');
+      (wrap.firstElementChild as HTMLElement).appendChild(n);
+      row.appendChild(
+        button('Got it', () => {
+          set({ templatesSeen: TEMPLATES_MARK });
+          reveal(wrap, false);
+        }),
+      );
+      box.appendChild(wrap);
+    }
+    // A chip for each group, All first, so the grid is never one long list.
+    const chips = el('<div class="af-row af-wrap af-tpl-cats" role="group" aria-label="Groups of templates" data-af-tplcats></div>');
     const grid = el('<div class="af-tpl-grid" data-af-templates></div>');
+    const filter = () => {
+      for (const b of Array.from(chips.querySelectorAll('[data-af-tplcat]'))) b.setAttribute('aria-pressed', b.getAttribute('data-af-tplcat') === tplCat ? 'true' : 'false');
+      for (const t of TEMPLATES) {
+        const tile = grid.querySelector('[data-af-tpl="' + t.id + '"]') as HTMLElement | null;
+        if (tile) tile.hidden = tplCat !== 'all' && t.cat !== tplCat;
+      }
+    };
+    for (const c of TEMPLATE_CATS) {
+      const chip = el('<button type="button" class="af-tpl-cat" aria-pressed="false"></button>') as HTMLButtonElement;
+      chip.textContent = c.label;
+      chip.setAttribute('data-af-tplcat', c.id);
+      chip.addEventListener('click', () => {
+        tplCat = c.id;
+        filter();
+      });
+      chips.appendChild(chip);
+    }
+    box.appendChild(chips);
     const said = el('<p class="af-note" role="status" data-af-tplsaid></p>');
     const acts = el('<div class="af-row af-wrap" data-af-tplacts></div>');
     const use = button('Use this template', () => void useTemplate(box), 'af-primary');
@@ -16178,6 +16443,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     box.appendChild(grid);
     box.appendChild(said);
     box.appendChild(acts);
+    filter();
     paint();
     // Drawn one after another, so the preview is not held up.
     void (async () => {

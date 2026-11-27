@@ -5649,7 +5649,7 @@ if (section("templates")) {
     await wsSec(page, "Templates");
     await page.waitForFunction(() => [...document.querySelectorAll("[data-af-tpl] img")].every((i) => i.getAttribute("src")), null, { timeout: 30000 }).catch(() => {});
     const thumbs = await page.evaluate(() => [...document.querySelectorAll("[data-af-tpl] img")].map((i) => i.getAttribute("src") || ""));
-    check(thumbs.length >= 8 && thumbs.length <= 17 && thumbs.every(Boolean), size.name + ": there are 8 to 17 templates, each with a picture drawn (" + thumbs.length + ")");
+    check(thumbs.length >= 8 && thumbs.length <= 26 && thumbs.every(Boolean), size.name + ": there are 8 to 26 templates, each with a picture drawn (" + thumbs.length + ")");
     check(new Set(thumbs).size === thumbs.length, size.name + ": no two pictures are the same");
     // Each one tried on the preview, at the same moment: readable words.
     const ids = await page.evaluate(() => [...document.querySelectorAll("[data-af-tpl]")].map((b) => b.getAttribute("data-af-tpl")));
@@ -6482,6 +6482,61 @@ if (section("video colors")) {
     check(personRed > 0 && personGreen === 0, size.name + ": a person's own video color wins over their kind's (" + personRed + " red, " + personGreen + " green)");
     check(kept === "#ff0000" && rows.kinds === 4 && rows.person, size.name + ": it is kept by their id, and Speakers lists the four kinds and the person");
     check(!m.overflow.length && !m.small.length, size.name + ": Speakers fits. " + m.overflow.concat(m.small).slice(0, 2).join("; "));
+  }
+}
+
+if (section("template groups")) {
+  console.log("Templates are grouped, and a chip for each group filters the grid");
+  for (const size of SIZES) {
+    const { context, page, errors } = await open(THEMES[0], size);
+    await openWs(page);
+    await wsSec(page, "Templates");
+    await page.waitForTimeout(400);
+    const chips = await page.evaluate(() => [...document.querySelectorAll("[data-af-tplcat]")].map((b) => ({ id: b.getAttribute("data-af-tplcat"), text: b.textContent, h: b.getBoundingClientRect().height, cut: b.scrollWidth > b.clientWidth + 1 })));
+    check(chips.length === 5 && chips[0].id === "all" && chips.every((c) => c.h >= 32 && !c.cut), size.name + ": five chips, All first, each 32 pixels tall or more and not cut (" + chips.map((c) => c.text + " " + Math.round(c.h)).join(", ") + ")");
+    const shown = () => page.evaluate(() => [...document.querySelectorAll("[data-af-tpl]")].filter((b) => !b.hidden).map((b) => b.getAttribute("data-af-tpl")));
+    const all = await shown();
+    const tap = async (id) => { const b = page.locator('[data-af-tplcat="' + id + '"]'); const box = await b.boundingBox(); if (size.touch) await page.touchscreen.tap(box.x + box.width / 2, box.y + box.height / 2); else await b.click(); await page.waitForTimeout(250); };
+    await tap("colors");
+    const colors = await shown();
+    await tap("moods");
+    const moods = await shown();
+    await tap("all");
+    const back = await shown();
+    check(colors.join() === "red,orange,yellow,green,blue,indigo,violet,pink" && moods.length >= 3 && moods.indexOf("red") < 0 && back.length === all.length, size.name + ": Colors shows the eight colors, Moods its own, and All every template (" + [all.length, colors.length, moods.length].join(", ") + ")");
+    const m = await page.evaluate(MEASURE, size.touch);
+    check(!m.overflow.length && !m.small.length, size.name + ": Templates fit. " + m.overflow.concat(m.small).slice(0, 2).join("; "));
+    check(!errors.length, size.name + ": no page errors. " + errors.slice(0, 2).join(" | "));
+    await context.close();
+  }
+}
+
+if (section("templates notice")) {
+  console.log("The notice that the templates changed has Got it, which keeps it away");
+  for (const size of SIZES) {
+    const { context, page, errors } = await open(THEMES[0], size, 1, `window.__settings.templatesSeen = "oldmark";`);
+    await openWs(page);
+    await wsSec(page, "Templates");
+    await page.waitForTimeout(300);
+    const before = !!(await page.$("[data-af-tplmoved]"));
+    await page.locator("[data-af-tplmoved] .af-btn", { hasText: "Got it" }).click();
+    await page.waitForTimeout(700);
+    const gone = await page.evaluate(() => { const n = document.querySelector("[data-af-tplmoved]"); return !n || !n.offsetParent || n.closest("[hidden]") !== null; });
+    const saved = await page.evaluate(() => window.__settings.templatesSeen);
+    await wsSec(page, "Shape and words");
+    await wsSec(page, "Templates");
+    await page.waitForTimeout(300);
+    const again = !!(await page.$("[data-af-tplmoved]"));
+    check(before && gone && saved !== "oldmark" && !again, size.name + ": Got it hides the notice, saves the mark on the account, and it stays away when Templates opens again");
+    await context.close();
+    // After a reload, with the mark the account saved.
+    const r = await open(THEMES[0], size, 1, `window.__settings.templatesSeen = ${JSON.stringify(saved)};`);
+    await openWs(r.page);
+    await wsSec(r.page, "Templates");
+    await r.page.waitForTimeout(300);
+    check(!(await r.page.$("[data-af-tplmoved]")), size.name + ": and after a reload");
+    check(!errors.length && !r.errors.length, size.name + ": no page errors. " + errors.concat(r.errors).slice(0, 2).join(" | "));
+    await r.context.close();
   }
 }
 

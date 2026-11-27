@@ -282,29 +282,47 @@ With no performance in the Studio, the preview shows an example clip, about 25 s
 
 Leaving **Templates** while you try one puts your look back.
 
+The chips above the templates show one group at a time: **All**, **Moods**, **Scenes**, **Styles** and **Colors**.
+
+**Moods**
+
+| Template | What it suits | Transition |
+| --- | --- | --- |
+| **Pink stationery** | Romance and soft, warm scenes. | Dissolve, 0.6 seconds |
+| **Horror, black and gray** | Horror. Slow, with a fade through black between lines. | Through black, 0.9 seconds |
+| **Stars and moon** | Dreams, memories and night scenes. | Soft focus, 0.7 seconds |
+| **After dark** | Intimate and sexual scenes between adults, slow and warm. See [The one thing it does not direct](director.md#the-one-thing-it-does-not-direct). | Dissolve, 0.9 seconds |
+
+**Scenes**
+
+| Template | What it suits | Transition |
+| --- | --- | --- |
+| **Dialogue box** | Roleplay, with the words in a box at the bottom like a story game. | Dissolve, 0.25 seconds |
+| **Terminal** | Hackers, robots and anything that happens on a screen. | Cut, with no movement |
+| **Rain on the window** | Quiet, sad or thoughtful scenes on a gray day. | Fade out, then in, 0.6 seconds |
+| **By the fire** | Quiet talks indoors: kitchens, taverns, a fire at night. | Fade and rise, 0.5 seconds |
+| **On the radio** | Talk shows, phone calls and stories told as a broadcast. | Dissolve, 0.4 seconds |
+
+**Styles**
+
 | Template | What it suits | Transition |
 | --- | --- | --- |
 | **The built-in look** | The look Auto Foley starts with. Quiet and easy to read. | Fade and rise, 0.5 seconds |
 | **Plain text on dark gray** | Words only, for dialogue with nothing around it. | Dissolve, 0.3 seconds |
 | **Storybook page** | Fairy tales and bedtime stories. | Fade and rise, 0.6 seconds |
-| **Film subtitles** | Drama and tense scenes, with the words at the bottom like subtitles. | Dissolve, 0.7 seconds |
-| **Eighties sunset** | Science fiction, city nights and stories set in the 1980s. | Gentle zoom, 0.5 seconds |
-| **Pink stationery** | Romance and soft, warm scenes. | Dissolve, 0.6 seconds |
-| **Horror, black and gray** | Horror. Slow, with a fade through black between lines. | Through black, 0.9 seconds |
-| **Comic panel** | Comedy, games and silly scenes. | Slide across, 0.4 seconds |
 | **Typed on lined paper** | Letters, diaries and mysteries. | Fade out, then in, 0.5 seconds |
-| **By the fire** | Quiet talks indoors: kitchens, taverns, a fire at night. | Fade and rise, 0.5 seconds |
-| **Stars and moon** | Dreams, memories and night scenes. | Soft focus, 0.7 seconds |
-| **Terminal** | Hackers, robots and anything that happens on a screen. | Cut, with no movement |
-| **Dialogue box** | Roleplay, with the words in a box at the bottom like a story game. | Dissolve, 0.25 seconds |
-| **Rain on the window** | Quiet, sad or thoughtful scenes on a gray day. | Fade out, then in, 0.6 seconds |
 | **Sepia film** | Old stories, westerns and memories from long ago. | Through black, 0.8 seconds |
-| **On the radio** | Talk shows, phone calls and stories told as a broadcast. | Dissolve, 0.4 seconds |
-| **After dark** | Intimate and sexual scenes between adults, slow and warm. See [The one thing it does not direct](director.md#the-one-thing-it-does-not-direct). | Dissolve, 0.9 seconds |
+| **Comic panel** | Comedy, games and silly scenes. | Slide across, 0.4 seconds |
+| **Eighties sunset** | Science fiction, city nights and stories set in the 1980s. | Gentle zoom, 0.5 seconds |
+| **Film subtitles** | Drama and tense scenes, with the words at the bottom like subtitles. | Dissolve, 0.7 seconds |
+
+**Colors**
+
+Red, Orange, Yellow, Green, Blue, Indigo, Violet and Pink share one simple layout: a soft gradient of the color, light words, and rings and names in the color. Each uses Fade out, then in, 0.5 seconds.
 
 Each template sets every setting that changes the drawn frame, and **Music** under **The performance**, so nothing is left from the look before. Templates use only built-in transitions. Switching templates fades the preview from one frame to the next over 0.2 seconds, which Reduce motion turns off.
 
-If a later update changes the templates, **Templates** says so.
+If a later update changes the templates, **Templates** says so, to someone who used a template before. **Got it** puts that notice away.
 
 ### Shape and words
 
