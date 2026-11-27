@@ -215,6 +215,32 @@ With no performance in the Studio, the preview shows an example clip, about 25 s
 - With a performance there, **Show in the preview** picks **Your performance** or **Example**.
 - The example is never saved. **Make a video** and the downloads use your performance, and stay off while there is none.
 
+### Templates
+
+**Templates**, a part of the Studio, has built-in looks. Each one sets the whole look: the fonts, colors and fills, shadows, the background or a design of shapes, how the words show, the transition, the pictures and the sizes. Your line under the title, watermarks, pictures, fonts you added, the title's words, notes and the video's shape stay as they are.
+
+1. Press a template. The preview shows it at once.
+2. Press another to compare, or **Go back to my look**.
+3. Press **Use this template** to keep it. If your look now is not saved under **Saved looks**, it asks first, and saves your look as "My look before" the template's name. **Undo** puts your look back in one step.
+
+Leaving **Templates** while you try one puts your look back.
+
+| Template | What it suits |
+| --- | --- |
+| **Soft dark blue** | Any story. The built-in look: quiet and easy to read. |
+| **Plain and clean** | Dialogue you want read with nothing around it. |
+| **Paper page** | Fairy tales and gentle stories read aloud. |
+| **Film bars** | Drama and tense scenes, like a film with subtitles, with bars above and below. |
+| **Neon glow** | City nights, science fiction and parties, with glowing words in a gradient. |
+| **Pastel blush** | Romance and soft, warm moments. Words blur in. |
+| **Cold and dark** | Horror and dread. Slow, through black, with dark edges. |
+| **Bright comic** | Comedy, games and playful scenes, with bright shapes. |
+| **Typewriter page** | Letters, diaries and old mysteries. |
+| **Warm lamp** | Cozy talks by a fire, taverns and homes. |
+| **Dreamy sky** | Dreams, memories and soft fantasy. |
+
+If a later update changes the templates, **Templates** says so.
+
 ### Shape and words
 
 - **Shape**: **Wide, 16 by 9** by default, 1920 by 1080. **Tall** is 1080 by 1920, for phone videos such as Reels and Shorts. **Square** is 1080 by 1080.
@@ -222,7 +248,7 @@ With no performance in the Studio, the preview shows an example clip, about 25 s
 - **Size of the words, in percent**: 100 by default, from 60 to 160.
 - **Color of the words**: a warm white by default.
 - **Fill of the words**: **One color** by default. See [Gradients](#gradients).
-- **How the words show**: **Light up as they are said** by default, with words not said yet dimmer. **Appear as they are said** shows each word only once it is said. **Fade in as they are said** fades each word in as it is said. **Blur in as they are said** fades each word in from a blur. **All at once** shows the whole line.
+- **How the words show**: **Fade in as they are said** by default, which fades each word in as it is said. **Light up as they are said** shows the words not said yet dimmer. **Appear as they are said** shows each word only once it is said. **Blur in as they are said** fades each word in from a blur. **All at once** shows the whole line.
 - **Where the words sit**: **Middle** by default, or **Lower third**, which leaves the picture behind them clear.
 - **Quotation marks around speech**: on by default. Narration never has them.
 - **A shadow behind the words**: on by default, the soft dark shadow the words always had. Sound captions have it too. Under it: **Color of the shadow**, black by default, and **How dark** (65%), **How soft** (18) and **How far below** (2), set by eye on the preview. Sizes are in pixels of a 1080-pixel frame.
@@ -232,7 +258,7 @@ When each word is said is worked out from where the voice is in the clip, so it 
 ### Speakers
 
 - **Show names**: on by default. Off, no names are in the video, in its title, or in the name of any file saved, audio included. Names are still said aloud. To take a name out of the sound too, use **Hide and bleep words**. Under it:
-  - **Font of the names**: **The same as the words** by default. Any font, your own included.
+  - **Font of the names**: **Clean** by default, beside the words in **Book**. Any font, your own included.
   - **Size of the names, in percent**: 100 by default, from 60 to 160. It is set apart from the size of the words and the size of the pictures.
   - **A shadow behind the names**: on by default, the same as the words' shadow, with its own color, darkness, softness and distance.
 - **Show pictures**: on by default. Each speaker's picture from the Cast tab is shown above their line. Narration has none. Under it:
@@ -246,13 +272,14 @@ When each word is said is worked out from where the voice is in the clip, so it 
 
 ### Background
 
-- **Dark** by default, lit a little in your theme's accent.
-- **A color of your own**, picked under it.
+- **A color of your own** by default: a soft dark blue gradient, from the middle out.
+- **Dark**, lit a little in your theme's accent.
+- **A color of your own**, picked under it, one color or a gradient.
 - **A picture of your own**. **Choose a picture** keeps it on your account. It is cut to the video's shape from the middle. **Dim the picture**, 40% by default, makes the words easier to read. **Blur the picture**, off by default, makes a busy picture easier to read words over.
   - **A slow move on the picture**: on by default. In each scene the picture makes one slow move, easing in and out: it zooms in, moves right, zooms out or moves left, in turn. It moves 1% of the frame a second on average, and never more than 2%, so it looks still at a glance. With Reduce motion on, in the panel or on your device, it holds still in the preview and full screen. A saved video keeps the move unless this is off.
 - **A design of your own**: shapes you place yourself, over a color. See [A design of your own](#a-design-of-your-own).
 
-**Darken the edges**, under any background, makes the edges of the frame darker than the middle. It is 50% by default. **Off** leaves the edges as bright as the middle.
+**Darken the edges**, under any background, makes the edges of the frame darker than the middle. It is 35% by default. **Off** leaves the edges as bright as the middle.
 
 **Color of the edges**, under it, is black by default. Another color tints the edges with it, as strongly as **Darken the edges** says.
 
@@ -290,7 +317,7 @@ A fill is part of your settings, a saved look, and each background in the list.
 | **Gentle zoom** | The two lines fade into each other, with a small zoom. |
 | **Cut, with no movement** | The next line shows at once. |
 
-**How long it takes, in seconds**: 0.4 by default, from 0.1 to 2.
+**How long it takes, in seconds**: 0.5 by default, from 0.1 to 2.
 
 The title gives way to the first line with the same transition.
 
@@ -333,7 +360,7 @@ A note is a few words for whoever watches, in a dark box at the top or the botto
 
 ### Put the look back
 
-**Put the look back** asks first, then puts back every choice of the video's look: the shape, words, captions, pictures, edges, transition and ending. The built-in background, Dark, goes into your list in place of the one with its id, and is used for every scene nothing else is for. Your other backgrounds stay. Saved looks, notes, **Show names** and **Show pictures** stay as they are. If nothing would change, it says so and asks nothing.
+**Put the look back** asks first, then puts back every choice of the video's look: the shape, words, captions, pictures, edges, transition and ending. The built-in background, a soft dark blue gradient, goes into your list in place of the one with its id, and is used for every scene nothing else is for. Your other backgrounds stay. Saved looks, notes, **Show names** and **Show pictures** stay as they are. If nothing would change, it says so and asks nothing.
 
 ### Start again
 

@@ -4433,7 +4433,7 @@ if (section("review fixes")) {
     await page.click('[data-af-studio="lookback"]');
     await page.waitForTimeout(600);
     const c = await page.evaluate(() => ({ ids: window.__settings.videoBacks.map((b) => b.id), main: window.__settings.videoBacks.find((b) => b.id === "main").kind, pick: window.__settings.videoBackPick }));
-    check(JSON.stringify(c.ids) === '["main","b2","b3","b9"]' && c.main === "dark" && c.pick === "main", size.name + ": Put the look back puts the built-in background in place of main and keeps the others (" + JSON.stringify(c) + ")");
+    check(JSON.stringify(c.ids) === '["main","b2","b3","b9"]' && c.main === "color" && c.pick === "main", size.name + ": Put the look back puts the built-in background in place of main and keeps the others (" + JSON.stringify(c) + ")");
     check(!errors.length, size.name + ": no page errors. " + errors.slice(0, 2).join(" | "));
     await context.close();
   }
@@ -5617,6 +5617,111 @@ if (section("phone fixes")) {
   }
 }
 
+if (section("templates")) {
+  console.log("Templates: each drawn and different, tried on the preview, used as one Undo step, and readable");
+  const OUT = process.env.UI_TEMPLATES || "";
+  const { writeFileSync, mkdirSync } = await import("node:fs");
+  if (OUT) mkdirSync(OUT, { recursive: true });
+  for (const size of SIZES) {
+    const { context, page, errors } = await open(THEMES[0], size);
+    await openWs(page);
+    await wsSec(page, "Templates");
+    await page.waitForFunction(() => [...document.querySelectorAll("[data-af-tpl] img")].every((i) => i.getAttribute("src")), null, { timeout: 30000 }).catch(() => {});
+    const thumbs = await page.evaluate(() => [...document.querySelectorAll("[data-af-tpl] img")].map((i) => i.getAttribute("src") || ""));
+    check(thumbs.length >= 8 && thumbs.length <= 12 && thumbs.every(Boolean), size.name + ": there are 8 to 12 templates, each with a picture drawn (" + thumbs.length + ")");
+    check(new Set(thumbs).size === thumbs.length, size.name + ": no two pictures are the same");
+    // Each one tried on the preview, at the same moment: readable words.
+    const ids = await page.evaluate(() => [...document.querySelectorAll("[data-af-tpl]")].map((b) => b.getAttribute("data-af-tpl")));
+    await page.evaluate(() => { const r = document.querySelector("[data-af-scrub] input"); r.step = "any"; });
+    const low = [];
+    for (const id of ids) {
+      await page.click('[data-af-tpl="' + id + '"]');
+      await page.waitForTimeout(700);
+      const got = await page.evaluate(async () => {
+        const r = document.querySelector("[data-af-scrub] input");
+        r.value = "9.6";
+        r.dispatchEvent(new Event("input", { bubbles: true }));
+        await new Promise((x) => requestAnimationFrame(() => requestAnimationFrame(x)));
+        const c = document.querySelector("[data-af-videopreview]");
+        const g = c.getContext("2d");
+        // The words' band: the rows around the line, and the background
+        // read from the frame's far corners of that band.
+        const H = c.height, W = c.width;
+        const d = g.getImageData(0, 0, W, H).data;
+        const lum = (i) => { const f = (v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); }; return 0.2126 * f(d[i]) + 0.7152 * f(d[i + 1]) + 0.0722 * f(d[i + 2]); };
+        // The background, from the middle row at the left and right edges
+        // of the middle half.
+        const bgs = [];
+        for (let y = Math.floor(H * 0.35); y < H * 0.75; y += 4) for (const x of [Math.floor(W * 0.08), Math.floor(W * 0.92)]) bgs.push(lum((y * W + x) * 4));
+        const bg = bgs.sort((a, b) => a - b)[Math.floor(bgs.length / 2)];
+        // The words: the pixels that differ most from it in the middle band.
+        const vals = [];
+        for (let y = Math.floor(H * 0.35); y < H * 0.85; y += 2) for (let x = Math.floor(W * 0.2); x < W * 0.8; x += 2) vals.push(lum((y * W + x) * 4));
+        vals.sort((a, b) => Math.abs(b - bg) - Math.abs(a - bg));
+        const ink = vals[Math.floor(vals.length * 0.002)];
+        const hi = Math.max(ink, bg), lo = Math.min(ink, bg);
+        return { ratio: (hi + 0.05) / (lo + 0.05), png: c.toDataURL("image/png").split(",")[1] };
+      });
+      if (got.ratio < 4.5) low.push(id + " " + got.ratio.toFixed(1));
+      if (OUT && size.name === "laptop") writeFileSync(OUT + "/" + id + ".png", Buffer.from(got.png, "base64"));
+    }
+    check(!low.length, size.name + ": the words stand out from the background in every template, 4.5 to 1 or more. Low: " + low.join(", "));
+    // Use this template is one Undo step.
+    await page.click('[data-af-tpl="neon"]');
+    await page.waitForTimeout(500);
+    await page.evaluate(() => { window.__confirmNo = false; });
+    await page.click("[data-af-tpluse]");
+    await page.waitForTimeout(700);
+    check(await page.evaluate(() => window.__settings.videoFont === "round" && window.__settings.videoMove === "zoom"), size.name + ": Use this template uses it");
+    await page.click('[data-af-ws="undo"]');
+    await page.waitForTimeout(700);
+    check(await page.evaluate(() => window.__settings.videoFont === "book" && window.__settings.videoMove === "rise"), size.name + ": and one Undo puts the look back");
+    const m = await page.evaluate(MEASURE, size.touch);
+    check(!m.overflow.length && !m.small.length, size.name + ": Templates fit. " + m.overflow.concat(m.small).slice(0, 2).join("; "));
+    check(!errors.length, size.name + ": no page errors. " + errors.slice(0, 2).join(" | "));
+    await context.close();
+  }
+  // A tall sheet of every template.
+  if (OUT) {
+    const { context, page } = await open(THEMES[0], SIZES[1], 1, () => { window.__settings.videoShape = "tall"; });
+    await openWs(page);
+    await wsSec(page, "Templates");
+    const ids = await page.evaluate(() => [...document.querySelectorAll("[data-af-tpl]")].map((b) => b.getAttribute("data-af-tpl")));
+    const shots = [];
+    for (const id of ids) {
+      await page.click('[data-af-tpl="' + id + '"]');
+      await page.waitForTimeout(700);
+      shots.push(await page.evaluate(async () => {
+        const r = document.querySelector("[data-af-scrub] input");
+        r.step = "any";
+        r.value = "9.6";
+        r.dispatchEvent(new Event("input", { bubbles: true }));
+        await new Promise((x) => requestAnimationFrame(() => requestAnimationFrame(x)));
+        const c = document.querySelector("[data-af-videopreview]");
+        const s = document.createElement("canvas");
+        s.width = 270;
+        s.height = 480;
+        s.getContext("2d").drawImage(c, 0, 0, 270, 480);
+        return s.toDataURL("image/png");
+      }));
+    }
+    const sheet = await page.evaluate(async (shots) => {
+      const ims = await Promise.all(shots.map((src) => new Promise((ok) => { const im = new Image(); im.onload = () => ok(im); im.src = src; })));
+      const per = 6, w = 270, h = 480;
+      const c = document.createElement("canvas");
+      c.width = per * (w + 6);
+      c.height = Math.ceil(ims.length / per) * (h + 6);
+      const g = c.getContext("2d");
+      g.fillStyle = "#808080";
+      g.fillRect(0, 0, c.width, c.height);
+      ims.forEach((im, n) => g.drawImage(im, (n % per) * (w + 6), Math.floor(n / per) * (h + 6)));
+      return c.toDataURL("image/png").split(",")[1];
+    }, shots);
+    writeFileSync(OUT + "/tall-sheet.png", Buffer.from(sheet, "base64"));
+    await context.close();
+  }
+}
+
 if (section("hint places")) {
   console.log("Each description opens right by its ?, in an open fold far down a scrolled drawer, at each UI Scale");
   // Where the description is against its ?: it sits just above the row the
@@ -6347,7 +6452,7 @@ if (section("studio design")) {
     await wsSec(page, "Speakers");
     await page.waitForTimeout(400);
     const start = await page.evaluate(() => ({ font: (document.querySelector('[data-af-fontpick="videoNameFont"]') || {}).value, ring: window.__settings.videoPicRing }));
-    check(start.font === "" && start.ring !== false, size.name + ": the names start in the words' font, with a ring (" + JSON.stringify(start) + ")");
+    check(start.font === "clean" && start.ring !== false, size.name + ": the names start in Clean, with a ring (" + JSON.stringify(start) + ")");
     const a0 = await whole();
     await page.selectOption('[data-af-fontpick="videoNameFont"]', "type");
     await settle();
@@ -7534,7 +7639,9 @@ if (section("transitions")) {
 
 if (section("hide words")) {
   console.log("Hidden words are covered in the video with a bar, blur or pixels");
-  const { context, page, errors } = await open(THEMES[0], SIZES[1]);
+  // All the words at once, so the hidden word is there to be covered at
+  // any moment.
+  const { context, page, errors } = await open(THEMES[0], SIZES[1], 1, () => { window.__settings.videoWords = "all"; });
   await openWs(page);
   await page.waitForTimeout(800);
   const print = () =>

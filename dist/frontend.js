@@ -1633,6 +1633,15 @@ html[data-af-still] [class^="af-"], html[data-af-still] [class*=" af-"], html[da
 html[data-af-still] .af-ws-sec.af-ws-in, .af-ws[data-af-still] .af-ws-sec.af-ws-in { animation: none; }
 @media (prefers-reduced-motion: reduce) { .af-ws-sec.af-ws-in { animation: none; } }
 .af-ws-h { margin: 0; font-size: 15px; font-weight: 650; color: var(--af-text); }
+.af-tpl-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+.af-tpl { display: flex; flex-direction: column; gap: 4px; min-width: 0; padding: 6px; border: 1px solid var(--af-line); border-radius: var(--af-r-md); background: var(--af-fill-subtle); color: var(--af-text); font: inherit; text-align: left; cursor: pointer; }
+.af-tpl[aria-pressed="true"] { border-color: var(--af-accent); box-shadow: 0 0 0 1px var(--af-accent); }
+.af-tpl-pic { display: block; aspect-ratio: 16 / 9; border-radius: var(--af-r-sm); overflow: hidden; background: #0b0a0f; }
+.af-tpl-pic img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.af-tpl-pic img:not([src]) { visibility: hidden; }
+.af-tpl b { font-size: 12.5px; font-weight: 600; overflow-wrap: anywhere; }
+.af-tpl-suits { font-size: 11.5px; color: var(--af-muted); overflow-wrap: anywhere; }
+@media (hover: hover) { .af-tpl:hover { border-color: var(--af-line-hover); } }
 .af-quick { gap: 8px; padding-top: 10px; border-top: 1px solid var(--af-line); }
 .af-quickh { margin: 0; font-size: 13px; font-weight: 600; color: var(--af-text); }
 .af-ws-sec > .af-card > .af-cardh { display: none; }
@@ -1740,6 +1749,11 @@ const MOVED_DEFAULTS = [
     // 1.10.0 turned it off, the same as in the sister extension that refines
     // replies. Each note makes the Director's next ask longer, which costs more.
     { key: 'askNote', was: true, label: 'Send a note when it asks again', why: 'it is now off by default, since each note makes the next ask longer and costs more.' },
+    // 1.10.0 gave the Studio's video a calmer, softer built-in look.
+    { key: 'videoWords', was: 'light', label: 'How the words show, in the Studio', why: 'it is now Fade in as they are said, which is calmer.' },
+    { key: 'videoMoveSecs', was: 0.4, label: 'How long a transition takes, in the Studio', why: 'it is now 0.5 seconds, a little slower and smoother.' },
+    { key: 'videoEdges', was: 50, label: 'Darken the edges, in the Studio', why: 'it is now 35%, softer.' },
+    { key: 'videoBacks', was: [{ id: 'main', name: 'Main', kind: 'dark', color: '', fill: 'solid', stops: ['#2a1f3d'], dir: 'down', dim: 40, blur: 0, shapes: [], use: 'match', moods: [], places: [] }], label: 'The background, in the Studio', why: 'it is now a soft dark blue gradient in place of Dark.' },
 ];
 // What a reader is marked with once told about a row: the setting and a mark
 // of its old value. A row added later is still told.
@@ -1802,6 +1816,7 @@ const DEFAULTS = {
     logShow: {},
     builtInSeen: '',
     movedSeen: '',
+    templatesSeen: '',
     promptRole: 'system',
     engineNoteRole: 'rules',
     askNoteRole: 'user',
@@ -1870,7 +1885,7 @@ const DEFAULTS = {
     videoSize: 100,
     videoInk: '',
     videoCaptionInk: '',
-    videoWords: 'light',
+    videoWords: 'fade',
     videoPlace: 'middle',
     videoQuotes: true,
     videoNames: true,
@@ -1878,7 +1893,7 @@ const DEFAULTS = {
     videoPicShape: 'circle',
     videoPicSize: 150,
     videoNameColor: 'kind',
-    videoNameFont: '',
+    videoNameFont: 'clean',
     videoNameSize: 100,
     videoPicRing: true,
     videoPicRingWidth: 3,
@@ -1909,8 +1924,8 @@ const DEFAULTS = {
     videoCapDir: 'right',
     videoWordShadow: true,
     videoWordShadowInk: '',
-    videoWordShadowDark: 65,
-    videoWordShadowSoft: 18,
+    videoWordShadowDark: 55,
+    videoWordShadowSoft: 14,
     videoWordShadowFar: 2,
     videoNameShadow: true,
     videoNameShadowInk: '',
@@ -1925,12 +1940,12 @@ const DEFAULTS = {
     mpShadowInk: '',
     mpShadowDark: 25,
     mpShadowSoft: 8,
-    videoBacks: [{ id: 'main', name: 'Main', kind: 'dark', color: '', fill: 'solid', stops: ['#2a1f3d'], dir: 'down', dim: 40, blur: 0, shapes: [], use: 'match', moods: [], places: [] }],
+    videoBacks: [{ id: 'main', name: 'Main', kind: 'color', color: '#232a45', fill: 'radial', stops: ['#0b0d18'], dir: 'down', dim: 40, blur: 0, shapes: [], use: 'match', moods: [], places: [] }],
     videoBackPick: 'main',
-    videoEdges: 50,
+    videoEdges: 35,
     videoEdgeColor: '',
     videoMove: 'rise',
-    videoMoveSecs: 0.4,
+    videoMoveSecs: 0.5,
     videoTitleOn: true,
     videoTitleText: '',
     videoFadeOut: 1.5,
@@ -2009,7 +2024,7 @@ export function setup(ctx, overrides) {
     let saveTimer = null;
     function keepLocal() {
         try {
-            localStorage.setItem(STORE_KEY, JSON.stringify(S));
+            localStorage.setItem(STORE_KEY, JSON.stringify(realS || S));
         }
         catch (_) { }
     }
@@ -2031,7 +2046,7 @@ export function setup(ctx, overrides) {
                     notify('warning', why);
                 }
             };
-            rpc({ type: 'save', settings: S }, 15000).then((r) => {
+            rpc({ type: 'save', settings: realS || S }, 15000).then((r) => {
                 if (r && r.type === 'failed')
                     lost(String(r.error || 'Your settings could not be saved to your account.'));
                 else if (!r || !r.ok)
@@ -15551,8 +15566,278 @@ export function setup(ctx, overrides) {
         r.appendChild(add);
         box.appendChild(r);
     }
-    // Each saved look: its name, which can be typed over, Use and Delete. Save
-    // this look, under them, keeps the look now under a new name.
+    const shape = (kind, x, y, w, h, fill, more = {}) => Object.assign({ id: 'tp' + kind + Math.round(x * 100) + Math.round(y * 100) + w, kind, x, y, w, h, rot: 0, fill, grad: 'none', stops: [], dir: 'down', clear: 0, text: '' }, more);
+    const backOf = (name, more) => Object.assign({ id: 'main', name, kind: 'color', color: '#141218', fill: 'solid', stops: [], dir: 'down', dim: 40, blur: 0, shapes: [], use: 'match', moods: [], places: [] }, more);
+    const noShadow = { videoWordShadow: false, videoNameShadow: false };
+    const TEMPLATES = [
+        {
+            id: 'calm',
+            name: 'Soft dark blue',
+            suits: 'Any story. The built-in look: quiet, easy to read.',
+            look: {},
+            back: DEFAULTS.videoBacks[0],
+        },
+        {
+            id: 'plain',
+            name: 'Plain and clean',
+            suits: 'Dialogue you want read with nothing around it.',
+            look: Object.assign({ videoFont: 'clean', videoNameFont: 'clean', videoInk: '#f2f2f2', videoWords: 'all', videoMove: 'dissolve', videoMoveSecs: 0.3, videoEdges: 0, videoPicShape: 'rounded', videoPicRing: false, videoNameColor: 'words', videoNameSize: 90 }, noShadow),
+            back: backOf('Plain', { color: '#121214' }),
+        },
+        {
+            id: 'paper',
+            name: 'Paper page',
+            suits: 'Fairy tales and gentle stories read aloud.',
+            look: Object.assign({ videoFont: 'book', videoNameFont: 'book', videoInk: '#3b2a1a', videoCaptionInk: '#8a4b20', videoWords: 'fade', videoMove: 'dissolve', videoMoveSecs: 0.6, videoEdges: 30, videoEdgeColor: '#6b4a24', videoNameColor: 'words', videoPicRingWidth: 2, videoSize: 104 }, noShadow),
+            back: backOf('Paper page', {
+                kind: 'design', color: '#f1e6cc', fill: 'radial', stops: ['#dcc89f'],
+                shapes: [
+                    shape('rect', 0.5, 0.06, 1500, 3, '#8a6a40', { clear: 30 }),
+                    shape('rect', 0.5, 0.94, 1500, 3, '#8a6a40', { clear: 30 }),
+                    shape('ellipse', 0.5, 0.94, 18, 18, '#8a6a40', { clear: 20 }),
+                ],
+            }),
+        },
+        {
+            id: 'film',
+            name: 'Film bars',
+            suits: 'Drama and tense scenes, like a film with subtitles.',
+            look: { videoFont: 'clean', videoNameFont: 'clean', videoInk: '#e8e6e1', videoCaptionInk: '#f0c36a', videoWords: 'all', videoPlace: 'lower', videoMove: 'dissolve', videoMoveSecs: 0.7, videoEdges: 70, videoPicSize: 130, videoPicRingWidth: 2, videoNameSize: 85, videoWordShadowDark: 80, videoWordShadowSoft: 10, videoWordShadowFar: 2 },
+            back: backOf('Film bars', {
+                kind: 'design', color: '#22303a', fill: 'linear', stops: ['#0e1418'], dir: 'down',
+                shapes: [shape('rect', 0.5, 0.055, 2400, 125, '#000000'), shape('rect', 0.5, 0.945, 2400, 125, '#000000')],
+            }),
+        },
+        {
+            id: 'neon',
+            name: 'Neon glow',
+            suits: 'City nights, science fiction and parties.',
+            look: { videoFont: 'round', videoNameFont: 'clean', videoInk: '#7df9ff', videoCaptionInk: '#ff7ad9', videoWordFill: 'linear', videoWordStops: ['#ff5fd2', '#b08cff'], videoWordDir: 'right', videoWords: 'light', videoMove: 'zoom', videoMoveSecs: 0.5, videoEdges: 40, videoEdgeColor: '#12002a', videoPicRingWidth: 4, videoWordShadowInk: '#ff3df5', videoWordShadowDark: 85, videoWordShadowSoft: 26, videoWordShadowFar: 0, videoNameShadowInk: '#33e6ff', videoNameShadowSoft: 20, videoNameShadowFar: 0 },
+            back: backOf('Neon glow', {
+                kind: 'design', color: '#1a0638', fill: 'linear', stops: ['#090016', '#02010a'], dir: 'down',
+                shapes: [shape('line', 0.5, 0.8, 1300, 4, '#ff3df5', { clear: 40 }), shape('line', 0.5, 0.83, 900, 3, '#33e6ff', { clear: 50 })],
+            }),
+        },
+        {
+            id: 'blush',
+            name: 'Pastel blush',
+            suits: 'Romance and soft, warm moments.',
+            look: Object.assign({ videoFont: 'round', videoNameFont: 'round', videoInk: '#5a2346', videoCaptionInk: '#9a3d6e', videoWords: 'blur', videoMove: 'focus', videoMoveSecs: 0.6, videoEdges: 15, videoEdgeColor: '#f6c1d6', videoNameColor: 'words', videoPicShape: 'circle', videoPicRingWidth: 3 }, noShadow),
+            back: backOf('Pastel blush', { color: '#fde8ef', fill: 'radial', stops: ['#f9d4c8', '#e7d3f5'] }),
+        },
+        {
+            id: 'cold',
+            name: 'Cold and dark',
+            suits: 'Horror and dread. Slow and quiet.',
+            look: { videoFont: 'book', videoNameFont: 'type', videoInk: '#cfd9d6', videoCaptionInk: '#9fb7b0', videoWords: 'fade', videoMove: 'black', videoMoveSecs: 0.9, videoEdges: 85, videoEdgeColor: '#061414', videoPicRingWidth: 1, videoNameSize: 85, videoWordShadowDark: 90, videoWordShadowSoft: 22, videoWordShadowFar: 0 },
+            back: backOf('Cold and dark', { color: '#1b2629', fill: 'radial', stops: ['#030506'] }),
+        },
+        {
+            id: 'comic',
+            name: 'Bright comic',
+            suits: 'Comedy, games and playful scenes.',
+            look: Object.assign({ videoFont: 'round', videoNameFont: 'round', videoSize: 110, videoInk: '#1c1c1c', videoCaptionInk: '#c2185b', videoWords: 'light', videoMove: 'slide', videoMoveSecs: 0.4, videoEdges: 0, videoPicShape: 'rounded', videoPicRingWidth: 6, videoNameColor: 'kind', videoNameSize: 110 }, noShadow),
+            back: backOf('Bright comic', {
+                kind: 'design', color: '#ffd84a', fill: 'solid',
+                shapes: [shape('ellipse', 0.1, 0.18, 420, 420, '#ff6f61'), shape('ellipse', 0.92, 0.85, 520, 520, '#2ec4b6'), shape('round', 0.5, 0.5, 1500, 560, '#fffbea', { clear: 10 })],
+            }),
+        },
+        {
+            id: 'typewriter',
+            name: 'Typewriter page',
+            suits: 'Letters, diaries and old mysteries.',
+            look: Object.assign({ videoFont: 'type', videoNameFont: 'type', videoInk: '#2b2b2b', videoCaptionInk: '#7a2e1f', videoWords: 'appear', videoMove: 'fade', videoMoveSecs: 0.5, videoEdges: 25, videoEdgeColor: '#5a4a30', videoQuotes: true, videoNameColor: 'words', videoPicShape: 'rounded', videoPicRing: false, videoSize: 96 }, noShadow),
+            back: backOf('Typewriter page', { color: '#ebe3d2', fill: 'solid' }),
+        },
+        {
+            id: 'lamp',
+            name: 'Warm lamp',
+            suits: 'Cozy talks by a fire, taverns and homes.',
+            look: { videoFont: 'book', videoNameFont: 'clean', videoInk: '#ffeccc', videoWordFill: 'linear', videoWordStops: ['#ffd58a'], videoWordDir: 'down', videoCaptionInk: '#ffb36b', videoWords: 'fade', videoMove: 'rise', videoMoveSecs: 0.5, videoEdges: 55, videoEdgeColor: '#1a0b02', videoPicRingWidth: 3, videoWordShadowDark: 70, videoWordShadowSoft: 16 },
+            back: backOf('Warm lamp', { color: '#4a2a12', fill: 'radial', stops: ['#1a0d05'] }),
+        },
+        {
+            id: 'dream',
+            name: 'Dreamy sky',
+            suits: 'Dreams, memories and soft fantasy.',
+            look: { videoFont: 'round', videoNameFont: 'round', videoInk: '#ffffff', videoCaptionInk: '#fff3b0', videoWords: 'blur', videoMove: 'focus', videoMoveSecs: 0.7, videoEdges: 20, videoEdgeColor: '#6b5ca8', videoPicRingWidth: 2, videoWordShadowInk: '#4b3c8a', videoWordShadowDark: 60, videoWordShadowSoft: 20, videoWordShadowFar: 0 },
+            back: backOf('Dreamy sky', {
+                kind: 'design', color: '#4c3f9a', fill: 'linear', stops: ['#3f63a8', '#9a4f7c'], dir: 'down',
+                shapes: [shape('ellipse', 0.18, 0.22, 520, 300, '#ffffff', { clear: 86 }), shape('ellipse', 0.84, 0.78, 640, 360, '#ffffff', { clear: 88 })],
+            }),
+        },
+    ];
+    // Every look setting but the reader's own content: the line under the
+    // title and the watermarks stay as they are.
+    // The shape of the video is the reader's choice for where it goes, so a
+    // template keeps it too.
+    const TEMPLATE_KEYS = LOOK_KEYS.filter((k) => !/^videoByline/.test(k) && k !== 'videoMarks' && k !== 'videoShape');
+    const TEMPLATES_MARK = markText(JSON.stringify(TEMPLATES.map((t) => [t.id, t.look, t.back])));
+    function templateLook(t) {
+        const patch = {};
+        for (const k of TEMPLATE_KEYS)
+            patch[k] = JSON.parse(JSON.stringify(DEFAULTS[k]));
+        Object.assign(patch, JSON.parse(JSON.stringify(t.look)));
+        return Object.assign(patch, withBack(t.back));
+    }
+    // The look as it is now, for going back from a template being tried.
+    function lookSnapshot() {
+        const out = {};
+        for (const k of TEMPLATE_KEYS)
+            out[k] = JSON.parse(JSON.stringify(S[k] === undefined ? DEFAULTS[k] : S[k]));
+        out.videoBacks = JSON.parse(JSON.stringify(backList()));
+        out.videoBackPick = S.videoBackPick;
+        return out;
+    }
+    // A template tried on the preview: the look from before it, so it can
+    // be put back, and which template it is.
+    let trying = null;
+    function quietSet(patch) {
+        undoing = true;
+        try {
+            set(patch);
+        }
+        finally {
+            undoing = false;
+        }
+    }
+    function tryTemplate(t) {
+        if (!trying)
+            trying = { id: t.id, before: lookSnapshot() };
+        else
+            trying.id = t.id;
+        quietSet(templateLook(t));
+        studioBuild(false);
+    }
+    function stopTrying() {
+        if (!trying)
+            return;
+        const was = trying.before;
+        trying = null;
+        quietSet(was);
+        studioBuild(false);
+    }
+    // Use this template: one Undo step from the look before it.
+    async function useTemplate(box) {
+        if (!trying)
+            return;
+        const t = TEMPLATES.find((x) => x.id === trying.id);
+        if (!t)
+            return;
+        const before = trying.before;
+        const saved = (Array.isArray(S.videoLooks) ? S.videoLooks : []).some((l) => TEMPLATE_KEYS.every((k) => !(k in l.look) || JSON.stringify(l.look[k]) === JSON.stringify(before[k])));
+        const plainDefault = TEMPLATE_KEYS.every((k) => JSON.stringify(before[k]) === JSON.stringify(DEFAULTS[k]));
+        let keep = false;
+        if (!saved && !plainDefault) {
+            keep = await askSure('Use this template', 'Your look now is not saved as a look. It is saved under Saved looks as "My look before ' + t.name + '", then the template is used. Undo also brings your look back.', 'Save my look and use it');
+            if (!keep)
+                return;
+        }
+        trying = null;
+        quietSet(before);
+        if (keep) {
+            const look = {};
+            for (const k of LOOK_KEYS)
+                look[k] = JSON.parse(JSON.stringify(S[k] === undefined ? DEFAULTS[k] : S[k]));
+            look.videoBack1 = JSON.parse(JSON.stringify(backDefault()));
+            const looks = (Array.isArray(S.videoLooks) ? S.videoLooks : []).slice(0, LOOKS_MAX - 1);
+            quietSet({ videoLooks: looks.concat([{ id: rid('lk'), name: ('My look before ' + t.name).slice(0, 60), look }]) });
+        }
+        set(Object.assign(templateLook(t), { templatesSeen: TEMPLATES_MARK }));
+        keepSaid('Using ' + t.name + '. Undo puts your look back.');
+        refreshSection();
+        void box;
+    }
+    // Each template drawn as a frame of the example clip, kept once drawn.
+    const templateThumbs = new Map();
+    let realS = null;
+    async function templateThumb(t) {
+        const key = t.id + ':' + TEMPLATES_MARK;
+        const had = templateThumbs.get(key);
+        if (had)
+            return had;
+        const real = S;
+        let url = '';
+        // The settings are swapped for the template only while it is drawn.
+        // A save in that time saves the reader's own, kept in realS.
+        realS = real;
+        S = Object.assign({}, real, templateLook(t), { videoShape: 'wide' });
+        try {
+            const ex = exampleClip();
+            const st = await videoStage(ex.parts, null, '', ex.scenes);
+            const c = canvasOf(st.w, st.h);
+            const g = c.getContext('2d');
+            // Late in a line, when all its words show.
+            const at = ex.parts[3] ? titleSecs(ex.title) + ex.parts[3].start + Math.min(1.8, ex.parts[3].len * 0.8) : titleSecs(ex.title) + 1;
+            videoFrame(g, at, ex.parts, ex.total, st, ex.title);
+            const small = canvasOf(384, 216);
+            const sg = small.getContext('2d');
+            sg.imageSmoothingQuality = 'high';
+            sg.drawImage(c, 0, 0, 384, 216);
+            url = small.toDataURL('image/jpeg', 0.86);
+        }
+        catch (_) {
+            url = '';
+        }
+        finally {
+            S = real;
+            realS = null;
+        }
+        if (url)
+            templateThumbs.set(key, url);
+        return url;
+    }
+    function drawTemplates(box) {
+        box.appendChild(hint('Each one sets the whole look. Your line under the title, watermarks, pictures and fonts stay. Press one to try it on the preview.'));
+        if (S.templatesSeen && S.templatesSeen !== TEMPLATES_MARK)
+            box.appendChild(notice('warn', 'The built-in templates changed in this update. A template you used before may look a little different if you use it again.'));
+        const grid = el('<div class="af-tpl-grid" data-af-templates></div>');
+        const said = el('<p class="af-note" role="status" data-af-tplsaid></p>');
+        const acts = el('<div class="af-row af-wrap" data-af-tplacts></div>');
+        const use = button('Use this template', () => void useTemplate(box), 'af-primary');
+        use.setAttribute('data-af-tpluse', '');
+        const back = button('Go back to my look', () => {
+            stopTrying();
+            paint();
+        });
+        back.setAttribute('data-af-tplback', '');
+        acts.appendChild(use);
+        acts.appendChild(back);
+        const paint = () => {
+            const t = trying ? TEMPLATES.find((x) => x.id === trying.id) : null;
+            setText(said, t ? 'Trying ' + t.name + ' on the preview.' : 'Your own look is on the preview.');
+            acts.hidden = !t;
+            for (const b of Array.from(grid.querySelectorAll('[data-af-tpl]')))
+                b.setAttribute('aria-pressed', t && b.getAttribute('data-af-tpl') === t.id ? 'true' : 'false');
+        };
+        for (const t of TEMPLATES) {
+            const tile = el('<button type="button" class="af-tpl" aria-pressed="false"><span class="af-tpl-pic"><img alt=""></span><b></b><span class="af-tpl-suits"></span></button>');
+            tile.setAttribute('data-af-tpl', t.id);
+            setText(tile.querySelector('b'), t.name);
+            setText(tile.querySelector('.af-tpl-suits'), t.suits);
+            tile.addEventListener('click', () => {
+                tryTemplate(t);
+                paint();
+            });
+            grid.appendChild(tile);
+        }
+        box.appendChild(grid);
+        box.appendChild(said);
+        box.appendChild(acts);
+        paint();
+        // Drawn one after another, so the preview is not held up.
+        void (async () => {
+            for (const t of TEMPLATES) {
+                const url = await templateThumb(t);
+                const img = grid.querySelector('[data-af-tpl="' + t.id + '"] img');
+                if (img && url) {
+                    img.src = url;
+                    img.alt = 'A frame of the example in ' + t.name;
+                }
+                await new Promise((r) => setTimeout(r, 0));
+            }
+        })();
+    }
     function drawLooks(box) {
         box.replaceChildren();
         const looks = Array.isArray(S.videoLooks) ? S.videoLooks : [];
@@ -15717,6 +16002,7 @@ export function setup(ctx, overrides) {
     const WS_SECTIONS = [
         { id: 'saved', title: 'Saved audio' },
         { id: 'show', title: 'The performance and scenes' },
+        { id: 'templates', title: 'Templates' },
         { id: 'shape', title: 'Shape and words' },
         { id: 'speakers', title: 'Speakers' },
         { id: 'background', title: 'Background' },
@@ -16040,6 +16326,9 @@ export function setup(ctx, overrides) {
             stage.appendChild(hint('Full screen needs App manipulation. Turn it on for Auto Foley in Lumiverse’s Extensions panel.'));
         renderStudio((id, title, build, toggle) => secs.set(id, { title, build, toggle }), stage, acts);
         secs.set('keys', { title: 'Keyboard shortcuts', build: (b) => drawKeyHelp(b) });
+        // Leaving Templates while one is being tried puts the look back.
+        secs.set('templates', { title: 'Templates', build: (b) => drawTemplates(b), toggle: (open) => { if (!open)
+                stopTrying(); } });
         // The top bar's own buttons, after Make a video and Download audio.
         const undoBtn = button('Undo', () => undoStep(true), 'af-ws-undo', ICON_UNDO);
         undoBtn.setAttribute('data-af-ws', 'undo');
@@ -17001,7 +17290,7 @@ export function setup(ctx, overrides) {
             ], S.videoWords || 'light', (v) => {
                 set({ videoWords: v });
                 look();
-            }, 'Light up by default: words not said yet are dimmer.'));
+            }, 'Fade in by default: each word fades in as it is said.'));
             b.appendChild(segmented('Where the words sit', [
                 { id: 'middle', label: 'Middle' },
                 { id: 'lower', label: 'Lower third' },
@@ -17014,7 +17303,7 @@ export function setup(ctx, overrides) {
         }));
         vc.appendChild(fold('Speakers', (b) => {
             b.appendChild(toggle('Show names', 'On by default. Off: no names in the video, in its title, or in the name of any file saved, audio included.', 'videoNames', look, () => [
-                fontPicker('videoNameFont', 'Font of the names', 'The same as the words by default.', true, look),
+                fontPicker('videoNameFont', 'Font of the names', 'Clean by default, beside the words in Book.', true, look),
                 numberRow('Size of the names, in percent', Math.round(numOr(S.videoNameSize, 100)), 60, 160, 5, (v) => {
                     set({ videoNameSize: v });
                     look();
@@ -17173,7 +17462,7 @@ export function setup(ctx, overrides) {
                     designing = v === 'design';
                     paintDesignMode();
                     look();
-                }, 'Dark by default, lit a little in your theme’s accent.');
+                }, 'A soft dark blue gradient by default, A color of your own. Dark is lit a little in your theme’s accent.');
                 sel.setAttribute('data-af-row', 'videoBack');
                 b.appendChild(sel);
                 colorBox.hidden = bk.kind !== 'color' && bk.kind !== 'design';
@@ -17183,10 +17472,10 @@ export function setup(ctx, overrides) {
                 b.appendChild(colorBox);
                 b.appendChild(picBox);
                 b.appendChild(designBox);
-                const edges = slider('Darken the edges', numOr(S.videoEdges, 50), 0, 100, 5, (v) => (v ? v + '%' : 'Off'), (v) => {
+                const edges = slider('Darken the edges', numOr(S.videoEdges, 35), 0, 100, 5, (v) => (v ? v + '%' : 'Off'), (v) => {
                     set({ videoEdges: v });
                     look();
-                }, '50% by default. Off leaves the edges as bright as the middle.');
+                }, '35% by default. Off leaves the edges as bright as the middle.');
                 edges.setAttribute('data-af-byeye', '');
                 edges.setAttribute('data-af-row', 'videoEdges');
                 b.appendChild(edges);
@@ -17217,7 +17506,7 @@ export function setup(ctx, overrides) {
             b.appendChild(numberRow('How long it takes, in seconds', Number(S.videoMoveSecs) || 0.4, 0.1, 2, 0.1, (v) => {
                 set({ videoMoveSecs: v });
                 look();
-            }, '0.4 by default.'));
+            }, '0.5 by default.'));
         }));
         vc.appendChild(fold('Title and ending', (b) => {
             const box = el('<input type="text" class="af-field" maxlength="120" spellcheck="true" autocomplete="off">');
@@ -17830,7 +18119,7 @@ export function setup(ctx, overrides) {
     ]);
     // The setting keys each part covers. Which parts are ticked are settings
     // too, but they are never carried in a file or put back by a reset.
-    const NOT_SETTINGS = ['cast', 'groups', 'moodList', 'prompt', 'promptRole', 'engineNoteRole', 'askNoteRole', 'askNotes', 'engineNotes', 'decisionQuestions', 'exportParts', 'importParts', 'resetParts', 'guideSeen', 'builtInSeen', 'movedSeen', 'chatsOff'];
+    const NOT_SETTINGS = ['cast', 'groups', 'moodList', 'prompt', 'promptRole', 'engineNoteRole', 'askNoteRole', 'askNotes', 'engineNotes', 'decisionQuestions', 'exportParts', 'importParts', 'resetParts', 'guideSeen', 'builtInSeen', 'movedSeen', 'templatesSeen', 'chatsOff'];
     const settingKeys = () => Object.keys(DEFAULTS).filter((k) => NOT_SETTINGS.indexOf(k) < 0);
     let transferSaid = '';
     let transferKind = '';

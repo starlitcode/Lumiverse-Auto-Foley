@@ -56,6 +56,7 @@ const DEFAULT_SETTINGS = {
     logShow: {},
     builtInSeen: '',
     movedSeen: '',
+    templatesSeen: '',
     promptRole: 'system',
     engineNoteRole: 'rules',
     askNoteRole: 'user',
@@ -100,7 +101,7 @@ const DEFAULT_SETTINGS = {
     videoSize: 100,
     videoInk: '',
     videoCaptionInk: '',
-    videoWords: 'light',
+    videoWords: 'fade',
     videoPlace: 'middle',
     videoQuotes: true,
     videoNames: true,
@@ -108,7 +109,7 @@ const DEFAULT_SETTINGS = {
     videoPicShape: 'circle',
     videoPicSize: 150,
     videoNameColor: 'kind',
-    videoNameFont: '',
+    videoNameFont: 'clean',
     videoNameSize: 100,
     videoPicRing: true,
     videoPicRingWidth: 3,
@@ -139,8 +140,8 @@ const DEFAULT_SETTINGS = {
     videoCapDir: 'right',
     videoWordShadow: true,
     videoWordShadowInk: '',
-    videoWordShadowDark: 65,
-    videoWordShadowSoft: 18,
+    videoWordShadowDark: 55,
+    videoWordShadowSoft: 14,
     videoWordShadowFar: 2,
     videoNameShadow: true,
     videoNameShadowInk: '',
@@ -155,12 +156,12 @@ const DEFAULT_SETTINGS = {
     mpShadowInk: '',
     mpShadowDark: 25,
     mpShadowSoft: 8,
-    videoBacks: [{ id: 'main', name: 'Main', kind: 'dark', color: '', fill: 'solid', stops: ['#2a1f3d'], dir: 'down', dim: 40, blur: 0, shapes: [], use: 'match', moods: [], places: [] }],
+    videoBacks: [{ id: 'main', name: 'Main', kind: 'color', color: '#232a45', fill: 'radial', stops: ['#0b0d18'], dir: 'down', dim: 40, blur: 0, shapes: [], use: 'match', moods: [], places: [] }],
     videoBackPick: 'main',
-    videoEdges: 50,
+    videoEdges: 35,
     videoEdgeColor: '',
     videoMove: 'rise',
-    videoMoveSecs: 0.4,
+    videoMoveSecs: 0.5,
     videoTitleOn: true,
     videoTitleText: '',
     videoFadeOut: 1.5,
@@ -771,6 +772,7 @@ function cleanSettings(raw) {
         logShow: cleanLogShow(r.logShow),
         builtInSeen: str(r.builtInSeen, 40).replace(/[^a-z0-9]/g, ''),
         movedSeen: str(r.movedSeen, 2000).replace(/[^a-zA-Z0-9: ]/g, ''),
+        templatesSeen: str(r.templatesSeen, 40).replace(/[^a-z0-9]/gi, ''),
         promptRole: pick(r.promptRole, ['system', 'user', 'assistant'], 'system'),
         engineNoteRole: pick(r.engineNoteRole, ['rules', 'system', 'user', 'assistant'], 'rules'),
         askNoteRole: pick(r.askNoteRole, ['system', 'user', 'assistant'], 'user'),
@@ -5280,7 +5282,7 @@ async function onPanel(p, userId) {
                 const parts = Array.isArray(p.parts) ? p.parts.filter((x) => RESET_PARTS.indexOf(x) >= 0) : [];
                 const s = await loadSettings(userId);
                 const fresh = cleanSettings({});
-                const NOT = ['cast', 'groups', 'moodList', 'prompt', 'promptRole', 'engineNoteRole', 'askNoteRole', 'askNotes', 'engineNotes', 'decisionQuestions', 'exportParts', 'importParts', 'resetParts', 'guideSeen', 'builtInSeen', 'movedSeen', 'chatsOff'];
+                const NOT = ['cast', 'groups', 'moodList', 'prompt', 'promptRole', 'engineNoteRole', 'askNoteRole', 'askNotes', 'engineNotes', 'decisionQuestions', 'exportParts', 'importParts', 'resetParts', 'guideSeen', 'builtInSeen', 'movedSeen', 'templatesSeen', 'chatsOff'];
                 const strip = (x) => {
                     const o = {};
                     for (const k of Object.keys(x).sort())

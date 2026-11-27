@@ -40,6 +40,8 @@ _2026-11-26_
 - **The Studio opens in a workspace of its own.** It opens over Lumiverse with the preview large: on a laptop, the parts of the Studio on the left, the preview in the middle, and the settings on the right; on a phone, the preview on top and the settings under it. With the new **App manipulation** permission it covers the whole screen, and without it, it opens in Lumiverse's extension window. **Open the Studio** is on the drawer's **Studio** tab, in the **Extras** menu and in the floating player's menu. Under it, **Quick shortcuts** has **Download audio** and **Make a video**, for a file in one tap with the current look, using the newest saved performance in the chat when nothing is loaded. Under the preview, the parts show as blocks to jump to. **Undo** and **Redo** take back a change. Every change is saved as it is made. See [The workspace](docs/studio.md#the-workspace).
 - **Keyboard shortcuts** in the Studio, on a computer: Space plays the preview, the arrow keys move along it, F shows it full screen, Ctrl and Z undoes, and more, with Cmd on a Mac. **?** or **Keyboard shortcuts** lists them. They can be turned off, and Lumiverse's own keys always go through. See [Keyboard shortcuts](docs/studio.md#keyboard-shortcuts).
 
+- **Templates** in the Studio: eleven built-in looks, from a plain one to a paper page, film bars, neon glow, a pastel one, a cold dark one, a bright comic one, a typewriter page, a warm lamp and a dreamy sky. Each shows a frame of the example, tries on the preview with a press, and **Use this template** keeps it as one Undo step. Your own line under the title, watermarks, pictures and fonts stay. See [Templates](docs/studio.md#templates).
+
 ### Changed
 
 - **Autoplay and Prepare replies ahead wait for a new reply to settle.** With **Wait before autoplay** at 0, a new reply is directed once it has gone 1.5 seconds with no change, and at most 10 seconds after it ends. An extension that changes a reply just after it ends, such as Auto Refine's word swaps, then costs one Director call, not two. A Play you press starts at once.
@@ -50,6 +52,7 @@ _2026-11-26_
 - **The Director's built-in prompt has a part on scenes.** It is only used while you have two or more backgrounds.
 - **The Director's built-in prompt has a part on music.** It says how to pick a mood and when to change it, and it is only used while Scene music is on. If you have your own prompt, a notice says the built-in one changed. Suggested by a Discord user.
 
+- **A calmer built-in look for the Studio's video.** The background is a soft dark blue gradient in place of Dark, the words fade in as they are said in place of lighting up, a transition takes 0.5 seconds in place of 0.4, the edges are darkened 35% in place of 50%, and the names are in Clean beside the words in Book. If you were on the old values, a notice says so, and you can take the new ones or keep yours.
 - **Every wait shows a number that moves.** Getting a line from the voice service, the Director writing the script, directing ahead, waiting for a new reply to settle, reading saved audio, and getting the audio or pictures ready for the Studio now count the seconds, or the part, so a long wait never looks stuck.
 
 ### Fixed

@@ -275,6 +275,14 @@ describe("defaults that change after a release", () => {
   test("every row names a real setting", () => {
     for (const m of MOVED_DEFAULTS) expect(typeof m.label).toBe("string");
   });
+  test("the Studio's new look tells a reader on the old one, and leaves one with their own", () => {
+    const rows = MOVED_DEFAULTS.filter((m: any) => ["videoWords", "videoMoveSecs", "videoEdges", "videoBacks"].includes(m.key));
+    expect(rows.length).toBe(4);
+    const old = { videoWords: "light", videoMoveSecs: 0.4, videoEdges: 50, videoBacks: rows.find((m: any) => m.key === "videoBacks").was };
+    expect(movedFor(old, "", rows).length).toBe(4);
+    const own = { videoWords: "all", videoMoveSecs: 0.8, videoEdges: 10, videoBacks: [{ id: "main", name: "Mine", kind: "color", color: "#203040" }] };
+    expect(movedFor(own, "", rows).length).toBe(0);
+  });
 });
 
 describe("picking a voice for someone new", () => {
