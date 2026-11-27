@@ -7455,6 +7455,49 @@ if (section("sharing files")) {
   }
 }
 
+if (section("background blur")) {
+  console.log("A blurred background picture is as soft in a small preview as in the saved video");
+  // Black and white stripes, which show how soft the blur is.
+  const maker = await browser.newPage();
+  const PIC = await maker.evaluate(() => {
+    const c = document.createElement("canvas"); c.width = 960; c.height = 540;
+    const g = c.getContext("2d");
+    g.fillStyle = "#000"; g.fillRect(0, 0, 960, 540);
+    g.fillStyle = "#fff"; for (let x = 0; x < 960; x += 48) g.fillRect(x, 0, 24, 540);
+    return c.toDataURL("image/png");
+  });
+  await maker.close();
+  const size = SIZES.find((x) => !x.touch) || SIZES[0];
+  // The top band of the frame, where no words are, at one small size.
+  const band = async (scale) => {
+    const { context, page } = await open(THEMES[0], size, 1, `window.__previewScale = ${scale}; Object.assign(window.__settings, { videoBacks: [{ id: "main", name: "Main", kind: "picture", color: "#000000", fill: "solid", stops: [], dir: "down", dim: 0, blur: 12, shapes: [], use: "match", moods: [], places: [] }], videoBackPick: "main", videoEdges: 0, videoTitleOn: false }); window.__videoBgs = { main: "${PIC}" };`);
+    await openWs(page);
+    await page.waitForTimeout(800);
+    const out = await page.evaluate(async () => {
+      const r = document.querySelector("[data-af-scrub] input");
+      r.step = "any";
+      r.value = "2";
+      r.dispatchEvent(new Event("input", { bubbles: true }));
+      await new Promise((x) => setTimeout(x, 200));
+      await new Promise((x) => requestAnimationFrame(() => requestAnimationFrame(x)));
+      const c = document.querySelector("[data-af-videopreview]");
+      const s = document.createElement("canvas"); s.width = 320; s.height = 180;
+      const g = s.getContext("2d"); g.drawImage(c, 0, 0, 320, 180);
+      return { w: c.width, px: Array.from(g.getImageData(0, 10, 320, 30).data) };
+    });
+    await context.close();
+    return out;
+  };
+  const video = await band(1);
+  for (const scale of [0.5, 0.25]) {
+    const small = await band(scale);
+    let n = 0;
+    for (let i = 0; i < video.px.length; i += 4) n += Math.abs(video.px[i] - small.px[i]);
+    const avg = n / (video.px.length / 4);
+    check(small.w < video.w && avg < 12, "a preview drawn at " + small.w + " pixels wide blurs the background as the " + video.w + "-pixel video does (difference " + avg.toFixed(1) + ")");
+  }
+}
+
 if (section("leaving while trying")) {
   console.log("Leaving the Studio while a template is tried puts the look back, and nothing tried is kept; Escape in a box only leaves the box");
   const STORE = "lv-auto-foley:settings:v1";

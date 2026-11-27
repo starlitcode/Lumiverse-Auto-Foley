@@ -4614,15 +4614,18 @@ export function setup(ctx: Ctx, overrides?: any) {
     const sc = Math.max(W / wall.width, H / wall.height);
     const dw = wall.width * sc;
     const dh = wall.height * sc;
-    const blur = Math.min(20, Math.max(0, Number(bk.blur) || 0));
-    if (blur && 'filter' in b) {
+    // The blur is in pixels of a frame 1080 pixels on its short side, the
+    // size of a saved video, and scaled with the frame as the shadows are,
+    // so the smaller preview is as soft as the video.
+    const blur = (Math.min(20, Math.max(0, Number(bk.blur) || 0)) * Math.min(W, H)) / 1080;
+    if (blur >= 0.05 && 'filter' in b) {
       // Drawn a little larger, so the soft edge of the blur stays off
       // the frame.
       const m = blur * 3;
       b.filter = 'blur(' + blur + 'px)';
       b.drawImage(wall, (W - dw) / 2 - m, (H - dh) / 2 - m, dw + m * 2, dh + m * 2);
       b.filter = 'none';
-    } else if (blur) {
+    } else if (blur >= 0.05) {
       // No blur filter on this browser: drawn small and stretched back,
       // which softens it the same way.
       const f = 1 / (1 + blur / 2);
