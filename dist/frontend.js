@@ -6369,6 +6369,165 @@ export function setup(ctx, overrides) {
             c = list[n] = canvasOf(st.w, st.h);
         return c;
     }
+    function trackInk(lg) {
+        const c = lg;
+        if (c.__ink)
+            return c.__ink;
+        const box = { x0: Infinity, y0: Infinity, x1: -Infinity, y1: -Infinity, all: false, px0: Infinity, py0: Infinity, px1: -Infinity, py1: -Infinity };
+        c.__ink = box;
+        const proto = Object.getPrototypeOf(lg);
+        // The current transform, read once per call.
+        const corners = (pts, pad, path) => {
+            const m = lg.getTransform();
+            let x0 = Infinity;
+            let y0 = Infinity;
+            let x1 = -Infinity;
+            let y1 = -Infinity;
+            for (let i = 0; i < pts.length; i += 2) {
+                const x = m.a * pts[i] + m.c * pts[i + 1] + m.e;
+                const y = m.b * pts[i] + m.d * pts[i + 1] + m.f;
+                if (x < x0)
+                    x0 = x;
+                if (x > x1)
+                    x1 = x;
+                if (y < y0)
+                    y0 = y;
+                if (y > y1)
+                    y1 = y;
+            }
+            if (!isFinite(x0 + y0 + x1 + y1)) {
+                box.all = true;
+                return;
+            }
+            const scale = Math.max(Math.hypot(m.a, m.b), Math.hypot(m.c, m.d));
+            const k = pad * scale;
+            if (path) {
+                box.px0 = Math.min(box.px0, x0 - k);
+                box.py0 = Math.min(box.py0, y0 - k);
+                box.px1 = Math.max(box.px1, x1 + k);
+                box.py1 = Math.max(box.py1, y1 + k);
+            }
+            else
+                grow(x0 - k, y0 - k, x1 + k, y1 + k);
+        };
+        // A shadow is not moved by the transform, so it is added after it.
+        const grow = (x0, y0, x1, y1) => {
+            let sx0 = 0;
+            let sy0 = 0;
+            let sx1 = 0;
+            let sy1 = 0;
+            const col = String(lg.shadowColor || '');
+            if (col && col !== 'transparent' && !/rgba\([^)]*,\s*0\)$/.test(col) && (lg.shadowBlur > 0 || lg.shadowOffsetX || lg.shadowOffsetY)) {
+                const b = lg.shadowBlur * 2;
+                sx0 = Math.min(0, lg.shadowOffsetX) - b;
+                sy0 = Math.min(0, lg.shadowOffsetY) - b;
+                sx1 = Math.max(0, lg.shadowOffsetX) + b;
+                sy1 = Math.max(0, lg.shadowOffsetY) + b;
+            }
+            box.x0 = Math.min(box.x0, x0 + sx0 - 2);
+            box.y0 = Math.min(box.y0, y0 + sy0 - 2);
+            box.x1 = Math.max(box.x1, x1 + sx1 + 2);
+            box.y1 = Math.max(box.y1, y1 + sy1 + 2);
+        };
+        const rect = (x, y, w, h) => [x, y, x + w, y, x, y + h, x + w, y + h];
+        const wrap = (name, measure) => {
+            const real = proto[name];
+            if (typeof real !== 'function')
+                return;
+            c[name] = function (...a) {
+                try {
+                    measure(...a);
+                }
+                catch (_) {
+                    box.all = true;
+                }
+                return real.apply(lg, a);
+            };
+        };
+        const text = (str, x, y) => {
+            const m = proto.measureText.call(lg, String(str));
+            const l = m.actualBoundingBoxLeft || 0;
+            const r = m.actualBoundingBoxRight || m.width || 0;
+            const up = m.actualBoundingBoxAscent || 0;
+            const dn = m.actualBoundingBoxDescent || 0;
+            corners([x - l, y - up, x + r, y - up, x - l, y + dn, x + r, y + dn], 0, false);
+        };
+        wrap('fillText', (str, x, y) => text(str, x, y));
+        wrap('strokeText', (str, x, y) => {
+            text(str, x, y);
+            const w = lg.lineWidth || 1;
+            box.x0 -= w;
+            box.y0 -= w;
+            box.x1 += w;
+            box.y1 += w;
+        });
+        wrap('fillRect', (x, y, w, h) => corners(rect(x, y, w, h), 0, false));
+        wrap('strokeRect', (x, y, w, h) => corners(rect(x, y, w, h), lg.lineWidth || 1, false));
+        wrap('drawImage', (img, ...a) => {
+            if (a.length === 2)
+                corners(rect(a[0], a[1], img.naturalWidth || img.videoWidth || img.width, img.naturalHeight || img.videoHeight || img.height), 0, false);
+            else if (a.length === 4)
+                corners(rect(a[0], a[1], a[2], a[3]), 0, false);
+            else
+                corners(rect(a[4], a[5], a[6], a[7]), 0, false);
+        });
+        wrap('putImageData', () => {
+            box.all = true;
+        });
+        // The path being built, in frame pixels.
+        wrap('beginPath', () => {
+            box.px0 = box.py0 = Infinity;
+            box.px1 = box.py1 = -Infinity;
+        });
+        wrap('moveTo', (x, y) => corners([x, y], 0, true));
+        wrap('lineTo', (x, y) => corners([x, y], 0, true));
+        wrap('quadraticCurveTo', (a, b, x, y) => corners([a, b, x, y], 0, true));
+        wrap('bezierCurveTo', (a, b, c2, d, x, y) => corners([a, b, c2, d, x, y], 0, true));
+        wrap('arcTo', (a, b, x, y, r) => corners([a - r, b - r, a + r, b + r, x - r, y - r, x + r, y + r], 0, true));
+        wrap('arc', (x, y, r) => corners([x - r, y - r, x + r, y + r, x - r, y + r, x + r, y - r], 0, true));
+        wrap('ellipse', (x, y, rx, ry) => {
+            const r = Math.max(rx, ry);
+            corners([x - r, y - r, x + r, y + r, x - r, y + r, x + r, y - r], 0, true);
+        });
+        wrap('rect', (x, y, w, h) => corners(rect(x, y, w, h), 0, true));
+        wrap('roundRect', (x, y, w, h) => corners(rect(x, y, w, h), 0, true));
+        const usePath = (a, line) => {
+            if (a.length && typeof a[0] === 'object') {
+                box.all = true;
+                return;
+            }
+            if (box.px0 > box.px1)
+                return;
+            grow(box.px0 - line, box.py0 - line, box.px1 + line, box.py1 + line);
+        };
+        wrap('fill', (...a) => usePath(a, 0));
+        wrap('stroke', (...a) => {
+            const m = lg.getTransform();
+            usePath(a, (lg.lineWidth || 1) * Math.max(Math.hypot(m.a, m.b), Math.hypot(m.c, m.d)) + 2);
+        });
+        return box;
+    }
+    // Starts a new count of what is drawn on a layer.
+    function inkStart(lg) {
+        const box = trackInk(lg);
+        box.x0 = box.y0 = box.px0 = box.py0 = Infinity;
+        box.x1 = box.y1 = box.px1 = box.py1 = -Infinity;
+        box.all = false;
+    }
+    // What was drawn since inkStart, grown by pad and held to the frame, in
+    // whole pixels: [x, y, w, h], with w 0 when nothing was drawn.
+    function inkBox(lg, W, H, pad) {
+        const box = trackInk(lg);
+        if (box.all)
+            return [0, 0, W, H];
+        if (box.x0 > box.x1)
+            return [0, 0, 0, 0];
+        const x0 = Math.max(0, Math.floor(box.x0 - pad));
+        const y0 = Math.max(0, Math.floor(box.y0 - pad));
+        const x1 = Math.min(W, Math.ceil(box.x1 + pad));
+        const y1 = Math.min(H, Math.ceil(box.y1 + pad));
+        return x1 > x0 && y1 > y0 ? [x0, y0, x1 - x0, y1 - y0] : [0, 0, 0, 0];
+    }
     // Typewriter and Word by word: how much of the text drawn now is shown,
     // from 0 to 1. Read by drawPart and drawTitle while it is set.
     let textReveal = null;
@@ -6527,23 +6686,32 @@ export function setup(ctx, overrides) {
         lg.globalAlpha = 1;
         lg.globalCompositeOperation = 'source-over';
         lg.clearRect(0, 0, W, H);
+        inkStart(lg);
         d(lg, 1, 0, 0);
+        // Only the part drawn on is worked on from here. A blur spreads past
+        // it, so the box is grown by the blur.
+        const r = s.b * u;
+        const box = inkBox(lg, W, H, r >= 0.5 ? r * 3 + 2 : 0);
+        const [bx, by, bw, bh] = box;
+        // An effect such as Signal lost still draws over an empty frame.
+        if (!bw && !s.fx)
+            return;
         // Darker, lighter and tinted, over what is drawn only.
         lg.globalCompositeOperation = 'source-atop';
         if (s.l < 99.5) {
             lg.globalAlpha = Math.min(1, (100 - s.l) / 100);
             lg.fillStyle = '#000';
-            lg.fillRect(0, 0, W, H);
+            lg.fillRect(bx, by, bw, bh);
         }
         else if (s.l > 100.5) {
             lg.globalAlpha = Math.min(1, (s.l - 100) / 100);
             lg.fillStyle = '#fff';
-            lg.fillRect(0, 0, W, H);
+            lg.fillRect(bx, by, bw, bh);
         }
         if (s.ta > 0.5) {
             lg.globalAlpha = Math.min(1, s.ta / 100);
             lg.fillStyle = s.tint;
-            lg.fillRect(0, 0, W, H);
+            lg.fillRect(bx, by, bw, bh);
         }
         lg.globalAlpha = 1;
         if (s.mask.type !== 'none')
@@ -6554,7 +6722,6 @@ export function setup(ctx, overrides) {
         let src = c;
         let sw = W;
         let sh = H;
-        const r = s.b * u;
         if (r >= 0.5) {
             const k = Math.min(1, 1.5 / r);
             sw = Math.max(1, Math.round(W * k));
@@ -6565,7 +6732,7 @@ export function setup(ctx, overrides) {
             bg.globalAlpha = 1;
             bg.clearRect(0, 0, W, H);
             bg.imageSmoothingQuality = 'high';
-            bg.drawImage(c, 0, 0, sw, sh);
+            bg.drawImage(c, bx, by, bw, bh, (bx * sw) / W, (by * sh) / H, (bw * sw) / W, (bh * sh) / H);
             src = bc;
         }
         const ax = anchor === 'left' ? 0 : anchor === 'right' ? W : W / 2;
@@ -6577,7 +6744,7 @@ export function setup(ctx, overrides) {
             g.rotate((s.r * Math.PI) / 180);
             g.scale(s.s / 100, s.s / 100);
             g.translate(-ax, -ay);
-            drawFx(g, st, src, sw, sh, s);
+            drawFx(g, st, src, sw, sh, s, box);
             g.restore();
             return;
         }
@@ -6588,7 +6755,7 @@ export function setup(ctx, overrides) {
         g.scale(s.s / 100, s.s / 100);
         g.translate(-ax, -ay);
         g.imageSmoothingQuality = 'high';
-        g.drawImage(src, 0, 0, sw, sh, 0, 0, W, H);
+        g.drawImage(src, (bx * sw) / W, (by * sh) / H, (bw * sw) / W, (bh * sh) / H, bx, by, bw, bh);
         g.restore();
     }
     // The calm glitches. Each is strongest at the start of an in track and
@@ -6597,48 +6764,49 @@ export function setup(ctx, overrides) {
         const x = Math.sin(n * 127.1 + 311.7) * 43758.5453;
         return x - Math.floor(x);
     };
-    function drawFx(g, st, src, sw, sh, s) {
+    function drawFx(g, st, src, sw, sh, s, box) {
         const W = st.w;
         const H = st.h;
         const u = Math.min(W, H) / 1080;
         // How far from rest: 1 at the far end of the track, 0 at rest.
         const away = s.hide ? s.p : 1 - s.p;
-        const plain = () => g.drawImage(src, 0, 0, sw, sh, 0, 0, W, H);
+        // The part of the layer drawn on, in frame pixels, and in the layer's
+        // own pixels, which are fewer while it is blurred.
+        const [bx, by, bw, bh] = box;
+        const kx = sw / W;
+        const ky = sh / H;
+        const plain = () => g.drawImage(src, bx * kx, by * ky, bw * kx, bh * ky, bx, by, bw, bh);
         if (s.fx === 'split') {
             // The red and the blue-green parts drift apart and back together.
             const d = Math.sin(away * Math.PI * 0.5) * 14 * u;
             if (d < 0.3)
                 return plain();
-            // Each color part is made at half size and drawn back at full size.
-            // The parts drift apart by a few pixels, so the softer edge is not
-            // seen, and it is a quarter of the work, which keeps play smooth.
-            const hw = Math.max(1, Math.round(W / 2));
-            const hh = Math.max(1, Math.round(H / 2));
+            // Each color part is made only as large as what is drawn, at full
+            // size, so it is drawn back with no stretching.
             const tinted = (n, color) => {
-                const list = (st.halfLayers = st.halfLayers || []);
+                const list = (st.splitLayers = st.splitLayers || []);
                 let c = list[n];
-                if (!c || c.width !== hw || c.height !== hh)
-                    c = list[n] = canvasOf(hw, hh);
+                if (!c || c.width !== W || c.height !== H)
+                    c = list[n] = canvasOf(W, H);
                 const cg = c.getContext('2d');
                 cg.setTransform(1, 0, 0, 1, 0, 0);
                 cg.globalAlpha = 1;
-                cg.globalCompositeOperation = 'source-over';
-                cg.clearRect(0, 0, hw, hh);
-                cg.drawImage(src, 0, 0, sw, sh, 0, 0, hw, hh);
+                cg.globalCompositeOperation = 'copy';
+                cg.drawImage(src, bx * kx, by * ky, bw * kx, bh * ky, 0, 0, bw, bh);
                 cg.globalCompositeOperation = 'multiply';
                 cg.fillStyle = color;
-                cg.fillRect(0, 0, hw, hh);
+                cg.fillRect(0, 0, bw, bh);
                 cg.globalCompositeOperation = 'destination-in';
-                cg.drawImage(src, 0, 0, sw, sh, 0, 0, hw, hh);
+                cg.drawImage(src, bx * kx, by * ky, bw * kx, bh * ky, 0, 0, bw, bh);
                 cg.globalCompositeOperation = 'source-over';
                 return c;
             };
-            const red = tinted(12, '#ff0000');
-            const rest = tinted(13, '#00ffff');
-            g.drawImage(red, -d, 0, W, H);
+            const red = tinted(0, '#ff0000');
+            const rest = tinted(1, '#00ffff');
+            g.drawImage(red, 0, 0, bw, bh, bx - d, by, bw, bh);
             const was = g.globalCompositeOperation;
             g.globalCompositeOperation = 'lighter';
-            g.drawImage(rest, d, 0, W, H);
+            g.drawImage(rest, 0, 0, bw, bh, bx + d, by, bw, bh);
             g.globalCompositeOperation = was;
             return;
         }

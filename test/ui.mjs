@@ -6096,6 +6096,7 @@ if (section("template switching")) {
     {
       const { context, page, errors } = await fresh(null);
       const slow = [];
+      const heavy = [];
       for (const id of ids) {
         await page.click('[data-af-tpl="' + id + '"]');
         await page.waitForTimeout(900);
@@ -6113,8 +6114,36 @@ if (section("template switching")) {
           document.querySelector('[data-af-studio="play"]').click();
           return out.slice(20);
         });
-        const worst = Math.max(...times);
-        if (worst > 51) slow.push(id + " " + Math.round(worst) + " ms");
+        // The median and the 95th percentile of the time between frames. A
+        // headless browser draws with no graphics card, and one frame can
+        // be held up by something else on the machine, so a single slow
+        // frame is not counted as a stutter on its own.
+        const sorted = times.slice().sort((a, b) => a - b);
+        const median = sorted[Math.floor(sorted.length / 2)];
+        const p95 = sorted[Math.floor(sorted.length * 0.95)];
+        if (median > 20 || p95 > 51) slow.push(id + " median " + Math.round(median) + " ms, 95th percentile " + Math.round(p95) + " ms");
+        // How long each frame takes to draw through a line change, with
+        // the drawing finished before the time is read. An effect or a blur
+        // that works on the whole frame for words that fill a small part of
+        // it shows here on every run.
+        if (!size.touch) {
+          const draw = await page.evaluate(() => {
+            const r = document.querySelector("[data-af-scrub] input");
+            const c = document.querySelector("[data-af-videopreview]");
+            r.step = "any";
+            const out = [];
+            for (let t = 7.9; t <= 8.6; t += 1 / 60) {
+              r.value = String(t);
+              const a = performance.now();
+              r.dispatchEvent(new Event("input", { bubbles: true }));
+              c.getContext("2d").getImageData(0, 0, 1, 1);
+              out.push(performance.now() - a);
+            }
+            out.sort((a, b) => a - b);
+            return out[Math.floor(out.length * 0.95)];
+          });
+          if (draw > 45) heavy.push(id + " " + Math.round(draw) + " ms");
+        }
         if (OUT && !size.touch) {
           const strip = await page.evaluate(async () => {
             const r = document.querySelector("[data-af-scrub] input");
@@ -6135,7 +6164,8 @@ if (section("template switching")) {
           fs.writeFileSync(OUT + "/strip-" + id + ".png", Buffer.from(strip, "base64"));
         }
       }
-      check(!slow.length, say + ": every template plays with no frame over 50 ms. Slow: " + slow.join(", "));
+      check(!slow.length, say + ": every template plays smoothly: half its frames within 20 ms, and 95 in 100 within 50 ms. Slow: " + slow.join(", "));
+      if (!size.touch) check(!heavy.length, say + ": through a line change, 95 in 100 frames of every template draw within 45 ms. Slow: " + heavy.join(", "));
       check(!errors.length, say + ": no page errors. " + errors.slice(0, 2).join(" | "));
       await context.close();
     }
