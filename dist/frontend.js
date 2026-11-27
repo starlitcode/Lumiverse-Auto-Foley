@@ -21318,6 +21318,9 @@ export function setup(ctx, overrides) {
                     more += ' Put back ' + done.join(', ') + '.';
                 if (skip.length)
                     more += ' Skipped ' + skip.join(', ') + ', already on your account. Nothing was replaced.';
+                const unread = countWords((r && r.unread) || {});
+                if (unread.length)
+                    more += ' Left out ' + unread.join(', ') + ': the one already on your account could not be read, so it was not written over. Try again in a moment.';
                 if (!r || !r.ok)
                     more += ' Its pictures and fonts could not be put back: ' + ((r && r.error) || 'the backend did not answer.');
             }
@@ -24849,15 +24852,18 @@ export function setup(ctx, overrides) {
         const parts = [said];
         if (done.length)
             parts.push('Put back ' + done.join(', ') + '.');
+        const unread = countWords((r && r.unread) || {});
         if (skip.length)
             parts.push('Skipped ' + skip.join(', ') + ', already on your account or not readable. Nothing was replaced.');
+        if (unread.length)
+            parts.push('Left out ' + unread.join(', ') + ': the one already on your account could not be read, so it was not written over. Try again in a moment.');
         if (!r || !r.ok)
             parts.push((r && r.error) || 'The pictures, fonts and projects could not be put back: the backend did not answer.');
         if (!done.length && !skip.length && r && r.ok)
             parts.push('The file holds no pictures, fonts or projects.');
         transferSaid = parts.filter(Boolean).join(' ');
-        transferKind = r && r.ok ? 'good' : 'bad';
-        log(transferSaid, r && r.ok ? '' : 'bad', 'setting');
+        transferKind = r && r.ok && !unread.length ? 'good' : 'bad';
+        log(transferSaid, r && r.ok && !unread.length ? '' : 'bad', 'setting');
         if (r && r.ok) {
             // The new pictures and projects are read again where they are shown.
             for (const id of Object.keys((files && files.stickers) || {}))

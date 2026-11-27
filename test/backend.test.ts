@@ -32,6 +32,9 @@ function host(opts: {
   tokens?: boolean;
   // A read of a matching path fails, as on a busy or broken disk.
   failRead?: (path: string) => boolean;
+  // Each read takes this many milliseconds, as on a slow disk, and
+  // answers with the file as it was when the read started.
+  readMs?: number;
 } = {}): Host {
   const files = new Map<string, any>(opts.files || []);
   const keys = new Map<string, string>();
@@ -69,7 +72,10 @@ function host(opts: {
       async read(path: string, userId?: string) {
         if (opts.failRead && opts.failRead(path)) throw new Error("EIO: the disk is busy");
         if (!files.has(k(path, userId))) throw new Error("ENOENT");
-        return files.get(k(path, userId));
+        // A slow read answers with what was there when it started.
+        const got = files.get(k(path, userId));
+        if (opts.readMs) await new Promise((r) => setTimeout(r, opts.readMs));
+        return got;
       },
       async write(path: string, data: string, userId?: string) {
         files.set(k(path, userId), data);
@@ -2448,6 +2454,73 @@ describe("full backup", () => {
     const again = (await b.ask({ type: "restore_files", files: got.files }, "u2")).find((m: any) => m.type === "restored_files");
     expect(again.done).toEqual({});
     expect(again.skip).toEqual({ backgrounds: 1, stickers: 1, marks: 1, fonts: 1, projects: 1 });
+  });
+});
+
+describe("a backup and a restore after a failed read", () => {
+  const pic = "data:image/png;base64,AAAA";
+  const other = "data:image/png;base64,BBBB";
+  const setUp = async (h: any) => {
+    await h.ask({ type: "save", settings: { videoBacks: [{ id: "main", kind: "picture" }], videoStickers: [{ id: "k1" }], videoMarks: [{ id: "w1", pic: true }], cast: [{ id: "c1", name: "Wren", moodPics: ["calm"] }] } }, "u1");
+    await h.ask({ type: "video_bg_put", id: "main", picture: pic }, "u1");
+    await h.ask({ type: "sticker_put", id: "k1", picture: pic }, "u1");
+    await h.ask({ type: "mark_pic_put", id: "w1", picture: pic }, "u1");
+    await h.ask({ type: "project_put", name: "Quay", project: { look: {}, keptKey: "" } }, "u1");
+  };
+  for (const [what, path] of [
+    ["a watermark picture", "video-marks/w1.json"],
+    ["a sticker", "video-stickers/k1.json"],
+    ["a project", "projects/pj1.json"],
+    ["a background picture", "video-backgrounds/main.json"],
+  ]) {
+    test("a backup fails as a whole when " + what + " cannot be read, and says so", async () => {
+      let broken = false;
+      const h = host({ failRead: (p) => broken && p.startsWith(path.replace(/[^/]+$/, "")) && p !== "projects/index.json" && p !== "video-marks/index.json" && p !== "video-stickers/index.json" && p !== "video-backgrounds/index.json" });
+      await setUp(h);
+      broken = true;
+      const got = (await h.ask({ type: "backup_files" }, "u1")).find((m: any) => m.type === "backup_files");
+      expect(got.ok).toBe(false);
+      expect(got.files).toBeUndefined();
+      expect(got.error).toContain("The full backup was not made.");
+      expect(got.error).toContain("could not be read from your account");
+    });
+  }
+  test("a mood picture that cannot be read makes the backup fail", async () => {
+    let broken = false;
+    const h = host({ failRead: (p) => broken && p.startsWith("cast-moods/") });
+    await setUp(h);
+    await h.ask({ type: "mood_pic_put", member: "c1", feeling: "calm", picture: pic }, "u1");
+    broken = true;
+    const got = (await h.ask({ type: "backup_files" }, "u1")).find((m: any) => m.type === "backup_files");
+    expect(got.ok).toBe(false);
+    expect(got.error).toContain("A mood picture could not be read");
+  });
+  test("a restore never writes over a picture it could not read, and says which were left out", async () => {
+    let broken = false;
+    const h = host({ failRead: (p) => broken && (p === "video-stickers/k1.json" || p === "video-backgrounds/main.json" || p === "video-marks/w1.json") });
+    await setUp(h);
+    broken = true;
+    const r = (await h.ask({ type: "restore_files", files: { backgrounds: { main: other }, stickers: { k1: other }, marks: { w1: other } } }, "u1")).find((m: any) => m.type === "restored_files");
+    expect(r.ok).toBe(true);
+    expect(r.done).toEqual({});
+    expect(r.unread).toEqual({ backgrounds: 1, stickers: 1, marks: 1 });
+    broken = false;
+    expect((await h.ask({ type: "sticker_get", id: "k1" }, "u1")).find((m: any) => m.type === "sticker").picture).toBe(pic);
+    expect((await h.ask({ type: "video_bg_get", id: "main" }, "u1")).find((m: any) => m.type === "video_bg").picture).toBe(pic);
+  });
+});
+
+describe("the list of projects from two tabs", () => {
+  test("a rename and a save sent at once both stay", async () => {
+    const h = host({ readMs: 5 });
+    const made = (await h.ask({ type: "project_put", name: "Quay", project: { look: {}, keptKey: "" } }, "u1")).find((m: any) => m.type === "project_saved");
+    await Promise.all([
+      h.ask({ type: "project_edit", id: made.id, name: "Quay at night" }, "u1"),
+      h.ask({ type: "project_put", id: made.id, name: "Quay", project: { look: { videoSize: 120 }, keptKey: "" } }, "u1"),
+      h.ask({ type: "project_put", name: "Mill", project: { look: {}, keptKey: "" } }, "u1"),
+    ]);
+    const list = (await h.ask({ type: "project_list" }, "u1")).find((m: any) => m.type === "projects").list;
+    expect(list.map((x: any) => x.name).sort()).toEqual(["Mill", "Quay at night"]);
   });
 });
 

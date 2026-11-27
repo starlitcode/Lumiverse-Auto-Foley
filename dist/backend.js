@@ -3859,6 +3859,18 @@ async function readVideoBg(id, userId) {
     const old = await readJson(VIDEO_BG_FILE, userId);
     return cleanVideoBg(old && old.picture);
 }
+// The same, for a picture that is written over or put in a backup: a
+// file that is there but cannot be read throws ReadFailed.
+async function readVideoBgStrict(id, userId) {
+    const what = 'A background picture could not be read from your account.';
+    const v = await readJsonStrict(bgFile(id), userId, what);
+    if (v && typeof v.picture === 'string')
+        return cleanVideoBg(v.picture);
+    if (id !== 'main')
+        return '';
+    const old = await readJsonStrict(VIDEO_BG_FILE, userId, what);
+    return cleanVideoBg(old && old.picture);
+}
 // The ids of every background with a picture kept, in a file of its own,
 // so a picture is found and taken out even after its background left the
 // list. Storage cannot list its files.
@@ -4901,7 +4913,27 @@ async function listDecisionConnections(userId) {
         return { list: [], state: 'error', why: sentence(decisionTrouble(e)) };
     }
 }
-async function onPanel(p, userId) {
+// The requests that read the list of projects and write it back. Each
+// waits for the one before it from the same account, so two tabs saving
+// at once never read the same list and lose each other's change, such as
+// a rename.
+const PROJECT_WRITES = new Set(['project_put', 'project_edit', 'project_dup', 'project_drop', 'restore_files', 'reset']);
+const projectTurns = new Map();
+function onPanel(p, userId) {
+    const type = String((p && p.type) || '');
+    if (!PROJECT_WRITES.has(type))
+        return panelRequest(p, userId);
+    const key = String(userId || '');
+    const run = (projectTurns.get(key) || Promise.resolve()).then(() => panelRequest(p, userId));
+    const tail = run.catch(() => undefined);
+    projectTurns.set(key, tail);
+    void tail.then(() => {
+        if (projectTurns.get(key) === tail)
+            projectTurns.delete(key);
+    });
+    return run;
+}
+async function panelRequest(p, userId) {
     if (!p || typeof p !== 'object')
         return;
     const type = String(p.type || '');
@@ -5393,24 +5425,24 @@ async function onPanel(p, userId) {
                     const out = { backgrounds: {}, marks: {}, stickers: {}, moods: {}, fonts: [], projects: [] };
                     const bgIds = (await bgIndex(userId)).concat(s.videoBacks.map((b) => b.id));
                     for (const id of bgIds.filter((x, i) => bgIds.indexOf(x) === i)) {
-                        const pic = await readVideoBg(id, userId);
+                        const pic = await readVideoBgStrict(id, userId);
                         if (pic)
                             out.backgrounds[id] = pic;
                     }
                     for (const id of await markIndex(userId)) {
-                        const v = await readJson(markFile(id), userId);
+                        const v = await readJsonStrict(markFile(id), userId, 'A watermark picture could not be read from your account.');
                         if (v && v.picture)
                             out.marks[id] = v.picture;
                     }
                     for (const id of await stickerIndex(userId)) {
-                        const v = await readJson(stickerFile(id), userId);
+                        const v = await readJsonStrict(stickerFile(id), userId, 'A sticker could not be read from your account.');
                         const pic = cleanVideoBg(v && v.picture);
                         if (pic)
                             out.stickers[id] = pic;
                     }
                     for (const m of s.cast)
                         for (const f of m.moodPics || []) {
-                            const v = await readJson(moodPicFile(String(m.id), f), userId);
+                            const v = await readJsonStrict(moodPicFile(String(m.id), f), userId, 'A mood picture could not be read from your account.');
                             if (v && v.picture)
                                 out.moods[String(m.id) + ':' + f] = v.picture;
                         }
@@ -5420,14 +5452,17 @@ async function onPanel(p, userId) {
                             out.fonts.push({ id: f.id, name: f.name, base64: toBase64(bytes) });
                     }
                     for (const e of await projectIndex(userId)) {
-                        const v = await readJson(projectFile(e.id), userId);
+                        const v = await readJsonStrict(projectFile(e.id), userId, 'A project could not be read from your account.');
                         if (v)
                             out.projects.push({ entry: e, body: v });
                     }
                     return answer({ type: 'backup_files', ok: true, files: out });
                 }
                 catch (e) {
-                    return answer({ type: 'backup_files', ok: false, error: 'Your pictures, fonts and projects could not be read from your account: ' + String((e && e.message) || e).slice(0, 160) });
+                    // A backup with a part left out would look whole, so a failed read
+                    // makes the whole backup fail.
+                    const why = e instanceof ReadFailed ? e.message : 'Your pictures, fonts and projects could not be read from your account: ' + String((e && e.message) || e).slice(0, 160);
+                    return answer({ type: 'backup_files', ok: false, error: 'The full backup was not made. ' + why + ' Try again in a moment.' });
                 }
             }
             case 'restore_files': {
@@ -5437,10 +5472,27 @@ async function onPanel(p, userId) {
                 const done = {};
                 const skip = {};
                 const add = (o, k) => (o[k] = (o[k] || 0) + 1);
+                // A file on the account that could not be read is left as it is,
+                // never written over, and counted here.
+                const unread = {};
+                const there = async (read, kind) => {
+                    try {
+                        return await read();
+                    }
+                    catch (e) {
+                        if (!(e instanceof ReadFailed))
+                            throw e;
+                        add(unread, kind);
+                        return null;
+                    }
+                };
                 try {
                     for (const [rawId, pic] of Object.entries(f.backgrounds || {})) {
                         const id = backId(rawId);
-                        if (await readVideoBg(id, userId)) {
+                        const had = await there(async () => !!(await readVideoBgStrict(id, userId)), 'backgrounds');
+                        if (had === null)
+                            continue;
+                        if (had) {
                             add(skip, 'backgrounds');
                             continue;
                         }
@@ -5460,9 +5512,14 @@ async function onPanel(p, userId) {
                     ]) {
                         for (const [rawId, pic] of Object.entries(f[kind] || {})) {
                             const id = backId(rawId);
-                            const there = await readJson(file(id), userId);
+                            const had = await there(async () => {
+                                const v = await readJsonStrict(file(id), userId);
+                                return !!(v && v.picture);
+                            }, kind);
+                            if (had === null)
+                                continue;
                             const clean = cleanVideoBg(pic);
-                            if ((there && there.picture) || !clean || !(await writeJson(file(id), { picture: clean }, userId))) {
+                            if (had || !clean || !(await writeJson(file(id), { picture: clean }, userId))) {
                                 add(skip, kind);
                                 continue;
                             }
@@ -5474,9 +5531,14 @@ async function onPanel(p, userId) {
                     }
                     for (const [key, pic] of Object.entries(f.moods || {})) {
                         const [member, feeling] = String(key).split(':');
-                        const there = await readJson(moodPicFile(memberId(member), moodId(feeling)), userId);
+                        const had = await there(async () => {
+                            const v = await readJsonStrict(moodPicFile(memberId(member), moodId(feeling)), userId);
+                            return !!(v && v.picture);
+                        }, 'moods');
+                        if (had === null)
+                            continue;
                         const clean = cleanPicture(pic);
-                        if ((there && there.picture) || !clean || !(await writeJson(moodPicFile(memberId(member), moodId(feeling)), { picture: clean }, userId)))
+                        if (had || !clean || !(await writeJson(moodPicFile(memberId(member), moodId(feeling)), { picture: clean }, userId)))
                             add(skip, 'moods');
                         else
                             add(done, 'moods');
@@ -5512,10 +5574,10 @@ async function onPanel(p, userId) {
                         await writeJson(PROJECT_INDEX, list, userId);
                         add(done, 'projects');
                     }
-                    return answer({ type: 'restored_files', ok: true, done, skip });
+                    return answer({ type: 'restored_files', ok: true, done, skip, unread });
                 }
                 catch (e) {
-                    return answer({ type: 'restored_files', ok: false, done, skip, error: 'Some files could not be put back on your account: ' + String((e && e.message) || e).slice(0, 160) });
+                    return answer({ type: 'restored_files', ok: false, done, skip, unread, error: 'Some files could not be put back on your account: ' + String((e && e.message) || e).slice(0, 160) });
                 }
             }
             case 'font_get': {
@@ -5969,7 +6031,7 @@ async function onPanel(p, userId) {
 }
 try {
     // The promise is returned so a caller that waits can see the work finish.
-    // onPanel catches its own errors, so it never rejects.
+    // panelRequest catches its own errors, so onPanel never rejects.
     spindle.onFrontendMessage((payload, userId) => onPanel(payload, userId));
 }
 catch (e) {
