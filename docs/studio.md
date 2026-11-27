@@ -190,7 +190,7 @@ Nothing leaves your device but the project itself, which is saved to your accoun
 - A save that fails warns once, in plain words, and the top says **Project, not saved**. The change stays on the page until it is saved.
 - A background or watermark picture that a project uses stays on your account, even after it leaves the backgrounds in use.
 - Up to 100 projects and 30 folders. A project is at most about 400 KB, which shapes and notes make up most of.
-- A setup file does not carry projects or their folders, since they point at saved audio and pictures that the file does not carry either.
+- A setup file carries projects only as part of a full backup. See [A full backup](#a-full-backup). Project folders are settings, and the saved audio a project uses is never in a file.
 - **Start again** with **Settings** ticked deletes every project.
 
 ## Older performances
@@ -555,6 +555,27 @@ A note is a few words for whoever watches, in a dark box at the top or the botto
 ### Start again
 
 Every choice in the Studio is a setting, kept on your account. **Start again** in the Settings tab, with **Settings** ticked, puts them all back: the look, the notes, the words to hide, the background pictures, your own fonts and your projects. A setup file carries the settings too, but not the background pictures, your fonts or the pictures for moods.
+
+### A full backup
+
+In the Settings tab, under **Your whole setup**, tick **Pictures, fonts and projects, for a full backup** under what to save, then press **Export to file**.
+
+- The file is named `auto-foley-backup.json`. The line under the button says how large it is.
+- It holds your settings and the parts ticked, and also the background pictures, watermark pictures, stickers, pictures for moods, your fonts and your projects.
+- It never holds your Freesound or ElevenLabs keys, saved audio, kept scripts or chat text.
+
+To put it back, tick the same part under what to take from a file, and press **Import from file**.
+
+- Pictures, fonts and projects already on your account are never replaced. They are skipped.
+- The line under the button says what was put back and what was skipped, and the Log says it too.
+
+| What | In a setup file | In a full backup |
+| --- | --- | --- |
+| Settings, the Studio's look, scene moods, animations, stickers' places | Yes | Yes |
+| Background, watermark and sticker pictures, pictures for moods | No | Yes |
+| Your fonts | No | Yes |
+| Projects | No | Yes |
+| Saved audio, kept scripts, keys | No | No |
 
 ## Your own fonts
 

@@ -215,6 +215,8 @@ function answer(msg) {
     // Watermark pictures, by id.
     case 'mark_pic_get': { const r = { type: 'mark_pic', id: msg.id, picture: (window.__markPics || {})[msg.id] || '' }; if (window.__markDelay) { setTimeout(() => reply(r), window.__markDelay); return; } return reply(r); }
     case 'sound_delete': window.__sounds = window.__sounds.filter((x) => x.id !== msg.id); return reply({ type: 'sounds', sounds: window.__sounds });
+    case 'backup_files': return reply({ type: 'backup_files', ok: true, files: window.__backupFiles || { backgrounds: {}, marks: {}, stickers: { k9: 'data:image/png;base64,AAAA' }, moods: {}, fonts: [], projects: [] } });
+    case 'restore_files': (window.__restored = window.__restored || []).push(msg.files); return reply({ type: 'restored_files', ok: true, done: { stickers: Object.keys(msg.files.stickers || {}).length }, skip: { fonts: (msg.files.fonts || []).length } });
     case 'sticker_get': return reply({ type: 'sticker', id: msg.id, picture: (window.__stickers || {})[msg.id] || '' });
     case 'sticker_put': window.__stickers = Object.assign(window.__stickers || {}, { [msg.id]: msg.picture || '' }); return reply({ type: 'sticker', id: msg.id, ok: true });
     case 'mark_pic_put': window.__markPics = Object.assign(window.__markPics || {}, { [msg.id]: msg.picture || '' }); return reply({ type: 'mark_pic', id: msg.id, ok: true });
@@ -7205,6 +7207,37 @@ if (section("built-in animations")) {
     check(await page.evaluate(() => (window.__settings.videoAnims.lines || {}).id === "thru-heart"), size.name + ": a card sets the place");
     const m = await page.evaluate(MEASURE, size.touch);
     check(!m.overflow.length && !m.small.length, size.name + ": it fits. " + m.overflow.concat(m.small).slice(0, 2).join("; "));
+    check(!errors.length, size.name + ": no page errors. " + errors.slice(0, 2).join(" | "));
+    await context.close();
+  }
+}
+
+if (section("full backup")) {
+  console.log("A full backup holds pictures, fonts and projects, says its size, and a file put back says what it restored and skipped");
+  for (const size of SIZES) {
+    const { context, page, errors } = await open(THEMES[0], size, 1, `window.__settings.exportParts = ["settings", "files"]; window.__settings.importParts = ["files"];`);
+    await page.click('.af-tab[data-tab="settings"]');
+    await page.waitForTimeout(400);
+    const [dl] = await Promise.all([page.waitForEvent("download", { timeout: 8000 }).catch(() => null), page.evaluate(() => [...document.querySelectorAll("button")].find((b) => b.textContent.trim() === "Export to file").click())]);
+    await page.waitForTimeout(400);
+    const name = dl ? dl.suggestedFilename() : "";
+    let body = {};
+    if (dl) { const fs = await import("node:fs"); body = JSON.parse(fs.readFileSync(await dl.path(), "utf8")); }
+    const said = await page.evaluate(() => document.body.textContent);
+    check(name === "auto-foley-backup.json" && body.files && body.files.stickers && body.files.stickers.k9 && /in a file of \d/.test(said), size.name + ": a full backup holds the pictures and says its size (" + name + ")");
+    check(!JSON.stringify(body).includes("fs_key") && !("key" in body), size.name + ": no key is in the file");
+    // Put back from the file.
+    const text = JSON.stringify(body);
+    await page.evaluate((text) => {
+      const input = [...document.querySelectorAll('input[type="file"]')].find((i) => /json/.test(i.accept));
+      const dt = new DataTransfer();
+      dt.items.add(new File([text], "auto-foley-backup.json", { type: "application/json" }));
+      input.files = dt.files;
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+    }, text);
+    await page.waitForTimeout(900);
+    const after = await page.evaluate(() => document.body.textContent);
+    check(/Put back 1 sticker/.test(after), size.name + ": putting a backup back says what was restored");
     check(!errors.length, size.name + ": no page errors. " + errors.slice(0, 2).join(" | "));
     await context.close();
   }

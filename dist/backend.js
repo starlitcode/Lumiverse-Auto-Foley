@@ -5384,6 +5384,140 @@ async function onPanel(p, userId) {
                 }
                 return answer({ type: 'font_saved', ok: true, font: entry, list: next });
             }
+            case 'backup_files': {
+                // A full backup: the pictures, fonts and projects kept in files of
+                // their own, which the setup file does not hold. Keys, saved audio
+                // and scripts are never in it.
+                try {
+                    const s = await loadSettings(userId);
+                    const out = { backgrounds: {}, marks: {}, stickers: {}, moods: {}, fonts: [], projects: [] };
+                    const bgIds = (await bgIndex(userId)).concat(s.videoBacks.map((b) => b.id));
+                    for (const id of bgIds.filter((x, i) => bgIds.indexOf(x) === i)) {
+                        const pic = await readVideoBg(id, userId);
+                        if (pic)
+                            out.backgrounds[id] = pic;
+                    }
+                    for (const id of await markIndex(userId)) {
+                        const v = await readJson(markFile(id), userId);
+                        if (v && v.picture)
+                            out.marks[id] = v.picture;
+                    }
+                    for (const id of await stickerIndex(userId)) {
+                        const v = await readJson(stickerFile(id), userId);
+                        const pic = cleanVideoBg(v && v.picture);
+                        if (pic)
+                            out.stickers[id] = pic;
+                    }
+                    for (const m of s.cast)
+                        for (const f of m.moodPics || []) {
+                            const v = await readJson(moodPicFile(String(m.id), f), userId);
+                            if (v && v.picture)
+                                out.moods[String(m.id) + ':' + f] = v.picture;
+                        }
+                    for (const f of await loadFonts(userId)) {
+                        const bytes = await spindle.userStorage.readBinary('fonts/' + f.id, userId);
+                        if (bytes && bytes.length)
+                            out.fonts.push({ id: f.id, name: f.name, base64: toBase64(bytes) });
+                    }
+                    for (const e of await projectIndex(userId)) {
+                        const v = await readJson(projectFile(e.id), userId);
+                        if (v)
+                            out.projects.push({ entry: e, body: v });
+                    }
+                    return answer({ type: 'backup_files', ok: true, files: out });
+                }
+                catch (e) {
+                    return answer({ type: 'backup_files', ok: false, error: 'Your pictures, fonts and projects could not be read from your account: ' + String((e && e.message) || e).slice(0, 160) });
+                }
+            }
+            case 'restore_files': {
+                // Puts back what a full backup holds. Nothing already on the account
+                // is replaced: a file there already is skipped, and counted.
+                const f = p.files && typeof p.files === 'object' ? p.files : {};
+                const done = {};
+                const skip = {};
+                const add = (o, k) => (o[k] = (o[k] || 0) + 1);
+                try {
+                    for (const [rawId, pic] of Object.entries(f.backgrounds || {})) {
+                        const id = backId(rawId);
+                        if (await readVideoBg(id, userId)) {
+                            add(skip, 'backgrounds');
+                            continue;
+                        }
+                        const clean = cleanVideoBg(pic);
+                        if (!clean || !(await writeJson(bgFile(id), { picture: clean }, userId))) {
+                            add(skip, 'backgrounds');
+                            continue;
+                        }
+                        const index = await bgIndex(userId);
+                        if (index.indexOf(id) < 0)
+                            await keepBgIndex(index.concat([id]), userId);
+                        add(done, 'backgrounds');
+                    }
+                    for (const [kind, file, indexFile, indexOf] of [
+                        ['marks', markFile, MARK_INDEX_FILE, markIndex],
+                        ['stickers', stickerFile, STICKER_INDEX_FILE, stickerIndex],
+                    ]) {
+                        for (const [rawId, pic] of Object.entries(f[kind] || {})) {
+                            const id = backId(rawId);
+                            const there = await readJson(file(id), userId);
+                            const clean = cleanVideoBg(pic);
+                            if ((there && there.picture) || !clean || !(await writeJson(file(id), { picture: clean }, userId))) {
+                                add(skip, kind);
+                                continue;
+                            }
+                            const index = await indexOf(userId);
+                            if (index.indexOf(id) < 0)
+                                await writeJson(indexFile, index.concat([id]), userId);
+                            add(done, kind);
+                        }
+                    }
+                    for (const [key, pic] of Object.entries(f.moods || {})) {
+                        const [member, feeling] = String(key).split(':');
+                        const there = await readJson(moodPicFile(memberId(member), moodId(feeling)), userId);
+                        const clean = cleanPicture(pic);
+                        if ((there && there.picture) || !clean || !(await writeJson(moodPicFile(memberId(member), moodId(feeling)), { picture: clean }, userId)))
+                            add(skip, 'moods');
+                        else
+                            add(done, 'moods');
+                    }
+                    let fonts = await loadFonts(userId);
+                    for (const ft of Array.isArray(f.fonts) ? f.fonts : []) {
+                        const id = str(ft && ft.id, 40).replace(/[^a-z0-9]/gi, '');
+                        const bytes = fromBase64(String((ft && ft.base64) || ''));
+                        if (!id || fonts.some((x) => x.id === id) || fonts.length >= FONTS_MAX || !fontKind(bytes) || bytes.length > MAX_FONT_BYTES) {
+                            add(skip, 'fonts');
+                            continue;
+                        }
+                        await spindle.userStorage.writeBinary('fonts/' + id, bytes, userId);
+                        fonts = fonts.concat([{ id, name: str(ft.name, 60).trim() || 'My font', bytes: bytes.length }]);
+                        await writeJson(FONTS_FILE, fonts, userId);
+                        add(done, 'fonts');
+                    }
+                    let list = await projectIndex(userId);
+                    for (const pj of Array.isArray(f.projects) ? f.projects : []) {
+                        const id = projectId(pj && pj.entry && pj.entry.id);
+                        if (!id || list.some((x) => x.id === id) || list.length >= PROJECTS_MAX || !pj.body) {
+                            add(skip, 'projects');
+                            continue;
+                        }
+                        const body = cleanProject(pj.body);
+                        const name = str(pj.entry.name, 80).trim() || 'A project';
+                        if (!(await writeJson(projectFile(id), Object.assign({ id, name }, body), userId))) {
+                            add(skip, 'projects');
+                            continue;
+                        }
+                        const e = Object.assign({}, pj.entry, { id, name, folder: str(pj.entry.folder, 40).replace(/[^a-z0-9_-]/gi, ''), at: Number(pj.entry.at) || Date.now(), keptKey: body.keptKey, backs: (body.look.videoBacks || []).map((b) => b.id), marks: (body.look.videoMarks || []).map((m) => m.id), stickers: (body.look.videoStickers || []).map((k) => k.id) });
+                        list = list.concat([e]);
+                        await writeJson(PROJECT_INDEX, list, userId);
+                        add(done, 'projects');
+                    }
+                    return answer({ type: 'restored_files', ok: true, done, skip });
+                }
+                catch (e) {
+                    return answer({ type: 'restored_files', ok: false, done, skip, error: 'Some files could not be put back on your account: ' + String((e && e.message) || e).slice(0, 160) });
+                }
+            }
             case 'font_get': {
                 const id = str(p.id, 40).replace(/[^a-z0-9]/gi, '');
                 const list = await loadFonts(userId);

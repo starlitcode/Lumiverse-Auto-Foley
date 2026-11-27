@@ -24151,8 +24151,9 @@ export function setup(ctx, overrides) {
         { id: 'prompt', label: 'The Director’s prompt and notes' },
         { id: 'cast', label: 'The cast and their voices' },
         { id: 'chats', label: 'Chats you switched off' },
+        { id: 'files', label: 'Pictures, fonts and projects, for a full backup' },
     ];
-    const RESETS = TRANSFER.concat([
+    const RESETS = TRANSFER.filter((p) => p.id !== 'files').concat([
         { id: 'sounds', label: 'The sound library' },
         { id: 'audio', label: 'Kept audio and scripts' },
         { id: 'key', label: 'The sound keys, for Freesound and ElevenLabs' },
@@ -24190,7 +24191,7 @@ export function setup(ctx, overrides) {
     function transferCard() {
         const c = card('Your whole setup', 'Save your setup to a file, or load it from one. Loading replaces what you have, so save a file first if you want a way back.');
         const row = el('<div class="af-row"></div>');
-        row.appendChild(button('Export to file', () => {
+        row.appendChild(button('Export to file', async () => {
             const parts = S.exportParts || [];
             if (!parts.length) {
                 transferSaid = 'Nothing is chosen, so there would be nothing in the file.';
@@ -24220,13 +24221,31 @@ export function setup(ctx, overrides) {
             }
             if (parts.indexOf('chats') >= 0)
                 body.chatsOff = (S.chatsOff || []).slice();
+            // A full backup also holds the pictures, fonts and projects, which
+            // live in files of their own on the account.
+            if (parts.indexOf('files') >= 0) {
+                let r = null;
+                try {
+                    r = await rpc({ type: 'backup_files' }, 120000);
+                }
+                catch (_) { }
+                if (!r || !r.ok) {
+                    transferSaid = (r && r.error) || 'Your pictures, fonts and projects could not be read: the backend did not answer. Nothing was saved.';
+                    transferKind = 'bad';
+                    renderTab();
+                    return;
+                }
+                body.files = r.files;
+            }
             let ok = false;
+            let bytes = 0;
             try {
                 const blob = new Blob([JSON.stringify(body, null, 2)], { type: 'application/json' });
+                bytes = blob.size;
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a');
                 a.href = url;
-                a.download = 'auto-foley-setup.json';
+                a.download = body.files ? 'auto-foley-backup.json' : 'auto-foley-setup.json';
                 document.body.appendChild(a);
                 a.click();
                 a.remove();
@@ -24234,7 +24253,8 @@ export function setup(ctx, overrides) {
                 ok = true;
             }
             catch (_) { }
-            transferSaid = ok ? 'Exported ' + parts.length + (parts.length === 1 ? ' part.' : ' parts.') : 'The browser would not save the file. Some private windows block downloads.';
+            const size = bytes >= 1048576 ? (bytes / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(bytes / 1024)) + ' KB';
+            transferSaid = ok ? 'Exported ' + parts.length + (parts.length === 1 ? ' part' : ' parts') + ', in a file of ' + size + '.' : 'The browser would not save the file. Some private windows block downloads.';
             transferKind = ok ? 'good' : 'bad';
             renderTab();
         }));
@@ -24370,14 +24390,55 @@ export function setup(ctx, overrides) {
             S.chatsOff = list.slice(-CHATS_OFF_CAP);
             took.push('the chats switched off');
         }
-        if (!took.length) {
+        // Pictures, fonts and projects are put back by the backend, which never
+        // replaces one already on the account, and says what it did.
+        const files = want.indexOf('files') >= 0 && body.files && typeof body.files === 'object' ? body.files : null;
+        if (!took.length && !files) {
             transferKind = 'bad';
             return 'Nothing was taken. The file holds none of the parts switched on under What to take from a file.';
         }
-        save();
-        syncSlots();
+        if (took.length) {
+            save();
+            syncSlots();
+        }
         transferKind = 'good';
-        return 'Imported ' + took.join(', ') + '.';
+        const said = took.length ? 'Imported ' + took.join(', ') + '.' : '';
+        if (files)
+            void restoreFiles(files, said);
+        return said ? said + ' Putting back pictures, fonts and projects.' : 'Putting back pictures, fonts and projects.';
+    }
+    const FILE_KINDS = { backgrounds: ['background picture', 'background pictures'], marks: ['watermark picture', 'watermark pictures'], stickers: ['sticker', 'stickers'], moods: ['mood picture', 'mood pictures'], fonts: ['font', 'fonts'], projects: ['project', 'projects'] };
+    const countWords = (o) => Object.keys(FILE_KINDS).filter((k) => o && o[k]).map((k) => o[k] + ' ' + FILE_KINDS[k][o[k] === 1 ? 0 : 1]);
+    async function restoreFiles(files, said) {
+        let r = null;
+        try {
+            r = await rpc({ type: 'restore_files', files }, 180000);
+        }
+        catch (_) { }
+        const done = countWords((r && r.done) || {});
+        const skip = countWords((r && r.skip) || {});
+        const parts = [said];
+        if (done.length)
+            parts.push('Put back ' + done.join(', ') + '.');
+        if (skip.length)
+            parts.push('Skipped ' + skip.join(', ') + ', already on your account or not readable. Nothing was replaced.');
+        if (!r || !r.ok)
+            parts.push((r && r.error) || 'The pictures, fonts and projects could not be put back: the backend did not answer.');
+        if (!done.length && !skip.length && r && r.ok)
+            parts.push('The file holds no pictures, fonts or projects.');
+        transferSaid = parts.filter(Boolean).join(' ');
+        transferKind = r && r.ok ? 'good' : 'bad';
+        log(transferSaid, r && r.ok ? '' : 'bad', 'setting');
+        if (r && r.ok) {
+            // The new pictures and projects are read again where they are shown.
+            for (const id of Object.keys((files && files.stickers) || {}))
+                stickerAsked.delete(id);
+            for (const id of Object.keys((files && files.marks) || {}))
+                markPicAsked.delete(id);
+            for (const id of Object.keys((files && files.backgrounds) || {}))
+                videoBgAsked.delete(id);
+        }
+        renderTab();
     }
     // How much made audio is kept, as last read, so the row is drawn with it.
     let keptState = null;
@@ -24873,6 +24934,8 @@ export function setup(ctx, overrides) {
                 savedFolders: (v) => (Array.isArray(v) ? v.length : 0) + ' folders',
                 projectFolders: (v) => (Array.isArray(v) ? v.length : 0) + ' folders',
                 videoLooks: (v) => (Array.isArray(v) ? v.length : 0) + ' looks',
+                videoByline: (v) => String(v || '').length + ' characters',
+                videoMarks: (v) => (Array.isArray(v) ? v.length : 0) + ' watermarks',
             };
             for (const k of changed)
                 lines.push('  ' + k + ': ' + (PRIVATE[k] ? PRIVATE[k](S[k]) : shown(S[k]) + ', default ' + shown(DEFAULTS[k])));

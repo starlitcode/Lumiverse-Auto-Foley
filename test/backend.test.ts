@@ -2417,6 +2417,40 @@ describe("animations", () => {
   });
 });
 
+describe("full backup", () => {
+  test("pictures, fonts and projects go into a backup and come back on another account, and nothing is replaced", async () => {
+    const pic = "data:image/png;base64,AAAA";
+    const font = new Uint8Array(64);
+    font.set([0x00, 0x01, 0x00, 0x00]);
+    const a = host();
+    await a.ask({ type: "save", settings: { videoBacks: [{ id: "main", kind: "picture" }], videoStickers: [{ id: "k1" }], videoMarks: [{ id: "w1", pic: true }] } }, "u1");
+    await a.ask({ type: "video_bg_put", id: "main", picture: pic }, "u1");
+    await a.ask({ type: "sticker_put", id: "k1", picture: pic }, "u1");
+    await a.ask({ type: "mark_pic_put", id: "w1", picture: pic }, "u1");
+    await a.ask({ type: "font_upload", name: "Lantern.ttf", base64: a.box.toBase64(font) }, "u1");
+    await a.ask({ type: "project_put", name: "Quay", project: { look: {}, keptKey: "", trim: { from: 0, to: 0 }, hand: {} } }, "u1");
+    const got = (await a.ask({ type: "backup_files" }, "u1")).find((m: any) => m.type === "backup_files");
+    expect(got.ok).toBe(true);
+    expect(Object.keys(got.files.backgrounds)).toEqual(["main"]);
+    expect(Object.keys(got.files.stickers)).toEqual(["k1"]);
+    expect(Object.keys(got.files.marks)).toEqual(["w1"]);
+    expect(got.files.fonts.length).toBe(1);
+    expect(got.files.projects.length).toBe(1);
+    expect(JSON.stringify(got)).not.toContain("api.elevenlabs.io");
+    const b = host();
+    const first = (await b.ask({ type: "restore_files", files: got.files }, "u2")).find((m: any) => m.type === "restored_files");
+    expect(first.ok).toBe(true);
+    expect(first.done).toEqual({ backgrounds: 1, stickers: 1, marks: 1, fonts: 1, projects: 1 });
+    expect((await b.ask({ type: "sticker_get", id: "k1" }, "u2")).find((m: any) => m.type === "sticker").picture).toBe(pic);
+    const list = (await b.ask({ type: "project_list" }, "u2")).find((m: any) => m.type === "projects");
+    expect(list.list.map((x: any) => x.name)).toEqual(["Quay"]);
+    // A second time, everything is already there, so nothing is replaced.
+    const again = (await b.ask({ type: "restore_files", files: got.files }, "u2")).find((m: any) => m.type === "restored_files");
+    expect(again.done).toEqual({});
+    expect(again.skip).toEqual({ backgrounds: 1, stickers: 1, marks: 1, fonts: 1, projects: 1 });
+  });
+});
+
 describe("stickers", () => {
   test("a sticker's picture stays while the settings, a saved look or a project uses it, and goes on Start again", async () => {
     const h = host();
