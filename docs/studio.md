@@ -336,6 +336,13 @@ When each word is said is worked out from where the voice is in the clip, so it 
 - **Color of the names**: **Each kind's color** by default, the colors set under **Colors for each kind of part** in the Settings tab. **The words' color** uses one color for every name.
 - **Fill of the names**: **One color** by default, the color above. See [Gradients](#gradients).
 
+**Colors of their own in the video**, at the end of **Speakers**, is off by default. On, the rings and names in the video use their own colors, and the Stage tab, the chat and the players keep the general ones from **Colors for each kind of part**.
+
+- A color for each kind: the narrator, characters, personas and NPCs. Each starts as the general color. **Use the general color** puts it back.
+- **A color for one person**: pick someone from the cast and press **Give them a color**. Their ring and name in the video use it in place of their kind's. **Remove** takes it away. It is kept by the person, so renaming them keeps it.
+- The timeline's blocks keep the general colors.
+- The kind colors are part of a saved look, and a template can set them. A person's color is kept in projects, and a template never changes it.
+
 ### Background
 
 - **A color of your own** by default: a soft dark blue gradient, from the middle out.

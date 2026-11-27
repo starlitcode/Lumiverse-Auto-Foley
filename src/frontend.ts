@@ -2031,6 +2031,9 @@ const DEFAULTS: any = {
   videoWordShadowSoft: 14,
   videoWordShadowFar: 2,
   videoBox: false,
+  videoOwnColors: false,
+  videoKindColors: {},
+  videoPersonColors: {},
   videoBoxColor: '#000000',
   videoBoxClear: 40,
   videoBoxRound: 16,
@@ -3944,7 +3947,7 @@ export function setup(ctx: Ctx, overrides?: any) {
   // and when each of its words is said.
   // Who is shown above a part: one person, or two who take turns in a
   // scene, with which of them is speaking. -1 is narration between them.
-  interface Face { name: string; who: string; picture: string }
+  interface Face { name: string; who: string; picture: string; member?: string }
   type Head = { kind: 'one'; face: Face } | { kind: 'pair'; a: Face; b: Face; speaking: number };
   interface VideoPart {
     // Which part of the performance it is, by its place in the items.
@@ -4575,10 +4578,10 @@ export function setup(ctx: Ctx, overrides?: any) {
       }
       if (p.kind === 'line' && !p.narration) {
         const at = recent.findIndex((f) => f.name === p.name);
-        if (at >= 0) recent[at] = { name: p.name, who: p.who, picture: p.picture };
+        if (at >= 0) recent[at] = { name: p.name, who: p.who, picture: p.picture, member: p.member };
         else {
           if (recent.length >= 2) recent = [];
-          recent.push({ name: p.name, who: p.who, picture: p.picture });
+          recent.push({ name: p.name, who: p.who, picture: p.picture, member: p.member });
         }
       }
       const both = S.videoTwo !== false && S.videoPics !== false && recent.length === 2 && recent.every((f) => !!f.picture && st.pics.has(f.picture));
@@ -4696,7 +4699,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     const u = Math.min(st.w, st.h) / 1080;
     const PIC = Math.round(Math.min(300, Math.max(60, Number(S.videoPicSize) || 150)) * u);
     const ink = hexOr(S.videoInk, STORY_INK);
-    const ring = S.videoNameColor === 'words' ? ink : kindHex(f.who);
+    const ring = S.videoNameColor === 'words' ? ink : videoHex(f.who, f.member);
     const round = S.videoPicShape === 'rounded';
     const pathPic = () => {
       g.beginPath();
@@ -4831,7 +4834,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     // too little, as in a narrow video with large pictures, one is shown.
     const PAIR_GAP = Math.round(90 * u);
     const pairFits = 2 * PIC + PAIR_GAP <= MAX_W;
-    const headOf = (h: Head | null | undefined): Head => (h && h.kind === 'pair' && pairFits ? h : h && h.kind === 'one' ? h : { kind: 'one', face: { name: p.name, who: p.who, picture: p.narration ? '' : p.picture } });
+    const headOf = (h: Head | null | undefined): Head => (h && h.kind === 'pair' && pairFits ? h : h && h.kind === 'one' ? h : { kind: 'one', face: { name: p.name, who: p.who, picture: p.narration ? '' : p.picture, member: p.member } });
     const now = headOf(p.pair ? { kind: 'pair', ...p.pair } : null);
     const heightOf = (h: Head) => {
       const pic = h.kind === 'pair' || (S.videoPics !== false && !!h.face.picture && st.pics.has(h.face.picture));
@@ -4865,7 +4868,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       const shownNames = now.kind === 'pair' ? places : !p.narration && now.face.name ? [{ face: now.face, x: cx, top: y, a: alpha }] : [];
       const picH = now.kind === 'pair' || places.length ? PIC + 28 * u : 0;
       for (const f of shownNames) {
-        const ring = S.videoNameColor === 'words' ? ink : kindHex(f.face.who);
+        const ring = S.videoNameColor === 'words' ? ink : videoHex(f.face.who, f.face.member);
         g.save();
         setShadow(g, 'Name', u);
         g.font = '600 ' + nameSize + 'px ' + (st.nameFont || font);
@@ -8088,6 +8091,19 @@ export function setup(ctx: Ctx, overrides?: any) {
     const own = String(S[k.key] || '');
     if (/^#[0-9a-f]{6}$/i.test(own)) return own.toLowerCase();
     return kind === 'sound' ? themeHex('--lumiverse-warning', k.built) : k.built;
+  }
+
+  // A kind's color in the video. With Colors of their own in the video on,
+  // a person's own video color comes first, then the kind's video color.
+  // Everything else in Auto Foley keeps the colors above.
+  function videoHex(kind: string, member?: string): string {
+    if (S.videoOwnColors) {
+      const own = (S.videoPersonColors || {})[member || ''];
+      if (member && /^#[0-9a-f]{6}$/i.test(String(own || ''))) return String(own).toLowerCase();
+      const k = (S.videoKindColors || {})[kind];
+      if (/^#[0-9a-f]{6}$/i.test(String(k || ''))) return String(k).toLowerCase();
+    }
+    return kindHex(kind);
   }
 
   function paintColors() {
@@ -13570,14 +13586,14 @@ export function setup(ctx: Ctx, overrides?: any) {
   const EXAMPLE_PEOPLE = { a: { name: 'Juniper', kind: 'character' }, b: { name: 'Ansel', kind: 'npc' }, c: { name: 'Bram', kind: 'persona' } };
   const examplePics = new Map<string, string>();
   function examplePicture(kind: string, initial: string, light: boolean): string {
-    const key = kind + initial + (light ? '+' : '') + kindHex(kind);
+    const key = kind + initial + (light ? '+' : '') + videoHex(kind);
     const had = examplePics.get(key);
     if (had) return had;
     let url = '';
     try {
       const c = canvasOf(160, 160);
       const g = c.getContext('2d') as CanvasRenderingContext2D;
-      g.fillStyle = kindHex(kind);
+      g.fillStyle = videoHex(kind);
       g.fillRect(0, 0, 160, 160);
       g.fillStyle = light ? 'rgba(0,0,0,0.32)' : 'rgba(0,0,0,0.58)';
       g.fillRect(0, 0, 160, 160);
@@ -15015,7 +15031,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     'videoBylineShadow', 'videoBylineShadowInk', 'videoBylineShadowDark', 'videoBylineShadowSoft', 'videoBylineShadowFar', 'videoMarks',
     'videoWordFill', 'videoWordStops', 'videoWordDir', 'videoNameFill', 'videoNameStops', 'videoNameDir', 'videoCapFill', 'videoCapStops', 'videoCapDir',
     'videoWordShadow', 'videoWordShadowInk', 'videoWordShadowDark', 'videoWordShadowSoft', 'videoWordShadowFar',
-    'videoBox', 'videoBoxColor', 'videoBoxClear', 'videoBoxRound', 'videoBoxWidth',
+    'videoBox', 'videoBoxColor', 'videoBoxClear', 'videoBoxRound', 'videoBoxWidth', 'videoOwnColors', 'videoKindColors',
     'videoNameShadow', 'videoNameShadowInk', 'videoNameShadowDark', 'videoNameShadowSoft', 'videoNameShadowFar', 'videoEdges', 'videoEdgeColor', 'videoMove', 'videoMoveSecs',
     'videoTitleOn', 'videoFadeOut', 'videoCaptions',
   ];
@@ -15053,6 +15069,93 @@ export function setup(ctx: Ctx, overrides?: any) {
   }
   const sameBack = (a: VideoBack | null) => !a || JSON.stringify(backDefault()) === JSON.stringify(a);
   // The watermarks, each with its own rows, and Add a watermark.
+  // Colors of their own in the video: a color for each kind, and for a
+  // person, used only in videos. The general colors stay as they are.
+  function videoColorRows(look: () => void): HTMLElement {
+    const kinds = KIND_COLORS.filter((k) => ['narrator', 'character', 'persona', 'npc'].indexOf(k.kind) >= 0);
+    const people = el('<div class="af-col" data-af-videopeople></div>');
+    const putKind = (kind: string, hex: string) => {
+      const map = Object.assign({}, S.videoKindColors || {});
+      if (hex) map[kind] = hex;
+      else delete map[kind];
+      set({ videoKindColors: map });
+      look();
+    };
+    const drawPeople = () => {
+      people.replaceChildren();
+      const map: Record<string, string> = S.videoPersonColors || {};
+      const cast: Member[] = (S.cast || []).filter((m: Member) => m && m.kind !== 'narrator');
+      for (const id of Object.keys(map)) {
+        const m = cast.find((x) => String(x.id) === id);
+        if (!m) continue;
+        const row = el('<div class="af-col" data-af-videoperson></div>');
+        row.setAttribute('data-af-id', id);
+        row.appendChild(colorRow('videoPerson-' + id, m.name, 'Their ring and name in the video.', '--af-none', videoHex(m.kind), 'Use their kind\u2019s color', look, {
+          get: () => String((S.videoPersonColors || {})[id] || ''),
+          put: (hex, save) => {
+            const next = Object.assign({}, S.videoPersonColors || {});
+            next[id] = hex || next[id];
+            if (!hex) delete next[id];
+            if (save) set({ videoPersonColors: next });
+            else S.videoPersonColors = next;
+            look();
+            if (!hex) drawPeople();
+          },
+        }));
+        const rm = button('Remove', () => {
+          const next = Object.assign({}, S.videoPersonColors || {});
+          delete next[id];
+          set({ videoPersonColors: next });
+          drawPeople();
+          look();
+        });
+        rm.setAttribute('data-af-videoperson-rm', '');
+        const r2 = el('<div class="af-row"></div>');
+        r2.appendChild(rm);
+        row.appendChild(r2);
+        people.appendChild(row);
+      }
+      const left = cast.filter((m) => !map[String(m.id)]);
+      if (!left.length) {
+        if (!cast.length) people.appendChild(hint('Add people on the Cast tab to give one a color of their own.'));
+        return;
+      }
+      let pick = String(left[0].id);
+      const sel = select('A color for one person', left.map((m) => ({ id: String(m.id), label: m.name })), pick, (v) => (pick = v), 'Their ring and name in the video, in place of their kind\u2019s.');
+      sel.setAttribute('data-af-videoperson-pick', '');
+      people.appendChild(sel);
+      const add = button('Give them a color', () => {
+        const m = cast.find((x) => String(x.id) === pick);
+        if (!m) return;
+        const next = Object.assign({}, S.videoPersonColors || {});
+        if (Object.keys(next).length >= 60) return;
+        next[pick] = videoHex(m.kind);
+        set({ videoPersonColors: next });
+        drawPeople();
+        look();
+      });
+      add.setAttribute('data-af-videoperson-add', '');
+      const r = el('<div class="af-row"></div>');
+      r.appendChild(add);
+      people.appendChild(r);
+    };
+    drawPeople();
+    return toggle('Colors of their own in the video', 'Off by default. On, the rings and names in the video use the colors below. The Stage tab, the chat and the players keep the general colors.', 'videoOwnColors', () => look(), () =>
+      (kinds.map((k) =>
+        colorRow('videoKindColor-' + k.kind, k.label + ' in the video', 'The general color by default.', '--af-none', kindHex(k.kind), 'Use the general color', look, {
+          get: () => String((S.videoKindColors || {})[k.kind] || ''),
+          put: (hex, save) => {
+            if (save) putKind(k.kind, hex);
+            else {
+              S.videoKindColors = Object.assign({}, S.videoKindColors || {}, hex ? { [k.kind]: hex } : {});
+              look();
+            }
+          },
+        }),
+      ) as HTMLElement[]).concat([people]),
+    );
+  }
+
   function drawMarkEditors(box: HTMLElement, look: () => void) {
     box.replaceChildren();
     box.appendChild(hint('Your mark on a video, such as your name or a logo. It is drawn over everything in the video, in a corner clear of the words.'));
@@ -15316,6 +15419,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         videoWordStops: ['#f2b880'], videoWordDir: 'down', videoWordShadow: true, videoWordShadowInk: '', videoWordShadowDark: 55,
         videoWordShadowSoft: 14, videoWordShadowFar: 2,
         videoBox: false, videoBoxColor: '#000000', videoBoxClear: 40, videoBoxRound: 16, videoBoxWidth: 'fit',
+        videoOwnColors: false, videoKindColors: {},
         videoCaptions: true, videoCaptionInk: '', videoCapFill: 'solid', videoCapStops: ['#f2b880'], videoCapDir: 'right',
         videoNameFont: 'clean', videoNameSize: 100, videoNameColor: 'kind', videoNameFill: 'solid', videoNameStops: ['#f2b880'],
         videoNameDir: 'right', videoNameShadow: true, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18,
@@ -15339,6 +15443,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         videoWordStops: ['#f2b880'], videoWordDir: 'down', videoWordShadow: false, videoWordShadowInk: '', videoWordShadowDark: 55,
         videoWordShadowSoft: 14, videoWordShadowFar: 2,
         videoBox: false, videoBoxColor: '#000000', videoBoxClear: 40, videoBoxRound: 16, videoBoxWidth: 'fit',
+        videoOwnColors: false, videoKindColors: {},
         videoCaptions: true, videoCaptionInk: '#a9a49a', videoCapFill: 'solid', videoCapStops: ['#f2b880'], videoCapDir: 'right',
         videoNameFont: 'clean', videoNameSize: 92, videoNameColor: 'words', videoNameFill: 'solid', videoNameStops: ['#f2b880'],
         videoNameDir: 'right', videoNameShadow: false, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18,
@@ -15362,6 +15467,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         videoWordStops: ['#f2b880'], videoWordDir: 'down', videoWordShadow: false, videoWordShadowInk: '', videoWordShadowDark: 55,
         videoWordShadowSoft: 14, videoWordShadowFar: 2,
         videoBox: false, videoBoxColor: '#000000', videoBoxClear: 40, videoBoxRound: 16, videoBoxWidth: 'fit',
+        videoOwnColors: false, videoKindColors: {},
         videoCaptions: true, videoCaptionInk: '#9a4a1c', videoCapFill: 'solid', videoCapStops: ['#f2b880'], videoCapDir: 'right',
         videoNameFont: 'book', videoNameSize: 118, videoNameColor: 'words', videoNameFill: 'solid', videoNameStops: ['#f2b880'],
         videoNameDir: 'right', videoNameShadow: false, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18,
@@ -15392,6 +15498,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         videoWordStops: ['#f2b880'], videoWordDir: 'down', videoWordShadow: true, videoWordShadowInk: '#000000', videoWordShadowDark: 90,
         videoWordShadowSoft: 6, videoWordShadowFar: 2,
         videoBox: false, videoBoxColor: '#000000', videoBoxClear: 40, videoBoxRound: 16, videoBoxWidth: 'fit',
+        videoOwnColors: false, videoKindColors: {},
         videoCaptions: true, videoCaptionInk: '#f0c36a', videoCapFill: 'solid', videoCapStops: ['#f2b880'], videoCapDir: 'right',
         videoNameFont: 'clean', videoNameSize: 82, videoNameColor: 'words', videoNameFill: 'solid', videoNameStops: ['#f2b880'],
         videoNameDir: 'right', videoNameShadow: true, videoNameShadowInk: '#000000', videoNameShadowDark: 90, videoNameShadowSoft: 6,
@@ -15418,6 +15525,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         videoWordFill: 'solid', videoWordStops: ['#f2b880'], videoWordDir: 'down', videoWordShadow: true, videoWordShadowInk: '#00c8ff',
         videoWordShadowDark: 70, videoWordShadowSoft: 18, videoWordShadowFar: 0,
         videoBox: false, videoBoxColor: '#000000', videoBoxClear: 40, videoBoxRound: 16, videoBoxWidth: 'fit',
+        videoOwnColors: false, videoKindColors: {},
         videoCaptions: true, videoCaptionInk: '#ff7ad9', videoCapFill: 'solid', videoCapStops: ['#f2b880'], videoCapDir: 'right',
         videoNameFont: 'clean', videoNameSize: 110, videoNameColor: 'words', videoNameFill: 'solid', videoNameStops: ['#f2b880'],
         videoNameDir: 'right', videoNameShadow: false, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18,
@@ -15452,6 +15560,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         videoWordStops: ['#f2b880'], videoWordDir: 'down', videoWordShadow: false, videoWordShadowInk: '', videoWordShadowDark: 55,
         videoWordShadowSoft: 14, videoWordShadowFar: 2,
         videoBox: false, videoBoxColor: '#000000', videoBoxClear: 40, videoBoxRound: 16, videoBoxWidth: 'fit',
+        videoOwnColors: false, videoKindColors: {},
         videoCaptions: true, videoCaptionInk: '#c25b7d', videoCapFill: 'solid', videoCapStops: ['#f2b880'], videoCapDir: 'right',
         videoNameFont: 'round', videoNameSize: 112, videoNameColor: 'words', videoNameFill: 'solid', videoNameStops: ['#f2b880'],
         videoNameDir: 'right', videoNameShadow: false, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18,
@@ -15478,6 +15587,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         videoWordStops: ['#f2b880'], videoWordDir: 'down', videoWordShadow: true, videoWordShadowInk: '#000000', videoWordShadowDark: 90,
         videoWordShadowSoft: 20, videoWordShadowFar: 0,
         videoBox: false, videoBoxColor: '#000000', videoBoxClear: 40, videoBoxRound: 16, videoBoxWidth: 'fit',
+        videoOwnColors: false, videoKindColors: {},
         videoCaptions: true, videoCaptionInk: '#c0504d', videoCapFill: 'solid', videoCapStops: ['#f2b880'], videoCapDir: 'right',
         videoNameFont: 'type', videoNameSize: 82, videoNameColor: 'words', videoNameFill: 'solid', videoNameStops: ['#f2b880'],
         videoNameDir: 'right', videoNameShadow: false, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18,
@@ -15501,6 +15611,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         videoWordFill: 'solid', videoWordStops: ['#f2b880'], videoWordDir: 'down', videoWordShadow: false, videoWordShadowInk: '',
         videoWordShadowDark: 55, videoWordShadowSoft: 14, videoWordShadowFar: 2,
         videoBox: false, videoBoxColor: '#000000', videoBoxClear: 40, videoBoxRound: 16, videoBoxWidth: 'fit',
+        videoOwnColors: false, videoKindColors: {},
         videoCaptions: true, videoCaptionInk: '#c2185b', videoCapFill: 'solid', videoCapStops: ['#f2b880'], videoCapDir: 'right',
         videoNameFont: 'round', videoNameSize: 128, videoNameColor: 'kind', videoNameFill: 'solid', videoNameStops: ['#f2b880'],
         videoNameDir: 'right', videoNameShadow: false, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18,
@@ -15527,6 +15638,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         videoWordStops: ['#f2b880'], videoWordDir: 'down', videoWordShadow: false, videoWordShadowInk: '', videoWordShadowDark: 55,
         videoWordShadowSoft: 14, videoWordShadowFar: 2,
         videoBox: false, videoBoxColor: '#000000', videoBoxClear: 40, videoBoxRound: 16, videoBoxWidth: 'fit',
+        videoOwnColors: false, videoKindColors: {},
         videoCaptions: true, videoCaptionInk: '#b03a2e', videoCapFill: 'solid', videoCapStops: ['#f2b880'], videoCapDir: 'right',
         videoNameFont: 'type', videoNameSize: 104, videoNameColor: 'words', videoNameFill: 'solid', videoNameStops: ['#f2b880'],
         videoNameDir: 'right', videoNameShadow: false, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18,
@@ -15560,6 +15672,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         videoWordStops: ['#f2b880'], videoWordDir: 'down', videoWordShadow: true, videoWordShadowInk: '#1a0b02', videoWordShadowDark: 70,
         videoWordShadowSoft: 16, videoWordShadowFar: 2,
         videoBox: false, videoBoxColor: '#000000', videoBoxClear: 40, videoBoxRound: 16, videoBoxWidth: 'fit',
+        videoOwnColors: false, videoKindColors: {},
         videoCaptions: true, videoCaptionInk: '#ff9f4a', videoCapFill: 'solid', videoCapStops: ['#f2b880'], videoCapDir: 'right',
         videoNameFont: 'clean', videoNameSize: 90, videoNameColor: 'words', videoNameFill: 'solid', videoNameStops: ['#f2b880'],
         videoNameDir: 'right', videoNameShadow: true, videoNameShadowInk: '#1a0b02', videoNameShadowDark: 65, videoNameShadowSoft: 18,
@@ -15583,6 +15696,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         videoWordStops: ['#f2b880'], videoWordDir: 'down', videoWordShadow: true, videoWordShadowInk: '#0b1638', videoWordShadowDark: 60,
         videoWordShadowSoft: 16, videoWordShadowFar: 0,
         videoBox: false, videoBoxColor: '#000000', videoBoxClear: 40, videoBoxRound: 16, videoBoxWidth: 'fit',
+        videoOwnColors: false, videoKindColors: {},
         videoCaptions: true, videoCaptionInk: '#f6d98b', videoCapFill: 'solid', videoCapStops: ['#f2b880'], videoCapDir: 'right',
         videoNameFont: 'round', videoNameSize: 108, videoNameColor: 'words', videoNameFill: 'solid', videoNameStops: ['#f2b880'],
         videoNameDir: 'right', videoNameShadow: false, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18,
@@ -15626,6 +15740,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         videoWordFill: 'solid', videoWordStops: ['#f2b880'], videoWordDir: 'down', videoWordShadow: true, videoWordShadowInk: '#00ff55',
         videoWordShadowDark: 45, videoWordShadowSoft: 10, videoWordShadowFar: 0,
         videoBox: false, videoBoxColor: '#000000', videoBoxClear: 40, videoBoxRound: 16, videoBoxWidth: 'fit',
+        videoOwnColors: true, videoKindColors: { narrator: '#2fbf5c', character: '#4dff7c', persona: '#9dffb8', npc: '#1fa84a' },
         videoCaptions: true, videoCaptionInk: '#b8ffcb', videoCapFill: 'solid', videoCapStops: ['#f2b880'], videoCapDir: 'right',
         videoNameFont: 'type', videoNameSize: 100, videoNameColor: 'words', videoNameFill: 'solid', videoNameStops: ['#f2b880'],
         videoNameDir: 'right', videoNameShadow: false, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18,
@@ -15680,6 +15795,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         videoWordFill: 'solid', videoWordStops: ['#f2b880'], videoWordDir: 'down', videoWordShadow: false, videoWordShadowInk: '',
         videoWordShadowDark: 55, videoWordShadowSoft: 14, videoWordShadowFar: 2,
         videoBox: true, videoBoxColor: '#141026', videoBoxClear: 12, videoBoxRound: 14, videoBoxWidth: 'wide',
+        videoOwnColors: false, videoKindColors: {},
         videoCaptions: true, videoCaptionInk: '#c9bfff', videoCapFill: 'solid', videoCapStops: ['#f2b880'], videoCapDir: 'right',
         videoNameFont: 'clean', videoNameSize: 110, videoNameColor: 'words', videoNameFill: 'solid', videoNameStops: ['#f2b880'],
         videoNameDir: 'right', videoNameShadow: false, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18,
@@ -15703,6 +15819,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         videoWordStops: ['#f2b880'], videoWordDir: 'down', videoWordShadow: true, videoWordShadowInk: '#1c252d', videoWordShadowDark: 60,
         videoWordShadowSoft: 14, videoWordShadowFar: 2,
         videoBox: false, videoBoxColor: '#000000', videoBoxClear: 40, videoBoxRound: 16, videoBoxWidth: 'fit',
+        videoOwnColors: false, videoKindColors: {},
         videoCaptions: true, videoCaptionInk: '#bcd3e3', videoCapFill: 'solid', videoCapStops: ['#f2b880'], videoCapDir: 'right',
         videoNameFont: 'clean', videoNameSize: 96, videoNameColor: 'words', videoNameFill: 'solid', videoNameStops: ['#f2b880'],
         videoNameDir: 'right', videoNameShadow: true, videoNameShadowInk: '#1c252d', videoNameShadowDark: 65, videoNameShadowSoft: 18,
@@ -15753,6 +15870,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         videoWordStops: ['#f2b880'], videoWordDir: 'down', videoWordShadow: false, videoWordShadowInk: '', videoWordShadowDark: 55,
         videoWordShadowSoft: 14, videoWordShadowFar: 2,
         videoBox: false, videoBoxColor: '#000000', videoBoxClear: 40, videoBoxRound: 16, videoBoxWidth: 'fit',
+        videoOwnColors: true, videoKindColors: { narrator: '#6b4a24', character: '#8a5a2b', persona: '#5a3a18', npc: '#a0703a' },
         videoCaptions: true, videoCaptionInk: '#5a3a18', videoCapFill: 'solid', videoCapStops: ['#f2b880'], videoCapDir: 'right',
         videoNameFont: 'book', videoNameSize: 104, videoNameColor: 'words', videoNameFill: 'solid', videoNameStops: ['#f2b880'],
         videoNameDir: 'right', videoNameShadow: false, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18,
@@ -15790,6 +15908,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         videoWordFill: 'solid', videoWordStops: ['#f2b880'], videoWordDir: 'down', videoWordShadow: true, videoWordShadowInk: '',
         videoWordShadowDark: 55, videoWordShadowSoft: 14, videoWordShadowFar: 2,
         videoBox: false, videoBoxColor: '#000000', videoBoxClear: 40, videoBoxRound: 16, videoBoxWidth: 'fit',
+        videoOwnColors: false, videoKindColors: {},
         videoCaptions: true, videoCaptionInk: '#e0a030', videoCapFill: 'solid', videoCapStops: ['#f2b880'], videoCapDir: 'right',
         videoNameFont: 'clean', videoNameSize: 104, videoNameColor: 'words', videoNameFill: 'solid', videoNameStops: ['#f2b880'],
         videoNameDir: 'right', videoNameShadow: false, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18,
@@ -15830,6 +15949,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         videoWordStops: ['#f2b880'], videoWordDir: 'down', videoWordShadow: true, videoWordShadowInk: '#12030a', videoWordShadowDark: 60,
         videoWordShadowSoft: 16, videoWordShadowFar: 0,
         videoBox: false, videoBoxColor: '#000000', videoBoxClear: 40, videoBoxRound: 16, videoBoxWidth: 'fit',
+        videoOwnColors: false, videoKindColors: {},
         videoCaptions: true, videoCaptionInk: '#f4a6a0', videoCapFill: 'solid', videoCapStops: ['#f2b880'], videoCapDir: 'right',
         videoNameFont: 'book', videoNameSize: 104, videoNameColor: 'words', videoNameFill: 'solid', videoNameStops: ['#f2b880'],
         videoNameDir: 'right', videoNameShadow: false, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18,
@@ -18158,6 +18278,7 @@ export function setup(ctx: Ctx, overrides?: any) {
           look();
         }, 'Each kind’s color by default, the colors set under Colors for each kind of part.'));
         b.appendChild(gradientRows('videoNameFill', 'Fill of the names', 'One color by default, the color above. A gradient runs across each name.', settingFill('Name'), look));
+        b.appendChild(videoColorRows(look));
       }),
     );
     vc.appendChild(

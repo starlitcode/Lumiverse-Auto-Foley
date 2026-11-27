@@ -6428,6 +6428,63 @@ if (section("permission notices")) {
   }
 }
 
+if (section("video colors")) {
+  console.log("Colors of their own in the video: a kind's and a person's video color draw in the video only");
+  const scanColor = (page, rgb) => page.evaluate(async (rgb) => {
+    const r = document.querySelector("[data-af-scrub] input");
+    r.step = "any";
+    let most = 0;
+    for (let t = 0.5; t < Number(r.max); t += 0.25) {
+      r.value = String(t);
+      r.dispatchEvent(new Event("input", { bubbles: true }));
+      await new Promise((x) => requestAnimationFrame(() => requestAnimationFrame(x)));
+      const c = document.querySelector("[data-af-videopreview]");
+      const d = c.getContext("2d").getImageData(0, 0, c.width, c.height).data;
+      let n = 0;
+      for (let i = 0; i < d.length; i += 16) if (Math.abs(d[i] - rgb[0]) < 40 && Math.abs(d[i + 1] - rgb[1]) < 40 && Math.abs(d[i + 2] - rgb[2]) < 40) n++;
+      most = Math.max(most, n);
+    }
+    return most;
+  }, rgb);
+  for (const size of SIZES) {
+    const run = async (pre) => {
+      const o = await open(THEMES[0], size, 1, `Object.assign(window.__settings, { videoNameColor: "kind", colorCharacter: "#7f00ff" });` + pre);
+      await o.page.evaluate(() => { window.__wav = [0.3, 0.9]; window.__clipMs = 400; });
+      await pressMessage(o.page);
+      await o.page.waitForFunction(() => document.querySelector('#mount [data-af-slot="message"]').getAttribute("aria-busy") === null && (window.__synth || []).length > 0, null, { timeout: 15000 });
+      await o.page.waitForTimeout(1200);
+      await openWs(o.page);
+      await o.page.waitForTimeout(900);
+      return o;
+    };
+    // Off: the general color, violet.
+    const a = await run("");
+    const offGreen = await scanColor(a.page, [0, 255, 0]);
+    const offViolet = await scanColor(a.page, [127, 0, 255]);
+    await a.context.close();
+    // On: the character's video color is green; the Stage keeps violet.
+    const b = await run(`Object.assign(window.__settings, { videoOwnColors: true, videoKindColors: { character: "#00ff00" } });`);
+    const onGreen = await scanColor(b.page, [0, 255, 0]);
+    const stageVar = await b.page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue("--af-k-character").trim() || getComputedStyle(document.querySelector(".af")).getPropertyValue("--af-k-character").trim());
+    await b.context.close();
+    // A person's own color wins over the kind's, and stays after a rename.
+    const c = await run(`Object.assign(window.__settings, { videoOwnColors: true, videoKindColors: { character: "#00ff00" }, videoPersonColors: { a: "#ff0000" } });`);
+    const personRed = await scanColor(c.page, [255, 0, 0]);
+    const personGreen = await scanColor(c.page, [0, 255, 0]);
+    await c.page.evaluate(() => { window.__settings.cast[1].name = "Ysolde Marrow"; });
+    const kept = await c.page.evaluate(() => window.__settings.videoPersonColors.a);
+    await wsSec(c.page, "Speakers");
+    const rows = await c.page.evaluate(() => ({ kinds: document.querySelectorAll('[data-af-row^="videoKindColor-"]').length, person: !!document.querySelector('[data-af-videoperson][data-af-id="a"]') }));
+    const m = await c.page.evaluate(MEASURE, size.touch);
+    await c.context.close();
+    check(offGreen === 0 && offViolet > 0, size.name + ": off, the video uses the general color (" + offViolet + " violet, " + offGreen + " green)");
+    check(onGreen > 0 && /7f00ff/i.test(stageVar || "#7f00ff"), size.name + ": on, the character's video color draws in the video, and the general color stays (" + onGreen + " green, " + stageVar + ")");
+    check(personRed > 0 && personGreen === 0, size.name + ": a person's own video color wins over their kind's (" + personRed + " red, " + personGreen + " green)");
+    check(kept === "#ff0000" && rows.kinds === 4 && rows.person, size.name + ": it is kept by their id, and Speakers lists the four kinds and the person");
+    check(!m.overflow.length && !m.small.length, size.name + ": Speakers fits. " + m.overflow.concat(m.small).slice(0, 2).join("; "));
+  }
+}
+
 if (section("snapping")) {
   console.log("A shape snaps to the middle with a guide, moves freely with the switch off or Alt held, and turns onto 90 degrees");
   for (const size of SIZES) for (const zoom of [1, 1.25, 0.85]) {

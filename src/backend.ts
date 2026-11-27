@@ -318,6 +318,9 @@ interface Settings {
   videoWordShadowSoft: number;
   videoWordShadowFar: number;
   videoBox: boolean;
+  videoOwnColors: boolean;
+  videoKindColors: Record<string, string>;
+  videoPersonColors: Record<string, string>;
   videoBoxColor: string;
   videoBoxClear: number;
   videoBoxRound: number;
@@ -601,6 +604,9 @@ const DEFAULT_SETTINGS: Settings = {
   videoWordShadowSoft: 14,
   videoWordShadowFar: 2,
   videoBox: false,
+  videoOwnColors: false,
+  videoKindColors: {},
+  videoPersonColors: {},
   videoBoxColor: '#000000',
   videoBoxClear: 40,
   videoBoxRound: 16,
@@ -710,6 +716,18 @@ function bool(v: any, dflt: boolean): boolean {
 }
 
 // A color code as #rrggbb, or empty for anything else, which uses the theme.
+// A map of colors by key: each key cleaned, each color a six-digit hex
+// code, at most max of them.
+function cleanColorMap(v: any, key: (k: string) => string, max: number): Record<string, string> {
+  const out: Record<string, string> = {};
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return out;
+  for (const k of Object.keys(v).slice(0, max * 2)) {
+    const id = key(k);
+    const hex = hexColor(v[k]);
+    if (id && hex && Object.keys(out).length < max) out[id] = hex;
+  }
+  return out;
+}
 function hexColor(v: any): string {
   const t = String(v == null ? '' : v).trim().toLowerCase();
   return /^#[0-9a-f]{6}$/.test(t) ? t : '';
@@ -1114,7 +1132,7 @@ const LOOK_KEYS = [
   'videoBylineShadow', 'videoBylineShadowInk', 'videoBylineShadowDark', 'videoBylineShadowSoft', 'videoBylineShadowFar', 'videoMarks',
   'videoWordFill', 'videoWordStops', 'videoWordDir', 'videoNameFill', 'videoNameStops', 'videoNameDir', 'videoCapFill', 'videoCapStops', 'videoCapDir',
   'videoWordShadow', 'videoWordShadowInk', 'videoWordShadowDark', 'videoWordShadowSoft', 'videoWordShadowFar',
-  'videoBox', 'videoBoxColor', 'videoBoxClear', 'videoBoxRound', 'videoBoxWidth',
+  'videoBox', 'videoBoxColor', 'videoBoxClear', 'videoBoxRound', 'videoBoxWidth', 'videoOwnColors', 'videoKindColors',
   'videoNameShadow', 'videoNameShadowInk', 'videoNameShadowDark', 'videoNameShadowSoft', 'videoNameShadowFar', 'videoEdges', 'videoEdgeColor', 'videoMove', 'videoMoveSecs',
   'videoTitleOn', 'videoFadeOut', 'videoCaptions',
 ];
@@ -1307,6 +1325,9 @@ function cleanSettings(raw: any): Settings {
     videoWordShadowSoft: Math.round(num(r.videoWordShadowSoft, 0, 40, d.videoWordShadowSoft)),
     videoWordShadowFar: Math.round(num(r.videoWordShadowFar, 0, 20, d.videoWordShadowFar)),
     videoBox: bool(r.videoBox, d.videoBox),
+    videoOwnColors: bool(r.videoOwnColors, d.videoOwnColors),
+    videoKindColors: cleanColorMap(r.videoKindColors, (k) => (['narrator', 'character', 'persona', 'npc'].indexOf(k) >= 0 ? k : ''), 4),
+    videoPersonColors: cleanColorMap(r.videoPersonColors, (k) => str(k, 40).replace(/[^a-z0-9_-]/gi, ''), 60),
     videoBoxColor: hexColor(r.videoBoxColor) || d.videoBoxColor,
     videoBoxClear: Math.round(num(r.videoBoxClear, 0, 90, d.videoBoxClear)),
     videoBoxRound: Math.round(num(r.videoBoxRound, 0, 60, d.videoBoxRound)),
