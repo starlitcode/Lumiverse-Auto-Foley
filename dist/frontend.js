@@ -5325,7 +5325,6 @@ export function setup(ctx, overrides) {
     // A fill over a box: one color, or a linear or radial gradient through
     // two to six colors, spread evenly. A radial one runs from the middle of
     // the box to its corners.
-    const GRAD_DIRS = ['down', 'right', 'diag', 'diag2'];
     function fillOf(g, kind, colors, dir, x0, y0, x1, y1) {
         const list = colors.filter((c) => /^#[0-9a-f]{6}$/i.test(String(c || ''))).slice(0, 6);
         if ((kind !== 'linear' && kind !== 'radial') || list.length < 2)
@@ -5944,7 +5943,6 @@ export function setup(ctx, overrides) {
     function videoFrame(g, t, parts, total, st, title) {
         const W = st.w;
         const H = st.h;
-        const u = Math.min(W, H) / 1080;
         const intro = titleSecs(title);
         const fadeOut = Math.min(5, Math.max(0, numOr(S.videoFadeOut, 1.5)));
         g.save();
@@ -18731,7 +18729,7 @@ export function setup(ctx, overrides) {
         box.appendChild(r);
     }
     // The places an animation is used, each with a dropdown: its default,
-    // the built-in animations, and the reader's own.
+    // and the built-in animations.
     function drawAnimPlaces(outer, changed) {
         outer.replaceChildren();
         const box = el('<div class="af-col" data-af-animplaces></div>');
@@ -18979,7 +18977,6 @@ export function setup(ctx, overrides) {
     let tplCat = 'all';
     const shape = (kind, x, y, w, h, fill, more = {}) => Object.assign({ id: 'tp' + kind + Math.round(x * 100) + Math.round(y * 100) + w, kind, x, y, w, h, rot: 0, fill, grad: 'none', stops: [], dir: 'down', clear: 0, text: '' }, more);
     const backOf = (name, more) => Object.assign({ id: 'main', name, kind: 'color', color: '#141218', fill: 'solid', stops: [], dir: 'down', dim: 40, blur: 0, shapes: [], use: 'match', moods: [], places: [] }, more);
-    const noShadow = { videoWordShadow: false, videoNameShadow: false };
     const TEMPLATES = [
         {
             id: 'calm',
@@ -22410,7 +22407,6 @@ export function setup(ctx, overrides) {
         previewBack = '';
         morePop = null;
         w.box.replaceChildren();
-        const sh = keptShow();
         const top = el('<div class="af-ws-top">' +
             '<div class="af-ws-name"><b data-af-ws-name></b><span data-af-ws-sub></span></div>' +
             '<div class="af-ws-acts" data-af-ws-acts></div>' +

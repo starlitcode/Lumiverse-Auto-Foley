@@ -1775,10 +1775,10 @@ const BUILT_IN_SCENE_MOODS: SceneMood[] = [
 const SCENE_MOODS_MAX = 30;
 
 // ---------------------------------------------------------------------------
-// Animations: how a part of the video comes in and goes out. A built-in or
-// the reader's own animation is the same shape: two tracks, in and out, each
-// a list of keyframes from 0 (the start of the track) to 1 (its end), with an
-// easing curve and an optional mask. Built-ins are calm: nothing flashes.
+// Animations: how a part of the video comes in and goes out. Each built-in
+// animation has two tracks, in and out, each a list of keyframes from 0 (the
+// start of the track) to 1 (its end), with an easing curve and an optional
+// mask. Only the ones behind Show effects that flash flash.
 // ---------------------------------------------------------------------------
 
 // One moment of a track. x and y are in pixels of a 1080-pixel frame, s is
@@ -5395,7 +5395,6 @@ export function setup(ctx: Ctx, overrides?: any) {
   // A fill over a box: one color, or a linear or radial gradient through
   // two to six colors, spread evenly. A radial one runs from the middle of
   // the box to its corners.
-  const GRAD_DIRS = ['down', 'right', 'diag', 'diag2'];
   function fillOf(g: CanvasRenderingContext2D, kind: string, colors: string[], dir: string, x0: number, y0: number, x1: number, y1: number): string | CanvasGradient {
     const list = colors.filter((c) => /^#[0-9a-f]{6}$/i.test(String(c || ''))).slice(0, 6);
     if ((kind !== 'linear' && kind !== 'radial') || list.length < 2) return list[0] || colors[0] || '#ffffff';
@@ -5988,7 +5987,6 @@ export function setup(ctx: Ctx, overrides?: any) {
   function videoFrame(g: CanvasRenderingContext2D, t: number, parts: VideoPart[], total: number, st: VideoStage, title: string) {
     const W = st.w;
     const H = st.h;
-    const u = Math.min(W, H) / 1080;
     const intro = titleSecs(title);
     const fadeOut = Math.min(5, Math.max(0, numOr(S.videoFadeOut, 1.5)));
     g.save();
@@ -18000,7 +17998,7 @@ export function setup(ctx: Ctx, overrides?: any) {
   }
 
   // The places an animation is used, each with a dropdown: its default,
-  // the built-in animations, and the reader's own.
+  // and the built-in animations.
   function drawAnimPlaces(outer: HTMLElement, changed: () => void) {
     outer.replaceChildren();
     const box = el('<div class="af-col" data-af-animplaces></div>');
@@ -18238,7 +18236,6 @@ export function setup(ctx: Ctx, overrides?: any) {
     Object.assign({ id: 'tp' + kind + Math.round(x * 100) + Math.round(y * 100) + w, kind, x, y, w, h, rot: 0, fill, grad: 'none', stops: [], dir: 'down', clear: 0, text: '' }, more) as VideoShapeDef;
   const backOf = (name: string, more: Partial<VideoBack>): VideoBack =>
     Object.assign({ id: 'main', name, kind: 'color', color: '#141218', fill: 'solid', stops: [], dir: 'down', dim: 40, blur: 0, shapes: [], use: 'match', moods: [], places: [] }, more) as VideoBack;
-  const noShadow = { videoWordShadow: false, videoNameShadow: false };
   const TEMPLATES: Template[] = [
     {
       id: 'calm',
@@ -21519,7 +21516,6 @@ export function setup(ctx: Ctx, overrides?: any) {
     previewBack = '';
     morePop = null;
     w.box.replaceChildren();
-    const sh = keptShow();
     const top = el(
       '<div class="af-ws-top">' +
         '<div class="af-ws-name"><b data-af-ws-name></b><span data-af-ws-sub></span></div>' +

@@ -472,9 +472,8 @@ function cleanSceneMoods(v) {
     }
     return out;
 }
-// Animations: the places they are used, and the reader's own, each held
-// to the shape the panel draws. An id is a built-in's or one of the
-// reader's own.
+// Animations: the places they are used, each held to the shape the panel
+// draws. An id is a built-in's.
 const ANIM_PLACE_IDS = ['open', 'end', 'between', 'scene', 'sceneBack', 'pics', 'lines', 'words', 'title', 'captions', 'marks'];
 // The built-in animations, by id, the same as the panel's list. A place
 // that names any other, such as one saved by an older build, keeps its
