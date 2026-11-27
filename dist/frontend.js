@@ -1257,6 +1257,8 @@ const PANEL_CSS = `
 .af-shape-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; }
 .af-shape-grid > * { min-width: 0; }
 .af-moods { gap: 6px; }
+/* Mood chips keep their whole names and wrap onto more lines. */
+.af-moods .af-mood { flex: 0 0 auto; min-width: 0; max-width: 100%; overflow: visible; text-overflow: clip; padding: 6px 12px; border: 1px solid var(--af-line); border-radius: 999px; }
 .af-markbox { gap: 6px; padding: 10px 0; border-top: 1px solid var(--af-line); }
 .af-markbox:first-of-type { border-top: 0; }
 .af-moodpic .af-row { flex-wrap: wrap; }
@@ -1621,6 +1623,9 @@ html[data-af-still] [class^="af-"], html[data-af-still] [class*=" af-"], html[da
 .af-ws-main { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
 .af-ws-rail { display: none; }
 .af-ws-stage { flex: none; display: flex; flex-direction: column; gap: 8px; min-width: 0; max-height: 62cqh; overflow: auto; overscroll-behavior: contain; padding: 10px 12px; border-bottom: 1px solid var(--af-line); }
+/* The top edge fades, so a row scrolled under it reads as going under,
+   not as cut. */
+.af-ws-panel { -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 14px); mask-image: linear-gradient(to bottom, transparent 0, #000 14px); }
 .af-ws-panel { flex: 1 1 auto; min-height: 0; min-width: 0; overflow: auto; overscroll-behavior: contain; display: flex; flex-direction: column; gap: 12px; padding: 12px 12px calc(16px + env(safe-area-inset-bottom, 0px)); }
 .af-ws .af-ws-stage .af-videopreview { width: auto; height: auto; max-width: 100%; max-height: 32cqh; margin: 0 auto; }
 .af-ws-sec { gap: 12px; }
@@ -5095,10 +5100,24 @@ export function setup(ctx, overrides) {
     function facesBetween(g, st, from, to, k) {
         const u = Math.min(st.w, st.h) / 1080;
         const used = new Set();
+        // A picture going and one coming in the same place are added together
+        // in a layer of their own, then drawn once, so half way each is at half
+        // strength and the place never goes darker. Drawn one over the other,
+        // the second would cover part of the first.
+        const lg = st.a.getContext('2d');
+        lg.clearRect(0, 0, st.w, st.h);
+        lg.globalCompositeOperation = 'lighter';
+        let layered = false;
+        const fade = (face, x, top, a) => {
+            if (a <= 0)
+                return;
+            drawPicture(lg, st, face, x, top, a);
+            layered = true;
+        };
         for (const b of to) {
             const at = from.findIndex((a, n) => !used.has(n) && a.face.name === b.face.name);
             if (at < 0) {
-                drawPicture(g, st, b.face, b.x, b.top - 4 * u * (1 - k), b.a * k);
+                fade(b.face, b.x, b.top - 4 * u * (1 - k), b.a * k);
                 continue;
             }
             used.add(at);
@@ -5109,16 +5128,19 @@ export function setup(ctx, overrides) {
             // A new picture of the same person, such as one for a mood, fades
             // over the old one as it moves.
             if (a.face.picture !== b.face.picture) {
-                drawPicture(g, st, a.face, x, top, strength * (1 - k));
-                drawPicture(g, st, b.face, x, top, strength * k);
+                fade(a.face, x, top, strength * (1 - k));
+                fade(b.face, x, top, strength * k);
             }
             else
                 drawPicture(g, st, b.face, x, top, strength);
         }
         from.forEach((a, n) => {
             if (!used.has(n))
-                drawPicture(g, st, a.face, a.x, a.top + 4 * u * k, a.a * (1 - k));
+                fade(a.face, a.x, a.top + 4 * u * k, a.a * (1 - k));
         });
+        lg.globalCompositeOperation = 'source-over';
+        if (layered)
+            g.drawImage(st.a, 0, 0);
     }
     // The last part giving way to the next, with no pictures: those are
     // moved by facesBetween. k runs from 0 to 1, eased.
@@ -7942,7 +7964,10 @@ export function setup(ctx, overrides) {
         const r = root.getBoundingClientRect();
         return r.width > 0 && r.height > 0;
     }
-    const calm = () => !!S.reduceMotion || (typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches);
+    // still is set while a part is drawn again in place, so folds opened
+    // back as they were open at once, with no motion.
+    let still = false;
+    const calm = () => still || !!S.reduceMotion || (typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches);
     // Reduce motion is marked on the page, since a hint opens outside the panel.
     function paintStill() {
         try {
@@ -15853,8 +15878,12 @@ export function setup(ctx, overrides) {
                 void box.offsetWidth;
                 box.setAttribute('data-af-open', '');
                 if (shell) {
-                    shell.style.transition = calm() ? 'none' : 'opacity 240ms ease-out';
+                    // Run as an animation of its own, so it is timed by the browser
+                    // and never skipped by a style change in the same frame.
+                    shell.style.transition = 'none';
                     shell.style.opacity = '1';
+                    if (!calm() && typeof shell.animate === 'function')
+                        shell.animate([{ opacity: 0.001 }, { opacity: 1 }], { duration: 240, easing: 'ease-out' });
                 }
                 const t = setTimeout(() => {
                     timers.delete(t);
@@ -15941,8 +15970,11 @@ export function setup(ctx, overrides) {
         if (w.how === 'app')
             w.box.removeAttribute('data-af-open');
         if (shell && !calm() && !fromHost) {
-            shell.style.transition = 'opacity 180ms ease-in';
-            shell.style.opacity = '0';
+            shell.style.transition = 'none';
+            if (typeof shell.animate === 'function')
+                shell.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 180, easing: 'ease-in', fill: 'forwards' });
+            else
+                shell.style.opacity = '0';
         }
         const done = () => {
             w.closing = fromHost;
@@ -16148,7 +16180,10 @@ export function setup(ctx, overrides) {
                 const what = p.kind === 'sound' ? 'Sound: ' + (p.caption || 'a sound') : (p.name ? p.name + ': ' : '') + p.words.join(' ');
                 b.setAttribute('aria-label', 'Part ' + (n + 1) + '. ' + what.slice(0, 80));
                 b.title = what.slice(0, 120);
-                b.addEventListener('click', () => wsSeek(intro + p.start));
+                // A tap goes to the start of the part, a little inside it, so the
+                // part before it, which ends at the same moment, is not the one
+                // shown as current.
+                b.addEventListener('click', () => wsSeek(intro + p.start + Math.min(0.05, p.len / 4)));
                 r.line.appendChild(b);
             });
             r.line.hidden = !v.parts.length;
@@ -16279,8 +16314,34 @@ export function setup(ctx, overrides) {
             undoing = false;
         }
         keepSaid(back ? 'Undone.' : 'Done again.');
-        renderWorkspace();
+        refreshSection();
         return true;
+    }
+    // Draws the part on screen again in place, with the values as they are
+    // now: the folds open as they were, the scroll where it was, and the
+    // preview drawn once. Nothing else in the workspace is rebuilt.
+    function refreshSection() {
+        const d = wsDraw;
+        if (!d)
+            return renderWorkspace();
+        const old = d.panel.querySelector('[data-af-section]');
+        const open = old ? Array.from(old.querySelectorAll('.af-fold[aria-expanded="true"]')).map((b) => (b.textContent || '').trim()) : [];
+        const top = d.panel.scrollTop;
+        still = true;
+        try {
+            showSection(wsSection, true);
+            const now = d.panel.querySelector('[data-af-section]');
+            if (now)
+                for (const b of Array.from(now.querySelectorAll('.af-fold[aria-expanded="false"]')))
+                    if (open.indexOf((b.textContent || '').trim()) >= 0)
+                        b.click();
+        }
+        finally {
+            still = false;
+        }
+        d.panel.scrollTop = top;
+        paintUndo();
+        studioBuild(false);
     }
     // ---- keyboard shortcuts ----
     const KEY_LIST = [

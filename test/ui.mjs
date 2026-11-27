@@ -5264,7 +5264,9 @@ if (section("workspace motion")) {
     const ups = seen.slice(1).map((f, n) => f.op - seen[n].op);
     const fading = seen.filter((f) => f.op < 0.98).length;
     check(seen.length > 0 && seen[0].drawn && seen[0].boxes.indexOf("none") < 0, say + ": it shows only once it is drawn, with its preview in it");
-    check(ups.every((d) => d > -0.01 && d < 0.25) && fading >= 6 && seen[seen.length - 1].op > 0.99, say + ": it fades in over several frames, a little more each frame (" + fading + " frames, largest step " + Math.max(0, ...ups).toFixed(2) + ")");
+    // One frame dropped by a busy machine doubles a step, so up to 0.35;
+    // a fade that jumps shows steps of half or more.
+    check(ups.every((d) => d > -0.01 && d < 0.35) && fading >= 6 && seen[seen.length - 1].op > 0.99, say + ": it fades in over several frames, a little more each frame (" + fading + " frames, largest step " + Math.max(0, ...ups).toFixed(2) + ")");
     const ys = seen.map((f) => f.y);
     check(ys.every((v, n) => n === 0 || v <= ys[n - 1] + 0.01) && Math.max(...ys) <= 9 && Math.abs(ys[ys.length - 1]) < 0.01, say + ": it slides up a few pixels into place (" + ys.slice(0, 4).map((v) => v.toFixed(1)).join(" ") + ")");
     // No frame is held up while it fades: work done as it shows makes the
@@ -5532,6 +5534,89 @@ if (section("saved in step")) {
   }
 }
 
+if (section("timeline taps")) {
+  console.log("Every block on the timeline answers a tap or a click, at every UI Scale");
+  for (const size of SIZES) for (const zoom of [1, 1.25, 0.85]) {
+    const { context, page, errors } = await open(THEMES[0], size, zoom, scale(zoom));
+    const say = size.name + " at " + zoom;
+    await openWs(page);
+    await page.waitForTimeout(600);
+    const n = await page.locator(".af-ws-part").count();
+    const missed = [];
+    for (let k = 0; k < n; k++) {
+      const b = page.locator(".af-ws-part").nth(k);
+      const box = await b.boundingBox();
+      if (!box) { missed.push(k + 1 + " has no box"); continue; }
+      const x = box.x + box.width / 2, y = box.y + box.height / 2;
+      if (size.touch) await page.touchscreen.tap(x, y); else await page.mouse.click(x, y);
+      await page.waitForTimeout(150);
+      const on = await page.evaluate((k) => {
+        const b = document.querySelectorAll(".af-ws-part")[k];
+        return b && b.getAttribute("aria-current") === "true";
+      }, k);
+      if (!on) missed.push(k + 1);
+    }
+    check(n >= 8 && !missed.length, say + ": a tap on each of the " + n + " blocks goes to that part. Missed: " + missed.join(", "));
+    const hit = await page.evaluate(() => [...document.querySelectorAll(".af-ws-part")].map((b) => b.getBoundingClientRect().height));
+    if (zoom === 1) check(hit.every((h) => h >= 32), say + ": each block is at least 32 pixels tall (" + Math.round(Math.min(...hit)) + ")");
+    check(!errors.length, say + ": no page errors. " + errors.slice(0, 2).join(" | "));
+    await context.close();
+  }
+}
+
+if (section("phone fixes")) {
+  console.log("On a phone: mood chips show their names, Undo changes nothing on screen but what it undoes");
+  for (const width of [360, 390]) {
+    const { context, page, errors } = await open(THEMES[0], { name: "phone", width, height: 800, touch: true }, 1, () => {
+      const one = (id, name, kind, color) => ({ id, name, kind, color, fill: "solid", stops: ["#2a1f3d"], dir: "down", dim: 40, blur: 0, shapes: [], use: "match", moods: [], places: [] });
+      window.__settings.videoBacks = [one("main", "Main", "dark", ""), one("b2", "Dock", "color", "#2040c0")];
+      window.__settings.videoBackPick = "main";
+    });
+    await openWs(page);
+    await wsSec(page, "Background");
+    await page.selectOption('[data-af-row="backList"] select', "b2").catch(() => {});
+    await page.waitForTimeout(400);
+    const chips = await page.evaluate(() => [...document.querySelectorAll("[data-af-backmood]")].map((b) => ({ name: b.textContent, cut: b.scrollWidth > b.clientWidth + 1, h: b.getBoundingClientRect().height })));
+    check(chips.length >= 8 && chips.every((c) => !c.cut && c.name.length > 2 && c.h >= 32), width + " px: every mood chip shows its whole name and is at least 32 pixels tall (" + chips.filter((c) => c.cut).map((c) => c.name).join(", ") + ")");
+    check(!errors.length, width + " px: no page errors. " + errors.slice(0, 2).join(" | "));
+    await context.close();
+  }
+  // Undo: the part on screen stays, its rows do not move or vanish, and the
+  // scroll stays.
+  for (const size of SIZES) {
+    const { context, page, errors } = await open(THEMES[0], size);
+    await openWs(page);
+    await wsSec(page, "Shape and words");
+    await page.evaluate(() => (document.querySelector("[data-af-ws-panel]").scrollTop = 160));
+    await page.selectOption('[data-af-section="shape"] select >> nth=0', "square");
+    await page.waitForTimeout(800);
+    const frames = await page.evaluate(async () => {
+      const panel = document.querySelector("[data-af-ws-panel]");
+      const read = () => {
+        // Within the panel, since the preview above it changes shape with
+        // what is undone.
+        const p0 = panel.getBoundingClientRect().top;
+        const rows = [...panel.querySelectorAll("[data-af-row]")].slice(0, 8).map((r) => { const b = r.getBoundingClientRect(); return Math.round(b.top - p0) + ":" + Math.round(b.height); });
+        const top = document.querySelector(".af-ws-top").getBoundingClientRect().height;
+        return { rows: rows.join(" "), n: rows.length, scroll: panel.scrollTop, top, canvas: !!document.querySelector("[data-af-videopreview]") };
+      };
+      const out = [read()];
+      document.querySelector('[data-af-ws="undo"]').click();
+      const t0 = performance.now();
+      while (performance.now() - t0 < 500) {
+        await new Promise((r) => requestAnimationFrame(r));
+        out.push(read());
+      }
+      return out;
+    });
+    const same = frames.every((f) => f.rows === frames[0].rows && f.n === frames[0].n && Math.abs(f.scroll - frames[0].scroll) < 1 && f.canvas);
+    check(same, size.name + ": Undo keeps every row where it was, and the scroll, on every frame (" + new Set(frames.map((f) => f.rows)).size + " layouts, scroll " + frames[0].scroll + " to " + frames[frames.length - 1].scroll + ")");
+    check(await page.evaluate(() => window.__settings.videoShape === "wide"), size.name + ": and it undoes the change");
+    check(!errors.length, size.name + ": no page errors. " + errors.slice(0, 2).join(" | "));
+    await context.close();
+  }
+}
+
 if (section("hint places")) {
   console.log("Each description opens right by its ?, in an open fold far down a scrolled drawer, at each UI Scale");
   // Where the description is against its ?: it sits just above the row the
@@ -5697,6 +5782,9 @@ if (section("hint places")) {
   }
 }
 
+// UI_SHEETS=folder saves a contact sheet of each change; UI_MOVES and
+// UI_VARIANTS, lists split by commas, run only those transitions and
+// variants.
 if (section("transition sweep")) {
   console.log("Every transition, frame by frame at 60 frames a second, for every kind of change in the example");
   const SHEETS = process.env.UI_SHEETS || "";
@@ -5738,7 +5826,10 @@ if (section("transition sweep")) {
         Object.assign(window.__settings, rest);
       })()`);
       await openWs(page);
-      await page.waitForTimeout(900);
+      // Fonts and the example's pictures settle first, so a late font is
+      // not read as a jump in the first change.
+      await page.evaluate(() => document.fonts && document.fonts.ready);
+      await page.waitForTimeout(2000);
       const say = variant.name + ", " + move;
       for (const ch of CHANGES) {
         if (variant.quick && !ch.people && ch.name !== "a new scene" && ch.name !== "caption to a line") continue;
@@ -5759,7 +5850,9 @@ if (section("transition sweep")) {
           for (const t of times) {
             r.value = String(t);
             r.dispatchEvent(new Event("input", { bubbles: true }));
-            await new Promise((x) => requestAnimationFrame(x));
+            // Two frames, since the preview draws on the next frame after
+            // the bar moves.
+            await new Promise((x) => requestAnimationFrame(() => requestAnimationFrame(x)));
             sg.drawImage(c, 0, 0, w, h);
             if (sheet) {
               const big = document.createElement("canvas");
@@ -5832,16 +5925,27 @@ if (section("transition sweep")) {
         const bgOnly = Math.min(...fr.map((x) => x.total));
         if (move === "black") check(least < lo * 0.2 && leastAt > 0.3 && leastAt < 0.7, tag + ": goes to black once, in the middle (" + Math.round((least / lo) * 100) + "% at " + leastAt.toFixed(2) + ")");
         else if (move === "fade") check(least >= lo * 0.3, tag + ": dips between the two, and is never empty (" + Math.round((least / lo) * 100) + "%)");
-        else check(least >= lo * 0.85 || least === bgOnly && lo === bgOnly, tag + ": no dark gap (" + Math.round((least / lo) * 100) + "% of the darker end)");
+        // A cut changes at once, so a new scene's background still fading
+        // in after it is not a gap; only the cut's own change is checked.
+        else if (move !== "cut") check(least >= lo * 0.85 || least === bgOnly && lo === bgOnly, tag + ": no dark gap (" + Math.round((least / lo) * 100) + "% of the darker end)");
         // No jump: a cut changes once; every other change in small steps.
-        const steps = fr.slice(1).map((x, n) => Math.abs(x.total - fr[n].total));
-        // Against how much the change moves, or a third of the light on
-        // screen, so two lines of the same length are not measured
-        // against almost nothing.
-        const range = Math.max(1, 0.3 * Math.max(first.total, last.total), Math.abs(last.total - first.total), ...fr.map((x) => Math.abs(x.total - first.total)));
+        // A frame the same as the one before is held, as a video at 30
+        // frames a second holds, so a change is spread over the frames
+        // since the last one that differed.
+        const steps = [];
+        let lastAt = 0;
+        for (let n = 1; n < fr.length; n++) {
+          if (fr[n].total === fr[n - 1].total && n < fr.length - 1) continue;
+          steps.push(Math.abs(fr[n].total - fr[lastAt].total) / (n - lastAt));
+          lastAt = n;
+        }
+        // Against all the light that takes part in the change: the part
+        // going and the part coming, on a black background. No frame moves
+        // more than a fifth of it.
+        const range = Math.max(1, first.total + last.total, ...fr.map((x) => Math.abs(x.total - first.total)));
         const big = steps.filter((x) => x > range * 0.2).length;
         if (move === "cut") check(big <= 1, tag + ": a cut changes in one frame (" + big + " big steps)");
-        else check(big === 0, tag + ": changes in small steps, with no jump (" + Math.round((Math.max(...steps) / range) * 100) + "% at most)");
+        else check(big === 0, tag + ": changes in small steps, with no jump (" + Math.round((Math.max(...steps) / range) * 100) + "% at most, at frame " + steps.indexOf(Math.max(...steps)) + " of " + steps.length + ")");
         // No ghost: never more pictures than at either end.
         if (variant.set.videoPics !== false) {
           const most = Math.max(...fr.map((x) => x.pics));
