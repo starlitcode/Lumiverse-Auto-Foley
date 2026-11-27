@@ -2346,3 +2346,69 @@ describe("watermarks and the line under the title", () => {
     expect(h.files.has("u1/video-marks/w2.json")).toBe(false);
   });
 });
+
+describe("projects", () => {
+  const look = { videoFont: "round", videoSize: 40, videoBackPick: "b2", videoBacks: [{ id: "main", name: "Main", kind: "dark" }, { id: "b2", name: "Harbor", kind: "picture" }], videoNotes: [], cast: "left out" };
+  test("a project keeps its recipe, and Rename, Move, Duplicate and Delete work", async () => {
+    const h = host();
+    const made = (await h.ask({ type: "project_put", name: "Lantern scene", project: { look, keptKey: "k9", trim: { from: 1.5, to: 0 }, hand: { cuts: { "2": "start" }, backs: {}, out: [3] } } })).find((m: any) => m.type === "project_saved");
+    expect(made.ok).toBe(true);
+    const id = made.id;
+    const got = (await h.ask({ type: "project_get", id })).find((m: any) => m.type === "project");
+    expect(got.project.keptKey).toBe("k9");
+    expect(got.project.look.videoFont).toBe("round");
+    expect(got.project.look.videoBackPick).toBe("b2");
+    expect("cast" in got.project.look).toBe(false);
+    expect(got.project.trim).toEqual({ from: 1.5, to: 0 });
+    expect(got.project.hand.out).toEqual([3]);
+    await h.ask({ type: "project_edit", id, name: "Lantern scene, long" });
+    await h.ask({ type: "project_edit", id, folder: "fd1" });
+    const dup = (await h.ask({ type: "project_dup", id })).find((m: any) => m.type === "project_duped");
+    expect(dup.ok).toBe(true);
+    let list = (await h.ask({ type: "project_list" })).find((m: any) => m.type === "projects").list;
+    expect(list.map((e: any) => e.name)).toEqual(["Lantern scene, long", "Lantern scene, long copy"]);
+    expect(list[0].folder).toBe("fd1");
+    expect(list[0].backs).toEqual(["main", "b2"]);
+    const copy = (await h.ask({ type: "project_get", id: dup.id })).find((m: any) => m.type === "project");
+    expect(copy.project.look.videoFont).toBe("round");
+    await h.ask({ type: "project_drop", id });
+    list = (await h.ask({ type: "project_list" })).find((m: any) => m.type === "projects").list;
+    expect(list.length).toBe(1);
+    expect([...h.files.keys()].some((k) => k.endsWith("projects/" + id + ".json"))).toBe(false);
+  });
+
+  test("a picture a project uses stays when it leaves the settings, and Start again removes projects", async () => {
+    const h = host();
+    await h.ask({ type: "save", settings: { videoBacks: look.videoBacks, videoBackPick: "b2" } });
+    await h.ask({ type: "video_bg_put", id: "b2", picture: "data:image/png;base64,AAAA" });
+    await h.ask({ type: "project_put", name: "Harbor", project: { look, keptKey: "" } });
+    await h.ask({ type: "save", settings: { videoBacks: [{ id: "main", name: "Main", kind: "dark" }], videoBackPick: "main" } });
+    const pic = (await h.ask({ type: "video_bg_get", id: "b2" })).find((m: any) => m.type === "video_bg");
+    expect(pic.picture).toBe("data:image/png;base64,AAAA");
+    const check = (await h.ask({ type: "reset_check", parts: ["settings"] })).find((m: any) => m.type === "reset_check");
+    expect(check.already).toEqual([]);
+    await h.ask({ type: "reset", parts: ["settings"] });
+    const list = (await h.ask({ type: "project_list" })).find((m: any) => m.type === "projects").list;
+    expect(list).toEqual([]);
+    expect([...h.files.keys()].some((k) => /projects\/pj/.test(k))).toBe(false);
+  });
+
+  test("an index that cannot be read is not written over, and the limits hold", async () => {
+    const first = host();
+    await first.ask({ type: "project_put", name: "One", project: { look, keptKey: "" } });
+    const saved = new Map(first.files);
+    const key = [...saved.keys()].find((x) => x.endsWith("projects/index.json")) as string;
+    const before = saved.get(key);
+    const h = host({ files: saved, failRead: (p) => p === "projects/index.json" });
+    const out = await h.ask({ type: "project_put", name: "Two", project: { look, keptKey: "" } });
+    const failed = out.find((m: any) => m.type === "failed");
+    expect(failed && failed.readFailed).toBe(true);
+    expect(failed.error).toBe("Your projects could not be read from your account. Nothing was changed.");
+    expect(h.files.get(key)).toBe(before);
+    const many = host();
+    for (let k = 0; k < 100; k++) await many.ask({ type: "project_put", name: "P" + k, project: { look, keptKey: "" } });
+    const over = (await many.ask({ type: "project_put", name: "One more", project: { look, keptKey: "" } })).find((m: any) => m.type === "project_saved");
+    expect(over.ok).toBe(false);
+    expect(over.error).toBe("You have 100 projects, which is the most there can be. Delete one to make another.");
+  });
+});

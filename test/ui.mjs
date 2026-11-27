@@ -178,6 +178,24 @@ function answer(msg) {
     case 'clips_clear': window.__clips = {}; window.__keptList = []; return reply({ type: 'clips_state', ok: true, count: 0, bytes: 0 });
     case 'clips_have': return reply({ type: 'clips_have', have: (msg.sigs || []).filter((x) => (window.__clips || {})[x]) });
     case 'kept_list': return reply({ type: 'kept_list', list: window.__keptList || [] });
+    // Projects, as the backend keeps them: an index and one file each.
+    case 'project_list': return reply({ type: 'projects', ok: true, list: JSON.parse(JSON.stringify(window.__projIndex || [])), folders: [] });
+    case 'project_get': { const v = (window.__projects || {})[msg.id]; return reply(v ? { type: 'project', ok: true, id: msg.id, project: JSON.parse(JSON.stringify(v)) } : { type: 'project', ok: false, error: 'This project is no longer saved.' }); }
+    case 'project_put': {
+      if (window.__projFail) return reply({ type: 'project_saved', ok: false, error: 'The project could not be saved to your account.' });
+      const list = (window.__projIndex = window.__projIndex || []);
+      window.__projects = window.__projects || {};
+      let e = list.find((x) => x.id === msg.id);
+      if (!e) { window.__projN = (window.__projN || 0) + 1; e = { id: 'pj' + window.__projN, name: msg.name, folder: '', at: 0, keptKey: '', backs: [], marks: [] }; list.push(e); }
+      e.at = Date.now();
+      e.keptKey = msg.project.keptKey || '';
+      window.__projects[e.id] = JSON.parse(JSON.stringify(Object.assign({ name: e.name }, msg.project)));
+      window.__projPuts = (window.__projPuts || 0) + 1;
+      return reply({ type: 'project_saved', ok: true, id: e.id, list: JSON.parse(JSON.stringify(list)) });
+    }
+    case 'project_edit': { const list = window.__projIndex || []; const e = list.find((x) => x.id === msg.id); if (!e) return reply({ type: 'project_edited', ok: false, error: 'This project is no longer saved.' }); if (typeof msg.name === 'string') e.name = msg.name; if (typeof msg.folder === 'string') e.folder = msg.folder; return reply({ type: 'project_edited', ok: true, list: JSON.parse(JSON.stringify(list)) }); }
+    case 'project_dup': { const list = window.__projIndex || []; const e = list.find((x) => x.id === msg.id); window.__projN = (window.__projN || 0) + 1; const id = 'pj' + window.__projN; list.push(Object.assign({}, e, { id, name: e.name + ' copy' })); window.__projects[id] = JSON.parse(JSON.stringify(window.__projects[e.id])); return reply({ type: 'project_duped', ok: true, id, list: JSON.parse(JSON.stringify(list)) }); }
+    case 'project_drop': { window.__projIndex = (window.__projIndex || []).filter((x) => x.id !== msg.id); delete (window.__projects || {})[msg.id]; return reply({ type: 'project_dropped', ok: true, list: JSON.parse(JSON.stringify(window.__projIndex)) }); }
     case 'kept_edit': { if (msg.scenes !== undefined) (window.__sceneEdits = window.__sceneEdits || []).push(msg.scenes); const e = (window.__keptList || []).find((x) => x.key === msg.key); if (!e) return reply({ type: 'kept_edited', ok: false }); if (typeof msg.name === 'string') e.name = msg.name; if (typeof msg.folder === 'string') e.folder = msg.folder; return reply({ type: 'kept_edited', ok: true, name: e.name || '', folder: e.folder || '' }); }
     case 'sound_kept': return reply({ type: 'sound', missing: true });
     // Each background's picture, by its id, as the backend keeps them.
@@ -5780,6 +5798,130 @@ if (section("timeline cuts")) {
     const m = await page.evaluate(MEASURE, size.touch);
     check(!m.overflow.length && !m.small.length, size.name + ": the timeline's buttons fit. " + m.overflow.concat(m.small).slice(0, 2).join("; "));
     check(!errors.length, size.name + ": no page errors. " + errors.slice(0, 2).join(" | "));
+    await context.close();
+  }
+}
+
+if (section("projects")) {
+  console.log("Projects: saved as the Studio changes, opened as they were saved, renamed, copied, moved, deleted, and said plainly when their audio is gone");
+  for (const size of SIZES) {
+    const say = size.name;
+    const { context, page, errors } = await open(THEMES[0], size);
+    await page.evaluate(() => {
+      // As the backend lists it: the script's own author.
+      window.__keptList = [{ key: "k", messageId: "m1", chatId: "chat1", author: "Ysolde Marrow-Kestrel of the Lower Quays", keptAt: Date.now() - 60000, lines: 3, first: "She set the cup down." }];
+      window.__clipMs = 200;
+      window.__wav = [0.2, 0.8];
+    });
+    await pressMessage(page);
+    await page.waitForFunction(() => document.querySelector('#mount [data-af-slot="message"]').getAttribute("aria-busy") === null && (window.__synth || []).length > 0, null, { timeout: 15000 });
+    await page.waitForTimeout(1200);
+    await openWs(page);
+    await page.waitForTimeout(800);
+    // The frame at one moment, as pixels.
+    const frame = () => page.evaluate(async () => {
+      const r = document.querySelector("[data-af-scrub] input");
+      r.step = "any";
+      r.value = "1.2";
+      r.dispatchEvent(new Event("input", { bubbles: true }));
+      await new Promise((x) => setTimeout(x, 300));
+      await new Promise((x) => requestAnimationFrame(() => requestAnimationFrame(x)));
+      const c = document.querySelector("[data-af-videopreview]");
+      return Array.from(c.getContext("2d").getImageData(0, 0, c.width, c.height).data.filter((_, i) => i % 97 === 0));
+    });
+    const differ = (a, b) => { let n = 0; for (let i = 0; i < Math.min(a.length, b.length); i++) if (Math.abs(a[i] - b[i]) > 24) n++; return n / Math.max(1, a.length); };
+    const useTpl = async (id) => {
+      await wsSec(page, "Templates");
+      await page.click('[data-af-tpl="' + id + '"]');
+      await page.waitForTimeout(400);
+      await page.click("[data-af-tpluse]");
+      await page.waitForTimeout(400);
+    };
+    await wsSec(page, "Projects");
+    check(/No projects yet/.test(await page.textContent('[data-af="projectsaid"]')), say + ": with none, Projects says so");
+    await page.click("[data-af-projectnew]");
+    await page.waitForTimeout(800);
+    check((await page.textContent("[data-af-ws-name]")) === "Project 1" && /^Project/.test(await page.textContent("[data-af-ws-sub]")), say + ": New project opens it, and its name shows at the top");
+    // A change is saved to it on its own.
+    const puts0 = await page.evaluate(() => window.__projPuts || 0);
+    await useTpl("neon");
+    await page.waitForTimeout(1600);
+    const saved1 = await page.evaluate(() => ({ puts: window.__projPuts || 0, font: window.__projects.pj1.look.videoFont, key: window.__projects.pj1.keptKey, sub: document.querySelector("[data-af-ws-sub]").textContent }));
+    check(saved1.puts > puts0 && saved1.font === "round" && saved1.key === "k", say + ": a change is saved to the project on its own, with its saved performance (" + JSON.stringify(saved1) + ")");
+    check(saved1.sub === "Project, saved", say + ": the top says it is saved, with no notification (" + saved1.sub + ")");
+    check(!(await page.evaluate(() => (window.__sent || []).some((m) => m.type === "notify" && /saved/i.test(m.text)))), say + ": saving sends no notification");
+    const A = await frame();
+    // A second project, from the current look, then changed.
+    await wsSec(page, "Projects");
+    await page.click("[data-af-projectnew]");
+    await page.waitForTimeout(800);
+    const from2 = await page.evaluate(() => window.__projects.pj2.look.videoFont);
+    check(from2 === "round", say + ": New project starts from the current look");
+    await useTpl("paper");
+    await page.waitForTimeout(1600);
+    const B = await frame();
+    check(differ(A, B) > 0.05, say + ": the two looks draw differently (" + differ(A, B).toFixed(3) + ")");
+    // Open the first: the look and the frame come back.
+    await wsSec(page, "Projects");
+    await page.locator('[data-af-project-row][data-af-id="pj1"] [data-af-projectopen-btn]').click();
+    await page.waitForTimeout(1500);
+    const A2 = await frame();
+    const back = await page.evaluate(() => ({ font: window.__settings.videoFont, name: document.querySelector("[data-af-ws-name]").textContent, two: window.__projects.pj2.look.videoFont }));
+    check(back.font === "round" && back.name === "Project 1", say + ": Open puts its look back (" + JSON.stringify(back) + ")");
+    check(differ(A, A2) < 0.01, say + ": and the preview shows the same frame (" + differ(A, A2).toFixed(4) + " differ)");
+    check(back.two !== "round", say + ": the project open before was saved first (" + back.two + ")");
+    // Rename, Move to a folder, Duplicate and Delete.
+    await wsSec(page, "Projects");
+    const more = async (id) => { await page.locator('[data-af-project-row][data-af-id="' + id + '"] [data-af-projectmore]').click(); await page.waitForTimeout(400); };
+    await more("pj1");
+    await page.fill('[data-af-project-row][data-af-id="pj1"] [data-af-projectrename]', "Harbor at night");
+    await page.locator('[data-af-project-row][data-af-id="pj1"] [data-af-projectrename]').dispatchEvent("change");
+    await page.waitForTimeout(500);
+    check((await page.evaluate(() => window.__projIndex.find((x) => x.id === "pj1").name)) === "Harbor at night" && (await page.textContent("[data-af-ws-name]")) === "Harbor at night", say + ": Rename renames it, and the top follows");
+    await page.click("[data-af-projectfolder]");
+    await page.waitForTimeout(400);
+    await more("pj1");
+    await page.evaluate(() => { const s = document.querySelector('[data-af-project-row][data-af-id="pj1"] [data-af-projectmove] select'); s.value = s.options[1].value; s.dispatchEvent(new Event("change", { bubbles: true })); });
+    await page.waitForTimeout(600);
+    const moved = await page.evaluate(() => ({ folder: window.__projIndex.find((x) => x.id === "pj1").folder, inside: !!document.querySelector('[data-af-savedfolder] [data-af-project-row][data-af-id="pj1"]') }));
+    check(!!moved.folder && moved.inside, say + ": Move to a folder puts it in the folder (" + JSON.stringify(moved) + ")");
+    await page.locator("[data-af-savedfolder] .af-fold").first().click().catch(() => {});
+    await page.waitForTimeout(300);
+    if (!(await page.locator('[data-af-project-row][data-af-id="pj1"] [data-af-projectdup]').isVisible())) {
+      await page.locator("[data-af-savedfolder] .af-fold").first().click();
+      await page.waitForTimeout(400);
+    }
+    if (!(await page.locator('[data-af-project-row][data-af-id="pj1"] [data-af-projectdup]').isVisible())) await more("pj1");
+    await page.locator('[data-af-project-row][data-af-id="pj1"] [data-af-projectdup]').click();
+    await page.waitForTimeout(500);
+    const dup = await page.evaluate(() => window.__projIndex.map((x) => x.name));
+    check(dup.indexOf("Harbor at night copy") >= 0 && (await page.evaluate(() => window.__projects.pj3.look.videoFont)) === "round", say + ": Duplicate makes a copy with the same recipe (" + dup.join(", ") + ")");
+    await page.evaluate(() => { window.__confirmNo = true; window.__asked = 0; });
+    await page.locator('[data-af-project-row][data-af-id="pj1"] [data-af-projectdel]').click();
+    await page.waitForTimeout(400);
+    check((await page.evaluate(() => window.__asked)) === 1 && (await page.evaluate(() => window.__projIndex.length)) === 3, say + ": Delete asks first, and No keeps it");
+    await page.evaluate(() => { window.__confirmNo = false; });
+    await page.locator('[data-af-project-row][data-af-id="pj1"] [data-af-projectdel]').click();
+    await page.waitForTimeout(500);
+    check((await page.evaluate(() => window.__projIndex.map((x) => x.id).join(","))) === "pj2,pj3" && (await page.textContent("[data-af-ws-name]")) !== "Harbor at night", say + ": Yes deletes it, and the project is closed");
+    // A project whose saved audio has gone.
+    await page.evaluate(() => { window.__keptList = [{ key: "k2", messageId: "m2", chatId: "chat1", author: "Ferryman", keptAt: Date.now() - 30000, lines: 2, first: "The tide does not wait." }]; window.__projects.pj2.keptKey = "k"; });
+    await page.locator('[data-af-project-row][data-af-id="pj2"] [data-af-projectopen-btn]').click();
+    await page.waitForTimeout(1500);
+    const gone = await page.evaluate(() => ({ text: (document.querySelector("[data-af-ws-stage] [data-af-projectgone]") || {}).textContent || "", link: !!document.querySelector("[data-af-ws-stage] [data-af-projectlink]"), font: window.__settings.videoFont }));
+    check(/The saved audio this project uses has been deleted\./.test(gone.text) && /cannot be made until the project is linked to a saved performance/.test(gone.text) && gone.link, say + ": a project whose audio is gone says so, with Use another saved performance (" + gone.text + ")");
+    check(gone.font === "book", say + ": and the rest of it still opens, with its own look (" + gone.font + ")");
+    // A save that fails warns, in plain words.
+    await page.evaluate(() => { window.__projFail = true; });
+    await useTpl("neon");
+    await page.waitForTimeout(1600);
+    const failed = await page.evaluate(() => ({ sub: document.querySelector("[data-af-ws-sub]").textContent, told: (window.__sent || []).filter((m) => m.type === "notify" && /could not be saved/.test(m.text)).map((m) => m.text) }));
+    check(failed.sub === "Project, not saved" && failed.told.length === 1, say + ": a save that fails warns once, in plain words (" + JSON.stringify(failed) + ")");
+    await page.evaluate(() => { window.__projFail = false; });
+    await wsSec(page, "Projects");
+    const m = await page.evaluate(MEASURE, size.touch);
+    check(!m.overflow.length && !m.small.length, say + ": Projects fit. " + m.overflow.concat(m.small).slice(0, 2).join("; "));
+    check(!errors.length, say + ": no page errors. " + errors.slice(0, 2).join(" | "));
     await context.close();
   }
 }

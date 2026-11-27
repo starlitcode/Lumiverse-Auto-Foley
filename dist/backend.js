@@ -169,6 +169,7 @@ const DEFAULT_SETTINGS = {
     videoCaptions: true,
     videoNotes: [],
     savedFolders: [],
+    projectFolders: [],
     savedSort: 'new',
     videoLooks: [],
     censorOn: false,
@@ -642,11 +643,11 @@ function cleanNotesList(v) {
     }));
 }
 // At most 50 folders, each with a name of at most 60 characters.
-function cleanSavedFolders(v) {
+function cleanSavedFolders(v, max = 50) {
     if (!Array.isArray(v))
         return [];
     const out = [];
-    for (const f of v.slice(0, 50)) {
+    for (const f of v.slice(0, max)) {
         const id = str(f && f.id, 40).replace(/[^a-z0-9_-]/gi, '');
         const name = str(f && f.name, 60).trim();
         if (id && name && !out.some((x) => x.id === id))
@@ -888,6 +889,7 @@ function cleanSettings(raw) {
         videoCaptions: bool(r.videoCaptions, d.videoCaptions),
         videoNotes: cleanNotesList(r.videoNotes),
         savedFolders: cleanSavedFolders(r.savedFolders),
+        projectFolders: cleanSavedFolders(r.projectFolders, 30),
         savedSort: pick(r.savedSort, ['new', 'old', 'az'], 'new'),
         videoLooks: cleanLooks(r.videoLooks),
         censorOn: bool(r.censorOn, d.censorOn),
@@ -3805,15 +3807,83 @@ async function dropMarkPics(s, userId) {
 }
 // After the list is saved: the pictures of backgrounds no longer in it.
 async function dropLeftBgs(s, userId) {
-    const keep = s.videoBacks.map((b) => b.id);
+    // A picture a project still uses stays, though it left the list in use.
+    let uses = { backs: [], marks: [] };
+    try {
+        uses = projectUses(await projectIndex(userId));
+    }
+    catch (_) {
+        // With the projects unreadable, no picture is taken out.
+        return;
+    }
+    const keep = s.videoBacks.map((b) => b.id).concat(uses.backs);
     for (const id of await bgIndex(userId))
         if (keep.indexOf(id) < 0)
             await dropVideoBg(id, userId);
     // The same for watermarks.
-    const marks = s.videoMarks.map((m) => m.id);
+    const marks = s.videoMarks.map((m) => m.id).concat(uses.marks);
     for (const id of await markIndex(userId))
         if (marks.indexOf(id) < 0)
             await dropMarkPic(id, userId);
+}
+// Projects in the Studio: the recipe of a video, never the video. Each is
+// a file of its own, with an index of their names, folders and times, and
+// the backgrounds and watermarks each uses, so their pictures stay.
+const PROJECT_INDEX = 'projects/index.json';
+const PROJECTS_MAX = 100;
+const PROJECT_MAX_CHARS = 400000;
+const projectFile = (id) => 'projects/' + id + '.json';
+const projectId = (v) => str(v, 24).replace(/[^a-z0-9]/gi, '');
+// A new id, not used by any project in the list.
+function newProjectId(list) {
+    for (;;) {
+        const id = 'pj' + Date.now().toString(36) + Math.floor(Math.random() * 1e6).toString(36);
+        if (!list.some((x) => x.id === id))
+            return id;
+    }
+}
+async function projectIndex(userId) {
+    const v = await readJsonStrict(PROJECT_INDEX, userId, 'Your projects could not be read from your account. Nothing was changed.');
+    if (!Array.isArray(v))
+        return [];
+    const out = [];
+    for (const e of v.slice(0, PROJECTS_MAX)) {
+        const id = projectId(e && e.id);
+        if (!id || out.some((x) => x.id === id))
+            continue;
+        out.push({
+            id,
+            name: str(e.name, 80).trim() || 'A project',
+            folder: str(e.folder, 40).replace(/[^a-z0-9_-]/gi, ''),
+            at: num(e.at, 0, 1e15, 0),
+            keptKey: str(e.keptKey, 80),
+            backs: Array.isArray(e.backs) ? e.backs.map((x) => backId(x)).slice(0, 12) : [],
+            marks: Array.isArray(e.marks) ? e.marks.map((x) => backId(x)).slice(0, 5) : [],
+        });
+    }
+    return out;
+}
+function projectUses(list) {
+    const backs = [];
+    const marks = [];
+    for (const e of list) {
+        backs.push(...e.backs);
+        marks.push(...e.marks);
+    }
+    return { backs, marks };
+}
+// What a project holds, cleaned: the look as settings, cleaned the same way
+// as the settings themselves, the saved performance it uses, its trim and
+// its hand changes.
+function cleanProject(v) {
+    const look = v && v.look && typeof v.look === 'object' ? v.look : {};
+    const clean = cleanSettings(look);
+    const keep = {};
+    for (const k of Object.keys(look))
+        if (k in clean && /^(video|studio|censor|audioSplit)/.test(k) && k !== 'videoLooks' && k !== 'studioKeys' && k !== 'studioSnap')
+            keep[k] = clean[k];
+    const trim = v && v.trim && typeof v.trim === 'object' ? { from: num(v.trim.from, 0, 36000, 0), to: num(v.trim.to, 0, 36000, 0) } : null;
+    return { look: keep, keptKey: str(v && v.keptKey, 80), trim, hand: cleanSceneHand(v && v.hand) || null };
 }
 // Fonts of the reader's own, for videos. The list is a file of its own, and
 // each font is a file named by its id. A font travels through the extension
@@ -4984,6 +5054,86 @@ async function onPanel(p, userId) {
                     ok = await dropMarkPic(id, userId);
                 return answer({ type: 'mark_pic', id, ok, error: ok ? '' : 'The picture could not be saved to your account.' });
             }
+            case 'project_list': {
+                const s = await loadSettings(userId);
+                return answer({ type: 'projects', ok: true, list: await projectIndex(userId), folders: s.projectFolders });
+            }
+            case 'project_get': {
+                const id = projectId(p.id);
+                const v = await readJsonStrict(projectFile(id), userId, 'This project could not be read from your account. Nothing was changed.');
+                if (!v)
+                    return answer({ type: 'project', ok: false, error: 'This project is no longer saved.' });
+                return answer({ type: 'project', ok: true, id, project: Object.assign(cleanProject(v), { name: str(v.name, 80) }) });
+            }
+            case 'project_put': {
+                // A new project, or the latest of one that is open, saved as it
+                // changes.
+                const list = await projectIndex(userId);
+                let id = projectId(p.id);
+                const name = str(p.name, 80).trim() || 'A project';
+                if (!id || !list.some((x) => x.id === id)) {
+                    if (list.length >= PROJECTS_MAX)
+                        return answer({ type: 'project_saved', ok: false, error: 'You have ' + PROJECTS_MAX + ' projects, which is the most there can be. Delete one to make another.' });
+                    id = newProjectId(list);
+                }
+                const body = cleanProject(p.project);
+                const text = JSON.stringify(Object.assign({ id, name }, body));
+                if (text.length > PROJECT_MAX_CHARS)
+                    return answer({ type: 'project_saved', ok: false, error: 'This project is too large to save. Take out some shapes or notes.' });
+                if (!(await writeJson(projectFile(id), Object.assign({ id, name }, body), userId)))
+                    return answer({ type: 'project_saved', ok: false, error: 'The project could not be saved to your account.' });
+                const was = list.find((x) => x.id === id);
+                const entry = {
+                    id, name: was ? was.name : name, folder: typeof p.folder === 'string' ? str(p.folder, 40).replace(/[^a-z0-9_-]/gi, '') : was ? was.folder : '', at: Date.now(), keptKey: body.keptKey,
+                    backs: (body.look.videoBacks || []).map((b) => b.id), marks: (body.look.videoMarks || []).map((m) => m.id),
+                };
+                const next = list.filter((x) => x.id !== id).concat([entry]);
+                if (!(await writeJson(PROJECT_INDEX, next, userId)))
+                    return answer({ type: 'project_saved', ok: false, error: 'The list of projects could not be saved to your account.' });
+                return answer({ type: 'project_saved', ok: true, id, list: next });
+            }
+            case 'project_edit': {
+                // Rename or move to a folder, without the project's own file.
+                const list = await projectIndex(userId);
+                const e = list.find((x) => x.id === projectId(p.id));
+                if (!e)
+                    return answer({ type: 'project_edited', ok: false, error: 'This project is no longer saved.' });
+                if (typeof p.name === 'string' && str(p.name, 80).trim())
+                    e.name = str(p.name, 80).trim();
+                if (typeof p.folder === 'string')
+                    e.folder = str(p.folder, 40).replace(/[^a-z0-9_-]/gi, '');
+                const ok = await writeJson(PROJECT_INDEX, list, userId);
+                return answer({ type: 'project_edited', ok, list, error: ok ? '' : 'The change could not be saved to your account.' });
+            }
+            case 'project_dup': {
+                const list = await projectIndex(userId);
+                const e = list.find((x) => x.id === projectId(p.id));
+                if (!e)
+                    return answer({ type: 'project_duped', ok: false, error: 'This project is no longer saved.' });
+                if (list.length >= PROJECTS_MAX)
+                    return answer({ type: 'project_duped', ok: false, error: 'You have ' + PROJECTS_MAX + ' projects, which is the most there can be. Delete one to make another.' });
+                const v = await readJsonStrict(projectFile(e.id), userId, 'This project could not be read from your account. Nothing was changed.');
+                if (!v)
+                    return answer({ type: 'project_duped', ok: false, error: 'This project is no longer saved.' });
+                const id = newProjectId(list);
+                const name = (e.name + ' copy').slice(0, 80);
+                if (!(await writeJson(projectFile(id), Object.assign({}, v, { id, name }), userId)))
+                    return answer({ type: 'project_duped', ok: false, error: 'The copy could not be saved to your account.' });
+                const next = list.concat([Object.assign({}, e, { id, name, at: Date.now() })]);
+                const ok = await writeJson(PROJECT_INDEX, next, userId);
+                return answer({ type: 'project_duped', ok, id, list: next, error: ok ? '' : 'The list of projects could not be saved to your account.' });
+            }
+            case 'project_drop': {
+                const list = await projectIndex(userId);
+                const id = projectId(p.id);
+                try {
+                    await spindle.userStorage.delete(projectFile(id), userId);
+                }
+                catch (_) { }
+                const next = list.filter((x) => x.id !== id);
+                const ok = await writeJson(PROJECT_INDEX, next, userId);
+                return answer({ type: 'project_dropped', ok, list: next, error: ok ? '' : 'The project could not be deleted from your account.' });
+            }
             case 'font_list':
                 return answer({ type: 'fonts', ok: true, list: await loadFonts(userId) });
             case 'font_upload': {
@@ -5288,7 +5438,7 @@ async function onPanel(p, userId) {
                 const parts = Array.isArray(p.parts) ? p.parts.filter((x) => RESET_PARTS.indexOf(x) >= 0) : [];
                 const s = await loadSettings(userId);
                 const fresh = cleanSettings({});
-                const NOT = ['cast', 'groups', 'moodList', 'prompt', 'promptRole', 'engineNoteRole', 'askNoteRole', 'askNotes', 'engineNotes', 'decisionQuestions', 'exportParts', 'importParts', 'resetParts', 'guideSeen', 'builtInSeen', 'movedSeen', 'templatesSeen', 'chatsOff'];
+                const NOT = ['cast', 'groups', 'moodList', 'prompt', 'promptRole', 'engineNoteRole', 'askNoteRole', 'askNotes', 'engineNotes', 'decisionQuestions', 'exportParts', 'importParts', 'resetParts', 'guideSeen', 'builtInSeen', 'movedSeen', 'templatesSeen', 'chatsOff', 'projectFolders'];
                 const strip = (x) => {
                     const o = {};
                     for (const k of Object.keys(x).sort())
@@ -5301,7 +5451,7 @@ async function onPanel(p, userId) {
                 for (const part of parts) {
                     let same = false;
                     if (part === 'settings') {
-                        same = strip(s) === strip(fresh) && !(await anyVideoBg(s, userId)) && !(await loadFonts(userId)).length && !(await markIndex(userId)).length;
+                        same = strip(s) === strip(fresh) && !(await anyVideoBg(s, userId)) && !(await loadFonts(userId)).length && !(await markIndex(userId)).length && !(await projectIndex(userId)).length && !s.projectFolders.length;
                     }
                     else if (part === 'prompt')
                         same = !s.prompt && empty(s.askNotes) && empty(s.engineNotes) && empty(s.decisionQuestions) &&
@@ -5333,8 +5483,22 @@ async function onPanel(p, userId) {
                 // The pictures are found from the backgrounds in the settings, so
                 // they are taken out before the settings go back to their defaults.
                 let bgsOk = true;
-                if (parts.indexOf('settings') >= 0)
-                    bgsOk = (await dropVideoBgs(s, userId)) && (await dropMarkPics(s, userId));
+                if (parts.indexOf('settings') >= 0) {
+                    // The projects go with the settings, so their pictures can go too.
+                    try {
+                        for (const e of await projectIndex(userId)) {
+                            try {
+                                await spindle.userStorage.delete(projectFile(e.id), userId);
+                            }
+                            catch (_) { }
+                        }
+                        await writeJson(PROJECT_INDEX, [], userId);
+                    }
+                    catch (_) {
+                        bgsOk = false;
+                    }
+                    bgsOk = (await dropVideoBgs(s, userId)) && (await dropMarkPics(s, userId)) && bgsOk;
+                }
                 if (parts.indexOf('settings') >= 0) {
                     const keep = { cast: s.cast, groups: s.groups, moodList: s.moodList, prompt: s.prompt, promptRole: s.promptRole, engineNoteRole: s.engineNoteRole, askNoteRole: s.askNoteRole, askNotes: s.askNotes, engineNotes: s.engineNotes, decisionQuestions: s.decisionQuestions, exportParts: s.exportParts, importParts: s.importParts, resetParts: s.resetParts, builtInSeen: s.builtInSeen, movedSeen: s.movedSeen, chatsOff: s.chatsOff };
                     Object.assign(s, fresh, keep);

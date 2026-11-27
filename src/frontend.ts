@@ -2046,6 +2046,7 @@ const DEFAULTS: any = {
   videoCaptions: true,
   videoNotes: [],
   savedFolders: [],
+  projectFolders: [],
   savedSort: 'new',
   videoLooks: [],
   censorOn: false,
@@ -2156,6 +2157,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     noteUndo(patch);
     Object.assign(S, patch);
     save();
+    if (openProject && patch && Object.keys(patch).some(studioKey)) projectTouch();
   }
 
   // Lumiverse's own auto-play reads a new reply too. Said under Autoplay, the
@@ -4033,6 +4035,7 @@ export function setup(ctx: Ctx, overrides?: any) {
   // is not kept keeps them for this visit, and the line under the scenes
   // says so.
   async function keepSceneHand(sh: Show): Promise<string> {
+    projectTouch();
     const key = sh.script && (sh.script as any).key;
     if (!key) return 'This performance is not saved in Saved audio, so the change lasts for this visit only.';
     let r: any = null;
@@ -6808,6 +6811,13 @@ export function setup(ctx: Ctx, overrides?: any) {
     if (!sh.played.some((p) => sh.items[p.k].kind === 'voice')) return savedMissWhy(lineWhy, unanswered);
     if (show) stop('Stopped, to open a saved script in the Studio');
     lastShow = sh;
+    // With a project open, a saved performance opened in the Studio is the
+    // one the project uses from now on.
+    if (openProject && !projectApplying && e.key) {
+      openProject.keptKey = String(e.key);
+      projectGone = '';
+      projectTouch();
+    }
     keepSaid(
       [
         lines ? lines + (lines === 1 ? ' line has' : ' lines have') + ' no saved audio, so ' + (lines === 1 ? 'it is' : 'they are') + ' left out.' : '',
@@ -7051,10 +7061,31 @@ export function setup(ctx: Ctx, overrides?: any) {
 
   // A folder: its name and how many it holds, opening and closing like the
   // folds, with its tiles inside. Rename and Delete are in its own row.
-  function folderSection(f: { id: string; name: string; open: boolean }, items: any[], redraw: () => void, tilesInto: (box: HTMLElement, items: any[], key: string) => void): HTMLElement {
+  // The folders of Saved audio and of Projects work the same way. fk says
+  // whose folders these are.
+  interface FolderKind {
+    key: 'savedFolders' | 'projectFolders';
+    finding: () => boolean;
+    members: () => any[];
+    unfile: (e: any) => Promise<string>;
+    one: string;
+    many: string;
+    empty: string;
+  }
+  const SAVED_FOLDERS: FolderKind = {
+    key: 'savedFolders',
+    finding: () => !!savedFind.trim(),
+    members: () => savedList || [],
+    unfile: (e) => editSaved(e, { folder: '' }),
+    one: 'saved script',
+    many: 'saved scripts',
+    empty: 'Nothing is in this folder yet. Move a saved script here with its More button.',
+  };
+  function folderSection(f: { id: string; name: string; open: boolean }, items: any[], redraw: () => void, tilesInto: (box: HTMLElement, items: any[], key: string) => void, fk: FolderKind = SAVED_FOLDERS): HTMLElement {
+    const folders = (): { id: string; name: string; open: boolean }[] => (Array.isArray(S[fk.key]) ? S[fk.key] : []);
     const wrap = el('<div class="af-col af-saved-folder" data-af-savedfolder></div>');
     wrap.setAttribute('data-af-folderid', f.id);
-    const open = f.open !== false || !!savedFind.trim();
+    const open = f.open !== false || fk.finding();
     const head = el('<button type="button" class="af-fold" aria-expanded="' + (open ? 'true' : 'false') + '"><span class="af-caret">▶</span><span></span></button>') as HTMLButtonElement;
     (head.lastElementChild as HTMLElement).textContent = f.name + ' (' + items.length + ')';
     const body = el('<div class="af-sub"><div class="af-col af-under"></div></div>');
@@ -7063,7 +7094,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     head.addEventListener('click', () => {
       const now = head.getAttribute('aria-expanded') !== 'true';
       head.setAttribute('aria-expanded', now ? 'true' : 'false');
-      set({ savedFolders: savedFolders().map((x) => (x.id === f.id ? { ...x, open: now } : x)) });
+      set({ [fk.key]: folders().map((x) => (x.id === f.id ? { ...x, open: now } : x)) });
       reveal(body, now);
     });
     // Its name, typed in place, and Delete, which moves what it holds out.
@@ -7079,20 +7110,24 @@ export function setup(ctx: Ctx, overrides?: any) {
         name.value = f.name;
         return;
       }
-      set({ savedFolders: savedFolders().map((x) => (x.id === f.id ? { ...x, name: v } : x)) });
+      set({ [fk.key]: folders().map((x) => (x.id === f.id ? { ...x, name: v } : x)) });
       (head.lastElementChild as HTMLElement).textContent = v + ' (' + items.length + ')';
     });
     const del = button('Delete the folder', async () => {
-      if (!(await askSure('Delete the folder', 'The folder ' + f.name + ' is deleted. The ' + items.length + ' saved ' + (items.length === 1 ? 'script in it stays' : 'scripts in it stay') + ', out of any folder.', 'Delete the folder', true))) return;
-      for (const e of (savedList || []).filter((x) => x.folder === f.id)) await editSaved(e, { folder: '' });
-      set({ savedFolders: savedFolders().filter((x) => x.id !== f.id) });
+      if (!(await askSure('Delete the folder', 'The folder ' + f.name + ' is deleted. The ' + items.length + ' ' + (items.length === 1 ? fk.one + ' in it stays' : fk.many + ' in it stay') + ', out of any folder.', 'Delete the folder', true))) return;
+      for (const e of fk.members().filter((x) => x.folder === f.id)) await fk.unfile(e);
+      set({ [fk.key]: folders().filter((x) => x.id !== f.id) });
       redraw();
     }, 'af-danger');
     tools.appendChild(name);
     tools.appendChild(del);
     inner.appendChild(tools);
     if (items.length) tilesInto(inner, items, f.id);
-    else inner.appendChild(el('<p class="af-note">Nothing is in this folder yet. Move a saved script here with its More button.</p>'));
+    else {
+      const none = el('<p class="af-note"></p>');
+      none.textContent = fk.empty;
+      inner.appendChild(none);
+    }
     wrap.appendChild(head);
     wrap.appendChild(body);
     return wrap;
@@ -15529,12 +15564,444 @@ export function setup(ctx: Ctx, overrides?: any) {
     box.appendChild(hint(notes.length >= NOTES_MAX ? 'Ten notes is the most a video can have.' : 'Add a note here starts it where the preview is. Notes are saved, so they can be used on the next video.'));
   }
 
+  // ---------- Projects ----------
+  // A project is the recipe of a video, never the video: the saved
+  // performance it uses, by its saved id, its trim and hand changes, and
+  // every Studio setting. Pictures and fonts are named by their ids. While a
+  // project is open, each change is saved to it on its own, a moment after
+  // the last one.
+  interface ProjectEntry { id: string; name: string; folder: string; at: number; keptKey: string; backs: string[]; marks: string[] }
+  let projectList: ProjectEntry[] | null = null;
+  let projectListWhy = '';
+  let openProject: { id: string; name: string; keptKey: string } | null = null;
+  // Where the open project's saving is: saving, saved or failed.
+  let projectState = '';
+  let projectTimer: any = null;
+  let projectApplying = false;
+  let projectWarned = false;
+  // The open project's saved performance is gone, with why.
+  let projectGone = '';
+  let projectQueue: Promise<any> = Promise.resolve();
+  let projectDraw = () => {};
+  function projectFolders(): { id: string; name: string; open: boolean }[] {
+    return Array.isArray(S.projectFolders) ? S.projectFolders : [];
+  }
+  // What the open project holds now.
+  function projectBody(keptKey: string): any {
+    const src = realS || S;
+    const look: Record<string, any> = {};
+    for (const k of Object.keys(DEFAULTS).concat(Object.keys(src))) if (studioKey(k) && !(k in look)) look[k] = src[k] === undefined ? DEFAULTS[k] : src[k];
+    const sh = keptShow();
+    const mine = !!sh && !!keptKey && String((sh.script as any).key || '') === keptKey;
+    return {
+      look,
+      keptKey,
+      trim: mine && sh!.trim ? { from: sh!.trim.from || 0, to: sh!.trim.to || 0 } : null,
+      hand: mine ? sh!.sceneHand || null : null,
+    };
+  }
+  // One request to the account at a time, so two saves never cross.
+  function projectAsk(msg: any, ms = 15000): Promise<any> {
+    const run = projectQueue.then(() => rpc(msg, ms).catch(() => null));
+    projectQueue = run.catch(() => null);
+    return run;
+  }
+  // Called after anything a project holds changes.
+  function projectTouch() {
+    if (!openProject || projectApplying) return;
+    if (projectTimer) {
+      clearTimeout(projectTimer);
+      timers.delete(projectTimer);
+    }
+    projectTimer = setTimeout(() => {
+      timers.delete(projectTimer);
+      projectTimer = null;
+      void projectSave();
+    }, 800);
+    timers.add(projectTimer);
+  }
+  async function projectSave(): Promise<string> {
+    const p = openProject;
+    if (!p) return '';
+    if (projectTimer) {
+      clearTimeout(projectTimer);
+      timers.delete(projectTimer);
+      projectTimer = null;
+    }
+    projectState = 'saving';
+    paintProjectName();
+    const r = await projectAsk({ type: 'project_put', id: p.id, name: p.name, project: projectBody(p.keptKey) });
+    if (!r || !r.ok) {
+      const why = (r && r.error ? String(r.error) : 'The project could not be saved: the backend did not answer.') + ' Your changes are on this page only until it is saved.';
+      if (openProject === p) projectState = 'failed';
+      paintProjectName();
+      log(why, 'bad', 'setting');
+      // Said once until a save works again: nothing else on screen says
+      // that the account did not get it.
+      if (!projectWarned) {
+        projectWarned = true;
+        notify('warning', why);
+      }
+      return why;
+    }
+    projectWarned = false;
+    if (Array.isArray(r.list)) projectList = r.list;
+    if (openProject === p) projectState = 'saved';
+    paintProjectName();
+    projectDraw();
+    return '';
+  }
+  // The project's name at the top of the Studio, and how its saving is.
+  function paintProjectName() {
+    if (!ws) return;
+    const name = ws.box.querySelector('[data-af-ws-name]') as HTMLElement | null;
+    const sub = ws.box.querySelector('[data-af-ws-sub]') as HTMLElement | null;
+    if (!name || !sub) return;
+    const sh = keptShow();
+    if (openProject) {
+      setText(name, openProject.name);
+      setText(sub, 'Project' + (projectState === 'saving' ? ', saving' : projectState === 'saved' ? ', saved' : projectState === 'failed' ? ', not saved' : ''));
+      sub.setAttribute('data-af-projectstate', projectState);
+    } else {
+      setText(name, sh ? String(sh.fileTitle || sh.title || 'The last message played') : 'Studio');
+      setText(sub, sh ? 'The performance' : 'The example, with no sound');
+      sub.removeAttribute('data-af-projectstate');
+    }
+  }
+  async function readProjects(): Promise<string> {
+    const r = await projectAsk({ type: 'project_list' });
+    if (!r || r.type === 'failed' || !Array.isArray(r.list)) {
+      projectListWhy = r && r.error ? String(r.error) : 'Your projects could not be read: the backend did not answer.';
+      return projectListWhy;
+    }
+    projectListWhy = '';
+    projectList = r.list;
+    return '';
+  }
+  // The saved performances, to link a project to.
+  async function savedEntries(): Promise<any[] | null> {
+    try {
+      const r = await rpc({ type: 'kept_list' }, 15000);
+      if (r && Array.isArray(r.list)) savedList = r.list.filter((e: any) => e && e.lines > 0);
+    } catch (_) {}
+    return savedList;
+  }
+  // A new project, from what the Studio shows now.
+  async function newProject(): Promise<string> {
+    if (openProject) await projectSave();
+    const n = (projectList || []).length + 1;
+    const name = 'Project ' + n;
+    const sh = keptShow();
+    const key = sh && (sh.script as any).key ? String((sh.script as any).key) : '';
+    const r = await projectAsk({ type: 'project_put', name, project: projectBody(key) });
+    if (!r || !r.ok) return r && r.error ? String(r.error) : 'The project could not be made: the backend did not answer.';
+    projectList = r.list;
+    openProject = { id: r.id, name, keptKey: key };
+    projectGone = '';
+    projectState = 'saved';
+    return '';
+  }
+  // Opens a project: every setting it holds, its performance, trim and hand
+  // changes, as they were saved. A project open now is saved first.
+  async function openProjectId(id: string): Promise<string> {
+    if (openProject && openProject.id !== id) await projectSave();
+    const r = await projectAsk({ type: 'project_get', id });
+    if (!r || !r.ok || !r.project) return r && r.error ? String(r.error) : 'The project could not be opened: the backend did not answer.';
+    const pj = r.project;
+    const entry = (projectList || []).find((x) => x.id === id);
+    stopTrying();
+    projectApplying = true;
+    try {
+      const patch: Record<string, any> = {};
+      for (const k of Object.keys(DEFAULTS)) if (studioKey(k)) patch[k] = k in pj.look ? pj.look[k] : JSON.parse(JSON.stringify(DEFAULTS[k]));
+      quietSet(patch);
+      backEditId = '';
+      openProject = { id, name: entry ? entry.name : String(pj.name || 'A project'), keptKey: String(pj.keptKey || '') };
+      projectState = 'saved';
+      projectGone = '';
+      const key = openProject.keptKey;
+      const list = key ? await savedEntries() : null;
+      const e = list ? list.find((x) => x.key === key) : null;
+      let why = '';
+      if (!key) why = 'This project is not linked to a saved performance.';
+      else if (!list) why = 'Your saved audio could not be read, so this project opened without its performance.';
+      else if (!e) why = 'The saved audio this project uses has been deleted.';
+      else why = await openSaved(e, false);
+      if (why) {
+        projectGone = why;
+        if (lastShow && String((lastShow.script as any).key || '') !== key) lastShow = null;
+      } else if (lastShow) {
+        lastShow.trim = pj.trim && (pj.trim.from || pj.trim.to) ? { from: pj.trim.from, to: pj.trim.to } : undefined;
+        lastShow.sceneHand = pj.hand || undefined;
+      }
+    } finally {
+      projectApplying = false;
+    }
+    undoStart();
+    return '';
+  }
+  // Links the open project to another saved performance.
+  async function linkProject(e: any): Promise<string> {
+    if (!openProject) return '';
+    projectApplying = true;
+    let why = '';
+    try {
+      why = await openSaved(e, false);
+    } finally {
+      projectApplying = false;
+    }
+    if (why) return why;
+    openProject.keptKey = String(e.key);
+    projectGone = '';
+    await projectSave();
+    return '';
+  }
+  function closeProject() {
+    if (!openProject) return;
+    void projectSave();
+    openProject = null;
+    projectGone = '';
+    projectState = '';
+  }
+  // A plain notice that the open project has no performance, with a way to
+  // link it to another.
+  function projectGoneBox(): HTMLElement {
+    const box = el('<div class="af-col" data-af-projectgone></div>');
+    box.appendChild(notice('warn', projectGone + ' The video cannot be made until the project is linked to a saved performance. Everything else in it is open.'));
+    const pickBox = el('<div class="af-col" hidden></div>');
+    const use = button('Use another saved performance', async () => {
+      if (!pickBox.hidden) return reveal(pickBox, false);
+      pickBox.replaceChildren();
+      const list = await savedEntries();
+      if (!list || !list.length) {
+        pickBox.appendChild(hint(list ? 'Nothing is saved in Saved audio yet. A message is saved after it plays, with Keep made audio on.' : 'Your saved audio could not be read: the backend did not answer.'));
+      } else {
+        let pick = String(list[0].key);
+        pickBox.appendChild(select('Saved performance', list.map((x) => ({ id: String(x.key), label: savedTitle(x) })), pick, (v) => (pick = v)));
+        const said = el('<div class="af-hint" aria-live="polite"></div>');
+        const go = button('Use it', async () => {
+          const e = list.find((x) => String(x.key) === pick);
+          if (!e) return;
+          setText(said, 'Reading the saved audio');
+          const why = await linkProject(e);
+          setText(said, why);
+          if (!why) renderWorkspace();
+        });
+        go.setAttribute('data-af-projectuse', '');
+        const row = el('<div class="af-row"></div>');
+        row.appendChild(go);
+        pickBox.appendChild(row);
+        pickBox.appendChild(said);
+      }
+      reveal(pickBox, true);
+    });
+    use.setAttribute('data-af-projectlink', '');
+    const row = el('<div class="af-row af-wrap"></div>');
+    row.appendChild(use);
+    box.appendChild(row);
+    box.appendChild(pickBox);
+    return box;
+  }
+
+  const PROJECT_FOLDERS: FolderKind = {
+    key: 'projectFolders',
+    finding: () => false,
+    members: () => projectList || [],
+    unfile: async (e) => {
+      const r = await projectAsk({ type: 'project_edit', id: e.id, folder: '' });
+      if (r && r.ok && Array.isArray(r.list)) projectList = r.list;
+      return r && r.ok ? '' : (r && r.error) || 'It could not be changed: the backend did not answer.';
+    },
+    one: 'project',
+    many: 'projects',
+    empty: 'Nothing is in this folder yet. Move a project here with its More button.',
+  };
+  let projectMoreOpen = '';
+  function projectsCard(): HTMLElement {
+    const c = card('Projects', 'A project saves how a video is made: its saved performance, trim, scenes and every Studio setting. Changes save on their own while it is open.');
+    c.setAttribute('data-af-projects', '');
+    const said = el('<div class="af-hint" data-af="projectsaid" aria-live="polite"></div>');
+    const tools = el('<div class="af-row af-wrap"></div>');
+    const make = button('New project', async () => {
+      setText(said, 'Making the project');
+      const why = await newProject();
+      setText(said, why);
+      if (!why) renderWorkspace();
+    });
+    make.setAttribute('data-af-projectnew', '');
+    const folder = button('New folder', () => {
+      if (projectFolders().length >= 30) return setText(said, 'There are 30 folders, which is the most there can be.');
+      set({ projectFolders: projectFolders().concat([{ id: rid('fd'), name: 'Folder ' + (projectFolders().length + 1), open: true }]) });
+      drawList();
+    });
+    folder.setAttribute('data-af-projectfolder', '');
+    tools.appendChild(make);
+    tools.appendChild(folder);
+    c.appendChild(tools);
+    if (openProject) {
+      const now = el('<div class="af-col" data-af-projectopen></div>');
+      const line = el('<p class="af-note"></p>');
+      line.textContent = 'Open: ' + openProject.name + '. Changes are saved to it as you make them.';
+      now.appendChild(line);
+      const row = el('<div class="af-row"></div>');
+      const shut = button('Close the project', () => {
+        closeProject();
+        renderWorkspace();
+      });
+      shut.setAttribute('data-af-projectclose', '');
+      row.appendChild(shut);
+      now.appendChild(row);
+      if (projectGone) now.appendChild(projectGoneBox());
+      c.appendChild(now);
+    }
+    c.appendChild(said);
+    const list = el('<div class="af-col" data-af="projectlist"></div>');
+    c.appendChild(list);
+    const tilesInto = (box: HTMLElement, items: any[]) => {
+      const grid = el('<div class="af-gallery"></div>');
+      for (const e of items) grid.appendChild(projectRow(e, said, drawList));
+      box.appendChild(grid);
+    };
+    const drawList = () => {
+      list.replaceChildren();
+      if (!projectList) {
+        setText(said, projectListWhy || 'Reading your projects');
+        return;
+      }
+      const all = projectList.slice().sort((a, b) => b.at - a.at);
+      if (!said.textContent || /^(Reading|No projects|\d+ projects?\.)/.test(said.textContent))
+        setText(said, !all.length ? 'No projects yet. New project saves what the Studio shows now.' : all.length + (all.length === 1 ? ' project.' : ' projects.'));
+      const folders = projectFolders();
+      const known = new Set(folders.map((f) => f.id));
+      for (const f of folders) list.appendChild(folderSection(f, all.filter((e) => e.folder === f.id), drawList, tilesInto, PROJECT_FOLDERS));
+      const loose = all.filter((e) => !e.folder || !known.has(e.folder));
+      if (loose.length) {
+        const box = el('<div class="af-col"></div>');
+        if (folders.length) box.appendChild(el('<p class="af-saved-group">Not in a folder</p>'));
+        tilesInto(box, loose);
+        list.appendChild(box);
+      }
+    };
+    projectDraw = () => {
+      if (c.isConnected) drawList();
+    };
+    drawList();
+    readProjects().then(() => {
+      if (c.isConnected) drawList();
+    });
+    return c;
+  }
+  function projectRow(e: ProjectEntry, said: HTMLElement, redraw: () => void): HTMLElement {
+    const row = el('<div class="af-saved" data-af-project-row></div>');
+    row.setAttribute('data-af-id', e.id);
+    const head = el('<div class="af-saved-head"><b data-af-projectname></b><span class="af-saved-meta"></span></div>');
+    setText(head.firstElementChild as HTMLElement, e.name);
+    const when = e.at ? new Date(e.at).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '';
+    setText(head.lastElementChild as HTMLElement, [openProject && openProject.id === e.id ? 'Open now' : '', when ? 'Saved ' + when : ''].filter(Boolean).join(' · '));
+    row.appendChild(head);
+    const say = (t: string) => setText(said, t);
+    const btns = el('<div class="af-row"></div>');
+    const isOpen = !!openProject && openProject.id === e.id;
+    const open = button(isOpen ? 'Open now' : 'Open', async () => {
+      say('Opening ' + e.name);
+      const why = await openProjectId(e.id);
+      say(why);
+      if (!why) renderWorkspace();
+    });
+    open.disabled = isOpen;
+    open.setAttribute('data-af-projectopen-btn', '');
+    const moreBtn = button('More', () => {
+      const now = moreBox.hidden;
+      projectMoreOpen = now ? e.id : '';
+      moreBtn.setAttribute('aria-expanded', now ? 'true' : 'false');
+      reveal(moreBox, now);
+    });
+    moreBtn.setAttribute('data-af-projectmore', '');
+    moreBtn.setAttribute('aria-expanded', projectMoreOpen === e.id ? 'true' : 'false');
+    const moreBox = el('<div class="af-sub"><div class="af-col af-under"></div></div>');
+    const moreIn = moreBox.firstElementChild as HTMLElement;
+    moreBox.hidden = projectMoreOpen !== e.id;
+    const nameId = rid('pn');
+    const name = el('<input type="text" class="af-field" maxlength="80" autocomplete="off">') as HTMLInputElement;
+    name.id = nameId;
+    name.value = e.name;
+    name.setAttribute('data-af-projectrename', '');
+    name.addEventListener('change', async () => {
+      const v = name.value.trim();
+      if (!v) {
+        name.value = e.name;
+        return;
+      }
+      const r = await projectAsk({ type: 'project_edit', id: e.id, name: v });
+      if (!r || !r.ok) return say((r && r.error) || 'It could not be renamed: the backend did not answer.');
+      projectList = r.list;
+      if (openProject && openProject.id === e.id) openProject.name = v;
+      paintProjectName();
+      say('');
+      redraw();
+    });
+    const nameRow = el('<div class="af-col"></div>');
+    nameRow.appendChild(labelRow('Name', 'The name the project is listed under.', nameId));
+    nameRow.appendChild(name);
+    moreIn.appendChild(nameRow);
+    const folders = projectFolders();
+    if (folders.length) {
+      const move = select('Folder', [{ id: '', label: 'Not in a folder' }].concat(folders.map((f) => ({ id: f.id, label: f.name }))), e.folder || '', async (v) => {
+        const r = await projectAsk({ type: 'project_edit', id: e.id, folder: v });
+        if (!r || !r.ok) return say((r && r.error) || 'It could not be moved: the backend did not answer.');
+        projectList = r.list;
+        redraw();
+      });
+      move.setAttribute('data-af-projectmove', '');
+      moreIn.appendChild(move);
+    }
+    const acts = el('<div class="af-row af-wrap"></div>');
+    const dup = button('Duplicate', async () => {
+      if (openProject && openProject.id === e.id) await projectSave();
+      const r = await projectAsk({ type: 'project_dup', id: e.id });
+      if (!r || !r.ok) return say((r && r.error) || 'It could not be copied: the backend did not answer.');
+      projectList = r.list;
+      say('');
+      redraw();
+    });
+    dup.setAttribute('data-af-projectdup', '');
+    const del = button('Delete', async () => {
+      if (!(await askSure('Delete this project', 'The project ' + e.name + ' is deleted. Its saved audio, pictures and fonts stay. There is no undo.', 'Delete', true))) return;
+      const r = await projectAsk({ type: 'project_drop', id: e.id });
+      if (!r || !r.ok) return say((r && r.error) || 'It could not be deleted: the backend did not answer.');
+      projectList = r.list;
+      const was = openProject && openProject.id === e.id;
+      if (was) {
+        if (projectTimer) {
+          clearTimeout(projectTimer);
+          timers.delete(projectTimer);
+          projectTimer = null;
+        }
+        openProject = null;
+        projectGone = '';
+        projectState = '';
+        renderWorkspace();
+      } else redraw();
+      say('');
+    }, 'af-danger');
+    del.setAttribute('data-af-projectdel', '');
+    acts.appendChild(dup);
+    acts.appendChild(del);
+    moreIn.appendChild(acts);
+    btns.appendChild(open);
+    btns.appendChild(moreBtn);
+    row.appendChild(btns);
+    row.appendChild(moreBox);
+    return row;
+  }
+
   // ---------- The Studio's workspace ----------
   // The Studio opens over Lumiverse in a workspace of its own. With App
   // manipulation it covers the whole screen, through ctx.ui.mountApp. Without
   // it, it opens in Lumiverse's extension window at the largest size
   // Lumiverse allows. The drawer's Studio tab keeps a short summary.
   const WS_SECTIONS: { id: string; title: string }[] = [
+    { id: 'projects', title: 'Projects' },
     { id: 'saved', title: 'Saved audio' },
     { id: 'show', title: 'The performance and scenes' },
     { id: 'templates', title: 'Templates' },
@@ -15750,6 +16217,8 @@ export function setup(ctx: Ctx, overrides?: any) {
       if (!(await askSure('Close the Studio', 'A video is being made. Closing the Studio stops it.', 'Close', true))) return;
       if (videoRun) videoRun.cancel();
     }
+    // A change still waiting to be saved to the open project is saved now.
+    if (projectTimer) void projectSave();
     if (ws !== w) return;
     w.closing = true;
     const shell = wsShell(w.box);
@@ -15801,8 +16270,6 @@ export function setup(ctx: Ctx, overrides?: any) {
         '<div class="af-ws-acts" data-af-ws-acts></div>' +
       '</div>',
     );
-    setText(top.querySelector('[data-af-ws-name]') as HTMLElement, sh ? String(sh.fileTitle || sh.title || 'The last message played') : 'Studio');
-    setText(top.querySelector('[data-af-ws-sub]') as HTMLElement, sh ? 'The performance' : 'The example, with no sound');
     const acts = top.querySelector('[data-af-ws-acts]') as HTMLElement;
     const main = el(
       '<div class="af-ws-main">' +
@@ -15817,9 +16284,11 @@ export function setup(ctx: Ctx, overrides?: any) {
     const panel = main.querySelector('[data-af-ws-panel]') as HTMLElement;
     const secs = new Map<string, { title: string; build: (b: HTMLElement) => void; toggle?: (open: boolean) => void }>();
     for (const n of permissionWarnings()) stage.appendChild(notice('bad', n));
+    if (openProject && projectGone) stage.appendChild(projectGoneBox());
     if (w.how === 'modal') stage.appendChild(hint('Full screen needs App manipulation. Turn it on for Auto Foley in Lumiverse’s Extensions panel.'));
     renderStudio((id, title, build, toggle) => secs.set(id, { title, build, toggle }), stage, acts);
     secs.set('keys', { title: 'Keyboard shortcuts', build: (b) => drawKeyHelp(b) });
+    secs.set('projects', { title: 'Projects', build: (b) => b.appendChild(projectsCard()) });
     // Leaving Templates while one is being tried puts the look back.
     secs.set('templates', { title: 'Templates', build: (b) => drawTemplates(b), toggle: (open) => { if (!open) stopTrying(); } });
     // The top bar's own buttons, after Make a video and Download audio.
@@ -15859,6 +16328,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     const pickRow = select('Part of the Studio', order.map((x) => ({ id: x.id, label: x.title })), secs.has(wsSection) ? wsSection : 'show', (v) => showSection(v));
     pickRow.classList.add('af-ws-picker');
     w.box.appendChild(top);
+    paintProjectName();
     w.box.appendChild(main);
     wsDraw = { panel, rail, picker: pickRow.querySelector('select') as HTMLSelectElement | null, secs, undo: undoBtn, redo: redoBtn };
     paintUndo();
@@ -16006,6 +16476,7 @@ export function setup(ctx: Ctx, overrides?: any) {
               const was = v.sh.trim || { from: 0, to: 0 };
               const here = v.mix.from + Math.max(0, Math.min(v.total, t - intro));
               v.sh.trim = end ? { from: was.from, to: Math.max(here, (was.from || 0) + 0.5) } : { from: here, to: was.to && was.to > here + 0.5 ? was.to : 0 };
+              projectTouch();
               v.at = 0;
               v.mix = null;
               lineKey = '';
@@ -16696,12 +17167,14 @@ export function setup(ctx: Ctx, overrides?: any) {
           body.appendChild(
             numberRow('Start at, in seconds', Number(tr.from) || 0, 0, 3600, 0.1, (v) => {
               sh.trim = { from: v, to: (sh.trim && sh.trim.to) || 0 };
+              projectTouch();
               studioBuild(true);
             }, '0 by default, the start.'),
           );
           body.appendChild(
             numberRow('End at, in seconds', Number(tr.to) || 0, 0, 3600, 0.1, (v) => {
               sh.trim = { from: (sh.trim && sh.trim.from) || 0, to: v };
+              projectTouch();
               studioBuild(true);
             }, '0 by default, which is the end.'),
           );
@@ -16825,6 +17298,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       const here = v.mix.from + Math.max(0, Math.min(v.total, v.at - titleSecs(v.title)));
       const was = v.sh.trim || { from: 0, to: 0 };
       v.sh.trim = end ? { from: was.from, to: Math.max(here, (was.from || 0) + 0.5) } : { from: here, to: was.to && was.to > here + 0.5 ? was.to : 0 };
+      projectTouch();
       v.at = 0;
       // The mix is made again with the new trim when the tab is drawn.
       v.mix = null;
@@ -16838,6 +17312,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       const v = studioView;
       if (!v.sh) return;
       v.sh.trim = undefined;
+      projectTouch();
       v.at = 0;
       v.mix = null;
       renderWorkspace();
@@ -17736,7 +18211,7 @@ export function setup(ctx: Ctx, overrides?: any) {
   ]);
   // The setting keys each part covers. Which parts are ticked are settings
   // too, but they are never carried in a file or put back by a reset.
-  const NOT_SETTINGS = ['cast', 'groups', 'moodList', 'prompt', 'promptRole', 'engineNoteRole', 'askNoteRole', 'askNotes', 'engineNotes', 'decisionQuestions', 'exportParts', 'importParts', 'resetParts', 'guideSeen', 'builtInSeen', 'movedSeen', 'templatesSeen', 'chatsOff'];
+  const NOT_SETTINGS = ['cast', 'groups', 'moodList', 'prompt', 'promptRole', 'engineNoteRole', 'askNoteRole', 'askNotes', 'engineNotes', 'decisionQuestions', 'exportParts', 'importParts', 'resetParts', 'guideSeen', 'builtInSeen', 'movedSeen', 'templatesSeen', 'chatsOff', 'projectFolders'];
   const settingKeys = () => Object.keys(DEFAULTS).filter((k) => NOT_SETTINGS.indexOf(k) < 0);
   let transferSaid = '';
   let transferKind = '';
@@ -18404,6 +18879,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         groups: (v) => (Array.isArray(v) ? v.length : 0) + ' groups',
         chatsOff: (v) => (Array.isArray(v) ? v.length : 0) + ' chats',
         savedFolders: (v) => (Array.isArray(v) ? v.length : 0) + ' folders',
+        projectFolders: (v) => (Array.isArray(v) ? v.length : 0) + ' folders',
         videoLooks: (v) => (Array.isArray(v) ? v.length : 0) + ' looks',
       };
       for (const k of changed) lines.push('  ' + k + ': ' + (PRIVATE[k] ? PRIVATE[k](S[k]) : shown(S[k]) + ', default ' + shown(DEFAULTS[k])));
