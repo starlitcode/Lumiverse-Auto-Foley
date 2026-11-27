@@ -174,7 +174,9 @@ function answer(msg) {
     }
     case 'clip_put': window.__clips = Object.assign(window.__clips || {}, { [msg.sig]: { base64: msg.base64, mime: msg.mime } }); return reply({ type: 'clip_kept', ok: true });
     case 'clips_state': { const c = window.__clips || {}; return reply({ type: 'clips_state', count: Object.keys(c).length, bytes: Object.values(c).reduce((n, x) => n + x.base64.length * 0.75, 0) }); }
-    case 'clips_clear': window.__clips = {}; return reply({ type: 'clips_state', ok: true, count: 0, bytes: 0 });
+    // As the backend does: the kept audio and the scripts go together.
+    case 'clips_clear': window.__clips = {}; window.__keptList = []; return reply({ type: 'clips_state', ok: true, count: 0, bytes: 0 });
+    case 'clips_have': return reply({ type: 'clips_have', have: (msg.sigs || []).filter((x) => (window.__clips || {})[x]) });
     case 'kept_list': return reply({ type: 'kept_list', list: window.__keptList || [] });
     case 'kept_edit': { if (msg.scenes !== undefined) (window.__sceneEdits = window.__sceneEdits || []).push(msg.scenes); const e = (window.__keptList || []).find((x) => x.key === msg.key); if (!e) return reply({ type: 'kept_edited', ok: false }); if (typeof msg.name === 'string') e.name = msg.name; if (typeof msg.folder === 'string') e.folder = msg.folder; return reply({ type: 'kept_edited', ok: true, name: e.name || '', folder: e.folder || '' }); }
     case 'sound_kept': return reply({ type: 'sound', missing: true });
@@ -303,7 +305,7 @@ window.__ctx = {
       const handle = { root: r, dismiss() { if (!backdrop.isConnected) return; backdrop.remove(); window.__modals--; gone.forEach((f) => f()); }, setTitle() {}, onDismiss(f) { gone.add(f); return () => gone.delete(f); } };
       return handle;
     },
-    showConfirm: async (o) => { window.__asked = (window.__asked || 0) + 1; window.__askedTitle = o && o.title; return { confirmed: !window.__confirmNo }; },
+    showConfirm: async (o) => { window.__asked = (window.__asked || 0) + 1; window.__askedTitle = o && o.title; window.__askedText = o && o.message; return { confirmed: !window.__confirmNo }; },
     showContextMenu: async (o) => { window.__menu = o; return { selectedKey: window.__menuPick || null }; },
     registerInputBarAction: (o) => {
       const fns = [];
@@ -5461,6 +5463,72 @@ if (section("error handling")) {
     await page.evaluate(() => { window.__breakCanvas = false; });
     check(await page.evaluate(() => { const b = document.querySelector('.af-tab[data-tab="stage"]'); const r = b.getBoundingClientRect(); return document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2) === b; }), "and the drawer can still be pressed");
     await context.close();
+  }
+}
+
+if (section("saved in step")) {
+  console.log("Saved audio stays in step with the kept audio: Clear empties it at once, and audio that is gone is said plainly");
+  for (const size of SIZES) {
+    const say = size.name;
+    {
+      const { context, page, errors } = await open(THEMES[0], size);
+      await page.evaluate(() => {
+        window.__keptList = [{ key: "k1", messageId: "m1", chatId: "chat1", author: "Ysolde", keptAt: Date.now() - 60000, lines: 3, first: "The quay was empty but for the ferry." }];
+        window.__clipMs = 200;
+        window.__wav = [0.05, 0.25];
+      });
+      await pressMessage(page);
+      await page.waitForFunction(() => document.querySelector('#mount [data-af-slot="message"]').getAttribute("aria-busy") === null && (window.__synth || []).length > 0, null, { timeout: 10000 });
+      await page.waitForTimeout(500);
+      await openWs(page);
+      await wsSec(page, "Saved audio");
+      await page.waitForTimeout(500);
+      check((await page.locator("[data-af-saved-row]").count()) === 1, say + ": the saved script is listed");
+      await toTab(page, "settings");
+      await page.waitForTimeout(300);
+      await page.locator(".af-btn", { hasText: "Clear kept audio" }).first().click();
+      await page.waitForTimeout(500);
+      const asked = await page.evaluate(() => window.__askedText || "");
+      check(/This deletes the kept audio and its 1 entry in Saved audio\./.test(asked) && /There is no undo\./.test(asked), say + ": Clear kept audio says what goes (" + asked + ")");
+      // The gallery is read as it is drawn, before the account answers.
+      const shown = await page.evaluate(async () => {
+        document.querySelector('.af-tab[data-tab="studio"]').click();
+        await new Promise((r) => setTimeout(r, 50));
+        document.querySelector("[data-af-studio-open]").click();
+        for (let n = 0; n < 40 && !document.querySelector("[data-af-ws] .af-ws-picker select"); n++) await new Promise((r) => setTimeout(r, 10));
+        const sel = document.querySelector("[data-af-ws] .af-ws-picker select");
+        sel.value = "saved";
+        sel.dispatchEvent(new Event("change", { bubbles: true }));
+        return document.querySelectorAll("[data-af-saved-row]").length;
+      });
+      check(shown === 0, say + ": after Clear kept audio, Saved audio is empty at once (" + shown + " shown)");
+      check(!errors.length, say + ": no page errors. " + errors.slice(0, 2).join(" | "));
+      await context.close();
+    }
+    {
+      // A saved script with no kept audio left for any of its lines.
+      const { context, page, errors } = await open(THEMES[0], size, 1, () => {
+        window.__keptList = [{ key: "k1", messageId: "m1", chatId: "chat1", author: "Ysolde", keptAt: Date.now() - 60000, lines: 3, first: "The quay was empty but for the ferry." }];
+        window.__clips = {};
+      });
+      await page.waitForTimeout(600);
+      await openWs(page);
+      await wsSec(page, "Saved audio");
+      await page.waitForFunction(() => !!document.querySelector("[data-af-savedgone]"), null, { timeout: 8000 }).catch(() => {});
+      const gone = await page.evaluate(() => {
+        const g = document.querySelector("[data-af-savedgone]");
+        return { text: g ? g.textContent : "", again: !!document.querySelector("[data-af-savedagain]"), remove: !!document.querySelector("[data-af-savedremove]") };
+      });
+      check(/The audio for this is gone\./.test(gone.text) && gone.again && gone.remove, say + ": an entry whose audio is gone says so, with Make it again and Remove it");
+      await page.click("[data-af-saved-row] [data-af-saved-play]");
+      await page.waitForTimeout(800);
+      check(/The audio for this is gone/.test(await page.textContent("[data-af-saved-row]")), say + ": and Play says the same");
+      await page.click("[data-af-savedremove]");
+      await page.waitForTimeout(500);
+      check((await page.locator("[data-af-saved-row]").count()) === 0, say + ": Remove it takes it out");
+      check(!errors.length, say + ": no page errors. " + errors.slice(0, 2).join(" | "));
+      await context.close();
+    }
   }
 }
 

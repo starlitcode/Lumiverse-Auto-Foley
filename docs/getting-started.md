@@ -228,7 +228,7 @@ With **Keep made audio** on, in the Settings tab:
 - A line is made again only when something about it changed, such as the voice, the model or the words.
 - The last 300 scripts are kept. The oldest go first.
 - **Up to 100 MB** is the default. When the total passes it, the oldest lines go first.
-- **Clear kept audio**, under it, deletes them all. It asks first.
+- **Clear kept audio**, under it, deletes them all, with their entries in **Saved audio**. It asks first, and says how many entries go.
 
 ## The player under a message
 
@@ -287,7 +287,8 @@ The colors are saved with your settings, under your account.
 - Play and Open in the Studio use only audio that is saved, so they spend nothing. A line with no saved audio, such as one spoken with a voice you changed since, is left out, and it says so.
 - At most 300 scripts are kept. Past that, the oldest one with no name of yours and no folder goes first, so a script you named or filed stays.
 - Its lines are kept by **Keep made audio**, which also has a size, from 50 MB to 500 MB. Past that, the oldest lines go first, even of a named script. Pick a larger size to keep more.
-- To delete everything at once, use **Clear kept audio** in the Settings tab.
+- To delete everything at once, use **Clear kept audio** in the Settings tab. Its entries leave **Saved audio** at once.
+- An entry whose lines all went, such as after the oldest lines went to make room, says "The audio for this is gone." **Make it again** directs and speaks the message again, which costs a Director call and voice credits, and works while its chat is open. **Remove it** takes the entry out. Play and Open in the Studio say the same.
 
 ## Downloads and videos
 

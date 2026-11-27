@@ -2702,15 +2702,20 @@ export function setup(ctx, overrides) {
     }
     // What is sent to speak a line, and the fingerprint its kept audio is
     // found by. Someone the AI added gets a voice first.
-    async function voiceRequest(line) {
+    // peek only looks: no voice is given to someone who has none, and their
+    // lines give no fingerprint.
+    async function voiceRequest(line, peek = false) {
         const isNarr = line.kind === 'narration';
         const m = isNarr ? narratorMember() : memberFor(line.speaker);
         const conn = connOf(m);
         if (!conn)
             return { why: ttsWhy || 'Pick your TTS connection in the Settings tab.' };
         // Anyone but the narrator with no voice on this connection gets one.
-        if (m && m.kind !== 'narrator' && !pickOf(m, conn).voice)
+        if (m && m.kind !== 'narrator' && !pickOf(m, conn).voice) {
+            if (peek)
+                return {};
             await voiceForNew(m, conn);
+        }
         const pick = pickOf(m, conn);
         const model = pick.model || conn.model || '';
         const eng = engineFor(conn, model);
@@ -7024,6 +7029,8 @@ export function setup(ctx, overrides) {
                 tilesInto(box, loose, '');
                 list.appendChild(box);
             }
+            // Entries whose audio is gone are found, the newest first.
+            void checkSavedAudio(sorted(all));
         };
         savedDraw = () => {
             if (c.isConnected)
@@ -7050,6 +7057,73 @@ export function setup(ctx, overrides) {
     }
     // Draws the gallery again, while it is on screen.
     let savedDraw = () => { };
+    // After audio is deleted, by Clear kept audio, Start again or Delete,
+    // Saved audio is brought in step at once: the entries whose audio went
+    // leave the gallery, its counts and folders, the players under messages
+    // and Quick shortcuts. Every path that deletes audio calls this, so they
+    // cannot drift apart.
+    function savedForget(keys) {
+        const gone = keys === 'all' ? null : new Set(keys);
+        const leaving = (savedList || []).filter((e) => !gone || gone.has(e.key));
+        savedList = gone ? (savedList || []).filter((e) => !gone.has(e.key)) : [];
+        if (!gone)
+            playerIds.clear();
+        else
+            for (const e of leaving)
+                if (e.messageId)
+                    playerIds.delete(String(e.messageId));
+        for (const e of leaving) {
+            savedGone.delete(e.key);
+            savedChecked.delete(e.key);
+        }
+        if (quickSaved && (!gone || gone.has(quickSaved.key)))
+            quickSaved = null;
+        fillPlayers();
+        savedDraw();
+        paintQuick();
+    }
+    // Entries whose audio is gone, found when the gallery is drawn: each
+    // shows so, with a way to make it again or to remove it.
+    const savedGone = new Set();
+    const savedChecked = new Set();
+    async function checkSavedAudio(list) {
+        const todo = list.filter((e) => e && !savedChecked.has(e.key)).slice(0, 30);
+        let changed = false;
+        for (const e of todo) {
+            savedChecked.add(e.key);
+            try {
+                const r = await rpc({ type: 'kept_script', key: e.key }, 15000);
+                if (!r || r.type === 'failed')
+                    continue;
+                if (!r.script) {
+                    // The script is gone too, so the entry is taken out.
+                    savedForget([e.key]);
+                    continue;
+                }
+                const sigs = [];
+                for (const l of (r.script.lines || []).filter((l) => l.kind === 'speech' || l.kind === 'narration')) {
+                    const req = await voiceRequest(l, true);
+                    if (req && req.sig)
+                        sigs.push(req.sig);
+                }
+                if (!sigs.length)
+                    continue;
+                const h = await rpc({ type: 'clips_have', sigs }, 15000);
+                const have = h && Array.isArray(h.have) ? h.have.length : -1;
+                if (have === 0 && !savedGone.has(e.key)) {
+                    savedGone.add(e.key);
+                    changed = true;
+                }
+                else if (have > 0 && savedGone.delete(e.key))
+                    changed = true;
+            }
+            catch (_) {
+                savedChecked.delete(e.key);
+            }
+        }
+        if (changed)
+            savedDraw();
+    }
     // A folder: its name and how many it holds, opening and closing like the
     // folds, with its tiles inside. Rename and Delete are in its own row.
     function folderSection(f, items, redraw, tilesInto) {
@@ -7123,6 +7197,39 @@ export function setup(ctx, overrides) {
         const first = el('<div class="af-saved-first"></div>');
         setText(first, String(e.first || ''));
         row.appendChild(first);
+        if (savedGone.has(e.key)) {
+            const gone = el('<div class="af-col" data-af-savedgone></div>');
+            gone.appendChild(notice('warn', 'The audio for this is gone.'));
+            const acts = el('<div class="af-row af-wrap"></div>');
+            const inChat = chatInfo.kind !== 'none' && chatInfo.id === String(e.chatId || '');
+            const again = button('Make it again', async () => {
+                if (!(await askSure('Make it again', 'This directs the message again and speaks every line again, which costs a Director call and voice credits.', 'Make it again')))
+                    return;
+                savedForget([e.key]);
+                perform(String(e.messageId || ''));
+            });
+            again.setAttribute('data-af-savedagain', '');
+            again.disabled = !inChat;
+            const remove = button('Remove it', async () => {
+                try {
+                    const r = await rpc({ type: 'kept_drop', key: e.key, sigs: [] }, 30000);
+                    if (r && r.ok)
+                        savedForget([e.key]);
+                    else
+                        say(String((r && r.error) || 'It could not be removed.'));
+                }
+                catch (_) {
+                    say('It could not be removed: the backend did not answer.');
+                }
+            }, 'af-danger');
+            remove.setAttribute('data-af-savedremove', '');
+            acts.appendChild(again);
+            acts.appendChild(remove);
+            gone.appendChild(acts);
+            if (!inChat)
+                gone.appendChild(hint('Open its chat to make it again.'));
+            row.appendChild(gone);
+        }
         const note = el('<div class="af-hint" aria-live="polite"></div>');
         note.textContent = savedNotes[e.key] || '';
         note.hidden = !note.textContent;
@@ -7299,12 +7406,7 @@ export function setup(ctx, overrides) {
                 }
                 if (!r || !r.ok)
                     throw new Error('no');
-                if (e.messageId)
-                    playerIds.delete(String(e.messageId));
-                if (savedList)
-                    savedList = savedList.filter((x) => x.key !== e.key);
-                fillPlayers();
-                savedDraw();
+                savedForget([e.key]);
                 log('A saved script and its saved audio were deleted.', '', 'setting');
             }
             catch (_) {
@@ -17905,16 +18007,27 @@ export function setup(ctx, overrides) {
         const row = el('<div class="af-row"></div>');
         const said = el('<span class="af-note af-grow" data-af="kept"></span>');
         const clear = button('Clear kept audio', async () => {
-            if (!(await askSure('Clear kept audio', 'Every kept line and every script is deleted. Playing them again makes them again, which costs voice credits and a Director call. There is no undo.', 'Clear', true)))
+            // How many entries in Saved audio go with it, read first if needed.
+            let n = savedList ? savedList.length : -1;
+            if (n < 0) {
+                try {
+                    const r = await rpc({ type: 'kept_list' }, 15000);
+                    n = r && Array.isArray(r.list) ? r.list.filter((e) => e && e.lines > 0).length : 0;
+                }
+                catch (_) {
+                    n = 0;
+                }
+            }
+            if (!(await askSure('Clear kept audio', 'This deletes the kept audio and its ' + n + (n === 1 ? ' entry' : ' entries') + ' in Saved audio. Playing them again makes them again, which costs voice credits and a Director call. There is no undo.', 'Clear', true)))
                 return;
             clear.disabled = true;
             try {
                 const r = await rpc({ type: 'clips_clear' }, 60000);
                 if (r && r.error)
                     log(r.error, 'bad');
-                // With nothing saved, no message has a player to play it.
-                playerIds.clear();
-                fillPlayers();
+                // With nothing saved, no entry stays in Saved audio and no message
+                // has a player to play it.
+                savedForget('all');
                 keptState = r;
                 showKept(r);
             }
@@ -18242,9 +18355,9 @@ export function setup(ctx, overrides) {
                 hasKey = r.hasKey;
             if (r && typeof r.hasFsKey === 'boolean')
                 hasFsKey = r.hasFsKey;
-            // Kept audio and scripts gone means no message has a player.
+            // Kept audio and scripts gone: Saved audio and the players go too.
             if (r && r.ok && chosen.indexOf('audio') >= 0)
-                playerIds.clear();
+                savedForget('all');
             // The picture behind videos goes with the settings.
             if (r && r.ok && chosen.indexOf('settings') >= 0) {
                 videoBgs.clear();
