@@ -2,9 +2,10 @@
 
 ## In short
 
-- The **Studio** tab keeps a performance as audio or as a video. It is the one place to download audio.
+- The **Studio** keeps a performance as audio or as a video. It is the one place to download audio.
+- It opens over Lumiverse in a workspace of its own, with the preview large and the settings beside it. See [The workspace](#the-workspace).
 - It holds the last message you played, or one opened from **Saved audio** with **Open in the Studio**.
-- **Saved audio**, at the top, is a gallery of everything saved, with names, folders, find and sort. See [Saved audio](getting-started.md#saved-audio).
+- **Saved audio**, one of its parts, is a gallery of everything saved, with names, folders, find and sort. See [Saved audio](getting-started.md#saved-audio).
 - **Saved looks** keeps a video's look under a name, to use again.
 - You choose which parts go in, where it starts and ends, a pause between parts, and how loud they are.
 - **Audio** saves one WAV file, or a ZIP with a WAV for each part.
@@ -15,12 +16,12 @@
 
 ## Steps
 
-1. Play a message, on the Stage tab or with the button on a message. For an older message, press **Open in the Studio** on it under **Saved audio**, at the top of the Studio, instead.
-2. Open the **Studio** tab. **Download or make a video**, under **Now playing** on the Stage tab, goes there too.
-3. Under **The performance**, open **Which parts go in** and switch off any part you do not want. To cut the start or the end, use **Trim**.
-4. For audio, pick **One file** or **A file for each part** under **Audio**, then press **Download audio**.
-5. For a video, set the look in the folds under **Video**. Watch the preview change.
-6. Press **Make a video**. It is saved when it ends.
+1. Play a message, on the Stage tab or with the button on a message. For an older message, press **Open in the Studio** on it under **Saved audio** instead.
+2. Open the Studio: press **Open the Studio** on the **Studio** tab in the drawer. **Download or make a video**, under **Now playing** on the Stage tab, opens it too.
+3. Under **The performance and scenes**, open **Which parts go in** and switch off any part you do not want. To cut the start or the end, use **Trim**.
+4. For audio, pick **One file** or **A file for each part** under **Audio**, then press **Download audio** at the top.
+5. For a video, set the look in the parts of the Studio, such as **Shape and words** and **Background**. Watch the preview change.
+6. Press **Make a video** at the top. It is saved when it ends.
 
 ## What it sends
 
@@ -38,9 +39,9 @@ Corvin Ashby keeps a lighthouse in a made-up story. A message has three parts:
 
 The reader wants to share a video, without the name Ilse.
 
-1. They open the Studio tab.
+1. They open the Studio.
 2. Under **Hide and bleep words**, they switch on **Hide words** and type `Ilse` in **Words to hide**.
-3. Under **Video**, in **Shape and words**, they pick **Tall, 9 by 16, for phones**.
+3. Under **Shape and words**, they pick **Tall, 9 by 16, for phones**.
 4. They press **Make a video**.
 
 The video:
@@ -54,9 +55,79 @@ The video:
 
 The file is saved as an MP4 or a WebM, named with the chat's name and the day.
 
+## The workspace
+
+### In short
+
+- The Studio opens over Lumiverse, in a workspace of its own.
+- With the **App manipulation** permission, it covers the whole screen. Without it, it opens in Lumiverse's extension window, as large as Lumiverse allows, and says how to get full screen.
+- On a laptop, the parts of the Studio are listed on the left, the preview is in the middle, and the settings of the part picked are on the right. **Hide the list** makes more room for the preview.
+- On a phone, the preview is at the top, and the settings are under it. **Part of the Studio** picks which settings show. The settings scroll, and the preview stays in view.
+- Under the preview, the parts of the performance are shown as blocks along the video. A press on one goes to it.
+- Every change is saved as you make it, so closing the Studio loses nothing.
+
+### Steps
+
+1. Open it with **Open the Studio** on the drawer's **Studio** tab. These open it too:
+   - **Open the Studio** in the chat's **Extras** menu, while **In the Extras menu** is on.
+   - **Open the Studio** in the floating player's menu.
+   - **Download or make a video** on the Stage tab, and **Open in the Studio** under **Saved audio**.
+   - Searching for Auto Foley, the Studio or a video in Lumiverse's command palette (Ctrl+K or Cmd+K) opens the drawer's **Studio** tab, with its **Open the Studio** button.
+2. Pick a part of the Studio and change its settings. The preview changes at once.
+3. Close it with **Close** at the top, or Escape.
+
+**Undo** and **Redo**, at the top, take back a change to the Studio's settings and make it again. Deleting a background with a picture, or a watermark with a picture, deletes the picture too, so Undo goes back no further than that.
+
+### What it sends
+
+Nothing. The workspace is drawn on your device.
+
+### An example
+
+Tamsin edits a video on a laptop, with **App manipulation** granted.
+
+1. She presses **Open the Studio**. The Studio covers the screen.
+2. She picks **Background** on the left, and picks a shape on the preview.
+3. She presses Ctrl and D to copy the shape, then Shift and Right four times to move the copy 40 pixels.
+4. She changes her mind, and presses Ctrl and Z until the copy is gone.
+5. She presses Escape. The Studio closes, and the drawer shows it as it was.
+
+### Keyboard shortcuts
+
+On a computer, these keys work while the Studio is open and you are not typing in a box. On a Mac, use Cmd in place of Ctrl.
+
+| Key | What it does |
+| --- | --- |
+| Space | Play or stop the preview |
+| Left and Right | Back or forward one second |
+| Shift with Left and Right | The part before or after |
+| Home and End | The start or the end |
+| F | The preview full screen |
+| Ctrl and Z | Undo |
+| Ctrl, Shift and Z, or Ctrl and Y | Redo |
+| Delete or Backspace | Delete the shape picked, after asking |
+| Ctrl and D | Copy the shape picked |
+| Ctrl and ] or [ | Bring the shape picked forward, or send it back |
+| Arrow keys, with the preview pressed | Move the shape picked 1 pixel, or 10 with Shift |
+| Ctrl and S | Say that everything is saved |
+| ? | The list of keys |
+| Escape | Close a pop-up, then full screen, then the Studio |
+
+- **Keyboard shortcuts**, a part of the Studio, turns them off if a key clashes with something else you use. Every action also has a button. Escape still closes the Studio.
+- **Keyboard shortcuts** at the top opens the same list. On a computer with a mouse, each button's hover text says its key.
+- Lumiverse's own keys, such as Ctrl and K for the command palette, always go on to Lumiverse.
+- A key is only read inside the Studio. A key in another extension's pop-up, or one another extension or Lumiverse has already used, is left alone.
+
+### Details
+
+- Opened again, the Studio shows the part it showed last.
+- If **App manipulation** is taken away while the Studio is open, it opens again in Lumiverse's window, on the same part. If it is granted while the Studio is open in the window, the next time it opens it covers the screen.
+- The workspace lays itself out by its own size, so it fits the window on a tablet, a phone turned sideways and a small laptop the same way.
+- Reduce motion, in the panel or on your device, turns off its fade and slide.
+
 ## Older performances
 
-The Studio holds the last message you played since the page was opened. A message played before that is in **Saved audio**, at the top of the Studio, while **Keep made audio** is on.
+The Studio holds the last message you played since the page was opened. A message played before that is in **Saved audio**, in the Studio, while **Keep made audio** is on.
 
 1. Find the message under **Saved audio**.
 2. Press **Open in the Studio**.
@@ -73,20 +144,21 @@ Playing the message again works too. Lines played from kept audio spend nothing,
 
 ## The performance
 
-These choices change both the audio and the video.
+These choices change both the audio and the video. The first two are under **The performance and scenes**, and the rest under **Sound effects and music**.
 
 - **Which parts go in**: a switch for each part heard, with **All** and **None**. It is for this performance only. Playing another message starts with every part in.
 - **Trim**: **Start at** and **End at**, in seconds of the whole performance. 0 for **End at** is the end. The line under them says how long the whole performance is and what is kept. **Start here** and **End here**, under the preview, set them from where the preview is, and **Clear the trim** keeps it all again. The trim is for this performance only. The new ends fade over 10 thousandths of a second, so they do not click.
 - **Sound effects**: on by default. Off, only the voices are kept.
+- **Music**: on by default. It keeps the scene music that played. Off, no music is kept.
 - **Pause between parts, in seconds**: 0 by default. A short pause, such as 0.3, adds a silence between lines, as in an audiobook.
 - **As you heard it**: on by default. It uses your **Voices** and **Sounds** volumes and **Even voice levels**. Off, each part is as the voice service sent it.
 - **Even out the loudness**: on by default. The loudest moment is set just under the most a file can hold, so the file is neither too quiet nor clipped.
 
 ## Audio
 
-- **Download audio** saves the whole performance, with the parts and trim chosen.
+- **Download audio**, at the top of the Studio, saves the whole performance, with the parts and trim chosen.
 - **Save as**: **One file** by default. **A file for each part** saves a ZIP, with the parts numbered in order and named by who says them. With **Show names** off, they are named "line", "narration" or "sound".
-- **Download this part** saves the part playing now, exactly as the voice service sent it. A part with a hidden word in it is saved bleeped, as a WAV.
+- **Download this part**, under **Audio**, saves the part playing now, exactly as the voice service sent it. A part with a hidden word in it is saved bleeped, as a WAV.
 
 The audio is a 48 kHz, 24-bit WAV file. WAV keeps the sound exactly as it was. Each part fades in and out over 3 thousandths of a second, too short to hear, so two parts never meet with a click.
 
@@ -97,7 +169,7 @@ Any audio converter can save the WAV as an MP3.
 - **On a computer:** most audio programs can open a WAV and save it as an MP3.
 - **On a phone:** the free [audio converter from Wave](https://wave.co/tools/audio-converter) works in the browser. Its page says the file is not uploaded. Open it in your phone's own browser, not inside the Lumiverse app, since an app may not let the page pick a file.
 
-The **Audio** card in the Studio links to this section.
+**Audio**, in the Studio, links to this section.
 
 ### Better sound from the start
 
@@ -108,11 +180,11 @@ The sound can only be as good as what the voice service sends.
 
 ## Video
 
-The preview at the top draws the video with your choices. **Where** moves through it. **Play the preview** plays it with its sound, from where the bar is.
+The preview draws the video with your choices. **Where** moves through it. **Play the preview** plays it with its sound, from where the bar is.
 
 **Full screen** shows the preview over the whole page, in its own shape, with nothing else in view. It fades in and out. It has its own play button, bar and close button. Press **Close full screen** or Escape to go back. It does not switch your phone or browser into its own full screen, since that switch is a sudden cut to black. On another tab or app, the preview stops where it is, and **Play the preview** goes on from there.
 
-**Make a video** records it as it plays, silently, so it takes as long as the performance and a few seconds more.
+**Make a video**, at the top of the Studio, records it as it plays, silently, so it takes as long as the performance and a few seconds more.
 
 - The line under the buttons counts the time.
 - On another tab or app, the video pauses, and it goes on when you come back.
@@ -251,7 +323,7 @@ A note is a few words for whoever watches, in a dark box at the top or the botto
 
 ### Put the look back
 
-**Put the look back** asks first, then puts back every choice under **Video**: the shape, words, captions, pictures, edges, transition and ending. The built-in background, Dark, goes into your list in place of the one with its id, and is used for every scene nothing else is for. Your other backgrounds stay. Saved looks, notes, **Show names** and **Show pictures** stay as they are. If nothing would change, it says so and asks nothing.
+**Put the look back** asks first, then puts back every choice of the video's look: the shape, words, captions, pictures, edges, transition and ending. The built-in background, Dark, goes into your list in place of the one with its id, and is used for every scene nothing else is for. Your other backgrounds stay. Saved looks, notes, **Show names** and **Show pictures** stay as they are. If nothing would change, it says so and asks nothing.
 
 ### Start again
 
@@ -441,7 +513,7 @@ Brisa and Tollan are made-up characters, in one scene. Both have a picture, and 
 
 ### Steps
 
-1. Open **Title and ending** under **Video**, and type in **A line under the title**. Pick **Color of the line** if you want it apart from the title.
+1. Open **Title and ending** in the Studio, and type in **A line under the title**. Pick **Color of the line** if you want it apart from the title.
 2. Open **Watermarks** and press **Add a watermark**.
 3. Type its **Text**, or press **Choose a picture** for a PNG, JPEG or WebP logo, or both.
 4. Pick **Where**, **How big, in pixels** and **How strong**.

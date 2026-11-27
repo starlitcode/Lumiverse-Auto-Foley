@@ -259,8 +259,53 @@ window.__ctx = {
       const r = document.getElementById('drawer');
       return { root: r, setBadge() {}, activate() {}, destroy() { window.__tabDestroyed = true; }, onActivate() { return () => {}; } };
     },
+    // The full-screen place, as Lumiverse gives it with App manipulation.
+    // window.__noApp stands for the permission refused.
+    mountApp(o) {
+      if (window.__noApp) throw new Error('Permission denied: app_manipulation');
+      const r = document.createElement('div');
+      r.setAttribute('data-spindle-extension-root', 'auto_foley');
+      r.setAttribute('data-spindle-app-mount', 'auto_foley');
+      if (o && o.className) r.className = o.className;
+      document.body.appendChild(r);
+      window.__appMounts = (window.__appMounts || 0) + 1;
+      return { root: r, mountId: 'm1', setVisible() {}, destroy() { r.remove(); window.__appMounts--; } };
+    },
+    // Lumiverse's extension window, with its title row, body and root.
+    showModal(o) {
+      const backdrop = document.createElement('div');
+      backdrop.style.cssText = 'position:fixed;inset:0;z-index:10003;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.5)';
+      const box = document.createElement('div');
+      const w = Math.min((o && o.width) || 420, innerWidth - 40), h = Math.min((o && o.maxHeight) || 520, innerHeight - 40);
+      box.style.cssText = 'width:' + w + 'px;max-height:' + h + 'px;background:var(--lumiverse-bg);border-radius:12px;display:flex;flex-direction:column;overflow:hidden';
+      const head = document.createElement('div');
+      head.style.cssText = 'display:flex;padding:12px 16px';
+      const h3 = document.createElement('h3');
+      h3.textContent = (o && o.title) || '';
+      head.appendChild(h3);
+      const body = document.createElement('div');
+      body.style.cssText = 'padding:16px;overflow-y:auto;flex:1';
+      const r = document.createElement('div');
+      r.setAttribute('data-spindle-extension-root', 'auto_foley');
+      r.setAttribute('data-spindle-modal', 'x1');
+      body.appendChild(r);
+      box.appendChild(head);
+      box.appendChild(body);
+      backdrop.appendChild(box);
+      document.body.appendChild(backdrop);
+      const gone = new Set();
+      window.__modals = (window.__modals || 0) + 1;
+      const handle = { root: r, dismiss() { if (!backdrop.isConnected) return; backdrop.remove(); window.__modals--; gone.forEach((f) => f()); }, setTitle() {}, onDismiss(f) { gone.add(f); return () => gone.delete(f); } };
+      return handle;
+    },
     showConfirm: async (o) => { window.__asked = (window.__asked || 0) + 1; window.__askedTitle = o && o.title; return { confirmed: !window.__confirmNo }; },
-    showContextMenu: async (o) => { window.__menu = o; return { selectedKey: null }; },
+    showContextMenu: async (o) => { window.__menu = o; return { selectedKey: window.__menuPick || null }; },
+    registerInputBarAction: (o) => {
+      const fns = [];
+      window.__actions = window.__actions || {};
+      window.__actions[o.id] = { label: o.label, press: () => fns.forEach((f) => f()) };
+      return { onClick(f) { fns.push(f); return () => {}; }, destroy() { delete window.__actions[o.id]; } };
+    },
     createFloatWidget: (o) => {
       // As Lumiverse draws it: a sized, placed surface, with the root the
       // extension fills inside it.
@@ -393,6 +438,55 @@ async function open(theme, size, zoom = 1, pre = null) {
   return { context, page, errors };
 }
 
+// The message's own button. While the Studio is open it covers the chat,
+// so the button is pressed through the page, as Autoplay starts a reply.
+async function pressMessage(page) {
+  if (await page.locator("[data-af-ws]").count()) await page.evaluate(() => document.querySelector('#mount [data-af-slot="message"]').click());
+  else await page.click('#mount [data-af-slot="message"]');
+}
+
+// A tab of the drawer. The Studio covers the drawer while it is open, so
+// it is closed first, as a reader would.
+async function toTab(page, id) {
+  if (await page.locator("[data-af-ws]").count()) {
+    await page.click('[data-af-ws="close"]');
+    await page.waitForTimeout(350);
+  }
+  await page.click('.af-tab[data-tab="' + id + '"]');
+}
+
+// Lumiverse's UI Scale zooms the page and gives the screen's size in its
+// own pixels, which the Studio's workspace is sized by. Passed to open()
+// with the same zoom.
+const scale = (z) => `(() => {
+  const r = document.documentElement;
+  r.style.setProperty('--lumiverse-ui-scale', '${z}');
+  r.style.setProperty('--app-scaled-viewport-width', (innerWidth / ${z}) + 'px');
+  r.style.setProperty('--app-scaled-viewport-height', (innerHeight / ${z}) + 'px');
+})()`;
+
+// Opens the Studio's workspace from the drawer's Studio tab.
+async function openWs(page) {
+  // Open already, it covers the drawer, so there is nothing to press.
+  if (await page.locator("[data-af-ws]").count()) return;
+  await page.click('.af-tab[data-tab="studio"]');
+  await page.waitForTimeout(150);
+  await page.click("[data-af-studio-open]");
+  await page.waitForSelector("[data-af-ws] [data-af-videopreview]", { timeout: 5000 }).catch(() => {});
+  await page.waitForTimeout(300);
+}
+// Shows one part of the workspace, by its name, through the dropdown that
+// is there at every width.
+async function wsSec(page, title) {
+  await page.evaluate((title) => {
+    const sel = document.querySelector("[data-af-ws] .af-ws-picker select");
+    const opt = [...sel.options].find((o) => o.textContent === title);
+    sel.value = opt.value;
+    sel.dispatchEvent(new Event("change", { bubbles: true }));
+  }, title);
+  await page.waitForTimeout(250);
+}
+
 async function showTab(page, id) {
   await page.click(`.af-tab[data-tab="${id}"]`);
   await page.waitForTimeout(320);
@@ -405,7 +499,8 @@ async function showTab(page, id) {
 // against the nearest painted surface behind each piece of text.
 const MEASURE = (touch) => {
   const out = { overflow: [], small: [], contrast: [] };
-  const af = document.querySelector('.af');
+  // The Studio's workspace, while it is open, or else the drawer.
+  const af = document.querySelector('[data-af-ws]') || document.querySelector('.af');
   const box = af.getBoundingClientRect();
   if (document.documentElement.scrollWidth > window.innerWidth + 1) out.overflow.push('page scrolls sideways: ' + document.documentElement.scrollWidth + ' > ' + window.innerWidth);
   const parse = (c) => {
@@ -462,7 +557,7 @@ if (section("layout")) {
     for (const size of SIZES) {
       const { context, page, errors } = await open(theme, size);
       // A message is performed first, so the Stage has a script to measure.
-      await page.click('#mount [data-af-slot="message"]');
+      await pressMessage(page);
       await page.waitForTimeout(900);
       for (const id of TABS) {
         await showTab(page, id);
@@ -536,12 +631,12 @@ if (section("perform")) {
   await page.evaluate(() => {
     window.__played = 0;
   });
-  await page.click('.af-tab[data-tab="settings"]');
+  await toTab(page, "settings");
   await page.waitForTimeout(250);
   await page.evaluate(() => document.querySelector('[data-af-row="applauseOn"] .af-box').click());
   await page.waitForTimeout(350);
   check((await page.locator('[data-af-row="applauseForUser"]').count()) === 1, "Cheer for you sits under Applause once it is on");
-  await page.click('.af-tab[data-tab="stage"]');
+  await toTab(page, "stage");
   await page.waitForTimeout(250);
   await page.evaluate(() => (window.__clipMs = 120));
   await btn.click();
@@ -553,10 +648,10 @@ if (section("perform")) {
   check(sawCheer, "after the message, the audience cheers, and the subtitles say so");
   await page.waitForTimeout(400);
   await page.evaluate(() => (window.__clipMs = 40));
-  await page.click('.af-tab[data-tab="settings"]');
+  await toTab(page, "settings");
   await page.waitForTimeout(250);
   await page.evaluate(() => document.querySelector('[data-af-row="applauseOn"] .af-box').click());
-  await page.click('.af-tab[data-tab="stage"]');
+  await toTab(page, "stage");
   await page.waitForTimeout(250);
 
   console.log("A message edited while it plays");
@@ -578,11 +673,11 @@ if (section("perform")) {
   await page.evaluate(() => {
     window.__synth = [];
   });
-  await page.click('.af-tab[data-tab="settings"]');
+  await toTab(page, "settings");
   await page.waitForTimeout(250);
   await page.click('.af-segbtn[data-v="skip"]');
   await page.waitForTimeout(500);
-  await page.click('.af-tab[data-tab="stage"]');
+  await toTab(page, "stage");
   await page.waitForTimeout(250);
   await page.click('[data-af="parts"] [data-at] >> nth=0');
   await page.waitForTimeout(500);
@@ -590,7 +685,7 @@ if (section("perform")) {
   check(!s2.some((b) => /set the cup down/.test(b.text)), "narration is not spoken when it is skipped");
 
   console.log("Switches open and close what sits under them");
-  await page.click('.af-tab[data-tab="director"]');
+  await toTab(page, "director");
   await page.waitForTimeout(250);
   const subOf = () => page.evaluate(() => {
     const wrap = document.querySelector('[data-af-row="soundsOn"]');
@@ -608,7 +703,7 @@ if (section("perform")) {
   check(after && after.hidden, "and are hidden once closed");
 
   console.log("Debug info");
-  await page.click('.af-tab[data-tab="settings"]');
+  await toTab(page, "settings");
   await page.waitForTimeout(250);
   await page.locator('.af-btn:has-text("Build preview")').click();
   await page.waitForTimeout(150);
@@ -627,7 +722,7 @@ if (section("perform")) {
   check((await page.locator('[data-af="chatline"]').textContent()).includes("Chat with Ysolde"), "the panel says which chat is open");
   check((await page.locator('#barmount [data-af-slot="bar"]').count()) === 1, "the chat's own row gets a button for the newest reply");
   check(((await page.locator('#barmount [data-af-slot="bar"]').getAttribute("class")) || "").includes("_barBtn_cd34e_1"), "and it wears that row's button class");
-  await page.click('.af-tab[data-tab="settings"]');
+  await toTab(page, "settings");
   await page.waitForTimeout(250);
   // Scrolled into view first: a scroll closes a description, and Playwright
   // scrolls just before it clicks.
@@ -643,7 +738,7 @@ if (section("perform")) {
   check((await page.locator(".af-hint").count()) === 0, "a tap elsewhere closes it");
 
   console.log("Expand");
-  await page.click('.af-tab[data-tab="director"]');
+  await toTab(page, "director");
   await page.waitForTimeout(250);
   await page.locator('.af-card:has(textarea.af-tall) .af-btn:has-text("Expand")').click();
   await page.waitForTimeout(250);
@@ -655,7 +750,7 @@ if (section("perform")) {
   check((await page.locator(".af-over").count()) === 0, "and the big editor closes");
 
   console.log("Look and the floating player");
-  await page.click('.af-tab[data-tab="settings"]');
+  await toTab(page, "settings");
   await page.waitForTimeout(250);
   await page.evaluate(() => {
     const s = Array.from(document.querySelectorAll('.af-col')).find((c) => c.textContent.startsWith('Pattern behind the panel'));
@@ -691,7 +786,7 @@ if (section("no stuck hover")) {
   console.log("On a phone, a button tapped off is not left lit");
   const size = SIZES[0];
   const { context, page, errors } = await open(THEMES[0], size);
-  await page.click('.af-tab[data-tab="settings"]');
+  await toTab(page, "settings");
   await page.waitForTimeout(200);
   await page.evaluate(() => document.querySelector('[data-af-row="widgetOn"] .af-box').click());
   await page.waitForTimeout(250);
@@ -734,7 +829,7 @@ if (section("lumiverse pictures")) {
   for (const size of SIZES) {
     const { context, page, errors } = await open(THEMES[0], size);
     const where = size.name;
-    await page.click('.af-tab[data-tab="cast"]');
+    await toTab(page, "cast");
     await page.waitForTimeout(300);
     await page.click("[data-af-lvpics]");
     await page.waitForTimeout(1200);
@@ -768,17 +863,18 @@ if (section("saved looks")) {
   for (const size of SIZES) {
     const { context, page, errors } = await open(THEMES[0], size);
     const where = size.name;
-    await page.click('.af-tab[data-tab="studio"]');
+    await openWs(page);
     await page.waitForTimeout(500);
-    await page.locator(".af-fold", { hasText: /^▶?\s*Saved looks$/ }).click();
+    await wsSec(page, "Saved looks");
     await page.waitForTimeout(300);
     // A look of its own: Typewriter, tall.
     await page.evaluate(() => { window.__settings.videoFont = "type"; });
     await page.evaluate(() => {});
-    await page.locator(".af-fold", { hasText: /^▶?\s*Shape and words$/ }).click();
+    await wsSec(page, "Shape and words");
     await page.waitForTimeout(300);
-    await page.selectOption('[data-af-card="studio-video"] select >> nth=0', "tall");
+    await page.selectOption('[data-af-section="shape"] select >> nth=0', "tall");
     await page.waitForTimeout(300);
+    await wsSec(page, "Saved looks");
     await page.fill("[data-af-lookname]", "Noir");
     await page.click("[data-af-looksave]");
     await page.waitForTimeout(300);
@@ -786,8 +882,10 @@ if (section("saved looks")) {
     check(saved.length === 1 && saved[0].name === "Noir" && saved[0].look.videoShape === "tall", where + ": Save this look keeps the look under its name (" + JSON.stringify(saved.map((l) => [l.name, l.look.videoShape])) + ")");
     check(!("videoNames" in saved[0].look) && !("videoNotes" in saved[0].look), where + ": names and notes are not part of a look");
     // Change the shape, then use the look again.
-    await page.selectOption('[data-af-card="studio-video"] select >> nth=0', "square");
+    await wsSec(page, "Shape and words");
+    await page.selectOption('[data-af-section="shape"] select >> nth=0', "square");
     await page.waitForTimeout(300);
+    await wsSec(page, "Saved looks");
     await page.click("[data-af-lookuse]");
     await page.waitForTimeout(600);
     check(await page.evaluate(() => window.__settings.videoShape === "tall"), where + ": Use puts the look back");
@@ -809,7 +907,7 @@ if (section("smooth close")) {
   console.log("Who is voiced closes to the end with no jump in the last frame");
   for (const size of SIZES) {
     const { context, page, errors } = await open(THEMES[0], size);
-    await page.click('.af-tab[data-tab="settings"]');
+    await toTab(page, "settings");
     await page.waitForTimeout(200);
     await page.evaluate(() => document.querySelector('[data-af-row="widgetOn"] .af-box').click());
     await page.waitForTimeout(250);
@@ -842,7 +940,7 @@ if (section("find someone")) {
   for (const size of SIZES) {
     const { context, page, errors } = await open(THEMES[0], size);
     const where = size.name;
-    await page.click('.af-tab[data-tab="cast"]');
+    await toTab(page, "cast");
     await page.waitForTimeout(300);
     const cards = () => page.evaluate(() => [...document.querySelectorAll(".af-person")].map((c) => c.dataset.person));
     const all = await cards();
@@ -888,7 +986,7 @@ if (section("voice call")) {
   for (const size of SIZES) {
     const { context, page, errors } = await open(THEMES[0], size);
     const where = size.name;
-    await page.click('.af-tab[data-tab="settings"]');
+    await toTab(page, "settings");
     await page.waitForTimeout(200);
     await page.evaluate(() => document.querySelector('[data-af-row="widgetOn"] .af-box').click());
     await page.waitForTimeout(250);
@@ -971,9 +1069,9 @@ if (section("voice call")) {
 if (section("video edges")) {
   console.log("Darken the edges of a video, or leave them as they are");
   const { context, page, errors } = await open(THEMES[0], SIZES[1]);
-  await page.click('.af-tab[data-tab="studio"]');
+  await openWs(page);
   await page.waitForTimeout(600);
-  await page.locator(".af-fold", { hasText: /^▶?\s*Background$/ }).click();
+  await wsSec(page, "Background");
   await page.waitForTimeout(300);
   const corner = () => page.evaluate(() => { const d = document.querySelector("[data-af-videopreview]").getContext("2d").getImageData(20, 20, 1, 1).data; return d[0] + d[1] + d[2]; });
   const set = async (v) => {
@@ -1005,7 +1103,7 @@ if (section("on air")) {
   for (const size of SIZES) {
     const { context, page, errors } = await open(THEMES[0], size);
     const where = size.name;
-    await page.click('.af-tab[data-tab="settings"]');
+    await toTab(page, "settings");
     await page.waitForTimeout(200);
     await page.evaluate(() => document.querySelector('[data-af-row="widgetOn"] .af-box').click());
     await page.waitForTimeout(250);
@@ -1015,7 +1113,7 @@ if (section("on air")) {
     check((await air()).every((x) => x === "off"), where + ": the light is dim before anything plays");
     await page.evaluate(() => window.__widget.querySelector('[data-p="play"]').click());
     await page.waitForTimeout(1500);
-    await page.click('.af-tab[data-tab="stage"]');
+    await toTab(page, "stage");
     await page.waitForTimeout(400);
     const lit = await air();
     check(lit.length === 2 && lit.every((x) => x === "on"), where + ": the light is on in the player and on the Stage while it plays (" + lit.join(",") + ")");
@@ -1046,7 +1144,7 @@ if (section("player")) {
     for (const zoom of [0.85, 1, 1.25]) {
       const { context, page, errors } = await open(THEMES[0], size, zoom);
       const where = size.name + ", zoom " + zoom;
-      await page.click('.af-tab[data-tab="settings"]');
+      await toTab(page, "settings");
       await page.waitForTimeout(200);
       await page.evaluate(() => document.querySelector('[data-af-row="widgetOn"] .af-box').click());
       await page.waitForTimeout(250);
@@ -1135,7 +1233,7 @@ if (section("hold")) {
   for (const size of SIZES) {
     const { context, page, errors } = await open(THEMES[0], size, 1);
     const where = size.name;
-    await page.click('.af-tab[data-tab="settings"]');
+    await toTab(page, "settings");
     await page.waitForTimeout(200);
     await page.evaluate(() => document.querySelector('[data-af-row="widgetOn"] .af-box').click());
     await page.waitForTimeout(250);
@@ -1211,7 +1309,7 @@ if (section("hold")) {
       window.__teardown = window.__setup(window.__ctx, { fetch: window.__fetch, Audio: window.__Audio });
     });
     await page.waitForTimeout(150);
-    await page.click('.af-tab[data-tab="settings"]');
+    await toTab(page, "settings");
     await page.waitForTimeout(200);
     await page.evaluate(() => document.querySelector('[data-af-row="widgetOn"] .af-box').click());
     await page.waitForTimeout(250);
@@ -1234,7 +1332,7 @@ if (section("engines")) {
   console.log("Voice engines in the Cast and Settings tabs");
   for (const size of SIZES) {
     const { context, page, errors } = await open(THEMES[0], size);
-    await page.click('.af-tab[data-tab="cast"]');
+    await toTab(page, "cast");
     await page.waitForTimeout(250);
     await page.locator(".af-person-head").first().click();
     await page.waitForTimeout(400);
@@ -1254,14 +1352,14 @@ if (section("engines")) {
     const m = await page.evaluate(MEASURE, size.touch);
     check(!m.overflow.length, size.name + ": the cast card fits. " + m.overflow.slice(0, 2).join("; "));
     check(!m.small.length, size.name + ": its tap targets are big enough. " + m.small.slice(0, 2).join("; "));
-    await page.click('.af-tab[data-tab="settings"]');
+    await toTab(page, "settings");
     await page.waitForTimeout(300);
     check((await page.locator('label:has-text("What this connection runs")').count()) === 0, size.name + ": an ElevenLabs connection is not asked what it runs");
     await page.locator('[data-af-row] select').filter({ has: page.locator('option[value="t3"]') }).first().selectOption("t3");
     await page.waitForTimeout(300);
     check((await page.locator('label:has-text("What this connection runs")').count()) === 1, size.name + ": an OpenAI-style connection can be named a Chatterbox-Turbo server");
     check((await page.locator(".af-note", { hasText: "Engine: Chatterbox-Turbo" }).count()) === 1, size.name + ": a server named Chatterbox is found as Chatterbox-Turbo");
-    await page.click('.af-tab[data-tab="director"]');
+    await toTab(page, "director");
     await page.waitForTimeout(300);
     const notes = await page.evaluate(() => {
       const card = Array.from(document.querySelectorAll(".af-card")).find((c) => /Notes for each voice engine/.test(c.textContent));
@@ -1284,9 +1382,9 @@ if (section("sync")) {
     window.__wav = [0.8, 1.6];
     window.__clipMs = 2400;
   });
-  await page.click('.af-tab[data-tab="stage"]');
+  await toTab(page, "stage");
   await page.waitForTimeout(200);
-  await page.click('#mount [data-af-slot="message"]');
+  await pressMessage(page);
   await page.waitForFunction(() => document.querySelector('[data-af="theater"]') && document.querySelector('[data-af="theater"]').dataset.state === "voice", null, { timeout: 8000 });
   const t0 = Date.now();
   const lit = () => page.evaluate(() => [document.querySelectorAll('[data-af="line"] .af-w.af-said').length, document.querySelectorAll('[data-af="line"] .af-w').length]);
@@ -1323,9 +1421,9 @@ if (section("script status")) {
       window.__directHold = 900;
       if (asked) window.__directingAt = 100;
     }, asked);
-    await page.click('.af-tab[data-tab="stage"]');
+    await toTab(page, "stage");
     await page.waitForTimeout(150);
-    await page.click('#mount [data-af-slot="message"]');
+    await pressMessage(page);
     await page.waitForTimeout(400);
     const said = (await page.locator('[data-af="sub"]').textContent()) || "";
     if (!asked) check(said.includes("Getting the script") && !said.includes("Director is writing"), "a kept script says it is getting the script (" + said + ")");
@@ -1337,9 +1435,9 @@ if (section("script status")) {
     // A script played from what was kept says so.
     const { context, page, errors } = await open(THEMES[0], SIZES[0]);
     await page.evaluate(() => { window.__fromKept = true; });
-    await page.click('.af-tab[data-tab="stage"]');
+    await toTab(page, "stage");
     await page.waitForTimeout(150);
-    await page.click('#mount [data-af-slot="message"]');
+    await pressMessage(page);
     await page.waitForTimeout(300);
     const used = (await page.locator('[data-af="used"]').textContent()) || "";
     check(used.startsWith("Saved script. The Director was not asked again."), "a saved script says so in Now playing (" + used + ")");
@@ -1347,7 +1445,7 @@ if (section("script status")) {
     await page.evaluate(() => { window.__fallback = true; });
     await page.evaluate(() => document.querySelector('[data-af="stop"]').click());
     await page.waitForTimeout(200);
-    await page.click('#mount [data-af-slot="message"]');
+    await pressMessage(page);
     await page.waitForTimeout(400);
     const fell = (await page.locator('[data-af="used"]').textContent()) || "";
     check(fell.startsWith("Saved script, read as written: the Director could not direct this message.") && fell.includes("Direct again tries the Director."), "a script read as written says why, and what Direct again does (" + fell + ")");
@@ -1355,7 +1453,7 @@ if (section("script status")) {
     await context.close();
   }
   const { context, page, errors } = await open(THEMES[0], SIZES[0]);
-  await page.click('.af-tab[data-tab="director"]');
+  await toTab(page, "director");
   await page.waitForTimeout(150);
   check(await page.evaluate(() => { const b = document.querySelector('[data-af-row="costOut"] input'); return b.value === "0" && !b.placeholder; }), "a price box shows its number, 0 by default, with no grey placeholder, as in Auto Refine");
   // Pasted, as a price is copied off a provider's page.
@@ -1372,9 +1470,9 @@ if (section("script status")) {
   await page.locator('[data-af-row="costOut"] input').blur();
   await page.waitForTimeout(100);
   check((await page.locator('[data-af-row="costIn"] input').inputValue()) === "1", "a pasted price line keeps its number");
-  await page.click('.af-tab[data-tab="stage"]');
+  await toTab(page, "stage");
   await page.waitForTimeout(150);
-  await page.click('#mount [data-af-slot="message"]');
+  await pressMessage(page);
   await page.waitForTimeout(300);
   const used = (await page.locator('[data-af="used"]').textContent()) || "";
   check(used.includes("Cost: about 0.0023"), "with prices set, Now playing gives the cost (" + used + ")");
@@ -1405,9 +1503,9 @@ if (section("message player shadow")) {
       window.__clipMs = 4000;
       window.__wav = [0.05, 0.5];
     });
-    await page.click('#mount [data-af-slot="message"]');
+    await pressMessage(page);
     await page.waitForTimeout(2200);
-    await page.click('.af-tab[data-tab="settings"]');
+    await toTab(page, "settings");
     await page.waitForTimeout(400);
     const shadow = () => page.evaluate(() => getComputedStyle(document.querySelector("[data-af-player] .af-mp-box")).boxShadow);
     const theme = await shadow();
@@ -1518,7 +1616,7 @@ if (section("message player")) {
       window.__directingAt = 50;
     });
     const bigStyle = await page.addStyleTag({ content: '[data-message-id="m1"]{font-size:26px}' });
-    await page.click('#mount [data-af-slot="message"]');
+    await pressMessage(page);
     await page.waitForTimeout(400);
     const busy = await look();
     check(!!busy && busy.text === "Writing the script" && busy.inside && !busy.sideways, where + ": while the script is written, with a large font, it fits inside the message (" + JSON.stringify(busy) + ")");
@@ -1593,7 +1691,7 @@ if (section("message player")) {
     });
     check(allIn, where + ": with a theme that styles every button, every part stays inside the pill");
     // Turned off, it goes.
-    await page.click('.af-tab[data-tab="settings"]');
+    await toTab(page, "settings");
     await page.waitForTimeout(200);
     await page.locator('[data-af-row="messagePlayer"] .af-box').first().click();
     await page.waitForTimeout(600);
@@ -1630,7 +1728,7 @@ if (section("message player contrast")) {
       content.after(mount);
       window.__clipMs = 4000;
     });
-    await page.click('#mount [data-af-slot="message"]');
+    await pressMessage(page);
     await page.waitForTimeout(800);
     const r = await page.evaluate(() => {
       const t = document.querySelector("[data-af-player] [data-af-mp=text]").getBoundingClientRect();
@@ -1680,11 +1778,12 @@ if (section("saved audio")) {
       window.__clipMs = 300;
       window.__wav = [0.05, 0.25];
     });
-    await page.click('#mount [data-af-slot="message"]');
+    await pressMessage(page);
     await page.waitForFunction(() => document.querySelector('#mount [data-af-slot="message"]').getAttribute("aria-busy") === null && (window.__synth || []).length > 0, null, { timeout: 10000 });
     await page.waitForTimeout(400);
     const made = await page.evaluate(() => (window.__synth || []).length);
-    await page.click('.af-tab[data-tab="studio"]');
+    await openWs(page);
+    await wsSec(page, "Saved audio");
     await page.waitForTimeout(200);
     // The list shows with no fold to open.
     await page.waitForTimeout(400);
@@ -1694,16 +1793,17 @@ if (section("saved audio")) {
     // Open in the Studio builds the performance from saved audio alone.
     const spentBefore = await page.evaluate(() => (window.__synth || []).length);
     await row.locator("[data-af-saved-open]").click();
-    await page.waitForFunction(() => document.querySelector('.af-tab[data-tab="studio"]').getAttribute("aria-selected") === "true", null, { timeout: 15000 }).catch(() => {});
+    await page.waitForFunction(() => !!document.querySelector("[data-af-ws] [data-af-videopreview]"), null, { timeout: 15000 }).catch(() => {});
     await page.waitForTimeout(800);
-    check(await page.evaluate(() => document.querySelector('.af-tab[data-tab="studio"]').getAttribute("aria-selected") === "true"), size.name + ": Open in the Studio opens the Studio tab");
+    check(await page.evaluate(() => !!document.querySelector("[data-af-ws] [data-af-videopreview]")), size.name + ": Open in the Studio opens the Studio");
     check((await page.locator(".af-fold", { hasText: "Which parts go in" }).count()) === 1, size.name + ": with the saved performance in it");
     check((await page.evaluate(() => (window.__synth || []).length)) === spentBefore, size.name + ": and nothing is spoken again to make it");
     const dl = page.waitForEvent("download", { timeout: 8000 }).catch(() => null);
     await page.click('[data-af-studio="dlall"]');
     const file = await dl;
     check(!!file && /^auto-foley Ysolde 2026-11-20\.wav$/.test(file.suggestedFilename()), size.name + ": its audio downloads, named for whose script it is and the day it was saved (" + (file && file.suggestedFilename()) + ")");
-    await page.click('.af-tab[data-tab="studio"]');
+    await openWs(page);
+    await wsSec(page, "Saved audio");
     await page.waitForTimeout(400);
     await page.evaluate(() => { window.__clipMs = 4000; });
     await row.locator("[data-af-saved-play]").click();
@@ -1714,14 +1814,14 @@ if (section("saved audio")) {
     // read, and a second press lets it go, so nothing plays twice.
     await row.locator("[data-af-saved-play]").click();
     await page.waitForTimeout(200);
-    await page.evaluate(() => { window.__clipGetMs = 500; window.__clipGetMost = 0; window.__played = 0; });
+    await page.evaluate(() => { window.__clipGetMs = 1500; window.__clipGetMost = 0; window.__played = 0; });
     await row.locator("[data-af-saved-play]").click();
     await page.waitForTimeout(100);
     check(((await row.locator("[data-af-saved-play]").textContent()) || "") === "Getting ready" && ((await row.textContent()) || "").includes("Reading the saved audio"), size.name + ": while the saved lines are read, Play says Getting ready (" + (await row.locator("[data-af-saved-play]").textContent()) + ")");
-    await page.click('.af-tab[data-tab="stage"]');
-    await page.click('.af-tab[data-tab="studio"]');
+    await wsSec(page, "Audio");
+    await wsSec(page, "Saved audio");
     await page.waitForTimeout(100);
-    check(((await row.locator("[data-af-saved-play]").textContent()) || "") === "Getting ready", size.name + ": and still says so when the tab is drawn again");
+    check(((await row.locator("[data-af-saved-play]").textContent()) || "") === "Getting ready", size.name + ": and still says so when the Studio is drawn again (" + (await row.locator("[data-af-saved-play]").textContent()) + ")");
     await row.locator("[data-af-saved-play]").click();
     await page.waitForTimeout(1800);
     check((await page.evaluate(() => window.__played || 0)) === 0 && ((await row.locator("[data-af-saved-play]").textContent()) || "") === "Play", size.name + ": a second press while it gets ready lets it go, and nothing plays (" + (await page.evaluate(() => window.__played || 0)) + ")");
@@ -1741,7 +1841,9 @@ if (section("saved audio")) {
     // plays stops the saved script, and the other way round.
     // The message's own button says Stop Auto Foley while it plays.
     const playLabel = () => page.evaluate(() => (document.querySelector('#mount [data-af-slot="message"]').getAttribute("aria-label") === "Stop Auto Foley" ? "Pause" : "not playing"));
-    await page.click('#mount [data-af-slot="message"]');
+    // The Studio covers the chat, so the message's button is pressed
+    // through the page, as Autoplay would start it.
+    await page.evaluate(() => document.querySelector('#mount [data-af-slot="message"]').click());
     await page.waitForTimeout(700);
     check(((await row.locator("[data-af-saved-play]").textContent()) || "") === "Play", size.name + ": starting a message stops the saved script");
     check((await playLabel()) === "Pause", size.name + ": and the message plays (" + (await playLabel()) + ")");
@@ -1815,14 +1917,14 @@ if (section("voice levels")) {
       window.__amps = { v1: 12000, v2: 3000, v3: 3000, "": 3000 };
     });
     if (!even) {
-      await page.click('.af-tab[data-tab="stage"]');
+      await toTab(page, "stage");
       await page.waitForTimeout(200);
       await page.locator('[data-af-row="evenVoices"] .af-box').first().click();
       await page.waitForTimeout(100);
     }
     // Twice, so every voice's level is known by the second time through.
     for (let k = 0; k < 2; k++) {
-      await page.click('#mount [data-af-slot="message"]');
+      await pressMessage(page);
       await page.waitForFunction(() => document.querySelector('#mount [data-af-slot="message"]').getAttribute("aria-busy") === null, null, { timeout: 10000 });
       await page.waitForTimeout(200);
     }
@@ -1834,7 +1936,7 @@ if (section("voice levels")) {
     if (even) {
       check(seen.voices.length > 1 && down.length > 0 && down.every((v) => Math.abs(v - 0.501) < 0.01), "the loud voice plays at half volume, 6 dB down (voices " + seen.voices.join(",") + "; volumes " + seen.volumes.join(",") + ")");
       check(seen.volumes.some((v) => v === 1), "the quiet voices play at full volume");
-      await page.click('.af-tab[data-tab="stage"]');
+      await toTab(page, "stage");
       await page.waitForTimeout(200);
       check(/turned down by 6 dB/.test(await page.locator(".af-log").first().textContent()), "the Log says which voice was turned down, and by how much");
     } else {
@@ -1867,7 +1969,7 @@ if (section("connection list")) {
         window.__teardown = window.__setup(window.__ctx, { fetch: window.__fetch, Audio: window.__Audio });
       }, c);
       await page.waitForTimeout(200);
-      await page.click('.af-tab[data-tab="settings"]');
+      await toTab(page, "settings");
       await page.waitForTimeout(500);
       const text = await page.evaluate(() => document.getElementById("drawer").innerText);
       check(c.want.test(text), size.name + ", " + c.name + ": the Settings tab says so");
@@ -1886,7 +1988,7 @@ if (section("connection list")) {
             { i: 0, kind: "speech", speaker: "Ysolde Marrow-Kestrel of the Lower Quays", text: "[nervously] We leave at dawn. [laughs] Truly.", plain: "", tags: [], inSounds: [], big: false, before: "", after: "", note: "" },
           ] };
         });
-        await page.click('#mount [data-af-slot="message"]');
+        await pressMessage(page);
         await page.waitForTimeout(1500);
         const sent = await page.evaluate(() => (window.__synth || []).map((b) => ({ text: b.text, emotion: b.parameters && b.parameters.emotion })));
         check(sent.some((b) => b.text === "We leave at dawn. [laughter] Truly." && b.emotion === "anxious"), size.name + ": Cartesia is sent the feeling beside the line and only [laughter] in it (" + JSON.stringify(sent.slice(0, 2)) + ")");
@@ -1894,7 +1996,7 @@ if (section("connection list")) {
       if (c.name === "ElevenLabs through OpenRouter") {
         // In the Cast tab: the model's own voices, and no setting that
         // cannot be sent through OpenRouter.
-        await page.click('.af-tab[data-tab="cast"]');
+        await toTab(page, "cast");
         await page.waitForTimeout(300);
         await page.locator(".af-person-head").nth(1).click();
         await page.waitForTimeout(900);
@@ -1920,7 +2022,7 @@ if (section("note limit")) {
   for (const size of SIZES) {
     const { context, page, errors } = await open(THEMES[0], size);
     const where = size.name;
-    await page.click('.af-tab[data-tab="cast"]');
+    await toTab(page, "cast");
     await page.waitForTimeout(300);
     await page.locator(".af-person-head").first().click();
     await page.waitForTimeout(600);
@@ -1962,13 +2064,13 @@ if (section("note limit")) {
 if (section("kept")) {
   console.log("Kept audio plays again without being made again");
   const { context, page, errors } = await open(THEMES[0], SIZES[0]);
-  await page.click('.af-tab[data-tab="settings"]');
+  await toTab(page, "settings");
   await page.waitForTimeout(200);
   await page.fill('[data-af-row="voicePrice"] input', "30");
   await page.locator('[data-af-row="voicePrice"] input').blur();
-  await page.click('.af-tab[data-tab="stage"]');
+  await toTab(page, "stage");
   await page.waitForTimeout(200);
-  await page.click('#mount [data-af-slot="message"]');
+  await pressMessage(page);
   await page.waitForFunction(() => document.querySelector('#mount [data-af-slot="message"]').getAttribute("aria-busy") === null && (window.__synth || []).length > 0, null, { timeout: 8000 });
   await page.waitForTimeout(300);
   const made = await page.evaluate(() => (window.__synth || []).length);
@@ -1994,7 +2096,7 @@ if (section("kept")) {
     window.__drawerBox.remove();
   });
   await page.waitForTimeout(400);
-  await page.click('#mount [data-af-slot="message"]');
+  await pressMessage(page);
   // The player under the message moves through the parts while saved audio
   // plays, with nothing new being made to repaint it.
   const parts = await page.evaluate(async () => {
@@ -2011,12 +2113,12 @@ if (section("kept")) {
   await page.evaluate(() => document.body.insertBefore(window.__drawerBox, window.__drawerNext));
   await page.waitForTimeout(1500);
   check((await page.evaluate(() => (window.__synth || []).length)) === made, "playing it again makes nothing new");
-  await page.click('.af-tab[data-tab="stage"]');
+  await toTab(page, "stage");
   await page.waitForTimeout(200);
   const savedSaid = (await page.locator('[data-af="used"]').textContent()) || "";
   check(/\d+ of \d+ lines?(?: so far)? played from saved audio, with nothing spent\./.test(savedSaid), "Now playing says the lines came from saved audio (" + savedSaid + ")");
   check(!savedSaid.includes("Voice:"), "audio played from what was saved adds no characters");
-  await page.click('.af-tab[data-tab="settings"]');
+  await toTab(page, "settings");
   await page.waitForTimeout(300);
   check((await page.locator('[data-af="kept"]').textContent()).includes("Kept now: " + made), "Settings says how much is kept");
   await page.locator('[data-af-row="keepAudio"] .af-btn', { hasText: "Clear kept audio" }).click();
@@ -2043,10 +2145,10 @@ if (section("steady")) {
         window.__teardown = window.__setup(window.__ctx, { fetch: window.__fetch, Audio: window.__Audio });
       });
       await page.waitForTimeout(200);
-      await page.click('.af-tab[data-tab="stage"]');
+      await toTab(page, "stage");
       await page.waitForTimeout(200);
       await page.evaluate(() => (window.__clipMs = 500));
-      await page.click('#mount [data-af-slot="message"]');
+      await pressMessage(page);
       await page.waitForTimeout(400);
       await page.evaluate(() => (document.getElementById("drawer").scrollTop = 60));
       await page.waitForTimeout(100);
@@ -2081,7 +2183,7 @@ if (section("groups")) {
   for (const size of SIZES) {
     const { context, page, errors } = await open(THEMES[0], size);
     const where = size.name;
-    await page.click('.af-tab[data-tab="cast"]');
+    await toTab(page, "cast");
     await page.waitForTimeout(250);
     await page.locator('.af-btn', { hasText: "New group" }).click();
     await page.waitForTimeout(300);
@@ -2133,7 +2235,7 @@ if (section("patterns")) {
   console.log("Patterns to leave out");
   for (const size of SIZES) {
     const { context, page, errors } = await open(THEMES[0], size);
-    await page.click('.af-tab[data-tab="settings"]');
+    await toTab(page, "settings");
     await page.waitForTimeout(250);
     const ta = page.locator("[data-af-skips] textarea");
     check((await ta.inputValue()).includes("【"), size.name + ": the built-in patterns show in the box");
@@ -2166,7 +2268,7 @@ if (section("one connection")) {
     window.__teardown = window.__setup(window.__ctx, { fetch: window.__fetch, Audio: window.__Audio });
   });
   await page.waitForTimeout(250);
-  await page.click('.af-tab[data-tab="settings"]');
+  await toTab(page, "settings");
   await page.waitForTimeout(400);
   const opts = await page.locator('.af-col:has(> .af-between label:text-is("TTS connection")) select option, .af-col:has(label:text-is("TTS connection")) select option').allTextContents();
   check(opts.length === 1 && opts[0].includes("My ElevenLabs"), "the only connection is named once (" + opts.join(" | ") + ")");
@@ -2193,17 +2295,17 @@ if (section("listed once")) {
   });
   await page.waitForTimeout(300);
   const twice = (opts, name) => opts.filter((o) => o.includes(name)).length;
-  await page.click('.af-tab[data-tab="settings"]');
+  await toTab(page, "settings");
   await page.waitForTimeout(400);
   const tts = await page.locator('.af-col:has(label:text-is("TTS connection")) select option').allTextContents();
   check(twice(tts, "My ElevenLabs") === 1 && tts[0].includes("My ElevenLabs") && tts.length === 4, "TTS connection: the default is named in the first choice only (" + tts.join(" | ") + ")");
-  await page.click('.af-tab[data-tab="director"]');
+  await toTab(page, "director");
   await page.waitForTimeout(400);
   const dir = await page.locator('.af-col:has(label:text-is("Which connection")) select option').allTextContents();
   check(twice(dir, "Brisk") === 1 && dir[0].includes("Brisk") && dir.some((o) => o.includes("Slowpoke")), "Which connection: the default is named in the first choice only (" + dir.join(" | ") + ")");
   const dec = await page.locator('.af-col:has(label:text-is("Which Decision connection")) select option').allTextContents();
   check(twice(dec, "Quick") === 1 && dec[0].includes("Quick") && dec.some((o) => o.includes("Careful")), "Which Decision connection: the default is named in the first choice only (" + dec.join(" | ") + ")");
-  await page.click('.af-tab[data-tab="cast"]');
+  await toTab(page, "cast");
   await page.waitForTimeout(300);
   await page.locator(".af-person-head").first().click();
   await page.waitForTimeout(600);
@@ -2245,17 +2347,17 @@ if (section("listed once")) {
       return sel ? { opts: Array.from(sel.options).map((o) => o.textContent), at: sel.selectedIndex } : null;
     }, words);
     const one = (r, name) => !!r && r.at === 0 && r.opts.filter((o) => o.includes(name)).length === 1 && !r.opts.some((o) => /gone/.test(o));
-    await page.click('.af-tab[data-tab="settings"]');
+    await toTab(page, "settings");
     await page.waitForTimeout(400);
     const tts = await read("TTS connection");
     check(one(tts, "My ElevenLabs"), "picked by name, the TTS connection shows once, as the first choice (" + JSON.stringify(tts) + ")");
-    await page.click('.af-tab[data-tab="director"]');
+    await toTab(page, "director");
     await page.waitForTimeout(400);
     const dir = await read("Which connection");
     check(one(dir, "Brisk"), "picked by name, the Director's connection shows once, as the first choice (" + JSON.stringify(dir) + ")");
     const dec = await read("Which Decision connection");
     check(one(dec, "Quick") && dec.opts.length === 1, "the only Decision connection, picked by name, is one choice (" + JSON.stringify(dec) + ")");
-    await page.click('.af-tab[data-tab="cast"]');
+    await toTab(page, "cast");
     await page.waitForTimeout(300);
     await page.locator(".af-person-head").first().click();
     await page.waitForTimeout(600);
@@ -2272,7 +2374,7 @@ if (section("erase name")) {
   console.log("Erasing a person's name leaves no old letter behind");
   for (const size of SIZES) {
     const { context, page, errors } = await open(THEMES[0], size);
-    await page.click('.af-tab[data-tab="cast"]');
+    await toTab(page, "cast");
     await page.waitForTimeout(300);
     // The Ferryman, typed into with the keyboard as a person does.
     await page.evaluate(() => document.querySelector('.af-person[data-person="b"] .af-person-head').click());
@@ -2300,9 +2402,9 @@ if (section("erase name")) {
     const left = await look();
     check(left.box === "" && left.saved === "" && left.name === "No name yet" && left.face === "?", size.name + ": left empty, it stays empty, with no letter put back (" + JSON.stringify(left) + ")");
     // Drawn again, such as after a tab switch, it is still empty.
-    await page.click('.af-tab[data-tab="stage"]');
+    await toTab(page, "stage");
     await page.waitForTimeout(300);
-    await page.click('.af-tab[data-tab="cast"]');
+    await toTab(page, "cast");
     await page.waitForTimeout(400);
     await page.evaluate(() => { const h = document.querySelector('.af-person[data-person="b"] .af-person-head'); if (h.getAttribute("aria-expanded") !== "true") h.click(); });
     await page.waitForTimeout(450);
@@ -2336,7 +2438,7 @@ if (section("already")) {
   for (const size of SIZES) {
     const { context, page, errors } = await open(THEMES[0], size);
     const where = size.name;
-    await page.click('.af-tab[data-tab="director"]');
+    await toTab(page, "director");
     await page.waitForTimeout(400);
     const prompt = await page.evaluate(async () => {
       window.__asked = 0;
@@ -2366,7 +2468,7 @@ if (section("already")) {
       return { said, asked: window.__asked, gone: !f.querySelector("[data-af-already]") };
     });
     check(!!note && note.asked === 0 && note.said === "This is already the built-in note. Nothing changed." && note.gone, where + ": an engine note says the same, and the line goes once the note is changed (" + JSON.stringify(note) + ")");
-    await page.click('.af-tab[data-tab="settings"]');
+    await toTab(page, "settings");
     await page.waitForTimeout(400);
     const reset = await page.evaluate(async () => {
       window.__asked = 0;
@@ -2388,7 +2490,7 @@ if (section("decision line")) {
   console.log("The Decision model's line can be changed, and its answers have a Log kind");
   for (const size of SIZES) {
     const { context, page, errors } = await open(THEMES[0], size);
-    await page.click('.af-tab[data-tab="director"]');
+    await toTab(page, "director");
     await page.waitForTimeout(400);
     const got = await page.evaluate(async () => {
       const row = document.querySelector("[data-af-sure]");
@@ -2404,7 +2506,7 @@ if (section("decision line")) {
     });
     check(!!got && got.before === "50" && got.after === "70" && got.saved === 70, size.name + ": How sure it must be is a box at 50 and saves a new value (" + JSON.stringify(got) + ")");
     check(!!got && got.right <= got.vw + 0.5, size.name + ": the box stays on screen");
-    await page.click('.af-tab[data-tab="stage"]');
+    await toTab(page, "stage");
     await page.waitForTimeout(300);
     const kind = await page.evaluate(async () => {
       const fold = Array.from(document.querySelectorAll(".af-fold")).find((x) => /What the Log shows/.test(x.textContent));
@@ -2430,7 +2532,7 @@ if (section("freesound")) {
       window.__teardown = window.__setup(window.__ctx, { fetch: window.__fetch, Audio: window.__Audio });
     });
     await page.waitForTimeout(300);
-    await page.click('.af-tab[data-tab="sounds"]');
+    await toTab(page, "sounds");
     await page.waitForTimeout(400);
     const got = await page.evaluate(() => {
       const cards = Array.from(document.querySelectorAll("[data-af-key]")).map((c) => c.getAttribute("data-af-key"));
@@ -2534,7 +2636,7 @@ if (section("widget fixes")) {
   for (const size of SIZES) {
     const { context, page, errors } = await open(THEMES[0], size);
     const where = size.name;
-    await page.click('.af-tab[data-tab="settings"]');
+    await toTab(page, "settings");
     await page.waitForTimeout(200);
     await page.evaluate(() => document.querySelector('[data-af-row="widgetOn"] .af-box').click());
     await page.waitForTimeout(250);
@@ -2583,7 +2685,7 @@ if (section("scroll kept")) {
       const where = size.name + ", zoom " + zoom;
       // Lumiverse's drawer is a box of its own that scrolls, not the page.
       await page.evaluate(() => { const d = document.getElementById("drawer"); d.style.height = "100vh"; d.style.overflowY = "auto"; });
-      await page.click('.af-tab[data-tab="settings"]');
+      await toTab(page, "settings");
       await page.waitForTimeout(300);
       const got = await page.evaluate(async () => {
         let box = document.querySelector(".af");
@@ -2639,7 +2741,7 @@ if (section("reused row")) {
   const playing = await page.evaluate(() => !!document.querySelector('[data-af-slot="message"][aria-pressed="true"], [data-af-slot="message"][data-af-state="playing"]'));
   await page.evaluate(() => window.__emit("MESSAGE_DELETED", { chatId: "chat1", messageId: "m7" }));
   await page.waitForTimeout(300);
-  await page.click('.af-tab[data-tab="stage"]');
+  await toTab(page, "stage");
   await page.waitForTimeout(300);
   const after = await page.evaluate(() => document.querySelector('[data-af="sub"]').textContent);
   check(/deleted, so it stopped/.test(after) || /Press Play to start/.test(after), "a message deleted while it plays stops, and its script is not kept for Play (" + after + ", playing before: " + playing + ")");
@@ -2651,9 +2753,9 @@ if (section("no audio")) {
   console.log("An answer with no audio is asked for again at once");
   const { context, page, errors } = await open(THEMES[0], SIZES[1]);
   await page.evaluate(() => { window.__emptyOnce = 1; window.__clipMs = 300; });
-  await page.click('.af-tab[data-tab="stage"]');
+  await toTab(page, "stage");
   await page.waitForTimeout(150);
-  await page.click('#mount [data-af-slot="message"]');
+  await pressMessage(page);
   await page.waitForTimeout(3500);
   const got = await page.evaluate(() => ({ empty: window.__emptyAt || [], made: window.__synthAt || [], log: (document.querySelector('.af-log') || {}).innerText || '' }));
   const gap = got.empty.length && got.made.length ? Math.min(...got.made.filter((t) => t > got.empty[0])) - got.empty[0] : -1;
@@ -2669,7 +2771,7 @@ if (section("pause keys")) {
     const where = size.name;
     const { context, page, errors } = await open(THEMES[0], size);
     await page.evaluate(() => { window.__clipMs = 4000; });
-    await page.click('.af-tab[data-tab="settings"]');
+    await toTab(page, "settings");
     await page.waitForTimeout(300);
     const seen = (sel) => page.evaluate((sel) => { const n = document.querySelector(sel); return !!n && !n.closest("[hidden]") && n.getClientRects().length > 0; }, sel);
     check(await seen('[data-af-row="pauseKeyOn"]'), where + ": the switch is in the Settings tab");
@@ -2694,7 +2796,7 @@ if (section("pause keys")) {
     check((await page.evaluate(() => window.__settings.pauseKey)) === "Ctrl+Shift+K", where + ": and saved");
 
     // While a message plays, the keys pause it and play it again.
-    await page.click('#mount [data-af-slot="message"]');
+    await pressMessage(page);
     await page.waitForTimeout(900);
     await page.evaluate(() => document.activeElement && document.activeElement.blur());
     const playing = () => page.evaluate(() => { const a = FakeAudio.all[FakeAudio.all.length - 1]; return !!a && !a.paused; });
@@ -2810,7 +2912,7 @@ if (section("dropdown press")) {
   console.log("A pressed dropdown keeps its plain edge, as in Auto Retry and Auto Refine");
   for (const size of SIZES) {
     const { context, page, errors } = await open(THEMES[0], size);
-    await page.click('.af-tab[data-tab="settings"]');
+    await toTab(page, "settings");
     await page.waitForTimeout(300);
     const got = await page.evaluate(async () => {
       const sel = Array.from(document.querySelectorAll(".af select.af-field")).find((s) => s.getClientRects().length);
@@ -2839,14 +2941,14 @@ if (section("still working")) {
         window.__directWait = 800;
       });
       await page.evaluate((every) => { window.__directHold = 2500; window.__workingEvery = every; window.__played = 0; }, every);
-      await page.click('.af-tab[data-tab="stage"]');
+      await toTab(page, "stage");
       await page.waitForTimeout(150);
       // The line under Nothing playing shows in two lines at most, so what
       // it says has to fit in them, whole.
       const whole = () => page.evaluate(() => Array.from(document.querySelectorAll(".af-now-sub")).filter((n) => n.getClientRects().length).map((n) => ({ text: n.textContent, cut: n.scrollHeight > n.clientHeight + 1 })));
       const idle = await whole();
       check(idle.length > 0 && idle.every((x) => !x.cut), where + ", " + label + ": the line under Nothing playing is shown whole (" + JSON.stringify(idle) + ")");
-      await page.click('#mount [data-af-slot="message"]');
+      await pressMessage(page);
       await page.waitForTimeout(3600);
       const got = await page.evaluate(() => ({ played: window.__played || 0, said: (document.querySelector(".af") || {}).innerText || "" }));
       if (every) check(got.played > 0 && !/backend stopped/.test(got.said), where + ": a backend that says it is still working is waited for, and the message plays (" + got.played + " played)");
@@ -2871,9 +2973,9 @@ if (section("gemini style")) {
     window.__script.lines[1].style = "quiet and hurt";
   });
   await page.evaluate(() => { window.__clipMs = 200; window.__synth = []; });
-  await page.click('.af-tab[data-tab="stage"]');
+  await toTab(page, "stage");
   await page.waitForTimeout(150);
-  await page.click('#mount [data-af-slot="message"]');
+  await pressMessage(page);
   await page.waitForTimeout(2500);
   const sent = await page.evaluate(() => (window.__synth || []).map((b) => ({ text: b.text, style: (b.parameters || {}).speech_style })));
   const hers = sent.find((b) => /You are late/.test(b.text || ""));
@@ -2892,7 +2994,7 @@ if (section("display name")) {
       window.__settings.cast = window.__settings.cast.map((m) => (m.id === "a" ? Object.assign({}, m, { display: "The Harbormistress" }) : m.id === "n" ? Object.assign({}, m, { display: "Old Wren" }) : m));
       window.__settings.widgetOn = true;
     });
-    await page.click('.af-tab[data-tab="cast"]');
+    await toTab(page, "cast");
     await page.waitForTimeout(400);
     const heads = await page.evaluate(() => Array.from(document.querySelectorAll(".af-person-name b")).map((b) => b.textContent));
     check(heads.indexOf("The Harbormistress") >= 0 && heads.indexOf("Old Wren") >= 0, where + ": the cards show the display names (" + heads.join(", ") + ")");
@@ -2912,9 +3014,9 @@ if (section("display name")) {
     if (size.touch) check(tall >= 32, where + ": the box is at least 32 pixels high (" + tall + ")");
     // While a line plays, the stage shows who says it by the name shown.
     await page.evaluate(() => { window.__clipMs = 1500; });
-    await page.click('.af-tab[data-tab="stage"]');
+    await toTab(page, "stage");
     await page.waitForTimeout(200);
-    await page.click('#mount [data-af-slot="message"]');
+    await pressMessage(page);
     const seen = await page.evaluate(async () => {
       const out = new Set();
       for (let k = 0; k < 80; k++) {
@@ -2938,7 +3040,7 @@ if (section("select several")) {
     const { context, page, errors } = await open(THEMES[0], size, 1, () => {
       window.__settings.groups = [{ id: "g1", name: "The harbor", open: true }];
     });
-    await page.click('.af-tab[data-tab="cast"]');
+    await toTab(page, "cast");
     await page.waitForTimeout(400);
     check(!(await page.$("[data-af-pickbar]")) && !(await page.$("[data-af-pick]")), where + ": no tick boxes or bar until Select is pressed");
     await page.click("[data-af-select]");
@@ -3021,12 +3123,12 @@ if (section("kind colors")) {
     const where = size.name;
     const { context, page, errors } = await open(THEMES[0], size);
     // The NPC's ring, before: the built-in pink.
-    await page.click('.af-tab[data-tab="cast"]');
+    await toTab(page, "cast");
     await page.waitForTimeout(400);
     const ring = '.af-person[data-person="b"] .af-person-head .af-avatar';
     const pink = await drawnAt(page, ring, 0.04, 0.5);
     check(pink[0] > 200 && pink[1] < 160 && pink[2] > 140, where + ": an NPC's ring is pink at first (" + pink.join(",") + ")");
-    await page.click('.af-tab[data-tab="settings"]');
+    await toTab(page, "settings");
     await page.waitForTimeout(300);
     await page.evaluate(() => Array.from(document.querySelectorAll(".af-fold")).find((b) => /Colors for each kind of part/.test(b.textContent)).click());
     await page.waitForTimeout(400);
@@ -3040,12 +3142,12 @@ if (section("kind colors")) {
     await page.locator(row + " [data-af-colorcode]").blur();
     await page.waitForTimeout(700);
     check(await page.evaluate(() => window.__settings.colorNpc === "#22cc44"), where + ": the NPC color is saved");
-    await page.click('.af-tab[data-tab="cast"]');
+    await toTab(page, "cast");
     await page.waitForTimeout(400);
     const green = await drawnAt(page, ring, 0.04, 0.5);
     check(green[1] > 150 && green[0] < 100 && green[2] < 120, where + ": the NPC's ring is drawn in the new color (" + green.join(",") + ")");
     // The built-in color comes back.
-    await page.click('.af-tab[data-tab="settings"]');
+    await toTab(page, "settings");
     await page.waitForTimeout(300);
     await page.evaluate(() => Array.from(document.querySelectorAll(".af-fold")).find((b) => /Colors for each kind of part/.test(b.textContent)).click());
     await page.waitForTimeout(400);
@@ -3053,7 +3155,7 @@ if (section("kind colors")) {
     check(back === "Use the built-in color", where + ": its button says Use the built-in color (" + back + ")");
     await page.click(row + " [data-af-colorback]");
     await page.waitForTimeout(500);
-    await page.click('.af-tab[data-tab="cast"]');
+    await toTab(page, "cast");
     await page.waitForTimeout(400);
     const again = await drawnAt(page, ring, 0.04, 0.5);
     check(again[0] > 200 && again[2] > 140 && (await page.evaluate(() => window.__settings.colorNpc === "")), where + ": Use the built-in color puts pink back (" + again.join(",") + ")");
@@ -3102,7 +3204,7 @@ if (section("reorder")) {
     const { context, page, errors } = await open(THEMES[0], size, zoom, () => {
       window.__settings.groups = [{ id: "g1", name: "The harbor", open: true }, { id: "g2", name: "The mill", open: true }];
     });
-    await page.click('.af-tab[data-tab="cast"]');
+    await toTab(page, "cast");
     await page.waitForTimeout(400);
     check(JSON.stringify(await order(page, ".af-page > .af-person, .af > * .af-person", "data-person")) !== "[]", where + ": the cast is shown");
     const before = await order(page, ".af-person", "data-person");
@@ -3215,7 +3317,7 @@ if (section("chat words name")) {
     msg.insertBefore(head, content);
     p.textContent = 'She set the cup down on the long table by the window.';
   });
-  await page.click('#mount [data-af-slot="message"]');
+  await pressMessage(page);
   const where = await page.evaluate(async () => {
     const out = [];
     for (let k = 0; k < 120; k++) {
@@ -3239,7 +3341,7 @@ if (section("chat words")) {
     document.querySelector('[data-message-id="m1"] p').innerHTML = 'She set the cup down on the long table by the window. <em>"You are late.</em> Again." "The tide does not wait for anyone, and neither does the boat that runs on it."';
   });
   const before = await page.evaluate(() => document.querySelector('[data-message-id="m1"]').innerHTML.replace(/<button[\s\S]*?<\/button>/g, ""));
-  await page.click('#mount [data-af-slot="message"]');
+  await pressMessage(page);
   const seen = await page.evaluate(async () => {
     const out = new Set();
     for (let k = 0; k < 200; k++) {
@@ -3255,7 +3357,7 @@ if (section("chat words")) {
   // Lumiverse can draw the message again while it is read, as it does just
   // after a reply finishes. The light finds the words in the new copy.
   await page.waitForTimeout(8000);
-  await page.click('#mount [data-af-slot="message"]');
+  await pressMessage(page);
   const redrawn = await page.evaluate(async () => {
     const p = document.querySelector('[data-message-id="m1"] p');
     const html = p.innerHTML;
@@ -3280,7 +3382,7 @@ if (section("chat words")) {
     return lit;
   });
   check(redrawn.slice(4).some((x) => x), "after the message is drawn again, the words are lit in the new copy (" + redrawn.join(",") + ")");
-  await page.click('.af-tab[data-tab="settings"]');
+  await toTab(page, "settings");
   await page.waitForTimeout(200);
   await page.evaluate(() => document.querySelector('[data-af-row="chatHighlight"] .af-box').click());
   await page.waitForTimeout(150);
@@ -3292,7 +3394,7 @@ if (section("chat words")) {
 if (section("chat words jump")) {
   console.log("After Back, Next or a tap on a part, the lit words are in the line playing");
   const { context, page, errors } = await open(THEMES[0], SIZES[1]);
-  await page.click('.af-tab[data-tab="stage"]');
+  await toTab(page, "stage");
   await page.waitForTimeout(200);
   await page.evaluate(() => {
     window.__wav = [0.1, 2.3];
@@ -3307,7 +3409,7 @@ if (section("chat words jump")) {
     ] };
     document.querySelector('[data-message-id="m1"] p').innerHTML = '<span id="s0">Rain hit the glass of the low window.</span> "<span id="s1">Rain hit the roof and ran down the gutter.</span>" "<span id="s2">Rain hit the road as the cart rolled in.</span>"';
   });
-  await page.click('#mount [data-af-slot="message"]');
+  await pressMessage(page);
   const litIn = () => page.evaluate(async () => {
     const out = new Set();
     for (let k = 0; k < 24; k++) {
@@ -3346,9 +3448,9 @@ if (section("big moments warning")) {
   });
   await page.waitForTimeout(300);
   const shown = async () => {
-    await page.click('.af-tab[data-tab="stage"]');
+    await toTab(page, "stage");
     await page.waitForTimeout(200);
-    await page.click('.af-tab[data-tab="director"]');
+    await toTab(page, "director");
     await page.waitForTimeout(400);
     return (await page.locator(".af-warn", { hasText: "Big moments do nothing" }).count()) > 0;
   };
@@ -3384,7 +3486,7 @@ if (section("fish drama")) {
       window.__teardown = window.__setup(window.__ctx, { fetch: window.__fetch, Audio: window.__Audio });
     }, model);
     await page.waitForTimeout(400);
-    await page.click('#mount [data-af-slot="message"]');
+    await pressMessage(page);
     await page.waitForFunction(() => (window.__synth || []).length > 0, null, { timeout: 10000 }).catch(() => {});
     await page.waitForTimeout(600);
     const sent = await page.evaluate(() => window.__synth || []);
@@ -3417,7 +3519,7 @@ if (section("colors")) {
   for (const size of SIZES) {
     const { context, page, errors } = await open(THEMES[0], size);
     const where = size.name;
-    await page.click('.af-tab[data-tab="settings"]');
+    await toTab(page, "settings");
     await page.waitForTimeout(300);
     const row = '[data-af-row="playerAccent"]';
     await page.locator(row + " [data-af-colorswatch]").scrollIntoViewIfNeeded();
@@ -3467,7 +3569,7 @@ if (section("sampler range")) {
   for (const size of SIZES) {
     const { context, page, errors } = await open(THEMES[0], size);
     const where = size.name;
-    await page.click('.af-tab[data-tab="director"]');
+    await toTab(page, "director");
     await page.waitForTimeout(300);
     await page.locator(".af-fold", { hasText: "Samplers" }).first().click();
     await page.waitForTimeout(400);
@@ -3494,7 +3596,7 @@ if (section("size box")) {
   for (const size of SIZES) {
     const { context, page, errors } = await open(THEMES[0], size);
     const where = size.name;
-    await page.click('.af-tab[data-tab="settings"]');
+    await toTab(page, "settings");
     await page.waitForTimeout(200);
     await page.evaluate(() => document.querySelector('[data-af-row="widgetOn"] .af-box').click());
     await page.waitForTimeout(500);
@@ -3517,7 +3619,7 @@ if (section("more settings")) {
   for (const size of SIZES) {
     const { context, page, errors } = await open(THEMES[0], size);
     const where = size.name;
-    await page.click('.af-tab[data-tab="cast"]');
+    await toTab(page, "cast");
     await page.waitForTimeout(300);
     await page.locator(".af-person-head").first().click();
     await page.waitForTimeout(600);
@@ -3556,7 +3658,7 @@ if (section("more settings")) {
 if (section("switch rows")) {
   console.log("Rows under a switch open in place, over several frames");
   const { context, page } = await open(THEMES[0], SIZES[1]);
-  await page.click('.af-tab[data-tab="settings"]');
+  await toTab(page, "settings");
   await page.waitForTimeout(250);
   await page.evaluate(() => {
     window.__row = document.querySelector('[data-af-row="autoplay"]');
@@ -3580,7 +3682,7 @@ if (section("new person")) {
   console.log("A person added with Add someone shows each change in their header as it is made");
   for (const size of SIZES) {
     const { context, page, errors } = await open(THEMES[0], size);
-    await page.click('.af-tab[data-tab="cast"]');
+    await toTab(page, "cast");
     await page.waitForTimeout(300);
     await page.getByRole("button", { name: "Add someone" }).click();
     await page.waitForTimeout(500);
@@ -3610,7 +3712,7 @@ if (section("group move")) {
       window.__teardown = window.__setup(window.__ctx, { fetch: window.__fetch, Audio: window.__Audio });
     });
     await page.waitForTimeout(300);
-    await page.click('.af-tab[data-tab="cast"]');
+    await toTab(page, "cast");
     await page.waitForTimeout(300);
     await page.getByRole("button", { name: "Add someone" }).click();
     await page.waitForTimeout(500);
@@ -3650,7 +3752,7 @@ if (section("speech detection")) {
   console.log("Reading messages has Asterisked text, Quoted text and Undecorated text, with Lumiverse's choices");
   for (const size of SIZES) {
     const { context, page, errors } = await open(THEMES[0], size);
-    await page.click('.af-tab[data-tab="settings"]');
+    await toTab(page, "settings");
     await page.waitForTimeout(400);
     const rows = await page.evaluate(() => {
       const out = {};
@@ -3705,7 +3807,7 @@ if (section("scene music")) {
       window.__wav = [0.2, 0.3];
       window.__musicAsked = [];
     });
-    await page.click('#mount [data-af-slot="message"]');
+    await pressMessage(page);
     await page.waitForFunction(() => (window.__musicAsked || []).indexOf("tense") >= 0, null, { timeout: 10000 }).catch(() => {});
     await page.waitForTimeout(900);
     const music = () => page.evaluate(() => window.__Audio.all.filter((a) => a.dataset && a.dataset.kind === "music").map((a) => ({ src: a.src, loop: a.loop, vol: Math.round(a.volume * 100) / 100, paused: a.paused })));
@@ -3756,9 +3858,10 @@ if (section("scene music")) {
       const d = await dl;
       return d ? energy(await d.path()) : null;
     };
-    await page.click('.af-tab[data-tab="studio"]');
+    await openWs(page);
     await page.waitForTimeout(1500);
     const withMusic = await takeAudio();
+    await wsSec(page, "Sound effects and music");
     await page.locator('[data-af-row="studioMusic"] .af-box').first().click();
     await page.waitForTimeout(1500);
     const without = await takeAudio();
@@ -3767,12 +3870,12 @@ if (section("scene music")) {
     await page.waitForTimeout(300);
     // The Mixer has a Music strip while Scene music is on, and the Log names
     // each track.
-    await page.click('.af-tab[data-tab="stage"]');
+    await toTab(page, "stage");
     await page.waitForTimeout(300);
     check(await page.evaluate(() => /Music for a tense mood: A tense track\./.test((document.querySelector(".af-log") || {}).textContent || "")), size.name + ": the Log names the track");
     check((await page.locator(".af-strip", { hasText: "Music" }).count()) === 1, size.name + ": the Mixer has a Music strip");
     // Each library sound can be marked as music for a mood.
-    await page.click('.af-tab[data-tab="sounds"]');
+    await toTab(page, "sounds");
     await page.waitForTimeout(400);
     const pick = page.locator("[data-af-soundmood] select").first();
     await pick.selectOption("calm");
@@ -3790,11 +3893,11 @@ if (section("full screen")) {
   console.log("The Studio's preview opens full screen, fitted to the screen, with its own controls, and closes back");
   for (const size of SIZES) {
     const { context, page, errors } = await open(THEMES[0], size);
-    await page.click('.af-tab[data-tab="studio"]');
+    await openWs(page);
     await page.waitForTimeout(600);
     for (const shape of ["wide", "tall"]) {
       if (shape === "tall") {
-        await page.locator(".af-fold", { hasText: "Shape and words" }).first().click();
+        await wsSec(page, "Shape and words");
         await page.waitForTimeout(400);
         await page.locator("select").filter({ has: page.locator('option[value="tall"]') }).first().selectOption("tall");
         await page.waitForTimeout(500);
@@ -3815,7 +3918,7 @@ if (section("full screen")) {
       check(got.btns.length === 2 && got.btns.every((h) => h >= 32), size.name + ", " + shape + ": its buttons are big enough to tap (" + got.btns.join(", ") + ")");
       await page.keyboard.press("Escape");
       await page.waitForTimeout(400);
-      const back = await page.evaluate(() => ({ gone: !document.querySelector("[data-af-theater]"), home: !!document.querySelector('[data-af-card="studio-video"] canvas[data-af-videopreview]'), drawer: !!document.querySelector('.af-tab[data-tab="studio"]') }));
+      const back = await page.evaluate(() => ({ gone: !document.querySelector("[data-af-theater]"), home: !!document.querySelector('[data-af-ws-stage] canvas[data-af-videopreview]'), drawer: !!document.querySelector('.af-tab[data-tab="studio"]') }));
       check(back.gone && back.home && back.drawer, size.name + ", " + shape + ": Escape closes it, the preview is back in the Studio, and the drawer stays open");
     }
     // Smooth: the layer fades in over several frames at one size, and on
@@ -3830,7 +3933,7 @@ if (section("full screen")) {
       while (box && !(box.scrollHeight > box.clientHeight + 2 && /auto|scroll/.test(getComputedStyle(box).overflowY))) box = box.parentElement;
       if (box) box.scrollTop = Math.max(0, cv.getBoundingClientRect().top + box.scrollTop - box.getBoundingClientRect().top - 40);
       const before = box ? box.scrollTop : 0;
-      const card = document.querySelector('[data-af-card="studio-video"]');
+      const card = document.querySelector('[data-af-ws-stage]');
       const cardBefore = Math.round(card.getBoundingClientRect().height);
       const frames = [];
       document.querySelector('[data-af-studio="full"]').click();
@@ -3855,6 +3958,7 @@ if (section("full screen")) {
     check(motion.frames.every((f) => f[2] === motion.before) && motion.after === motion.before, size.name + ": the Studio stays scrolled where it was, open and closed (" + motion.before + " to " + motion.after + ", page scrolls: " + motion.scrolls + ")");
     // The Audio card links the guide's section on getting an MP3, in a new
     // tab, and no converter page of its own.
+    await wsSec(page, "Audio");
     const conv = await page.evaluate(() => { const a = document.querySelector("a[data-af-mp3help]"); return a ? { href: a.href, target: a.target, rel: a.rel, text: a.textContent, other: !!document.querySelector('a[href*="wave.co"]') } : null; });
     check(!!conv && /github\.com\/starlitcode\/Lumiverse-Auto-Foley\/blob\/stable\/docs\/studio\.md#getting-an-mp3$/.test(conv.href) && conv.target === "_blank" && /noopener/.test(conv.rel) && !conv.other, size.name + ": the Audio card links Getting an MP3 on GitHub in a new tab, and not the converter (" + JSON.stringify(conv) + ")");
     // The close button works too, and Play plays from full screen.
@@ -3893,10 +3997,10 @@ if (section("studio extras")) {
   };
   const play = async (page) => {
     await page.evaluate(() => { window.__wav = [0.1, 1.4]; window.__clipMs = 300; });
-    await page.click('#mount [data-af-slot="message"]');
+    await pressMessage(page);
     await page.waitForFunction(() => document.querySelector('#mount [data-af-slot="message"]').getAttribute("aria-busy") === null && (window.__synth || []).length >= 5, null, { timeout: 30000 });
     await page.waitForTimeout(7000);
-    await page.click('.af-tab[data-tab="studio"]');
+    await openWs(page);
     await page.waitForTimeout(1500);
   };
   // For each frame, every tenth of a second: how many pixels of each
@@ -3935,7 +4039,7 @@ if (section("studio extras")) {
     const orange = f1.filter((x) => x.orange > big).length;
     check(both >= 5 && marekAlone >= 3, size.name + ": two people taking turns show side by side, and a third goes back to one (" + both + " frames with two, " + marekAlone + " with Marek alone)");
     check(pinkPair >= 3 && orange === 0, size.name + ": Tollan's angry line shows his angry picture (" + pinkPair + " pink frames, " + orange + " orange)");
-    await page.locator(".af-fold", { hasText: "Speakers" }).first().click();
+    await wsSec(page, "Speakers");
     await page.waitForTimeout(400);
     await page.locator('[data-af-row="videoMoodPics"] input[type=checkbox]').click();
     await page.waitForTimeout(900);
@@ -3955,12 +4059,13 @@ if (section("studio extras")) {
       return n;
     });
     await page.evaluate(() => { const r = document.querySelector("[data-af-scrub] input"); r.value = String(Number(r.max) * 0.3); r.dispatchEvent(new Event("input", { bubbles: true })); });
-    await page.locator(".af-fold", { hasText: "Shape and words" }).first().click();
+    await wsSec(page, "Shape and words");
     await page.waitForTimeout(400);
     const s0 = await sum();
     await page.locator('[data-af-row="videoWordShadow"] input[type=checkbox]').first().click();
     await page.waitForTimeout(700);
     const s1 = await sum();
+    await wsSec(page, "Speakers");
     await page.locator('[data-af-row="videoNameShadow"] input[type=checkbox]').first().click();
     await page.waitForTimeout(700);
     const saved = await page.evaluate(() => [window.__settings.videoWordShadow, window.__settings.videoNameShadow]);
@@ -3979,12 +4084,12 @@ if (section("slow move")) {
   for (const how of ["on", "off", "calm"]) {
     const { context, page, errors } = await open(THEMES[0], SIZES[1] || SIZES[0], 1, how === "calm" ? () => { window.__settings.reduceMotion = true; } : null);
     await page.evaluate(() => { window.__stripes = true; window.__wav = [0.1, 0.3]; window.__clipMs = 300; });
-    await page.click('#mount [data-af-slot="message"]');
+    await pressMessage(page);
     await page.waitForFunction(() => document.querySelector('#mount [data-af-slot="message"]').getAttribute("aria-busy") === null && (window.__synth || []).length > 0, null, { timeout: 15000 });
     await page.waitForTimeout(2500);
-    await page.click('.af-tab[data-tab="studio"]');
+    await openWs(page);
     await page.waitForTimeout(1200);
-    await page.locator(".af-fold", { hasText: "Background" }).first().click();
+    await wsSec(page, "Background");
     await page.waitForTimeout(400);
     await page.selectOption('[data-af-row="videoBack"] select', "picture");
     await page.waitForTimeout(400);
@@ -3995,7 +4100,7 @@ if (section("slow move")) {
       await page.waitForTimeout(800);
     }
     // Closed again, so the preview shows the video's own scenes.
-    await page.locator(".af-fold", { hasText: "Background" }).first().click();
+    await wsSec(page, "Background");
     await page.waitForTimeout(900);
     const strips = await page.evaluate(async () => {
       const r = document.querySelector("[data-af-scrub] input");
@@ -4025,7 +4130,7 @@ if (section("player shadow")) {
   // The theme's by default, none when off, and the color picked, at once.
   for (const size of SIZES) {
     const { context, page, errors } = await open(THEMES[0], size);
-    await page.click('.af-tab[data-tab="settings"]');
+    await toTab(page, "settings");
     await page.waitForTimeout(300);
     await page.evaluate(() => document.querySelector('[data-af-row="widgetOn"] .af-box').click());
     await page.waitForTimeout(500);
@@ -4078,7 +4183,7 @@ if (section("gradients")) {
           videoBackPick: "main",
         });
       });
-      await page.click('.af-tab[data-tab="studio"]');
+      await openWs(page);
       await page.waitForTimeout(1500);
       await setPreview(page, 0.61);
       const bg = await page.evaluate(() => {
@@ -4098,7 +4203,7 @@ if (section("gradients")) {
       const { context, page, errors } = await open(THEMES[0], size, 1, () => {
         Object.assign(window.__settings, { videoInk: "#ff2020", videoWordFill: "linear", videoWordStops: ["#20ff20", "#2020ff"], videoWordDir: "right", videoWordShadow: false, videoWords: "all" });
       });
-      await page.click('.af-tab[data-tab="studio"]');
+      await openWs(page);
       await page.waitForTimeout(1500);
       await setPreview(page, 4.2);
       const parts = await page.evaluate(() => {
@@ -4120,7 +4225,7 @@ if (section("gradients")) {
       const most = (n) => (n.r >= n.g && n.r >= n.b ? "red" : n.g >= n.b ? "green" : "blue");
       check(!!parts && most(parts.left) === "red" && most(parts.middle) === "green" && most(parts.right) === "blue", size.name + ": a three-color gradient on the words is red at the start of the line, green in the middle and blue at the end (" + JSON.stringify(parts) + ")");
       // Adding a color, and taking it out again, with no question.
-      await page.locator(".af-fold", { hasText: "Shape and words" }).first().click();
+      await wsSec(page, "Shape and words");
       await page.waitForTimeout(400);
       await page.click('[data-af-stop-add="videoWordFill"]');
       await page.waitForTimeout(400);
@@ -4145,7 +4250,7 @@ if (section("example clip")) {
   console.log("With no performance, the preview shows a silent example, and redraws on every change");
   for (const size of SIZES) {
     const { context, page, errors } = await open(THEMES[0], size);
-    await page.click('.af-tab[data-tab="studio"]');
+    await openWs(page);
     await page.waitForTimeout(1500);
     // The sum of the bright pixels, and the yellow ones, at one moment.
     const frame = (t) => page.evaluate(async (t) => {
@@ -4178,7 +4283,7 @@ if (section("example clip")) {
     const makeBtn = page.locator("[data-af-card] button", { hasText: "Make a video" }).first();
     check(await makeBtn.isDisabled(), size.name + ": the example cannot be made into a video");
     // A change redraws at once, at the same moment, with no press of Play.
-    await page.locator(".af-fold", { hasText: "Shape and words" }).first().click();
+    await wsSec(page, "Shape and words");
     await page.waitForTimeout(400);
     await page.locator('[data-af-colorswatch="videoInk"]').click();
     await page.waitForTimeout(300);
@@ -4191,7 +4296,7 @@ if (section("example clip")) {
     await page.waitForTimeout(700);
     const noShadow = await frame(null);
     check(noShadow.sum !== yellow.sum, size.name + ": turning off the words' shadow redraws it at once");
-    await page.locator(".af-fold", { hasText: "Speakers" }).first().click();
+    await wsSec(page, "Speakers");
     await page.waitForTimeout(400);
     const ring = page.locator('[data-af-row="videoPicRingWidth"] input.af-numbox');
     await ring.fill("14");
@@ -4203,17 +4308,17 @@ if (section("example clip")) {
     check(!m.overflow.length && !m.small.length, size.name + ": the Studio fits with the example. " + m.overflow.concat(m.small).slice(0, 2).join("; "));
     // With a performance: it is shown, and a change redraws it at once too.
     await page.evaluate(() => { window.__wav = [0.1, 1.4]; window.__clipMs = 300; });
-    await page.click('#mount [data-af-slot="message"]');
+    await pressMessage(page);
     await page.waitForFunction(() => document.querySelector('#mount [data-af-slot="message"]').getAttribute("aria-busy") === null && (window.__synth || []).length > 0, null, { timeout: 20000 });
     await page.waitForTimeout(4000);
-    await page.click('.af-tab[data-tab="settings"]');
+    await toTab(page, "settings");
     await page.waitForTimeout(300);
-    await page.click('.af-tab[data-tab="studio"]');
+    await openWs(page);
     await page.waitForTimeout(1500);
     const mine = await page.evaluate(() => ({ choice: !!document.querySelector('[data-af-row="studioExample"]'), note: document.querySelector("[data-af-example]").hidden }));
     check(mine.choice && mine.note, size.name + ": with a performance, it is shown, with a choice of the example");
     const p0 = await frame(3);
-    await page.locator(".af-fold", { hasText: "Shape and words" }).first().click();
+    await wsSec(page, "Shape and words");
     await page.waitForTimeout(400);
     await page.locator('[data-af-colorswatch="videoInk"]').click();
     await page.waitForTimeout(300);
@@ -4248,10 +4353,10 @@ if (section("ring width")) {
       window.__settings.videoNames = false;
     });
     await page.evaluate(() => { window.__wav = [0.1, 1.4]; window.__clipMs = 300; });
-    await page.click('#mount [data-af-slot="message"]');
+    await pressMessage(page);
     await page.waitForFunction(() => document.querySelector('#mount [data-af-slot="message"]').getAttribute("aria-busy") === null && (window.__synth || []).length > 0, null, { timeout: 20000 });
     await page.waitForTimeout(4000);
-    await page.click('.af-tab[data-tab="studio"]');
+    await openWs(page);
     await page.waitForTimeout(1500);
     const ink = () => page.evaluate(async () => {
       const r = document.querySelector("[data-af-scrub] input");
@@ -4267,7 +4372,7 @@ if (section("ring width")) {
       }
       return n;
     });
-    await page.locator(".af-fold", { hasText: "Speakers" }).first().click();
+    await wsSec(page, "Speakers");
     await page.waitForTimeout(400);
     const thin = await ink();
     const box = page.locator('[data-af-row="videoPicRingWidth"] input.af-numbox');
@@ -4302,17 +4407,17 @@ if (section("review fixes")) {
         { id: "new", name: "Night", look: { videoShape: "wide", videoBack1: one("b9", "Night", "color", "#101830") } },
       ];
     });
-    await page.click('.af-tab[data-tab="studio"]');
+    await openWs(page);
     await page.waitForTimeout(1200);
-    await page.locator(".af-fold", { hasText: "Saved looks" }).first().click();
+    await wsSec(page, "Saved looks");
     await page.waitForTimeout(400);
     await page.locator("[data-af-look]").nth(0).locator("[data-af-lookuse]").click();
     await page.waitForTimeout(600);
     const a = await page.evaluate(() => ({ ids: window.__settings.videoBacks.map((b) => b.id), main: window.__settings.videoBacks.find((b) => b.id === "main"), hall: window.__settings.videoBacks.find((b) => b.id === "b3"), pick: window.__settings.videoBackPick }));
     check(JSON.stringify(a.ids) === '["main","b2","b3"]' && a.main.kind === "color" && a.main.color === "#603020" && a.hall.shapes.length === 1 && a.pick === "main", size.name + ": a look from before puts its one background in place of main, and the other two stay (" + JSON.stringify(a.ids) + ")");
-    await page.locator(".af-fold", { hasText: "Saved looks" }).first().click();
+    await wsSec(page, "Saved looks");
     await page.waitForTimeout(300);
-    if (!(await page.locator("[data-af-look]").count())) await page.locator(".af-fold", { hasText: "Saved looks" }).first().click();
+    if (!(await page.locator("[data-af-look]").count())) await wsSec(page, "Saved looks");
     await page.waitForTimeout(300);
     await page.locator("[data-af-look]").nth(1).locator("[data-af-lookuse]").click();
     await page.waitForTimeout(600);
@@ -4332,9 +4437,9 @@ if (section("review fixes")) {
     const b64 = existsSync(FONT) ? readFileSync(FONT).toString("base64") : "";
     const { context, page, errors } = await open(THEMES[0], SIZES[1]);
     await page.evaluate((b64) => { window.__fontFile = { name: "Plain.ttf", base64: b64 }; }, b64);
-    await page.click('.af-tab[data-tab="studio"]');
+    await openWs(page);
     await page.waitForTimeout(1200);
-    await page.locator(".af-fold", { hasText: "Shape and words" }).first().click();
+    await wsSec(page, "Shape and words");
     await page.waitForTimeout(400);
     await page.click('[data-af-font-add="videoFont"]');
     await page.waitForTimeout(1500);
@@ -4355,9 +4460,9 @@ if (section("review fixes")) {
       window.__fontData = { fbad: "AAAAAAAAAAAAAAAA" };
       window.__fontGets = 0;
     });
-    await page.click('.af-tab[data-tab="studio"]');
+    await openWs(page);
     await page.waitForTimeout(1500);
-    await page.locator(".af-fold", { hasText: "Shape and words" }).first().click();
+    await wsSec(page, "Shape and words");
     await page.waitForTimeout(300);
     const quotes = page.locator('[data-af-row="videoQuotes"] input[type=checkbox]');
     for (let n = 0; n < 4; n++) {
@@ -4423,7 +4528,7 @@ if (section("example faces")) {
       window.__settings.videoBacks = [{ id: "main", name: "Main", kind: "color", color: "#000000", fill: "solid", stops: ["#2a1f3d"], dir: "down", dim: 40, blur: 0, shapes: [], use: "match", moods: [], places: [] }];
       window.__settings.videoBackPick = "main";
     });
-    await page.click('.af-tab[data-tab="studio"]');
+    await openWs(page);
     await page.waitForTimeout(1500);
     // Juniper is violet: the ring is the full color, and the picture a
     // darker tint. Ansel is pink. Each frame is read along the row through
@@ -4519,9 +4624,9 @@ if (section("caption transitions")) {
       window.__settings.videoBackPick = "main";
     });
     await page.evaluate((move) => { window.__moveNow = move; }, move);
-    await page.click('.af-tab[data-tab="studio"]');
+    await openWs(page);
     await page.waitForTimeout(800);
-    await page.locator(".af-fold", { hasText: "Moving between lines" }).first().click();
+    await wsSec(page, "Moving between lines");
     await page.waitForTimeout(300);
     await page.selectOption('[data-af-row="videoMove"] select', move);
     await page.waitForTimeout(900);
@@ -4620,7 +4725,7 @@ if (section("watermarks")) {
         videoMarks: [{ id: "wgrad", text: "WRENWRENWREN", pic: false, place: "bl", size: 120, strength: 100, when: "all", from: 0, secs: 4, backs: [], font: "", ink: "#ff2020", fill: "linear", stops: ["#2020ff"], dir: "right", shadow: false, shadowInk: "", shadowDark: 60, shadowSoft: 10, shadowFar: 0 }],
       });
     });
-    await page.click('.af-tab[data-tab="studio"]');
+    await openWs(page);
     await page.waitForTimeout(1500);
     const both = await page.evaluate(async () => {
       const r = document.querySelector("[data-af-scrub] input");
@@ -4661,7 +4766,7 @@ if (section("watermarks")) {
         videoMarks: [{ id: "wred", text: "", pic: true, place: "tr", size: 80, strength: 100, when: "from", from: 5, secs: 3, backs: [] }],
       });
     });
-    await page.click('.af-tab[data-tab="studio"]');
+    await openWs(page);
     await page.waitForTimeout(1500);
     const title = await look(page, 1.2, "yellow");
     check(title.under > 50 && title.under >= title.all * 0.95, size.name + ": the line under the title is drawn under it (" + JSON.stringify(title) + ")");
@@ -4671,7 +4776,7 @@ if (section("watermarks")) {
     check(during.all > 100 && during.corner === during.all, size.name + ": a watermark in the top right shows only in that corner (" + JSON.stringify(during) + ")");
     check(before.all === 0 && after.all === 0, size.name + ": and only at the times chosen (" + before.all + " before, " + after.all + " after)");
     // The panel: its strength at 0 draws nothing.
-    await page.locator(".af-fold", { hasText: "Watermarks" }).first().click();
+    await wsSec(page, "Watermarks");
     await page.waitForTimeout(400);
     await page.evaluate(() => {
       const r = document.querySelector('[data-af-markstrength="wred"] input[type=range]');
@@ -4723,7 +4828,7 @@ if (section("seek bar")) {
   for (const size of SIZES) {
     for (const zoom of [1, 1.25, 0.85]) {
       const { context, page, errors } = await open(THEMES[0], size, zoom);
-      await page.click('.af-tab[data-tab="studio"]');
+      await openWs(page);
       await page.waitForTimeout(1500);
       await page.click('[data-af-studio="full"]');
       await page.waitForTimeout(700);
@@ -4778,6 +4883,285 @@ if (section("seek bar")) {
   }
 }
 
+if (section("workspace")) {
+  console.log("The Studio opens in a workspace of its own: full screen with App manipulation, Lumiverse's window without it");
+  const WS_SIZES = [
+    { name: "phone", width: 390, height: 844, touch: true },
+    { name: "sideways phone", width: 844, height: 390, touch: true },
+    { name: "tablet", width: 820, height: 1180, touch: true },
+    { name: "laptop", width: 1280, height: 800, touch: false },
+  ];
+  for (const size of WS_SIZES) for (const zoom of [1, 1.25, 0.85]) {
+    const { context, page, errors } = await open(THEMES[0], size, zoom, scale(zoom));
+    const say = size.name + " at " + zoom;
+    await openWs(page);
+    const box = await page.evaluate(() => {
+      const w = document.querySelector("[data-af-ws]");
+      const r = w.getBoundingClientRect();
+      const c = w.querySelector("[data-af-videopreview]").getBoundingClientRect();
+      return { how: w.getAttribute("data-af-how"), l: r.left, t: r.top, w: r.width, h: r.height, vw: innerWidth, vh: innerHeight, cb: c.bottom, ch: c.height, mounts: window.__appMounts || 0 };
+    });
+    check(box.how === "app" && box.mounts === 1 && Math.abs(box.l) < 2 && Math.abs(box.t) < 2 && Math.abs(box.w - box.vw) < 3 && Math.abs(box.h - box.vh) < 3, say + ": with App manipulation it covers the whole screen (" + [box.how, Math.round(box.w), Math.round(box.h), box.vw, box.vh].join(" ") + ")");
+    check(box.ch > 60 && box.cb <= box.vh + 1, say + ": the preview is in view (" + Math.round(box.ch) + " tall, ending at " + Math.round(box.cb) + ")");
+    for (const sec of ["The performance and scenes", "Shape and words", "Background", "Speakers"]) {
+      await wsSec(page, sec);
+      const m = await page.evaluate(MEASURE, size.touch);
+      // A smaller UI Scale makes every button smaller by choice, so sizes
+      // are checked at 1, and fit at every scale.
+      const small = zoom === 1 ? m.small : [];
+      check(!m.overflow.length && !small.length, say + ", " + sec + ": nothing runs off the side" + (zoom === 1 ? ", and every button is big enough. " : ". ") + m.overflow.concat(small).slice(0, 2).join("; "));
+    }
+    // The settings scroll on their own, and the preview stays in view.
+    const kept = await page.evaluate(async () => {
+      const panel = document.querySelector("[data-af-ws-panel]");
+      const c = document.querySelector("[data-af-videopreview]");
+      const before = c.getBoundingClientRect().top;
+      panel.scrollTop = 400;
+      await new Promise((r) => requestAnimationFrame(r));
+      return { moved: panel.scrollTop > 0, still: Math.abs(c.getBoundingClientRect().top - before) < 1 };
+    });
+    check(kept.still, say + ": scrolling the settings leaves the preview where it is (" + JSON.stringify(kept) + ")");
+    check(!errors.length, say + ": no page errors. " + errors.slice(0, 2).join(" | "));
+    await context.close();
+  }
+
+  // Without App manipulation: Lumiverse's own window, as large as it goes,
+  // with a note on how to get full screen.
+  for (const size of SIZES) {
+    const { context, page, errors } = await open(THEMES[0], size, 1, () => { window.__noApp = true; });
+    await openWs(page);
+    const m = await page.evaluate(() => {
+      const w = document.querySelector("[data-af-ws]");
+      const r = w.getBoundingClientRect();
+      return { how: w.getAttribute("data-af-how"), modals: window.__modals || 0, w: r.width, h: r.height, vw: innerWidth, vh: innerHeight, note: /App manipulation/.test(w.textContent || "") };
+    });
+    check(m.how === "modal" && m.modals === 1 && m.w > m.vw - 60 && m.h > m.vh - 120 && m.note, size.name + ": without App manipulation it opens in Lumiverse's window, nearly as large as the screen, and says how to get full screen (" + [m.how, Math.round(m.w), Math.round(m.h)].join(" ") + ")");
+    await page.click('[data-af-ws="close"]');
+    await page.waitForTimeout(400);
+    check((await page.evaluate(() => window.__modals || 0)) === 0 && !(await page.locator("[data-af-ws]").count()), size.name + ": Close closes the window");
+    check(!errors.length, size.name + ": no page errors. " + errors.slice(0, 2).join(" | "));
+    await context.close();
+  }
+
+  // The ways in, Close and Escape, and a change kept.
+  for (const size of SIZES) {
+    const { context, page, errors } = await open(THEMES[0], size, 1, () => { Object.assign(window.__settings, { extrasMenu: true }); });
+    const isOpen = () => page.evaluate(() => !!document.querySelector("[data-af-ws]"));
+    const closeIt = async () => {
+      await page.click('[data-af-ws="close"]');
+      await page.waitForTimeout(400);
+    };
+    await page.waitForTimeout(300);
+    await page.evaluate(() => window.__actions["auto-foley-studio"].press());
+    await page.waitForTimeout(400);
+    check(await isOpen(), size.name + ": Open the Studio in the Extras menu opens it");
+    await closeIt();
+    check(!(await isOpen()), size.name + ": Close closes it");
+    await page.evaluate(() => { window.__menuPick = "studio"; });
+    await toTab(page, "settings");
+    await page.waitForTimeout(200);
+    await page.evaluate(() => document.querySelector('[data-af-row="widgetOn"] .af-box').click());
+    await page.waitForTimeout(300);
+    // The player opened, then its menu button.
+    await page.evaluate(() => window.__widget.querySelector(".af-float").click());
+    await page.waitForTimeout(500);
+    await page.evaluate(() => window.__widget.querySelector('[data-p="menu"]').click());
+    await page.waitForTimeout(500);
+    const menuNow = await page.evaluate(() => ({ open: !!document.querySelector("[data-af-ws]"), listed: !!(window.__menu && window.__menu.items.some((x) => x.key === "studio")) }));
+    check(menuNow.listed && menuNow.open, size.name + ": the floating player's menu has Open the Studio, and it opens it (" + JSON.stringify(menuNow) + ")");
+    if (menuNow.open) await closeIt();
+    await page.evaluate(() => { window.__menuPick = null; document.querySelector('[data-af-row="widgetOn"] .af-box').click(); });
+    await page.waitForTimeout(300);
+    // The drawer: Open the Studio, then a change in it is kept after Escape.
+    await openWs(page);
+    await wsSec(page, "Shape and words");
+    const before = await page.evaluate(() => document.querySelector("[data-af-videopreview]").getBoundingClientRect().height);
+    await page.selectOption('[data-af-section="shape"] select >> nth=0', "square");
+    await page.waitForTimeout(120);
+    const after = await page.evaluate(() => document.querySelector("[data-af-videopreview]").getBoundingClientRect().height);
+    check(Math.abs(after - before) > 10, size.name + ": a setting changed in the Studio redraws the preview at once (" + Math.round(before) + " to " + Math.round(after) + ")");
+    await page.keyboard.press("Escape");
+    await page.waitForTimeout(400);
+    check(!(await isOpen()), size.name + ": Escape closes it");
+    check(await page.evaluate(() => window.__settings.videoShape === "square"), size.name + ": and the change is kept");
+    await openWs(page);
+    check(await page.evaluate(() => document.querySelector('[data-af-section]').getAttribute("data-af-section") === "shape"), size.name + ": opened again, it shows the part it showed");
+    check(!errors.length, size.name + ": no page errors. " + errors.slice(0, 2).join(" | "));
+    await context.close();
+  }
+
+  // Keyboard shortcuts, on a laptop.
+  {
+    const { context, page, errors } = await open(THEMES[0], SIZES[1], 1, () => {
+      const shape = { id: "s1", kind: "rect", x: 0.5, y: 0.5, w: 300, h: 200, rot: 0, fill: "#c03030", grad: "none", stops: ["#141218"], dir: "down", clear: 0, text: "" };
+      window.__settings.videoBacks = [{ id: "main", name: "Main", kind: "design", color: "#101018", fill: "solid", stops: ["#2a1f3d"], dir: "down", dim: 40, blur: 0, shapes: [shape], use: "match", moods: [], places: [] }];
+      window.__settings.videoBackPick = "main";
+    });
+    const MOD = await page.evaluate(() => (/mac|iphone|ipad/i.test(navigator.platform) ? "Meta" : "Control"));
+    await openWs(page);
+    const at = () => page.evaluate(() => Number(document.querySelector("[data-af-scrub] input").value));
+    const playing = () => page.evaluate(() => /Stop the preview/.test(document.querySelector('[data-af-studio="play"]').textContent || ""));
+    await page.evaluate(() => document.querySelector("[data-af-ws]").focus());
+    await page.keyboard.press("Space");
+    await page.waitForTimeout(300);
+    check(await playing(), "Space plays the preview");
+    await page.keyboard.press("Space");
+    await page.waitForTimeout(200);
+    check(!(await playing()), "and Space again stops it");
+    await page.keyboard.press("Home");
+    await page.keyboard.press("ArrowRight");
+    await page.waitForTimeout(100);
+    check(Math.abs((await at()) - 1) < 0.01, "Right goes forward one second (" + (await at()) + ")");
+    await page.keyboard.press("ArrowLeft");
+    check(Math.abs(await at()) < 0.01, "Left goes back one second");
+    await page.keyboard.press("Shift+ArrowRight");
+    const p1 = await at();
+    await page.keyboard.press("Shift+ArrowRight");
+    const p2 = await at();
+    check(p1 > 1 && p2 > p1, "Shift with Right goes to the next part (" + p1.toFixed(2) + ", " + p2.toFixed(2) + ")");
+    await page.keyboard.press("End");
+    const end = await page.evaluate(() => Number(document.querySelector("[data-af-scrub] input").max));
+    check(Math.abs((await at()) - end) < 0.06, "End goes to the end");
+    await page.keyboard.press("f");
+    await page.waitForTimeout(400);
+    check(await page.evaluate(() => !!document.querySelector("[data-af-theater]")), "F opens the preview full screen");
+    await page.keyboard.press("Escape");
+    await page.waitForTimeout(400);
+    check(await page.evaluate(() => !document.querySelector("[data-af-theater]") && !!document.querySelector("[data-af-ws]")), "Escape leaves full screen first, and the Studio stays open");
+    await page.keyboard.press("?");
+    await page.waitForTimeout(300);
+    check(await page.evaluate(() => !!document.querySelector("[data-af-keylist][data-af-open]")), "? opens the list of keys");
+    const keysTitle = await page.evaluate(() => document.querySelector('[data-af-ws="undo"]').title);
+    check(new RegExp((MOD === "Meta" ? "Cmd" : "Ctrl") + "\\+Z").test(keysTitle), "each button's hover text has its key (" + keysTitle + ")");
+    await page.keyboard.press("Escape");
+    await page.waitForTimeout(300);
+    check(await page.evaluate(() => !document.querySelector("[data-af-keylist]") && !!document.querySelector("[data-af-ws]")), "Escape closes the list first, and the Studio stays open");
+    await page.click('[data-af-ws="keys"]');
+    await page.waitForTimeout(300);
+    check(await page.evaluate(() => !!document.querySelector("[data-af-keylist][data-af-open]")), "Keyboard shortcuts in the top bar opens the same list");
+    await page.click("[data-af-keyclose]");
+    await page.waitForTimeout(300);
+    // Undo and Redo.
+    await wsSec(page, "Shape and words");
+    await page.selectOption('[data-af-section="shape"] select >> nth=0', "tall");
+    await page.waitForTimeout(700);
+    await page.evaluate(() => document.querySelector("[data-af-ws]").focus());
+    await page.keyboard.press(MOD + "+z");
+    await page.waitForTimeout(300);
+    check(await page.evaluate(() => window.__settings.videoShape === "wide"), MOD + "+Z undoes the change");
+    await page.evaluate(() => document.querySelector("[data-af-ws]").focus());
+    await page.keyboard.press(MOD + "+Shift+z");
+    await page.waitForTimeout(300);
+    check(await page.evaluate(() => window.__settings.videoShape === "tall"), MOD + "+Shift+Z does it again");
+    await page.evaluate(() => document.querySelector("[data-af-ws]").focus());
+    await page.keyboard.press(MOD + "+z");
+    await page.waitForTimeout(200);
+    await page.evaluate(() => document.querySelector("[data-af-ws]").focus());
+    await page.keyboard.press(MOD + "+y");
+    await page.waitForTimeout(300);
+    check(await page.evaluate(() => window.__settings.videoShape === "tall"), MOD + "+Y does it again too");
+    await page.evaluate(() => document.querySelector("[data-af-ws]").focus());
+    const saveEvt = await page.evaluate(() => {
+      const e = new KeyboardEvent("keydown", { key: "s", ctrlKey: !/mac/i.test(navigator.platform), metaKey: /mac/i.test(navigator.platform), bubbles: true, cancelable: true });
+      document.querySelector("[data-af-ws]").dispatchEvent(e);
+      return e.defaultPrevented;
+    });
+    await page.waitForTimeout(100);
+    check(saveEvt && /Saved/.test(await page.evaluate(() => document.querySelector('[data-af-studio="said"]').textContent || "")), MOD + "+S says Saved, and the browser's own save is stopped");
+    // The shape: picked in Background, then deleted, copied and moved.
+    await wsSec(page, "Background");
+    await page.locator('[data-af-shape="s1"]').click();
+    await page.waitForTimeout(300);
+    await page.evaluate(() => document.querySelector("[data-af-ws]").focus());
+    await page.keyboard.press(MOD + "+d");
+    await page.waitForTimeout(500);
+    check(await page.evaluate(() => window.__settings.videoBacks[0].shapes.length === 2), MOD + "+D makes a copy of the shape picked");
+    await page.evaluate(() => document.querySelector("[data-af-ws]").focus());
+    await page.keyboard.press(MOD + "+[");
+    await page.waitForTimeout(500);
+    check(await page.evaluate(() => window.__settings.videoBacks[0].shapes[0].id !== "s1" && window.__settings.videoBacks[0].shapes.length === 2), MOD + "+[ sends the copy back");
+    const x0 = await page.evaluate(() => window.__settings.videoBacks[0].shapes.find((x) => x.id !== "s1").x);
+    await page.locator("[data-af-videopreview]").focus();
+    await page.keyboard.press("Shift+ArrowRight");
+    await page.waitForTimeout(600);
+    const x1 = await page.evaluate(() => window.__settings.videoBacks[0].shapes.find((x) => x.id !== "s1").x);
+    check(x1 > x0, "Shift with Right, with the preview pressed, moves the shape (" + x0.toFixed(4) + " to " + x1.toFixed(4) + ")");
+    const asked = await page.evaluate(() => window.__asked || 0);
+    await page.evaluate(() => { window.__confirmNo = true; document.querySelector("[data-af-ws]").focus(); });
+    await page.keyboard.press("Delete");
+    await page.waitForTimeout(400);
+    check((await page.evaluate(() => window.__asked || 0)) === asked + 1 && (await page.evaluate(() => window.__settings.videoBacks[0].shapes.length)) === 2, "Delete asks first, and No keeps the shape");
+    await page.evaluate(() => { window.__confirmNo = false; });
+    // Typing in a box: no shortcut. Escape still closes.
+    await wsSec(page, "Title and ending");
+    await page.locator("[data-af-section] input[type=text]").first().focus();
+    await page.keyboard.press("f");
+    await page.keyboard.press("Space");
+    await page.waitForTimeout(300);
+    check(await page.evaluate(() => !document.querySelector("[data-af-theater]")) && !(await playing()), "typing in a box sets off no shortcut");
+    // Another extension's pop-up inside the workspace, and a key someone
+    // else used first: nothing.
+    const others = await page.evaluate(() => {
+      const w = document.querySelector("[data-af-ws]");
+      const pop = document.createElement("div");
+      pop.setAttribute("data-spindle-ext", "someone_else");
+      pop.tabIndex = 0;
+      w.appendChild(pop);
+      const e1 = new KeyboardEvent("keydown", { key: "f", bubbles: true, cancelable: true });
+      pop.dispatchEvent(e1);
+      const theirs = !!document.querySelector("[data-af-theater]") || e1.defaultPrevented;
+      pop.remove();
+      const first = (e) => e.preventDefault();
+      w.parentElement.addEventListener("keydown", first, true);
+      const e2 = new KeyboardEvent("keydown", { key: "f", bubbles: true, cancelable: true });
+      w.dispatchEvent(e2);
+      w.parentElement.removeEventListener("keydown", first, true);
+      const used = !!document.querySelector("[data-af-theater]");
+      // Lumiverse's own keys go on through.
+      let reached = 0;
+      const host = (e) => { if (!e.defaultPrevented) reached++; };
+      document.addEventListener("keydown", host);
+      for (const k of [{ key: "k", ctrlKey: true }, { key: "k", metaKey: true }, { key: "u", ctrlKey: true, shiftKey: true }, { key: "l", ctrlKey: true }]) w.dispatchEvent(new KeyboardEvent("keydown", Object.assign({ bubbles: true, cancelable: true }, k)));
+      document.removeEventListener("keydown", host);
+      return { theirs, used, reached };
+    });
+    check(!others.theirs, "a key pressed in another extension's pop-up over the Studio does nothing");
+    check(!others.used, "a key another listener already used does nothing");
+    check(others.reached === 4, "Lumiverse's Ctrl+K, Ctrl+Shift+U and Ctrl+L go on through (" + others.reached + " of 4)");
+    // The switch off: no shortcut, but Escape still closes.
+    await wsSec(page, "Keyboard shortcuts");
+    await page.locator('[data-af-row="studioKeys-switch"] input').click();
+    await page.waitForTimeout(200);
+    check(await page.evaluate(() => window.__settings.studioKeys === false), "Keyboard shortcuts can be turned off, and it is saved");
+    await page.evaluate(() => document.querySelector("[data-af-ws]").focus());
+    await page.keyboard.press("Space");
+    await page.keyboard.press("f");
+    await page.waitForTimeout(300);
+    check(!(await playing()) && (await page.evaluate(() => !document.querySelector("[data-af-theater]"))), "with them off, no shortcut acts");
+    const kPassed = await page.evaluate(() => {
+      const e = new KeyboardEvent("keydown", { key: "k", ctrlKey: true, bubbles: true, cancelable: true });
+      document.querySelector("[data-af-ws]").dispatchEvent(e);
+      return !e.defaultPrevented;
+    });
+    check(kPassed, "and Ctrl+K still reaches the page");
+    await page.keyboard.press("Escape");
+    await page.waitForTimeout(400);
+    check(!(await page.evaluate(() => !!document.querySelector("[data-af-ws]"))), "Escape still closes the Studio");
+    // Closed: every key goes on to the page untouched.
+    const loose = await page.evaluate(() => {
+      let n = 0;
+      const host = (e) => { if (!e.defaultPrevented) n++; };
+      document.addEventListener("keydown", host);
+      for (const key of [" ", "f", "ArrowRight", "Escape", "?", "Delete"]) document.body.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true }));
+      document.removeEventListener("keydown", host);
+      return n;
+    });
+    check(loose === 6, "with the Studio closed, keys reach the page untouched (" + loose + " of 6)");
+    check(!errors.length, "no page errors. " + errors.slice(0, 2).join(" | "));
+    await context.close();
+  }
+}
+
 if (section("hint places")) {
   console.log("Each description opens right by its ?, in an open fold far down a scrolled drawer, at each UI Scale");
   // Where the description is against its ?: it sits just above the row the
@@ -4806,17 +5190,13 @@ if (section("hint places")) {
     const zoom = Number(document.documentElement.style.zoom) || 1;
     box.scrollTop += (t.getBoundingClientRect().top - innerHeight * at) / zoom;
   };
-  const SCROLLED = () => {
-    let box = document.querySelector("#drawer [data-af-hint]");
-    while (box && !(box.scrollHeight > box.clientHeight + 2 && /auto|scroll/.test(getComputedStyle(box).overflowY))) box = box.parentElement;
-    return Math.round((box || document.scrollingElement).scrollTop);
-  };
+
   for (const size of SIZES) for (const zoom of [1, 1.25, 0.85]) {
-    const { context, page, errors } = await open(THEMES[0], size, zoom);
+    const { context, page, errors } = await open(THEMES[0], size, zoom, scale(zoom));
     const say = size.name + " at " + zoom;
-    await page.click('.af-tab[data-tab="studio"]');
+    await openWs(page);
     await page.waitForTimeout(1200);
-    const head = page.locator(".af-fold", { hasText: "Title and ending" }).first();
+    await wsSec(page, "Title and ending");
     const tapOrHover = async (q) => {
       if (size.touch) await q.tap(); else await q.hover();
       await page.waitForTimeout(220);
@@ -4826,23 +5206,17 @@ if (section("hint places")) {
       return m;
     };
     const far = (m) => !m || m.covers || m.gap < 0 || m.gap > m.allowed;
-    const tell = (m, q) => (m ? m.name + " " + (m.above ? "above " : "under ") + m.gap + "px" + (m.covers ? ", covers it" : "") : "did not open");
-    // The other folds open, so the drawer is long. It is scrolled down so
-    // the fold's head is near the middle, below the preview that stays at
-    // the top on a phone. Then the fold is opened, and a ? read while it is
-    // still opening.
-    await page.evaluate(() => [...document.querySelectorAll('#drawer .af-fold[aria-expanded="false"]')].filter((x) => !/Title and ending/.test(x.textContent || "")).forEach((b) => b.click()));
-    await page.waitForTimeout(700);
-    await page.evaluate(SCROLL_TO, [".af-fold", "Title and ending", 0.45]);
-    await page.waitForTimeout(150);
-    check((await page.evaluate(SCROLLED)) > 200, say + ": the drawer is scrolled down (" + (await page.evaluate(SCROLLED)) + ")");
-    await head.click();
+    const tell = (m) => (m ? m.name + " " + (m.above ? "above " : "under ") + m.gap + "px" + (m.covers ? ", covers it" : "") : "did not open");
+    // Title at the start switched off and on again, and a ? under it read
+    // while its rows are still opening.
+    const flip = () => page.evaluate(() => document.querySelector('[data-af-row="videoTitleOn-switch"] .af-box').click());
+    await flip();
+    await page.waitForTimeout(500);
+    await flip();
     await page.waitForTimeout(40);
-    const qs = head.locator("xpath=..").locator("[data-af-hint]");
-    // Straight at where the ? is drawn now, so nothing waits for the fold
-    // to stop moving first.
-    // The first moment it can be pressed: while the fold is still opening,
-    // the rows below its moving edge are not drawn yet.
+    const qs = page.locator("[data-af-section] [data-af-hint]");
+    // The first moment it can be pressed: while the rows are still
+    // opening, the ones below the moving edge are not drawn yet.
     const at = await qs.nth(1).evaluate(async (q) => {
       for (let n = 0; n < 40; n++) {
         const b = q.getBoundingClientRect();
@@ -4852,15 +5226,15 @@ if (section("hint places")) {
       }
       return { x: 0, y: 0, n: -1 };
     });
-    check(at.n >= 0 && at.n < 25, say + ": the ? can be pressed while the fold is still opening (" + at.n + " frames)");
+    check(at.n >= 0 && at.n < 25, say + ": the ? can be pressed while the rows are still opening (" + at.n + " frames)");
     if (size.touch) await page.touchscreen.tap(at.x, at.y); else await page.mouse.move(at.x, at.y);
     await page.waitForTimeout(220);
     const early = await measure(qs.nth(1));
     if (size.touch) await page.touchscreen.tap(at.x, at.y); else await page.mouse.move(1, 1);
     await page.waitForTimeout(220);
-    check(!far(early), say + ", as the fold opens: the description opens right by its ? (" + tell(early) + ")");
+    check(!far(early), say + ", as the rows open: the description opens right by its ? (" + tell(early) + ")");
     await page.waitForTimeout(600);
-    // Then every ? in the fold, each scrolled to sit far down the drawer.
+    // Then every ? in the part, each scrolled as far down as it goes.
     const n = await qs.count();
     const bad = [];
     let seen = 0;
@@ -4875,7 +5249,28 @@ if (section("hint places")) {
       seen++;
       if (far(m)) bad.push(m ? tell(m) : "did not open: " + (await q.getAttribute("aria-label")));
     }
-    check(seen >= 8 && !bad.length, say + ": each ? in the title fold opens its description right by it (" + seen + " read). " + bad.slice(0, 3).join(" | "));
+    check(seen >= 8 && !bad.length, say + ": each ? in Title and ending opens its description right by it (" + seen + " read). " + bad.slice(0, 3).join(" | "));
+    // Every ? in every part of the Studio has a row of its own.
+    if (zoom === 1) {
+      const names = await page.evaluate(() => [...document.querySelectorAll("[data-af-ws] .af-ws-picker option")].map((o) => o.textContent));
+      const shared = [];
+      for (const name of names) {
+        await wsSec(page, name);
+        await page.evaluate(() => {
+          document.querySelectorAll('[data-af-section] .af-fold[aria-expanded="false"]').forEach((b) => b.click());
+          document.querySelectorAll("[data-af-section] .af-sub[hidden]").forEach((x) => (x.hidden = false));
+        });
+        await page.waitForTimeout(300);
+        shared.push(...(await page.evaluate((name) => [...document.querySelectorAll("[data-af-ws] [data-af-hint]")].map((q) => {
+          const row = q.closest("[data-af-row]");
+          const n = row ? row.querySelectorAll("[data-af-hint]").length : 0;
+          return n === 1 ? "" : name + ": " + q.getAttribute("aria-label") + (row ? " shares " + row.getAttribute("data-af-row") + " with " + (n - 1) + " more" : " has no row");
+        }).filter(Boolean), name)));
+      }
+      check(!shared.length, say + ": every ? in the Studio has a row of its own (" + shared.length + " share one). " + [...new Set(shared)].slice(0, 5).join(" | "));
+    }
+    await page.click('[data-af-ws="close"]');
+    await page.waitForTimeout(400);
     // Every ? finds its own row: with every fold open and every switch's
     // rows shown, the nearest row around each ? holds that one ? only.
     if (zoom === 1) {
@@ -4900,7 +5295,7 @@ if (section("hint places")) {
         }).filter(Boolean), tab)));
       }
       check(!shared.length, say + ": every ? has a row of its own (" + shared.length + " share one). " + [...new Set(shared)].slice(0, 6).join(" | "));
-      await page.click('.af-tab[data-tab="stage"]');
+      await toTab(page, "stage");
       await page.waitForTimeout(300);
     }
     // Every other ? on every tab, at the top of the drawer, the same way.
@@ -4994,10 +5389,10 @@ if (section("mood list")) {
     check(!m1.overflow.length && !m1.small.length, size.name + ": the Cast tab fits with the moods open. " + m1.overflow.concat(m1.small).slice(0, 2).join("; "));
     // The video shows it for Tollan's smug line.
     await page.evaluate(() => { window.__wav = [0.1, 1.4]; window.__clipMs = 300; });
-    await page.click('#mount [data-af-slot="message"]');
+    await pressMessage(page);
     await page.waitForFunction(() => document.querySelector('#mount [data-af-slot="message"]').getAttribute("aria-busy") === null && (window.__synth || []).length >= 2, null, { timeout: 30000 });
     await page.waitForTimeout(5000);
-    await page.click('.af-tab[data-tab="studio"]');
+    await openWs(page);
     await page.waitForTimeout(1500);
     const seen = await colors(page);
     check(seen.red > 300 && seen.orange === 0, size.name + ": a line whose tag matches the new mood shows that picture (" + JSON.stringify(seen) + ")");
@@ -5076,10 +5471,10 @@ if (section("scene backgrounds")) {
       ] };
       window.__script = base;
     });
-    await page.click('#mount [data-af-slot="message"]');
+    await pressMessage(page);
     await page.waitForFunction(() => document.querySelector('#mount [data-af-slot="message"]').getAttribute("aria-busy") === null && (window.__synth || []).length >= 3, null, { timeout: 20000 });
     await page.waitForTimeout(3000);
-    await page.click('.af-tab[data-tab="studio"]');
+    await openWs(page);
     await page.waitForTimeout(1500);
     // How red and how blue the left side of the frame is, every tenth of a
     // second, over the whole preview.
@@ -5137,7 +5532,7 @@ if (section("scene backgrounds")) {
     const m = await page.evaluate(MEASURE, size.touch);
     check(!m.overflow.length && !m.small.length, size.name + ": the Studio fits with the scenes open. " + m.overflow.concat(m.small).slice(0, 2).join("; "));
     // The list of backgrounds: added, renamed, and deleted after asking.
-    await page.locator(".af-fold", { hasText: "Background" }).first().click();
+    await wsSec(page, "Background");
     await page.waitForTimeout(500);
     await page.click('[data-af-back-act="add"]');
     await page.waitForTimeout(600);
@@ -5159,10 +5554,10 @@ if (section("scene backgrounds")) {
   // With one background, there are no scenes to change.
   const { context, page } = await open(THEMES[0], SIZES[0]);
   await page.evaluate(() => { window.__wav = [0.1, 0.3]; window.__clipMs = 200; });
-  await page.click('#mount [data-af-slot="message"]');
+  await pressMessage(page);
   await page.waitForFunction(() => document.querySelector('#mount [data-af-slot="message"]').getAttribute("aria-busy") === null && (window.__synth || []).length > 0, null, { timeout: 15000 });
   await page.waitForTimeout(2500);
-  await page.click('.af-tab[data-tab="studio"]');
+  await openWs(page);
   await page.waitForTimeout(1200);
   check((await page.locator(".af-fold", { hasText: "Scenes" }).count()) === 0, "with one background, there is no Scenes fold");
   await context.close();
@@ -5191,10 +5586,10 @@ if (section("studio design")) {
       window.__clipMs = 200;
       window.__fontFile = b64 ? { name: "Plain_Mono.ttf", base64: b64 } : null;
     }, fontB64);
-    await page.click('#mount [data-af-slot="message"]');
+    await pressMessage(page);
     await page.waitForFunction(() => document.querySelector('#mount [data-af-slot="message"]').getAttribute("aria-busy") === null && (window.__synth || []).length > 0, null, { timeout: 15000 });
     await page.waitForTimeout(2500);
-    await page.click('.af-tab[data-tab="studio"]');
+    await openWs(page);
     await page.waitForTimeout(1500);
     // A short summary of the preview: the sum of its pixels, sampled.
     const frame = () => page.evaluate(async () => {
@@ -5227,7 +5622,7 @@ if (section("studio design")) {
     });
 
     // 1. A font of your own.
-    await page.locator(".af-fold", { hasText: "Shape and words" }).first().click();
+    await wsSec(page, "Shape and words");
     await page.waitForTimeout(400);
     const plain = await frame();
     await page.click('[data-af-font-add="videoFont"]');
@@ -5255,7 +5650,7 @@ if (section("studio design")) {
     check(dropped.asked >= 1 && dropped.pick === "book" && dropped.left === 0, size.name + ": taking the font out asks first, then goes back to Book (" + JSON.stringify(dropped) + ")");
 
     // 2 to 4. The names' font and size, and the ring, under Speakers.
-    await page.locator(".af-fold", { hasText: "Speakers" }).first().click();
+    await wsSec(page, "Speakers");
     await page.waitForTimeout(400);
     const start = await page.evaluate(() => ({ font: (document.querySelector('[data-af-fontpick="videoNameFont"]') || {}).value, ring: window.__settings.videoPicRing }));
     check(start.font === "" && start.ring !== false, size.name + ": the names start in the words' font, with a ring (" + JSON.stringify(start) + ")");
@@ -5277,7 +5672,7 @@ if (section("studio design")) {
     check((await page.evaluate(() => window.__settings.videoPicRing)) === false && a3 !== a2, size.name + ": the ring switch takes the ring off");
 
     // 5. A design of your own.
-    await page.locator(".af-fold", { hasText: "Background" }).first().click();
+    await wsSec(page, "Background");
     await page.waitForTimeout(400);
     await page.selectOption('[data-af-row="videoBack"] select', "design");
     await page.waitForTimeout(500);
@@ -5330,9 +5725,9 @@ if (section("studio design")) {
   for (const zoom of [1.25, 0.85]) {
     const size = SIZES.find((x) => !x.touch) || SIZES[0];
     const { context, page, errors } = await open(THEMES[0], size, zoom);
-    await page.click('.af-tab[data-tab="studio"]');
+    await openWs(page);
     await page.waitForTimeout(1200);
-    await page.locator(".af-fold", { hasText: "Background" }).first().click();
+    await wsSec(page, "Background");
     await page.waitForTimeout(400);
     await page.selectOption('[data-af-row="videoBack"] select', "design");
     await page.waitForTimeout(400);
@@ -5366,12 +5761,12 @@ if (section("word effects")) {
       window.__wav = [0.1, 0.3];
       window.__clipMs = 200;
     });
-    await page.click('#mount [data-af-slot="message"]');
+    await pressMessage(page);
     await page.waitForFunction(() => document.querySelector('#mount [data-af-slot="message"]').getAttribute("aria-busy") === null && (window.__synth || []).length > 0, null, { timeout: 15000 });
     await page.waitForTimeout(2500);
-    await page.click('.af-tab[data-tab="studio"]');
+    await openWs(page);
     await page.waitForTimeout(1500);
-    await page.locator(".af-fold", { hasText: "Shape and words" }).first().click();
+    await wsSec(page, "Shape and words");
     await page.waitForTimeout(400);
     const words = page.locator('[data-af-row] select').filter({ has: page.locator('option[value="blur"]') }).first();
     // The ink in each frame of the preview, every twentieth of a second: the
@@ -5435,10 +5830,10 @@ if (section("caption color")) {
       window.__wav = [0.1, 0.3];
       window.__clipMs = 200;
     });
-    await page.click('#mount [data-af-slot="message"]');
+    await pressMessage(page);
     await page.waitForFunction(() => document.querySelector('#mount [data-af-slot="message"]').getAttribute("aria-busy") === null && (window.__synth || []).length > 0, null, { timeout: 15000 });
     await page.waitForTimeout(2500);
-    await page.click('.af-tab[data-tab="studio"]');
+    await openWs(page);
     await page.waitForTimeout(1500);
     // The most yellow pixels in any frame of the preview, looked at every
     // fifth of a second.
@@ -5459,7 +5854,7 @@ if (section("caption color")) {
       return most;
     });
     const before = await mostYellow();
-    await page.locator(".af-fold", { hasText: "Sounds" }).last().click();
+    await wsSec(page, "Sounds");
     await page.waitForTimeout(400);
     await page.locator('[data-af-colorswatch="videoCaptionInk"]').click();
     await page.waitForTimeout(300);
@@ -5480,7 +5875,7 @@ if (section("player scroll")) {
   console.log("A tall floating player scrolls under a swipe instead of moving");
   const { context, page, errors } = await open(THEMES[0], SIZES[0]);
   await page.setViewportSize({ width: 390, height: 560 });
-  await page.click('.af-tab[data-tab="settings"]');
+  await toTab(page, "settings");
   await page.waitForTimeout(300);
   await page.evaluate(() => document.querySelector('[data-af-row="widgetOn"] .af-box').click());
   await page.waitForTimeout(500);
@@ -5523,7 +5918,7 @@ if (section("player scroll")) {
 if (section("person close")) {
   console.log("A person in the Cast tab opens and closes over several frames, with CSS transitions");
   const { context, page, errors } = await open(THEMES[0], SIZES[0]);
-  await page.click('.af-tab[data-tab="cast"]');
+  await toTab(page, "cast");
   await page.waitForTimeout(300);
   const run = (open) =>
     page.evaluate(async (open) => {
@@ -5556,10 +5951,10 @@ if (section("stage buttons")) {
   console.log("Back, next and the part marks in Now playing");
   for (const size of SIZES) {
     const { context, page, errors } = await open(THEMES[0], size);
-    await page.click('.af-tab[data-tab="stage"]');
+    await toTab(page, "stage");
     await page.waitForTimeout(200);
     await page.evaluate(() => (window.__clipMs = 1500));
-    await page.click('#mount [data-af-slot="message"]');
+    await pressMessage(page);
     await page.waitForTimeout(600);
     const at = () => page.evaluate(() => { const b = document.querySelector('[data-af="parts"] [aria-current="true"]'); return b ? Number(b.dataset.at) : -1; });
     await page.click('[data-af="skip"]');
@@ -5583,7 +5978,7 @@ if (section("stage buttons")) {
 if (section("key notice")) {
   console.log("A key test says how it went in a Lumiverse notification");
   const { context, page } = await open(THEMES[0], SIZES[1]);
-  await page.click('.af-tab[data-tab="sounds"]');
+  await toTab(page, "sounds");
   await page.waitForTimeout(250);
   await page.locator('[data-af-key="eleven"] .af-btn', { hasText: "Test" }).first().click();
   await page.waitForTimeout(250);
@@ -5594,9 +5989,9 @@ if (section("key notice")) {
 if (section("log kinds")) {
   console.log("Switches for each kind of Log line");
   const { context, page } = await open(THEMES[0], SIZES[0]);
-  await page.click('.af-tab[data-tab="stage"]');
+  await toTab(page, "stage");
   await page.waitForTimeout(200);
-  await page.click('#mount [data-af-slot="message"]');
+  await pressMessage(page);
   await page.waitForTimeout(1200);
   const count = () => page.evaluate(() => document.querySelectorAll(".af-log .af-log-line").length);
   const before = await count();
@@ -5619,7 +6014,7 @@ if (section("log all none")) {
     for (const still of [false, true]) {
       const tag = size.name + (still ? ", Reduce motion" : "");
       const { context, page, errors } = await open(THEMES[0], size, 1, still ? () => (window.__settings.reduceMotion = true) : null);
-      await page.click('.af-tab[data-tab="stage"]');
+      await toTab(page, "stage");
       await page.waitForTimeout(200);
       await page.locator(".af-fold", { hasText: "What the Log shows" }).click();
       await page.waitForTimeout(350);
@@ -5670,7 +6065,7 @@ if (section("this chat")) {
   console.log("Auto Foley can be switched off in one chat, as in Auto Retry and Auto Refine");
   for (const size of SIZES) {
     const { context, page, errors } = await open(THEMES[0], size);
-    await page.click('.af-tab[data-tab="settings"]');
+    await toTab(page, "settings");
     await page.waitForTimeout(300);
     const row = page.locator('[data-af-row="thisChat"]');
     check((await row.count()) === 1, size.name + ": Settings has a This chat row");
@@ -5720,7 +6115,7 @@ if (section("pictures")) {
   console.log("A picture for a person, or the first letter of the name");
   for (const size of SIZES) {
     const { context, page, errors } = await open(THEMES[0], size);
-    await page.click('.af-tab[data-tab="cast"]');
+    await toTab(page, "cast");
     await page.waitForTimeout(250);
     const head = page.locator(".af-person").nth(1);
     check(/^[A-Z]$/.test(((await head.locator(".af-person-head .af-avatar").textContent()) || "").trim()), size.name + ": with no picture, the first letter of the name is shown");
@@ -5777,7 +6172,7 @@ if (section("pictures")) {
 if (section("no flicker")) {
   console.log("Opening a person shows their voice from the first frame");
   const { context, page } = await open(THEMES[0], SIZES[0]);
-  await page.click('.af-tab[data-tab="cast"]');
+  await toTab(page, "cast");
   await page.waitForTimeout(250);
   // Every frame for half a second, the words the voice and model boxes show.
   const seen = await page.evaluate(async () => {
@@ -5801,7 +6196,7 @@ if (section("sound link")) {
   console.log("Adding a sound by link");
   for (const size of SIZES) {
     const { context, page, errors } = await open(THEMES[0], size);
-    await page.click('.af-tab[data-tab="sounds"]');
+    await toTab(page, "sounds");
     await page.waitForTimeout(250);
     await page.locator("[data-af-link] input").first().fill("ftp://nope");
     await page.locator(".af-btn", { hasText: "Add the link" }).click();
@@ -5863,7 +6258,7 @@ if (section("tab flicker")) {
 if (section("setup check")) {
   console.log("Check my setup changes the page once");
   const { context, page } = await open(THEMES[0], SIZES[0]);
-  await page.click('.af-tab[data-tab="settings"]');
+  await toTab(page, "settings");
   await page.waitForTimeout(400);
   const changes = await page.evaluate(async () => {
     const btn = Array.from(document.querySelectorAll(".af-btn")).find((b) => b.textContent.trim() === "Check my setup");
@@ -5891,7 +6286,7 @@ if (section("widget low")) {
       for (const corner of ["low left", "low right", "high left"]) {
         const { context, page, errors } = await open(THEMES[0], size, zoom);
         const where = size.name + ", zoom " + zoom + ", " + corner;
-        await page.click('.af-tab[data-tab="settings"]');
+        await toTab(page, "settings");
         await page.waitForTimeout(200);
         await page.evaluate(() => document.querySelector('[data-af-row="widgetOn"] .af-box').click());
         await page.waitForTimeout(300);
@@ -5993,14 +6388,14 @@ if (section("under a pick")) {
       const mids = hs.filter((h) => h > 2 && h < end - 2).length;
       return end > 20 && mids >= 3;
     };
-    await page.click('.af-tab[data-tab="director"]');
+    await toTab(page, "director");
     await page.waitForTimeout(300);
     const open1 = await watch("director", "Let it think first", "custom");
     check(open1.kept, size.name + ": picking Yes does not draw the tab again");
     check(smooth(open1.hs, true), size.name + ": How much thinking opens over several frames (" + open1.hs.join(",") + ")");
     const shut1 = await watch("director", "Let it think first", "off");
     check(smooth(shut1.hs, false) && shut1.hidden, size.name + ": and closes over several frames (" + shut1.hs.join(",") + ")");
-    await page.click('.af-tab[data-tab="settings"]');
+    await toTab(page, "settings");
     await page.waitForTimeout(300);
     const open2 = await watch("settings", "Pattern behind the panel", "dots");
     check(open2.kept && smooth(open2.hs, true), size.name + ": How solid the boxes are opens over several frames (" + open2.hs.join(",") + ")");
@@ -6017,23 +6412,23 @@ if (section("downloads")) {
     const { context, page, errors } = await open(THEMES[0], size);
     const where = size.name;
     await page.evaluate(() => { window.__wav = [0.1, 0.5]; window.__clipMs = 1500; });
-    await page.click('.af-tab[data-tab="stage"]');
+    await toTab(page, "stage");
     await page.waitForTimeout(300);
     // The Stage has one button for all of it, which opens the Studio.
     check(await page.evaluate(() => !document.querySelector('[data-af="dlall"]') && !document.querySelector('[data-af="dlpart"]') && /Download or make a video/.test(document.querySelector('[data-af="studio"]').textContent)), where + ": the Stage has one Download or make a video button, and no download buttons of its own");
     await page.click('[data-af="studio"]');
     await page.waitForTimeout(500);
-    check(await page.evaluate(() => document.querySelector('.af-tab[data-tab="studio"]').getAttribute("aria-selected") === "true"), where + ": it opens the Studio tab");
+    check(await page.evaluate(() => !!document.querySelector("[data-af-ws] [data-af-videopreview]")), where + ": it opens the Studio");
     const state = () => page.evaluate(() => ["dlall", "dlpart"].map((k) => document.querySelector('[data-af-studio="' + k + '"]').disabled));
     check((await state()).join() === "true,true", where + ": with nothing played, both downloads are off (" + (await state()).join() + ")");
-    await page.click('#mount [data-af-slot="message"]');
+    await pressMessage(page);
     await page.waitForTimeout(900);
     const part = page.waitForEvent("download", { timeout: 8000 }).catch(() => null);
     await page.click('[data-af-studio="dlpart"]');
     const p1 = await part;
     check(!!p1 && /part 1\.wav$/.test(p1.suggestedFilename()), where + ": Download this part saves the part playing (" + (p1 && p1.suggestedFilename()) + ")");
     // Let the message play to the end.
-    await page.waitForFunction(() => document.querySelector('[data-af-studio="dlpart"]') && document.querySelector('[data-af-studio="dlpart"]').disabled, null, { timeout: 20000 });
+    await page.waitForFunction(() => document.querySelector('[data-af-studio="dlpart"]'), null, { timeout: 20000 });
     await page.waitForTimeout(300);
     const all = page.waitForEvent("download", { timeout: 8000 }).catch(() => null);
     await page.click('[data-af-studio="dlall"]');
@@ -6104,7 +6499,7 @@ if (section("downloads")) {
   }
 }
 
-if (section("studio")) {
+if (section("studio basics")) {
   console.log("The Studio tab keeps the audio and makes the video, with every choice");
   const fs = await import("node:fs");
   // A WAV file's rate, bits, channels and length in seconds, and its samples
@@ -6135,20 +6530,24 @@ if (section("studio")) {
     const where = size.name;
     const { context, page, errors } = await open(THEMES[0], size);
     await page.evaluate(() => { window.__wav = [0.1, 0.5]; window.__clipMs = 300; });
-    await page.click('.af-tab[data-tab="stage"]');
+    await toTab(page, "stage");
     await page.waitForTimeout(300);
-    await page.click('.af-tab[data-tab="studio"]');
+    await openWs(page);
     await page.waitForTimeout(300);
-    await page.click('#mount [data-af-slot="message"]');
-    await page.waitForFunction(() => document.querySelector('[data-af-studio="dlall"]') && !document.querySelector('[data-af-studio="dlall"]').disabled && document.querySelector('[data-af-studio="dlpart"]').disabled, null, { timeout: 20000 });
+    await pressMessage(page);
+    await page.waitForFunction(() => document.querySelector('[data-af-studio="dlall"]') && !document.querySelector('[data-af-studio="dlall"]').disabled, null, { timeout: 20000 });
     await page.waitForTimeout(900);
-    const cards = await page.evaluate(() => ["studio-show", "studio-audio", "studio-video", "studio-censor"].map((k) => !!document.querySelector('[data-af-card="' + k + '"]')));
-    check(cards.every(Boolean), where + ": the Studio has the performance, audio, video and hide words cards");
+    const cards = await page.evaluate(() => {
+      const names = [...document.querySelectorAll("[data-af-ws] .af-ws-picker option")].map((o) => o.textContent);
+      return ["The performance and scenes", "Audio", "Hide and bleep words"].map((k) => names.includes(k)).concat([!!document.querySelector("[data-af-ws-stage] [data-af-videopreview]")]);
+    });
+    check(cards.every(Boolean), where + ": the Studio has the performance, audio and hide words, and the preview (" + JSON.stringify(cards) + ")");
 
     // The audio: 48 kHz, 24-bit, every part in.
     const one = await grab(page, '[data-af-studio="dlall"]');
     const w1 = one ? readWav(one.path) : null;
     check(!!w1 && w1.rate === 48000 && w1.bits === 24 && w1.secs > 1, where + ": Download audio is a 48 kHz, 24-bit WAV (" + (w1 && [w1.rate, w1.bits, w1.secs.toFixed(2)].join(", ")) + ")");
+    await wsSec(page, "The performance and scenes");
     const parts = await page.evaluate(() => {
       const f = [...document.querySelectorAll(".af-fold")].find((b) => /Which parts go in/.test(b.textContent));
       f.click();
@@ -6160,8 +6559,9 @@ if (section("studio")) {
     check(peak > 0.85 && peak < 0.9, where + ": the loudness is evened out to just under full (" + peak.toFixed(3) + ")");
 
     // A pause between parts makes the file longer by that much each time.
+    await wsSec(page, "Sound effects and music");
     await page.evaluate(() => {
-      const box = [...document.querySelectorAll('[data-af-card="studio-show"] input[type="number"]')][0];
+      const box = [...document.querySelectorAll('[data-af-section="sound"] input[type="number"]')][0];
       box.value = "0.5";
       box.dispatchEvent(new Event("input", { bubbles: true }));
       box.dispatchEvent(new Event("change", { bubbles: true }));
@@ -6174,13 +6574,16 @@ if (section("studio")) {
     const added = w2 ? (w2.secs - w1.secs) / 0.5 : 0;
     check(!!w2 && added >= 1 && Math.abs(added - Math.round(added)) < 0.04, where + ": a pause of 0.5 s adds 0.5 s between each part (" + (w2 && (w2.secs - w1.secs).toFixed(2)) + " s more)");
     await page.evaluate(() => {
-      const box = [...document.querySelectorAll('[data-af-card="studio-show"] input[type="number"]')][0];
+      const box = [...document.querySelectorAll('[data-af-section="sound"] input[type="number"]')][0];
       box.value = "0";
       box.dispatchEvent(new Event("input", { bubbles: true }));
       box.dispatchEvent(new Event("change", { bubbles: true }));
     });
 
     // A part left out is not in the file.
+    await wsSec(page, "The performance and scenes");
+    await page.evaluate(() => { const f = [...document.querySelectorAll(".af-fold")].find((b) => /Which parts go in/.test(b.textContent)); if (f.getAttribute("aria-expanded") !== "true") f.click(); });
+    await page.waitForTimeout(400);
     await page.locator('[data-af-studiopart="0"] .af-box').click();
     await page.waitForTimeout(400);
     const less = await grab(page, '[data-af-studio="dlall"]');
@@ -6191,6 +6594,7 @@ if (section("studio")) {
     await page.waitForTimeout(500);
 
     // A file for each part, in a ZIP.
+    await wsSec(page, "Audio");
     await page.locator('[data-af-card="studio-audio"] .af-segbtn[data-v="parts"]').click();
     await page.waitForTimeout(300);
     const zip = await grab(page, '[data-af-studio="dlall"]');
@@ -6200,6 +6604,7 @@ if (section("studio")) {
     await page.locator('[data-af-card="studio-audio"] .af-segbtn[data-v="one"]').click();
 
     // Hiding a word: bleeped in the audio. "late" is said in the second line.
+    await wsSec(page, "Hide and bleep words");
     await page.locator('[data-af-row="censorOn"] .af-box').first().click();
     await page.waitForTimeout(300);
     await page.fill("[data-af-censorwords]", "late");
@@ -6218,6 +6623,7 @@ if (section("studio")) {
       for (let i = at + 480; i < at + 480 + 4800 && i + 1 < w4.samples.length; i++) if ((w4.samples[i] >= 0) !== (w4.samples[i + 1] >= 0)) zc++;
     }
     check(zc > 180 && zc < 220, where + ": the bleep is a 1 kHz tone, which crosses zero 200 times in 0.1 s (" + zc + ")");
+    await wsSec(page, "Hide and bleep words");
     await page.locator('[data-af-row="censorOn"] .af-box').first().click();
     await page.waitForTimeout(300);
 
@@ -6254,16 +6660,23 @@ if (section("studio")) {
     await page.click('[data-af-studio="play"]');
     await page.waitForTimeout(200);
 
-    // Every fold opened, nothing runs off the side.
-    await page.evaluate(() => document.querySelectorAll('.af-page .af-fold[aria-expanded="false"]').forEach((b) => b.click()));
-    await page.waitForTimeout(500);
-    const m = await page.evaluate(MEASURE, size.touch);
-    check(!m.overflow.length && !m.small.length, where + ": every part of the Studio fits. " + m.overflow.concat(m.small).slice(0, 3).join("; "));
-    if (shots) await page.locator('[data-af-card="studio-video"]').screenshot({ path: shots + "/studio-video-" + where + ".png" });
+    // Every part of the Studio, with every fold in it opened, fits.
+    const names = await page.evaluate(() => [...document.querySelectorAll("[data-af-ws] .af-ws-picker option")].map((o) => o.textContent));
+    const bad = [];
+    for (const name of names) {
+      await wsSec(page, name);
+      await page.evaluate(() => document.querySelectorAll('[data-af-section] .af-fold[aria-expanded="false"]').forEach((b) => b.click()));
+      await page.waitForTimeout(400);
+      const m = await page.evaluate(MEASURE, size.touch);
+      bad.push(...m.overflow.concat(m.small).map((x) => name + ": " + x));
+    }
+    check(names.length >= 12 && !bad.length, where + ": every part of the Studio fits (" + names.length + " parts). " + bad.slice(0, 3).join("; "));
+    if (shots) await page.locator('[data-af-ws]').screenshot({ path: shots + "/studio-video-" + where + ".png" });
 
     // The shape changes the preview.
+    await wsSec(page, "Shape and words");
     const shape = async (v) => {
-      await page.selectOption('[data-af-card="studio-video"] select >> nth=0', v);
+      await page.selectOption('[data-af-section="shape"] select >> nth=0', v);
       await page.waitForTimeout(500);
       return page.evaluate(() => { const c = document.querySelector("[data-af-videopreview]"); return c.width + "x" + c.height; });
     };
@@ -6277,13 +6690,13 @@ if (section("studio follows")) {
   console.log("With the Studio open, a message played is picked up");
   const { context, page, errors } = await open(THEMES[0], SIZES[1]);
   await page.evaluate(() => { window.__wav = [0.1, 0.5]; window.__clipMs = 300; });
-  await page.click('.af-tab[data-tab="studio"]');
+  await openWs(page);
   await page.waitForTimeout(500);
   check((await page.locator(".af-fold", { hasText: "Which parts go in" }).count()) === 0, "before anything is played, there are no parts to pick");
-  await page.click('#mount [data-af-slot="message"]');
+  await pressMessage(page);
   await page.waitForFunction(() => !!document.querySelector('[data-af-studio="dlall"]') && !document.querySelector('[data-af-studio="dlall"]').disabled, null, { timeout: 20000 }).catch(() => {});
   await page.waitForTimeout(800);
-  check((await page.locator(".af-fold", { hasText: "Which parts go in" }).count()) === 1, "after a message plays, its parts can be picked, without leaving the tab");
+  check((await page.locator(".af-fold", { hasText: "Which parts go in" }).count()) === 1, "after a message plays, its parts can be picked, without leaving the Studio");
   check(!errors.length, "no errors. " + errors.slice(0, 2).join("; "));
   await context.close();
 }
@@ -6302,10 +6715,10 @@ if (section("trim and notes")) {
     const where = size.name;
     const { context, page, errors } = await open(THEMES[0], size);
     await page.evaluate(() => { window.__wav = [0.1, 0.5]; window.__clipMs = 300; });
-    await page.click('.af-tab[data-tab="studio"]');
+    await openWs(page);
     await page.waitForTimeout(300);
-    await page.click('#mount [data-af-slot="message"]');
-    await page.waitForFunction(() => document.querySelector('[data-af-studio="dlall"]') && !document.querySelector('[data-af-studio="dlall"]').disabled && document.querySelector('[data-af-studio="dlpart"]').disabled, null, { timeout: 20000 });
+    await pressMessage(page);
+    await page.waitForFunction(() => document.querySelector('[data-af-studio="dlall"]') && !document.querySelector('[data-af-studio="dlall"]').disabled, null, { timeout: 20000 });
     await page.waitForTimeout(900);
     const whole = await grab(page);
     check(whole > 1, where + ": the whole performance is " + whole.toFixed(2) + " s");
@@ -6352,7 +6765,7 @@ if (section("trim and notes")) {
         return sum;
       });
     const before = await print();
-    await page.locator(".af-fold", { hasText: /^▶?\s*Notes$/ }).click();
+    await wsSec(page, "Notes");
     await page.waitForTimeout(300);
     await page.click('[data-af-studio="noteadd"]');
     await page.waitForTimeout(300);
@@ -6382,14 +6795,14 @@ if (section("transitions")) {
   console.log("Every transition moves from one line to the next, and none is a cut but Cut");
   const { context, page, errors } = await open(THEMES[0], SIZES[1]);
   await page.evaluate(() => { window.__wav = [0.1, 0.5]; window.__clipMs = 300; });
-  await page.click('.af-tab[data-tab="stage"]');
+  await toTab(page, "stage");
   await page.waitForTimeout(300);
-  await page.click('.af-tab[data-tab="studio"]');
+  await openWs(page);
   await page.waitForTimeout(300);
-  await page.click('#mount [data-af-slot="message"]');
-  await page.waitForFunction(() => document.querySelector('[data-af-studio="dlall"]') && !document.querySelector('[data-af-studio="dlall"]').disabled && document.querySelector('[data-af-studio="dlpart"]').disabled, null, { timeout: 20000 });
+  await pressMessage(page);
+  await page.waitForFunction(() => document.querySelector('[data-af-studio="dlall"]') && !document.querySelector('[data-af-studio="dlall"]').disabled, null, { timeout: 20000 });
   await page.waitForTimeout(900);
-  await page.locator(".af-fold", { hasText: "Moving between lines" }).click();
+  await wsSec(page, "Moving between lines");
   await page.waitForTimeout(300);
   // Fingerprints of every frame of the preview, 50 ms apart.
   const frames = () =>
@@ -6428,7 +6841,7 @@ if (section("transitions")) {
 if (section("hide words")) {
   console.log("Hidden words are covered in the video with a bar, blur or pixels");
   const { context, page, errors } = await open(THEMES[0], SIZES[1]);
-  await page.click('.af-tab[data-tab="studio"]');
+  await openWs(page);
   await page.waitForTimeout(800);
   const print = () =>
     page.evaluate(() => {
@@ -6439,6 +6852,7 @@ if (section("hide words")) {
       return sum;
     });
   const plain = await print();
+  await wsSec(page, "Hide and bleep words");
   await page.locator('[data-af-row="censorOn"] .af-box').first().click();
   await page.waitForTimeout(300);
   await page.fill("[data-af-censorwords]", "bells");
@@ -6467,7 +6881,7 @@ if (section("start here")) {
   for (const size of SIZES) {
     const { context, page, errors } = await open(THEMES[0], size);
     const where = size.name;
-    await page.click('.af-tab[data-tab="stage"]');
+    await toTab(page, "stage");
     await page.waitForTimeout(300);
     const card = page.locator('[data-af-card="Start here"]');
     check((await card.count()) === 1, where + ": Start here is on the Stage tab");
@@ -6478,7 +6892,7 @@ if (section("start here")) {
     await card.locator(".af-btn", { hasText: "Open the Cast tab" }).click();
     await page.waitForTimeout(300);
     check(await page.evaluate(() => document.querySelector('.af-tab[data-tab="cast"]').getAttribute("aria-selected") === "true"), where + ": Open the Cast tab goes there");
-    await page.click('.af-tab[data-tab="stage"]');
+    await toTab(page, "stage");
     await page.waitForTimeout(300);
     await card.locator(".af-btn", { hasText: "Check my setup" }).click();
     await page.waitForTimeout(600);
@@ -6538,7 +6952,7 @@ if (section("widget steady")) {
   console.log("The round button and the open player stay still");
   for (const zoom of [0.85, 1, 1.25]) {
     const { context, page } = await open(THEMES[0], SIZES[0], zoom);
-    await page.click('.af-tab[data-tab="settings"]');
+    await toTab(page, "settings");
     await page.waitForTimeout(200);
     await page.evaluate(() => document.querySelector('[data-af-row="widgetOn"] .af-box').click());
     await page.waitForTimeout(300);
@@ -6600,7 +7014,7 @@ if (section("taps")) {
         window.__teardown = window.__setup(window.__ctx, { fetch: window.__fetch, Audio: window.__Audio });
       });
       await page.waitForTimeout(200);
-      await page.click('.af-tab[data-tab="settings"]');
+      await toTab(page, "settings");
       await page.waitForTimeout(200);
       await page.evaluate(() => (document.getElementById("drawer").scrollTop = 900));
       await page.waitForTimeout(200);
@@ -6639,7 +7053,7 @@ if (section("reduce")) {
     window.__teardown = window.__setup(window.__ctx, { fetch: window.__fetch, Audio: window.__Audio });
   });
   await page.waitForTimeout(150);
-  await page.click('.af-tab[data-tab="director"]');
+  await toTab(page, "director");
   await page.waitForTimeout(50);
   await page.evaluate(() => document.querySelector('[data-af-row="soundsOn"] .af-box').click());
   await page.waitForTimeout(20);

@@ -37,6 +37,7 @@ describe("the permissions it asks for", () => {
     decisions: /spindle\.decisions\.evaluate\(/,
     cors_proxy: /spindle\.cors\(/,
     ui_panels: /ui\.createFloatWidget\(/,
+    app_manipulation: /ui\.mountApp\(/,
   };
 
   test("every one is used by the code", () => {
@@ -49,7 +50,7 @@ describe("the permissions it asks for", () => {
 
   test("the privacy page lists each one", () => {
     const page = read("docs/privacy.md");
-    const names: Record<string, string> = { generation: "Generation", decisions: "Decision models", cors_proxy: "CORS proxy", ui_panels: "UI panels" };
+    const names: Record<string, string> = { generation: "Generation", decisions: "Decision models", cors_proxy: "CORS proxy", ui_panels: "UI panels", app_manipulation: "App manipulation" };
     for (const p of asked) expect(page).toContain("| " + names[p] + " |");
   });
 });

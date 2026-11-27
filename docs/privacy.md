@@ -33,10 +33,10 @@ All of this is kept by Lumiverse, under your account, with `spindle.userStorage`
 
 - Your settings and your cast, with any pictures you picked for it, made small on your device first.
 - The ids of the chats you switched Auto Foley off in. A temporary chat is never kept.
-- The background pictures for videos in the Studio tab, if you choose them, at most 1920 pixels on the long side, one file for each background.
-- Fonts you add in the Studio tab, up to 8, each up to 3 MB. A font is read only to draw your videos on your device.
+- The background pictures for videos in the Studio, if you choose them, at most 1920 pixels on the long side, one file for each background.
+- Fonts you add in the Studio, up to 8, each up to 3 MB. A font is read only to draw your videos on your device.
 - Pictures for moods on the Cast tab, if you choose them, each in a file of its own, made small like the main picture.
-- Watermark pictures in the Studio tab, if you choose them, each in a file of its own, at most 512 pixels on the long side.
+- Watermark pictures in the Studio, if you choose them, each in a file of its own, at most 512 pixels on the long side.
 - A picture taken from a character or persona in Lumiverse, when you press **Use pictures from Lumiverse** or **Use their Lumiverse picture**, made small like a picture you choose.
 - Your sound library: sounds found on Freesound, with their credit, sounds made by ElevenLabs, your uploads, and your links. A music track is kept here too, with the mood it is marked with.
 - With **Keep made audio** on, which it is by default: each spoken line, up to the size you pick, and the last 300 scripts, with their text. **Clear kept audio** deletes them, and **Do not keep it** stops it.
@@ -63,8 +63,9 @@ With **Save the performance to the message** on, the finished audio is saved to 
 | Decision models | Asking the Decision model, and listing your Decision connections |
 | CORS proxy | Finding sounds and music on Freesound, making sounds with ElevenLabs, testing the keys, and reaching a Chatterbox server you added |
 | UI panels | The floating player, when you turn it on in the Settings tab |
+| App manipulation | Opening the Studio over the whole screen |
 
-Refusing **UI panels** stops only the floating player. Refusing **CORS proxy** stops new sound effects and a Chatterbox server reached directly. Refusing **Decision models** turns the Decision model off. Refusing **Generation** turns the Director off, and messages are read as written.
+Refusing **UI panels** stops only the floating player. Refusing **App manipulation** opens the Studio in Lumiverse's extension window instead of over the whole screen. Refusing **CORS proxy** stops new sound effects and a Chatterbox server reached directly. Refusing **Decision models** turns the Decision model off. Refusing **Generation** turns the Director off, and messages are read as written.
 
 ## What it never does
 

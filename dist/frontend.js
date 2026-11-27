@@ -1017,6 +1017,10 @@ function rateWait(attempt, err) {
 // to listen to.
 const ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 15v-3a8 8 0 0 1 16 0v3"/><rect x="3" y="14" width="4" height="7" rx="1.5"/><rect x="17" y="14" width="4" height="7" rx="1.5"/><path d="M10 16.5v2M12 15v5M14 16.5v2"/></svg>';
 const ICON_FULL = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9V4h5"/><path d="M20 9V4h-5"/><path d="M4 15v5h5"/><path d="M20 15v5h-5"/></svg>';
+const ICON_UNDO = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg>';
+const ICON_STEP_AGAIN = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 14 5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/></svg>';
+const ICON_LIST = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M5 7h14M5 12h14M5 17h14"/></svg>';
+const ICON_KEYS = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.5" y="6" width="19" height="12" rx="2"/><path d="M6.5 10h1M10.5 10h1M14.5 10h1M8 14h8"/></svg>';
 const ICON_CLOSE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12"/><path d="M18 6L6 18"/></svg>';
 const ICON_PLAY = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5.5v13a1 1 0 0 0 1.5.86l10.5-6.5a1 1 0 0 0 0-1.72L9.5 4.64A1 1 0 0 0 8 5.5Z"/></svg>';
 const ICON_PAUSE = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6.5" y="5" width="4" height="14" rx="1"/><rect x="13.5" y="5" width="4" height="14" rx="1"/></svg>';
@@ -1593,6 +1597,79 @@ html[data-af-still] [class^="af-"], html[data-af-still] [class*=" af-"], html[da
 @media (prefers-reduced-motion: reduce) {
   [class^="af-"], [class*=" af-"], [class^="af-"]::before, [class*=" af-"]::before, [class^="af-"]::after, [class*=" af-"]::after { animation: none !important; transition: none !important; }
 }
+
+/* The Studio's workspace. It fills the screen, or Lumiverse's extension
+   window, and lays itself out by its own size: a list of parts, the
+   preview and the settings side by side when wide, the preview over the
+   settings when narrow. */
+.af.af-ws { position: relative; display: flex; flex-direction: column; gap: 0; width: 100%; max-width: none; height: 100%; min-height: 0; margin: 0; padding: 0; background: var(--lumiverse-bg, #1b1a22); container: afws / size; opacity: 0; transform: translateY(6px); transition: opacity .2s ease-out, transform .2s ease-out; outline: none; overflow: hidden; }
+.af.af-ws[data-af-how="app"] { position: fixed; top: 0; left: 0; z-index: 9990; width: var(--app-scaled-viewport-width, calc(100vw / var(--lumiverse-ui-scale, 1))); height: var(--app-scaled-viewport-height, calc(100vh / var(--lumiverse-ui-scale, 1))); }
+.af.af-ws[data-af-open] { opacity: 1; transform: none; }
+.af.af-ws[data-af-still], html[data-af-still] .af.af-ws { transition: none; transform: none; }
+@media (prefers-reduced-motion: reduce) { .af.af-ws { transition: none; transform: none; } }
+.af-ws-top { flex: none; display: flex; align-items: center; gap: 10px; min-width: 0; padding: 8px 12px; padding-top: calc(8px + env(safe-area-inset-top, 0px)); border-bottom: 1px solid var(--af-line); background: var(--af-fill-subtle); }
+.af-ws-name { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }
+.af-ws-name b, .af-ws-name span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.af-ws-name span { font-size: 11.5px; color: var(--af-muted); }
+.af-ws-acts { flex: none; display: flex; align-items: center; gap: 6px; }
+.af-ws-main { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+.af-ws-rail { display: none; }
+.af-ws-stage { flex: none; display: flex; flex-direction: column; gap: 8px; min-width: 0; max-height: 62cqh; overflow: auto; overscroll-behavior: contain; padding: 10px 12px; border-bottom: 1px solid var(--af-line); }
+.af-ws-panel { flex: 1 1 auto; min-height: 0; min-width: 0; overflow: auto; overscroll-behavior: contain; display: flex; flex-direction: column; gap: 12px; padding: 12px 12px calc(16px + env(safe-area-inset-bottom, 0px)); }
+.af-ws .af-ws-stage .af-videopreview { width: auto; height: auto; max-width: 100%; max-height: 32cqh; margin: 0 auto; }
+.af-ws-sec { gap: 12px; }
+.af-ws-sec.af-ws-in { animation: af-in .2s ease-out; }
+html[data-af-still] .af-ws-sec.af-ws-in, .af-ws[data-af-still] .af-ws-sec.af-ws-in { animation: none; }
+@media (prefers-reduced-motion: reduce) { .af-ws-sec.af-ws-in { animation: none; } }
+.af-ws-h { margin: 0; font-size: 15px; font-weight: 650; color: var(--af-text); }
+.af-ws-sec > .af-card > .af-cardh { display: none; }
+.af-ws-sec-btn { display: block; width: 100%; min-height: 34px; padding: 7px 10px; border: 0; border-radius: var(--af-r); background: transparent; color: var(--af-muted); font: 13px var(--lumiverse-font-family, system-ui); text-align: left; cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.af-ws-sec-btn[aria-current="true"] { color: var(--af-text); background: var(--af-accent-soft); }
+.af-ws-sec-btn:focus-visible, .af-ws-part:focus-visible { outline: 2px solid var(--af-accent); outline-offset: 1px; }
+@media (hover: hover) { .af-ws-sec-btn:not([aria-current="true"]):hover { color: var(--af-text); background: var(--af-accent-faint); } }
+.af-ws-railbtn { width: 100%; justify-content: flex-start; margin-bottom: 6px; }
+/* The parts along the video, under the bar. */
+.af-ws-line { position: relative; flex: none; height: 36px; border-radius: var(--af-r-sm); background: var(--af-fill); overflow: hidden; }
+.af-ws-part { position: absolute; top: 2px; bottom: 2px; min-width: 3px; padding: 0; border: 0; border-radius: 3px; background: var(--af-k-character); opacity: .45; cursor: pointer; }
+.af-ws-part[data-kind="narration"] { background: var(--af-k-narrator); }
+.af-ws-part[data-kind="sound"] { background: var(--af-sound); }
+.af-ws-part[aria-current="true"] { opacity: 1; }
+/* The list of keys, over the workspace. */
+.af-ws-pop { position: absolute; z-index: 6; top: 56px; right: 12px; display: flex; flex-direction: column; gap: 10px; width: min(440px, calc(100% - 24px)); max-height: calc(100% - 72px); overflow: auto; padding: 14px; border: 1px solid var(--af-line); border-radius: var(--af-r-md); background: var(--lumiverse-bg-elevated, var(--lumiverse-bg, #1b1a22)); box-shadow: 0 10px 30px rgba(0,0,0,.35); opacity: 0; transform: translateY(4px); transition: opacity .18s ease-out, transform .18s ease-out; outline: none; }
+.af-ws-pop[data-af-open] { opacity: 1; transform: none; }
+html[data-af-still] .af-ws-pop, .af-ws[data-af-still] .af-ws-pop { transition: none; transform: none; }
+@media (prefers-reduced-motion: reduce) { .af-ws-pop { transition: none; transform: none; } }
+.af-keys { display: grid; grid-template-columns: minmax(0, max-content) minmax(0, 1fr); gap: 5px 14px; margin: 0; }
+.af-keys dt { font-weight: 600; overflow-wrap: anywhere; }
+.af-keys dd { margin: 0; color: var(--af-muted); }
+/* Narrow: the buttons in the top bar show their icons only, and the
+   list of keys is left out, since a phone has no keyboard. */
+@container afws (max-width: 899.98px) {
+  .af-ws-acts .af-btn { padding: 7px 9px; min-width: 36px; min-height: 36px; }
+  .af-ws-acts .af-btn > span:last-child { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+}
+@container afws (max-width: 639.98px) {
+  .af-ws-keysbtn { display: none; }
+  .af-ws-top { gap: 6px; padding-left: 8px; padding-right: 8px; }
+  .af-ws-acts { gap: 4px; }
+}
+/* Middle: the preview beside the settings. */
+@container afws (min-width: 640px) {
+  .af-ws-main { display: grid; grid-template-columns: minmax(0, 1fr) minmax(300px, 380px); }
+  .af-ws-stage { max-height: none; min-height: 0; border-bottom: 0; padding: 12px 14px; }
+  .af-ws .af-ws-stage .af-videopreview { max-height: max(140px, calc(100cqh - 250px)); }
+  .af-ws-panel { border-left: 1px solid var(--af-line); }
+}
+/* Wide: the list of parts on the left as well. */
+@container afws (min-width: 1000px) {
+  .af-ws-main { grid-template-columns: 210px minmax(0, 1fr) minmax(320px, 400px); }
+  .af-ws-main[data-rail="closed"] { grid-template-columns: 52px minmax(0, 1fr) minmax(320px, 400px); }
+  .af-ws-rail { display: flex; flex-direction: column; gap: 2px; min-height: 0; overflow: auto; padding: 10px 8px; border-right: 1px solid var(--af-line); }
+  .af-ws-main[data-rail="closed"] .af-ws-sec-btn { display: none; }
+  .af-ws-main[data-rail="closed"] .af-ws-railbtn > span:last-child { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .af-ws-picker { display: none; }
+  .af-ws-stage { padding: 16px 20px; }
+}
 `;
 const BUILT_IN_MOODS = [
     { id: 'happy', name: 'Happy', words: ['happy', 'happily', 'cheerful', 'cheerfully', 'joyful', 'delighted', 'excited', 'excitedly', 'elated', 'laughs', 'laughing', 'laughter', 'chuckles', 'chuckling', 'giggles', 'giggling', 'grinning', 'beaming', 'brightly', 'warmly'] },
@@ -1773,6 +1850,7 @@ const DEFAULTS = {
     studioGap: 0,
     studioAsHeard: true,
     studioLoud: true,
+    studioKeys: true,
     audioSplit: 'one',
     videoShape: 'wide',
     videoFont: 'book',
@@ -1937,6 +2015,7 @@ export function setup(ctx, overrides) {
         }, 400);
     }
     function set(patch) {
+        noteUndo(patch);
         Object.assign(S, patch);
         save();
     }
@@ -3024,7 +3103,7 @@ export function setup(ctx, overrides) {
     let videoRun = null;
     function keepSaid(text) {
         keepLine = text;
-        if (studioRefs && tab === 'studio')
+        if (studioRefs && ws)
             setText(studioRefs.said, text);
     }
     let keepLine = '';
@@ -6575,7 +6654,7 @@ export function setup(ctx, overrides) {
             lines ? lines + (lines === 1 ? ' line has' : ' lines have') + ' no saved audio, so ' + (lines === 1 ? 'it is' : 'they are') + ' left out.' : '',
             sounds ? sounds + (sounds === 1 ? ' sound is' : ' sounds are') + ' not in your library, so ' + (sounds === 1 ? 'it is' : 'they are') + ' left out.' : '',
         ].filter(Boolean).join(' '));
-        goTo('studio');
+        openStudio('show');
         return '';
     }
     // ---- Saved audio, as a gallery ----
@@ -6904,7 +6983,7 @@ export function setup(ctx, overrides) {
             }
         });
         play.setAttribute('data-af-saved-play', '');
-        // The whole performance, built from saved audio, in the Studio tab,
+        // The whole performance, built from saved audio, in the Studio,
         // where it can be downloaded or made into a video.
         // One opening at a time. A press while it opens is ignored, and the
         // button says it is opening.
@@ -7496,7 +7575,7 @@ export function setup(ctx, overrides) {
             shortName: 'Foley',
             headerTitle: 'Auto Foley',
             description: 'Voice acting and sound effects for your TTS',
-            keywords: ['tts', 'voice', 'elevenlabs', 'fish audio', 'gemini', 'chatterbox', 'sound effects', 'audio', 'foley', 'speech', 'narrator'],
+            keywords: ['tts', 'voice', 'elevenlabs', 'fish audio', 'gemini', 'chatterbox', 'sound effects', 'audio', 'foley', 'speech', 'narrator', 'studio', 'video'],
             iconSvg: ICON,
         });
         drawer.root.appendChild(root);
@@ -8644,7 +8723,14 @@ export function setup(ctx, overrides) {
         return { el: bar, paint };
     }
     // A part that opens and closes on a tap, for detail most people skip.
+    // While the Studio is drawn into the workspace, its folds become sections
+    // of their own, and a fold gives back nothing to place.
+    let foldSink = null;
     function fold(title, build, onToggle) {
+        if (foldSink) {
+            foldSink(title, build, onToggle);
+            return document.createDocumentFragment();
+        }
         const wrap = el('<div class="af-col"></div>');
         const head = el('<button type="button" class="af-fold" aria-expanded="false"><span class="af-caret">▶</span><span></span></button>');
         head.lastElementChild.textContent = title;
@@ -8682,11 +8768,14 @@ export function setup(ctx, overrides) {
         page.innerHTML = '';
         page.classList.remove('af-finding');
         stageRefs = null;
-        studioRefs = null;
-        designing = false;
-        designRefs = null;
-        previewBack = '';
-        stopPreview();
+        // The Studio's own parts belong to the workspace, which is drawn apart.
+        if (!ws) {
+            studioRefs = null;
+            designing = false;
+            designRefs = null;
+            previewBack = '';
+            stopPreview();
+        }
         for (const w of permissionWarnings())
             page.appendChild(notice('bad', w));
         for (const n of changeNotices())
@@ -8701,7 +8790,7 @@ export function setup(ctx, overrides) {
             else if (tab === 'sounds')
                 renderSounds();
             else if (tab === 'studio')
-                renderStudio();
+                renderStudioSummary();
             else
                 renderSettings();
         }
@@ -9399,6 +9488,7 @@ export function setup(ctx, overrides) {
         if (!playerOpen)
             go.push({ key: 'player', label: 'Open the player' });
         go.push({ key: 'open', label: 'Open the Auto Foley tab' });
+        go.push({ key: 'studio', label: 'Open the Studio' });
         groups.push(go);
         const doing = [];
         if (show)
@@ -9434,6 +9524,8 @@ export function setup(ctx, overrides) {
         const key = got && got.selectedKey;
         if (key === 'player')
             openPlayer(true);
+        else if (key === 'studio')
+            openStudio();
         else if (key === 'open') {
             try {
                 if (drawer)
@@ -10135,6 +10227,7 @@ export function setup(ctx, overrides) {
             stop();
             pressBar();
         });
+        extra('auto-foley-studio', 'Open the Studio', on, () => openStudio());
         extra('auto-foley-mine', 'Perform my latest message', on, async () => {
             stop();
             const id = await latestId(true);
@@ -10287,10 +10380,10 @@ export function setup(ctx, overrides) {
         }, 'af-primary', ICON_REDO));
         now.appendChild(againRow);
         now.appendChild(retryRow);
-        // Keeping what was heard is all in the Studio tab, with every choice
+        // Keeping what was heard is all in the Studio, with every choice
         // for it in one place.
         const keepRow = el('<div class="af-row" data-af="keeprow"></div>');
-        const video = button('Download or make a video', () => goTo('studio'), '', ICON_DOWNLOAD);
+        const video = button('Download or make a video', () => openStudio('show'), '', ICON_DOWNLOAD);
         video.setAttribute('data-af', 'studio');
         keepRow.appendChild(video);
         now.appendChild(keepRow);
@@ -13492,12 +13585,34 @@ export function setup(ctx, overrides) {
             paintPreview();
             paintStudio();
         });
+        // Keys pressed in full screen: Escape closes it, and Space and F act
+        // as in the Studio. Read on its own root, so no key outside it is
+        // taken.
         const onKey = (e) => {
-            // Escape closes full screen only, not the drawer behind it.
+            if (e.defaultPrevented || e.isComposing)
+                return;
+            const t = e.target;
+            if (t && t.closest && t.closest('input, textarea, select')) {
+                if (e.key !== 'Escape')
+                    return;
+            }
+            const plain = !e.ctrlKey && !e.metaKey && !e.altKey;
+            let did = false;
             if (e.key === 'Escape') {
+                closeTheater();
+                did = true;
+            }
+            else if (ws && S.studioKeys !== false && plain && (e.key === 'f' || e.key === 'F') && !e.shiftKey) {
+                closeTheater();
+                did = true;
+            }
+            else if (ws && S.studioKeys !== false && plain && e.key === ' ' && !e.shiftKey && !play.disabled && t !== play) {
+                play.click();
+                did = true;
+            }
+            if (did) {
                 e.preventDefault();
                 e.stopPropagation();
-                closeTheater();
             }
         };
         // Fitted once a frame at most while the window changes size.
@@ -13510,13 +13625,18 @@ export function setup(ctx, overrides) {
                 });
         };
         root.querySelector('[data-th="close"]').addEventListener('click', () => closeTheater());
-        document.addEventListener('keydown', onKey, true);
+        root.setAttribute('tabindex', '-1');
+        root.addEventListener('keydown', onKey);
         window.addEventListener('resize', onResize);
         (document.body || document.documentElement).appendChild(root);
+        try {
+            root.focus({ preventScroll: true });
+        }
+        catch (_) { }
         theater = {
             root, slot, canvas, play, scrub, time,
             leave: () => {
-                document.removeEventListener('keydown', onKey, true);
+                root.removeEventListener('keydown', onKey);
                 window.removeEventListener('resize', onResize);
             },
         };
@@ -13550,6 +13670,8 @@ export function setup(ctx, overrides) {
             }
             t.root.remove();
             paintStudio();
+            if (ws)
+                focusWs();
         };
         if (calm() || now)
             return back();
@@ -14274,55 +14396,74 @@ export function setup(ctx, overrides) {
         box('rot', 'Turn, in degrees', sh.rot, -180, 180, '0 is level.', (v) => (sh.rot = v));
         r.editor.appendChild(grid);
         const row = el('<div class="af-row af-wrap"></div>');
-        const move = (by) => {
-            const all = shapesNow();
-            const at = all.indexOf(sh);
-            const to = Math.max(0, Math.min(all.length - 1, at + by));
-            if (to === at)
+        const keyed = (b, keys) => {
+            if (S.studioKeys === false)
                 return;
-            all.splice(at, 1);
-            all.splice(to, 0, sh);
-            saveDesignSoon(true);
-            drawDesign();
-            redrawDesign();
+            if (fromMouse())
+                b.title = b.textContent + ' (' + keys + ')';
         };
-        const dup = button('Duplicate', () => {
-            const all = shapesNow();
-            if (all.length >= SHAPES_MAX)
-                return;
-            const copy = { ...sh, stops: (sh.stops || []).slice(), id: rid('sh').replace(/[^a-z0-9]/gi, '').slice(0, 24), x: Math.min(1.5, sh.x + 0.03), y: Math.min(1.5, sh.y + 0.03) };
-            all.splice(all.indexOf(sh) + 1, 0, copy);
-            designSel = copy.id;
-            saveDesignSoon(true);
-            drawDesign();
-            redrawDesign();
-        });
+        const dup = button('Duplicate', () => shapeAct('dup'));
         dup.disabled = shapesNow().length >= SHAPES_MAX;
         dup.setAttribute('data-af-shape-act', 'dup');
-        const fwd = button('Bring forward', () => move(1));
+        keyed(dup, MOD + '+D');
+        const fwd = button('Bring forward', () => shapeAct('forward'));
         fwd.setAttribute('data-af-shape-act', 'forward');
         fwd.disabled = shapesNow().indexOf(sh) === shapesNow().length - 1;
-        const bwd = button('Send back', () => move(-1));
+        keyed(fwd, MOD + '+]');
+        const bwd = button('Send back', () => shapeAct('back'));
         bwd.setAttribute('data-af-shape-act', 'back');
         bwd.disabled = shapesNow().indexOf(sh) === 0;
-        const del = button('Delete', async () => {
-            if (!(await askSure('Delete this shape', 'Delete ' + shapeName(sh, shapesNow().indexOf(sh)) + ' from the design? There is no undo.', 'Delete', true)))
-                return;
-            const all = shapesNow();
-            const at = all.indexOf(sh);
-            if (at >= 0)
-                all.splice(at, 1);
-            designSel = '';
-            saveDesignSoon(true);
-            drawDesign();
-            redrawDesign();
-        });
+        keyed(bwd, MOD + '+[');
+        const del = button('Delete', () => shapeAct('delete'));
         del.setAttribute('data-af-shape-act', 'delete');
+        keyed(del, 'Delete');
         row.appendChild(dup);
         row.appendChild(fwd);
         row.appendChild(bwd);
         row.appendChild(del);
         r.editor.appendChild(row);
+    }
+    // What the buttons under a picked shape do, and the keys that do the
+    // same. Each gives back whether it acted.
+    function shapeAct(what) {
+        const sh = shapeNow();
+        if (!sh)
+            return false;
+        const all = shapesNow();
+        const at = all.indexOf(sh);
+        if (what === 'dup') {
+            if (all.length >= SHAPES_MAX)
+                return false;
+            const copy = { ...sh, stops: (sh.stops || []).slice(), id: rid('sh').replace(/[^a-z0-9]/gi, '').slice(0, 24), x: Math.min(1.5, sh.x + 0.03), y: Math.min(1.5, sh.y + 0.03) };
+            all.splice(at + 1, 0, copy);
+            designSel = copy.id;
+        }
+        else if (what === 'forward' || what === 'back') {
+            const to = Math.max(0, Math.min(all.length - 1, at + (what === 'forward' ? 1 : -1)));
+            if (to === at)
+                return false;
+            all.splice(at, 1);
+            all.splice(to, 0, sh);
+        }
+        else {
+            void (async () => {
+                if (!(await askSure('Delete this shape', 'Delete ' + shapeName(sh, shapesNow().indexOf(sh)) + ' from the design?', 'Delete', true)))
+                    return;
+                const now = shapesNow();
+                const i = now.indexOf(sh);
+                if (i >= 0)
+                    now.splice(i, 1);
+                designSel = '';
+                saveDesignSoon(true);
+                drawDesign();
+                redrawDesign();
+            })();
+            return true;
+        }
+        saveDesignSoon(true);
+        drawDesign();
+        redrawDesign();
+        return true;
     }
     // The preview takes presses for shapes only while a design is shown, and
     // only then stops a finger on it from scrolling the page.
@@ -14508,7 +14649,7 @@ export function setup(ctx, overrides) {
                 videoFrame(g2, v.at, v.parts, v.total, v.st, v.title);
         }
     }
-    // The buttons and lines of the Studio tab, kept in step with what there is.
+    // The buttons and lines of the Studio, kept in step with what there is.
     // The performance the Studio was last built for, so a new one played
     // while the tab is open is picked up once, not on every paint.
     let studioFor;
@@ -14517,14 +14658,14 @@ export function setup(ctx, overrides) {
     let studioForN = 0;
     function paintStudio() {
         const r = studioRefs;
-        if (!r || tab !== 'studio')
+        if (!r || !ws)
             return;
         const now = keptShow();
         if (now !== studioFor && !videoRun) {
             studioFor = now;
             studioForN = now ? now.played.length : 0;
             // Drawn again, since its list of parts belongs to that performance.
-            renderTab();
+            renderWorkspace();
             return;
         }
         if (now && now.played.length !== studioForN && !videoRun) {
@@ -14562,6 +14703,12 @@ export function setup(ctx, overrides) {
                 r.scrub.value = String(v.at);
             fillTo(r.scrub, v.length ? v.at / v.length : 0);
             setText(r.scrubOut, mmss(v.at) + ' of ' + mmss(v.length));
+        }
+        if (r.line) {
+            if (shown)
+                paintLine();
+            else
+                r.line.hidden = true;
         }
         setText(r.said, keepLine);
         if (theater) {
@@ -15033,7 +15180,7 @@ export function setup(ctx, overrides) {
                 if (back)
                     Object.assign(patch, withBack(back));
                 set(patch);
-                renderTab();
+                renderWorkspace();
             }, 'af-primary');
             use.setAttribute('data-af-lookuse', '');
             const del = button('Delete', async () => {
@@ -15158,12 +15305,768 @@ export function setup(ctx, overrides) {
         box.appendChild(addRow);
         box.appendChild(hint(notes.length >= NOTES_MAX ? 'Ten notes is the most a video can have.' : 'Add a note here starts it where the preview is. Notes are saved, so they can be used on the next video.'));
     }
-    function renderStudio() {
+    // ---------- The Studio's workspace ----------
+    // The Studio opens over Lumiverse in a workspace of its own. With App
+    // manipulation it covers the whole screen, through ctx.ui.mountApp. Without
+    // it, it opens in Lumiverse's extension window at the largest size
+    // Lumiverse allows. The drawer's Studio tab keeps a short summary.
+    const WS_SECTIONS = [
+        { id: 'saved', title: 'Saved audio' },
+        { id: 'show', title: 'The performance and scenes' },
+        { id: 'shape', title: 'Shape and words' },
+        { id: 'speakers', title: 'Speakers' },
+        { id: 'background', title: 'Background' },
+        { id: 'moving', title: 'Moving between lines' },
+        { id: 'title', title: 'Title and ending' },
+        { id: 'sounds', title: 'Sounds' },
+        { id: 'notes', title: 'Notes' },
+        { id: 'marks', title: 'Watermarks' },
+        { id: 'looks', title: 'Saved looks' },
+        { id: 'sound', title: 'Sound effects and music' },
+        { id: 'audio', title: 'Audio' },
+        { id: 'hide', title: 'Hide and bleep words' },
+        { id: 'keys', title: 'Keyboard shortcuts' },
+    ];
+    function sectionId(title) {
+        const f = WS_SECTIONS.find((x) => x.title === title);
+        return f ? f.id : title.toLowerCase().replace(/[^a-z]+/g, '-');
+    }
+    let ws = null;
+    let wsSection = 'show';
+    let wsRail = true;
+    let wsDraw = null;
+    function paintUndo() {
+        if (!wsDraw)
+            return;
+        wsDraw.undo.disabled = !undoStack.length;
+        wsDraw.redo.disabled = !redoStack.length;
+    }
+    const IS_MAC = (() => {
+        try {
+            const nav = navigator;
+            return /mac|iphone|ipad/i.test(String((nav.userAgentData && nav.userAgentData.platform) || nav.platform || ''));
+        }
+        catch (_) {
+            return false;
+        }
+    })();
+    const MOD = IS_MAC ? 'Cmd' : 'Ctrl';
+    // Opens the workspace, on one section when given. Open already, it shows
+    // that section.
+    function openStudio(section, then) {
+        if (section)
+            wsSection = section;
+        if (ws && ws.box.isConnected && !ws.closing) {
+            renderWorkspace();
+            focusWs();
+            if (then)
+                then();
+            return;
+        }
+        if (ws)
+            dropWs();
+        const box = el('<div class="af af-ws" role="dialog" aria-modal="true" aria-label="Auto Foley Studio" tabindex="-1" data-af-ws></div>');
+        if (calm())
+            box.setAttribute('data-af-still', '');
+        let how = 'modal';
+        let handle = null;
+        try {
+            if (ctx.ui && typeof ctx.ui.mountApp === 'function') {
+                handle = ctx.ui.mountApp({ position: 'app-overlay', className: 'af-ws-mount' });
+                if (handle && handle.root) {
+                    handle.root.appendChild(box);
+                    how = 'app';
+                }
+            }
+        }
+        catch (_) {
+            // Without App manipulation, Lumiverse refuses the mount, and the
+            // workspace opens in the extension window instead.
+            handle = null;
+        }
+        if (how !== 'app') {
+            try {
+                handle = ctx.ui.showModal({ title: 'Auto Foley Studio', width: 100000, maxHeight: 100000, persistent: true });
+                // The window is made as tall as it may be, and its own title row
+                // is hidden, since the workspace has a bar of its own with Close.
+                const body = handle.root.parentElement;
+                const shell = body ? body.parentElement : null;
+                if (body) {
+                    body.style.padding = '0';
+                    body.style.display = 'flex';
+                    body.style.flexDirection = 'column';
+                    body.style.overflow = 'hidden';
+                    const head = body.previousElementSibling;
+                    if (head && head.querySelector('h3'))
+                        head.style.display = 'none';
+                }
+                if (shell && shell.style.maxHeight)
+                    shell.style.height = shell.style.maxHeight;
+                handle.root.style.cssText += ';flex:1 1 auto;min-height:0;display:flex;flex-direction:column';
+                handle.root.appendChild(box);
+                if (typeof handle.onDismiss === 'function')
+                    handle.onDismiss(() => {
+                        if (ws && ws.handle === handle)
+                            closeStudio(true);
+                    });
+            }
+            catch (e) {
+                notify('warning', 'The Studio could not be opened: ' + String((e && e.message) || e) + '.');
+                return;
+            }
+        }
+        box.setAttribute('data-af-how', how);
+        box.addEventListener('keydown', wsKey);
+        // App manipulation can be taken away while the workspace is open, and
+        // Lumiverse then takes its place away. The workspace opens again in the
+        // extension window, on the same section.
+        const watch = setInterval(() => {
+            if (ws && ws.box === box && !box.isConnected && !ws.closing) {
+                const at = wsSection;
+                dropWs();
+                openStudio(at);
+            }
+        }, 1000);
+        ws = { box, how, handle, closing: false, watch };
+        undoStart();
+        renderWorkspace();
+        if (tab === 'studio')
+            renderTab();
+        requestAnimationFrame(() => {
+            void box.offsetWidth;
+            box.setAttribute('data-af-open', '');
+        });
+        focusWs();
+        if (then)
+            requestAnimationFrame(() => then());
+    }
+    function focusWs() {
+        try {
+            if (ws && !ws.box.contains(document.activeElement))
+                ws.box.focus({ preventScroll: true });
+        }
+        catch (_) { }
+    }
+    // Takes the workspace away at once, with nothing saved to do: every
+    // change is saved as it is made.
+    function dropWs() {
+        const w = ws;
+        if (!w)
+            return;
+        ws = null;
+        wsDraw = null;
+        clearInterval(w.watch);
+        w.box.removeEventListener('keydown', wsKey);
+        if (theater)
+            closeTheater(true);
+        stopPreview();
+        hideHint();
+        hideKeyList();
+        studioRefs = null;
+        designing = false;
+        designRefs = null;
+        previewBack = '';
+        try {
+            if (w.how === 'app')
+                w.handle.destroy();
+            else if (!w.closing)
+                w.handle.dismiss();
+        }
+        catch (_) { }
+        w.box.remove();
+    }
+    async function closeStudio(fromHost = false) {
+        const w = ws;
+        if (!w || w.closing)
+            return;
+        if (videoRun && !fromHost) {
+            if (!(await askSure('Close the Studio', 'A video is being made. Closing the Studio stops it.', 'Close', true)))
+                return;
+            if (videoRun)
+                videoRun.cancel();
+        }
+        if (ws !== w)
+            return;
+        w.closing = true;
+        w.box.removeAttribute('data-af-open');
+        const done = () => {
+            w.closing = fromHost;
+            if (ws === w)
+                dropWs();
+            else {
+                try {
+                    if (w.how === 'app')
+                        w.handle.destroy();
+                    else if (!fromHost)
+                        w.handle.dismiss();
+                }
+                catch (_) { }
+                w.box.remove();
+            }
+            if (alive && tab === 'studio')
+                renderTab();
+        };
+        if (calm() || fromHost)
+            done();
+        else {
+            const t = setTimeout(() => {
+                timers.delete(t);
+                done();
+            }, 220);
+            timers.add(t);
+        }
+    }
+    // Draws the workspace again, on the section that was open, with the list
+    // of settings scrolled where it was.
+    function renderWorkspace() {
+        const w = ws;
+        if (!w || w.closing)
+            return;
+        hideHint();
+        stopPreview();
+        const oldPanel = w.box.querySelector('[data-af-ws-panel]');
+        const was = oldPanel ? oldPanel.scrollTop : 0;
+        studioRefs = null;
+        designing = false;
+        designRefs = null;
+        previewBack = '';
+        w.box.replaceChildren();
+        const sh = keptShow();
+        const top = el('<div class="af-ws-top">' +
+            '<div class="af-ws-name"><b data-af-ws-name></b><span data-af-ws-sub></span></div>' +
+            '<div class="af-ws-acts" data-af-ws-acts></div>' +
+            '</div>');
+        setText(top.querySelector('[data-af-ws-name]'), sh ? String(sh.fileTitle || sh.title || 'The last message played') : 'Studio');
+        setText(top.querySelector('[data-af-ws-sub]'), sh ? 'The performance' : 'The example, with no sound');
+        const acts = top.querySelector('[data-af-ws-acts]');
+        const main = el('<div class="af-ws-main">' +
+            '<nav class="af-ws-rail" aria-label="Parts of the Studio" data-af-ws-rail></nav>' +
+            '<div class="af-ws-stage" data-af-ws-stage></div>' +
+            '<div class="af-ws-panel" data-af-ws-panel></div>' +
+            '</div>');
+        main.setAttribute('data-rail', wsRail ? 'open' : 'closed');
+        const rail = main.querySelector('[data-af-ws-rail]');
+        const stage = main.querySelector('[data-af-ws-stage]');
+        const panel = main.querySelector('[data-af-ws-panel]');
+        const secs = new Map();
+        for (const n of permissionWarnings())
+            stage.appendChild(notice('bad', n));
+        if (w.how === 'modal')
+            stage.appendChild(hint('Full screen needs App manipulation. Turn it on for Auto Foley in Lumiverse’s Extensions panel.'));
+        renderStudio((id, title, build, toggle) => secs.set(id, { title, build, toggle }), stage, acts);
+        secs.set('keys', { title: 'Keyboard shortcuts', build: (b) => drawKeyHelp(b) });
+        // The top bar's own buttons, after Make a video and Download audio.
+        const undoBtn = button('Undo', () => undoStep(true), 'af-ws-undo', ICON_UNDO);
+        undoBtn.setAttribute('data-af-ws', 'undo');
+        const redoBtn = button('Redo', () => undoStep(false), 'af-ws-undo', ICON_STEP_AGAIN);
+        redoBtn.setAttribute('data-af-ws', 'redo');
+        acts.appendChild(undoBtn);
+        acts.appendChild(redoBtn);
+        const keysBtn = button('Keyboard shortcuts', () => showKeyList(keysBtn), 'af-ws-keysbtn', ICON_KEYS);
+        keysBtn.setAttribute('data-af-ws', 'keys');
+        keysBtn.title = 'Keyboard shortcuts (?)';
+        acts.appendChild(keysBtn);
+        const close = button('Close', () => closeStudio(), '', ICON_CLOSE);
+        close.setAttribute('data-af-ws', 'close');
+        close.title = 'Close the Studio (Escape)';
+        acts.appendChild(close);
+        // The list of sections, on a laptop, with a button to fold it away.
+        const fold = button(wsRail ? 'Hide the list' : 'Show the list', () => {
+            wsRail = !wsRail;
+            main.setAttribute('data-rail', wsRail ? 'open' : 'closed');
+            setText(fold.querySelector('span:last-child'), wsRail ? 'Hide the list' : 'Show the list');
+            fold.setAttribute('aria-expanded', wsRail ? 'true' : 'false');
+        }, 'af-ws-railbtn', ICON_LIST);
+        fold.setAttribute('aria-expanded', wsRail ? 'true' : 'false');
+        fold.setAttribute('data-af-ws', 'rail');
+        rail.appendChild(fold);
+        const order = WS_SECTIONS.filter((x) => secs.has(x.id));
+        for (const x of order) {
+            const b = el('<button type="button" class="af-ws-sec-btn"></button>');
+            b.textContent = x.title;
+            b.setAttribute('data-af-ws-sec', x.id);
+            b.addEventListener('click', () => showSection(x.id));
+            rail.appendChild(b);
+        }
+        // On a phone and in a narrow window, a dropdown in place of the list.
+        const pickRow = select('Part of the Studio', order.map((x) => ({ id: x.id, label: x.title })), secs.has(wsSection) ? wsSection : 'show', (v) => showSection(v));
+        pickRow.classList.add('af-ws-picker');
+        w.box.appendChild(top);
+        w.box.appendChild(main);
+        wsDraw = { panel, rail, picker: pickRow.querySelector('select'), secs, undo: undoBtn, redo: redoBtn };
+        paintUndo();
+        // Each button's key, in its hover text, on a computer with a mouse.
+        if (fromMouse() && S.studioKeys !== false) {
+            const say = (b, k) => {
+                if (b)
+                    b.title = (b.textContent || '').trim() + ' (' + k + ')';
+            };
+            say(undoBtn, MOD + '+Z');
+            say(redoBtn, MOD + '+Shift+Z');
+            // Set again by renderStudio above, which TypeScript does not follow.
+            const refs = studioRefs;
+            if (refs) {
+                say(refs.play, 'Space');
+                say(w.box.querySelector('[data-af-studio="full"]'), 'F');
+            }
+        }
+        panel.appendChild(pickRow);
+        showSection(secs.has(wsSection) ? wsSection : 'show', true);
+        panel.scrollTop = was;
+    }
+    function showSection(id, first = false) {
+        const d = wsDraw;
+        if (!d)
+            return;
+        const s = d.secs.get(id);
+        if (!s)
+            return;
+        const changed = wsSection !== id;
+        wsSection = id;
+        hideHint();
+        const old = d.panel.querySelector('[data-af-section]');
+        if (old) {
+            // A part that does something while it shows, such as Background
+            // letting the preview take presses for shapes, is told it is gone.
+            const was = d.secs.get(String(old.getAttribute('data-af-section')));
+            old.remove();
+            if (was && was.toggle) {
+                try {
+                    was.toggle(false);
+                }
+                catch (_) { }
+            }
+        }
+        if (designing) {
+            designing = false;
+            designRefs = null;
+            paintDesignMode();
+            redrawDesign();
+        }
+        const box = el('<div class="af-col af-ws-sec" data-af-section></div>');
+        box.setAttribute('data-af-section', id);
+        box.appendChild(el('<h2 class="af-ws-h"></h2>'));
+        setText(box.firstElementChild, s.title);
+        try {
+            s.build(box);
+        }
+        catch (e) {
+            box.appendChild(notice('bad', 'This part could not be drawn: ' + String((e && e.message) || e)));
+        }
+        if (!first && !calm())
+            box.classList.add('af-ws-in');
+        d.panel.appendChild(box);
+        if (s.toggle) {
+            try {
+                s.toggle(true);
+            }
+            catch (_) { }
+        }
+        for (const b of Array.from(d.rail.querySelectorAll('[data-af-ws-sec]'))) {
+            if (b.getAttribute('data-af-ws-sec') === id)
+                b.setAttribute('aria-current', 'true');
+            else
+                b.removeAttribute('aria-current');
+        }
+        if (d.picker && d.picker.value !== id)
+            d.picker.value = id;
+        if (changed && !first)
+            d.panel.scrollTop = 0;
+    }
+    // ---- the timeline under the preview ----
+    // One block for each part, as long as the part, so a press goes to it.
+    let lineKey = '';
+    function paintLine() {
+        const r = studioRefs;
+        if (!r || !r.line)
+            return;
+        const v = studioView;
+        const intro = titleSecs(v.title);
+        const key = v.parts.map((p) => p.k + ':' + p.start.toFixed(2)).join(',') + '|' + v.length.toFixed(2);
+        if (key !== lineKey || !r.line.childElementCount) {
+            lineKey = key;
+            r.line.replaceChildren();
+            const total = Math.max(0.1, v.length);
+            v.parts.forEach((p, n) => {
+                const b = el('<button type="button" class="af-ws-part"></button>');
+                b.style.left = ((intro + p.start) / total) * 100 + '%';
+                b.style.width = Math.max(0.6, (p.len / total) * 100) + '%';
+                b.setAttribute('data-kind', p.kind === 'sound' ? 'sound' : p.narration ? 'narration' : 'line');
+                const what = p.kind === 'sound' ? 'Sound: ' + (p.caption || 'a sound') : (p.name ? p.name + ': ' : '') + p.words.join(' ');
+                b.setAttribute('aria-label', 'Part ' + (n + 1) + '. ' + what.slice(0, 80));
+                b.title = what.slice(0, 120);
+                b.addEventListener('click', () => wsSeek(intro + p.start));
+                r.line.appendChild(b);
+            });
+            r.line.hidden = !v.parts.length;
+        }
+        const now = v.at - intro;
+        Array.from(r.line.children).forEach((b, n) => {
+            const p = v.parts[n];
+            const on = !!p && now >= p.start && now < p.start + p.len;
+            if (on)
+                b.setAttribute('aria-current', 'true');
+            else
+                b.removeAttribute('aria-current');
+        });
+    }
+    function wsSeek(t) {
+        const v = studioView;
+        if (!v.sh && !v.example)
+            return;
+        stopPreview();
+        v.at = Math.max(0, Math.min(v.length, t));
+        paintPreview();
+        paintStudio();
+    }
+    // The part before or after the one at the bar, by its start.
+    function wsPart(dir) {
+        const v = studioView;
+        const intro = titleSecs(v.title);
+        const starts = v.parts.map((p) => intro + p.start);
+        if (dir > 0) {
+            const next = starts.find((x) => x > v.at + 0.01);
+            wsSeek(next === undefined ? v.length : next);
+        }
+        else {
+            const before = starts.filter((x) => x < v.at - 0.25);
+            wsSeek(before.length ? before[before.length - 1] : 0);
+        }
+    }
+    // ---- undo ----
+    // Each change to a Studio setting made while the workspace is open can be
+    // taken back and done again. Changes within 600 ms of each other, such as
+    // a color dragged, are one step. Deleting a background or a watermark
+    // deletes its picture too, so Undo goes back no further than that.
+    const UNDO_MAX = 60;
+    let undoStack = [];
+    let redoStack = [];
+    let undoing = false;
+    const studioKey = (k) => /^(video|studio|censor|audioSplit)/.test(k) && k !== 'videoLooks' && k !== 'studioKeys';
+    // What each Studio setting was after the last change, as text. Shapes
+    // and watermarks are changed in place before they are saved, so the
+    // value before a change is read from here, not from the settings.
+    let undoBase = {};
+    function undoStart() {
+        undoBase = {};
+        undoStack = [];
+        redoStack = [];
+        for (const k of Object.keys(DEFAULTS).concat(Object.keys(S)))
+            if (studioKey(k))
+                undoBase[k] = JSON.stringify(S[k] === undefined ? DEFAULTS[k] : S[k]);
+    }
+    function noteUndo(patch) {
+        if (!ws || !patch || typeof patch !== 'object')
+            return;
+        const keys = Object.keys(patch).filter(studioKey);
+        if (!keys.length)
+            return;
+        const base = (k) => (k in undoBase ? undoBase[k] : JSON.stringify(S[k] === undefined ? DEFAULTS[k] : S[k]));
+        const keep = () => {
+            for (const k of keys)
+                undoBase[k] = JSON.stringify(patch[k]);
+        };
+        if (undoing)
+            return keep();
+        // A background or watermark with a picture, deleted: its picture is
+        // deleted with it, so nothing before it can be undone.
+        for (const k of ['videoBacks', 'videoMarks']) {
+            if (keys.indexOf(k) < 0)
+                continue;
+            const now = (Array.isArray(patch[k]) ? patch[k] : []).map((x) => x && x.id);
+            let was = [];
+            try {
+                was = JSON.parse(base(k)) || [];
+            }
+            catch (_) { }
+            const gone = (Array.isArray(was) ? was : []).filter((x) => x && now.indexOf(x.id) < 0 && (k === 'videoBacks' ? x.kind === 'picture' : !!x.pic));
+            if (gone.length) {
+                undoStack = [];
+                redoStack = [];
+                return keep();
+            }
+        }
+        const last = undoStack[undoStack.length - 1];
+        const at = Date.now();
+        const after = {};
+        for (const k of keys)
+            after[k] = JSON.parse(JSON.stringify(patch[k] === undefined ? null : patch[k]));
+        if (last && at - last.at < 600 && keys.every((k) => k in last.after)) {
+            Object.assign(last.after, after);
+            last.at = at;
+        }
+        else {
+            const before = {};
+            for (const k of keys)
+                before[k] = JSON.parse(base(k));
+            if (JSON.stringify(before) !== JSON.stringify(after)) {
+                undoStack.push({ before, after, at });
+                if (undoStack.length > UNDO_MAX)
+                    undoStack.shift();
+            }
+        }
+        redoStack = [];
+        keep();
+        paintUndo();
+    }
+    function undoStep(back) {
+        const from = back ? undoStack : redoStack;
+        const step = from.pop();
+        if (!step) {
+            keepSaid(back ? 'Nothing to undo.' : 'Nothing to redo.');
+            paintStudio();
+            return false;
+        }
+        (back ? redoStack : undoStack).push(step);
+        undoing = true;
+        try {
+            set(JSON.parse(JSON.stringify(back ? step.before : step.after)));
+        }
+        finally {
+            undoing = false;
+        }
+        keepSaid(back ? 'Undone.' : 'Done again.');
+        renderWorkspace();
+        return true;
+    }
+    // ---- keyboard shortcuts ----
+    const KEY_LIST = [
+        ['Space', 'Play or stop the preview'],
+        ['Left and Right', 'Back or forward one second'],
+        ['Shift with Left and Right', 'The part before or after'],
+        ['Home and End', 'The start or the end'],
+        ['F', 'The preview full screen'],
+        [MOD + ' and Z', 'Undo'],
+        [MOD + ', Shift and Z, or ' + MOD + ' and Y', 'Redo'],
+        ['Delete or Backspace', 'Delete the shape picked, after asking'],
+        [MOD + ' and D', 'Make a copy of the shape picked'],
+        [MOD + ' and ] or [', 'Bring the shape picked forward, or send it back'],
+        ['Arrow keys, with the preview pressed', 'Move the shape picked 1 pixel, or 10 with Shift'],
+        [MOD + ' and S', 'Say that everything is saved'],
+        ['?', 'This list'],
+        ['Escape', 'Close a pop-up, then full screen, then the Studio'],
+    ];
+    function drawKeyHelp(b) {
+        b.appendChild(toggle('Keyboard shortcuts', 'On by default. Turn off if a key clashes with something else you use. Every action also has a button.', 'studioKeys'));
+        b.appendChild(keyTable());
+        b.appendChild(hint('They work while the Studio is open and you are not typing in a box. Escape always closes the Studio.'));
+    }
+    function keyTable() {
+        const t = el('<dl class="af-keys"></dl>');
+        for (const [k, what] of KEY_LIST) {
+            const dt = document.createElement('dt');
+            dt.textContent = k;
+            const dd = document.createElement('dd');
+            dd.textContent = what;
+            t.appendChild(dt);
+            t.appendChild(dd);
+        }
+        return t;
+    }
+    let keyPop = null;
+    function showKeyList(from) {
+        const w = ws;
+        if (!w)
+            return;
+        if (keyPop) {
+            hideKeyList();
+            return;
+        }
+        const pop = el('<div class="af-ws-pop" role="dialog" aria-label="Keyboard shortcuts" tabindex="-1" data-af-keylist><h2 class="af-ws-h">Keyboard shortcuts</h2></div>');
+        pop.appendChild(keyTable());
+        pop.appendChild(hint(S.studioKeys === false ? 'They are off. Turn them on under Keyboard shortcuts in the list of parts.' : 'Turn them off under Keyboard shortcuts in the list of parts, if a key clashes with something else you use.'));
+        const row = el('<div class="af-row"></div>');
+        const close = button('Close', () => hideKeyList());
+        close.setAttribute('data-af-keyclose', '');
+        row.appendChild(close);
+        pop.appendChild(row);
+        w.box.appendChild(pop);
+        keyPop = pop;
+        void pop.offsetWidth;
+        pop.setAttribute('data-af-open', '');
+        try {
+            close.focus({ preventScroll: true });
+        }
+        catch (_) { }
+        pop._from = from || null;
+    }
+    function hideKeyList() {
+        const pop = keyPop;
+        if (!pop)
+            return;
+        keyPop = null;
+        const from = pop._from;
+        pop.removeAttribute('data-af-open');
+        const t = setTimeout(() => {
+            timers.delete(t);
+            pop.remove();
+        }, calm() ? 0 : 180);
+        timers.add(t);
+        try {
+            if (from && from.isConnected)
+                from.focus({ preventScroll: true });
+            else
+                focusWs();
+        }
+        catch (_) { }
+    }
+    // A key pressed in the workspace. Only keys it acts on are stopped; every
+    // other key, and every key while typing in a box, goes on as normal.
+    function wsKey(e) {
+        const w = ws;
+        if (!w || w.closing || e.defaultPrevented || e.isComposing)
+            return;
+        const t = e.target;
+        if (!t || !w.box.contains(t))
+            return;
+        // Another extension's part of the page, even one drawn inside.
+        const other = t.closest ? t.closest(OTHER_UI) : null;
+        if (other && !other.contains(w.box))
+            return;
+        const mod = IS_MAC ? e.metaKey : e.ctrlKey;
+        const extra = IS_MAC ? e.ctrlKey : e.metaKey;
+        const key = e.key;
+        const act = () => {
+            // Escape closes the newest thing first. It works with the
+            // shortcuts off, since it is how the Studio is closed.
+            if (key === 'Escape') {
+                if (hintPop)
+                    hideHint();
+                else if (keyPop)
+                    hideKeyList();
+                else
+                    closeStudio();
+                return true;
+            }
+            if (S.studioKeys === false || extra || e.altKey)
+                return false;
+            const typing = !!t.closest('input, textarea, select, [contenteditable=""], [contenteditable="true"]');
+            if (typing)
+                return false;
+            const lower = key.length === 1 ? key.toLowerCase() : key;
+            if (mod) {
+                if (lower === 'z')
+                    return undoStep(!e.shiftKey) || true;
+                if (lower === 'y' && !e.shiftKey)
+                    return undoStep(false) || true;
+                if (lower === 's' && !e.shiftKey) {
+                    keepSaid('Saved. Every change is kept as you make it.');
+                    paintStudio();
+                    return true;
+                }
+                if (!shapeNow() || !designing)
+                    return false;
+                if (lower === 'd' && !e.shiftKey)
+                    return shapeAct('dup');
+                if (key === ']' && !e.shiftKey)
+                    return shapeAct('forward');
+                if (key === '[' && !e.shiftKey)
+                    return shapeAct('back');
+                return false;
+            }
+            const onPreview = !!(studioRefs && t === studioRefs.canvas);
+            if ((key === 'Delete' || key === 'Backspace') && designing && shapeNow())
+                return shapeAct('delete');
+            if (key.startsWith('Arrow') && designing && shapeNow() && onPreview) {
+                const by = e.shiftKey ? 10 : 1;
+                const dx = key === 'ArrowLeft' ? -by : key === 'ArrowRight' ? by : 0;
+                const dy = key === 'ArrowUp' ? -by : key === 'ArrowDown' ? by : 0;
+                return nudgeShape(dx, dy);
+            }
+            if (key === '?') {
+                showKeyList();
+                return true;
+            }
+            if (!studioRefs)
+                return false;
+            const v = studioView;
+            const shown = !!v.sh || !!v.example;
+            if (key === ' ' && !e.shiftKey) {
+                if (!shown || studioRefs.play.disabled)
+                    return false;
+                studioRefs.play.click();
+                return true;
+            }
+            if (lower === 'f' && !e.shiftKey) {
+                if (theater)
+                    closeTheater();
+                else
+                    openTheater();
+                return true;
+            }
+            if (!shown)
+                return false;
+            if (key === 'ArrowLeft' || key === 'ArrowRight') {
+                if (e.shiftKey)
+                    wsPart(key === 'ArrowRight' ? 1 : -1);
+                else
+                    wsSeek(v.at + (key === 'ArrowRight' ? 1 : -1));
+                return true;
+            }
+            if (key === 'Home') {
+                wsSeek(0);
+                return true;
+            }
+            if (key === 'End') {
+                wsSeek(v.length);
+                return true;
+            }
+            return false;
+        };
+        if (act()) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+    }
+    // Moves the shape picked by pixels of a 1080-pixel frame.
+    function nudgeShape(dx, dy) {
+        const sh = shapeNow();
+        const st = studioView.st;
+        if (!sh || !st)
+            return false;
+        const u = Math.min(st.w, st.h) / 1080;
+        sh.x = Math.max(-0.5, Math.min(1.5, sh.x + (dx * u) / st.w));
+        sh.y = Math.max(-0.5, Math.min(1.5, sh.y + (dy * u) / st.h));
+        saveDesignSoon();
+        drawDesign();
+        redrawDesign();
+        return true;
+    }
+    // Teardown takes the workspace away at once.
+    disposers.push(() => dropWs());
+    // The drawer's Studio tab: what is loaded, and the way into the workspace.
+    function renderStudioSummary() {
+        const sh = keptShow();
+        const c = card('Studio', 'Make a video of a performance, or download its audio. The Studio opens over Lumiverse, with the preview large and every choice beside it.');
+        c.setAttribute('data-af-card', 'studio-summary');
+        const what = el('<p class="af-status" data-af-studio-what></p>');
+        setText(what, sh ? 'Loaded: ' + String(sh.fileTitle || sh.title || 'the last message played') + '.' : 'Nothing is loaded. Play a message, or open one from Saved audio in the Studio.');
+        c.appendChild(what);
+        if (ws)
+            c.appendChild(hint('The Studio is open.'));
+        const row = el('<div class="af-row"></div>');
+        const open = button('Open the Studio', () => openStudio(), 'af-primary', ICON_VIDEO);
+        open.setAttribute('data-af-studio-open', '');
+        row.appendChild(open);
+        const make = button('Make a video', () => openStudio('show', () => {
+            if (!videoRun && keptShow())
+                makeVideo();
+        }), '', ICON_VIDEO);
+        make.setAttribute('data-af-studio-make', '');
+        make.disabled = !sh;
+        row.appendChild(make);
+        c.appendChild(row);
+        page.appendChild(c);
+    }
+    // The Studio, drawn into the workspace: each part of it is a section with
+    // a name, built when it is picked; the preview and its controls go in
+    // stage; Make a video and Download audio go in the top bar.
+    function renderStudio(sec, stage, topActs) {
         const sh = keptShow();
         studioFor = sh;
         studioForN = sh ? sh.played.length : 0;
-        // The gallery of saved scripts first: each one can be opened here.
-        page.appendChild(savedCard());
+        // The gallery of saved scripts: each one can be opened here.
+        sec('saved', 'Saved audio', (b) => b.appendChild(savedCard()));
         // ---- the performance ----
         const pc = card('The performance', sh ? 'The last message played. Choose what goes into the audio and the video.' : 'Play a message first. Its audio and a video of it can then be kept here.');
         pc.setAttribute('data-af-card', 'studio-show');
@@ -15332,15 +16235,17 @@ export function setup(ctx, overrides) {
                 sayLong();
             }));
         }
-        pc.appendChild(toggle('Sound effects', 'On by default. Off: only the voices are kept.', 'studioSounds', () => studioBuild(true)));
-        pc.appendChild(toggle('Music', 'On by default. Keeps the scene music that played under the performance. Off: no music is kept.', 'studioMusic', () => studioBuild(true)));
-        pc.appendChild(numberRow('Pause between parts, in seconds', Number(S.studioGap) || 0, 0, 3, 0.1, (v) => {
-            set({ studioGap: v });
-            studioBuild(true);
-        }, '0 by default. A short pause, such as 0.3, adds a silence between lines, as in an audiobook.'));
-        pc.appendChild(toggle('As you heard it', 'On by default. Uses your Voices and Sounds volumes and Even voice levels. Off: each part as the voice service sent it.', 'studioAsHeard', () => studioBuild(true)));
-        pc.appendChild(toggle('Even out the loudness', 'On by default. The loudest moment is set just under the most a file can hold, so the file is neither too quiet nor clipped.', 'studioLoud', () => studioBuild(true)));
-        page.appendChild(pc);
+        sec('show', 'The performance and scenes', (b) => b.appendChild(pc));
+        sec('sound', 'Sound effects and music', (b) => {
+            b.appendChild(toggle('Sound effects', 'On by default. Off: only the voices are kept.', 'studioSounds', () => studioBuild(true)));
+            b.appendChild(toggle('Music', 'On by default. Keeps the scene music that played under the performance. Off: no music is kept.', 'studioMusic', () => studioBuild(true)));
+            b.appendChild(numberRow('Pause between parts, in seconds', Number(S.studioGap) || 0, 0, 3, 0.1, (v) => {
+                set({ studioGap: v });
+                studioBuild(true);
+            }, '0 by default. A short pause, such as 0.3, adds a silence between lines, as in an audiobook.'));
+            b.appendChild(toggle('As you heard it', 'On by default. Uses your Voices and Sounds volumes and Even voice levels. Off: each part as the voice service sent it.', 'studioAsHeard', () => studioBuild(true)));
+            b.appendChild(toggle('Even out the loudness', 'On by default. The loudest moment is set just under the most a file can hold, so the file is neither too quiet nor clipped.', 'studioLoud', () => studioBuild(true)));
+        });
         // ---- audio ----
         const ac = card('Audio', 'A WAV file keeps the sound exactly as it was. Any audio program can save it as MP3.');
         ac.setAttribute('data-af-card', 'studio-audio');
@@ -15358,18 +16263,29 @@ export function setup(ctx, overrides) {
         dlall.setAttribute('data-af-studio', 'dlall');
         const dlpart = button('Download this part', () => downloadPart(), '', ICON_DOWNLOAD);
         dlpart.setAttribute('data-af-studio', 'dlpart');
-        aRow.appendChild(dlall);
+        topActs.appendChild(dlall);
         aRow.appendChild(dlpart);
         ac.appendChild(aRow);
-        page.appendChild(ac);
+        sec('audio', 'Audio', (b) => b.appendChild(ac));
         // ---- video ----
-        const vc = card('Video', 'The preview shows one frame with your choices. Drag the bar to look at any moment, or play it.');
-        vc.setAttribute('data-af-card', 'studio-video');
+        // The preview and its controls are the stage. The folds of the look
+        // become sections of their own.
+        const vc = stage;
+        foldSink = (title, build, onToggle) => sec(sectionId(title), title, build, onToggle);
         const canvas = document.createElement('canvas');
         canvas.className = 'af-videopreview';
         canvas.setAttribute('role', 'img');
         canvas.setAttribute('aria-label', 'A preview of the video');
         canvas.setAttribute('data-af-videopreview', '');
+        // The preview can hold the keyboard, so the arrow keys move the shape
+        // picked once the preview has been pressed.
+        canvas.tabIndex = 0;
+        canvas.addEventListener('pointerdown', () => {
+            try {
+                canvas.focus({ preventScroll: true });
+            }
+            catch (_) { }
+        });
         hookDesign(canvas);
         // With a performance there, a choice between it and the example.
         if (keptShow()) {
@@ -15403,6 +16319,9 @@ export function setup(ctx, overrides) {
         });
         scrubRow.appendChild(scrub);
         vc.appendChild(scrubRow);
+        // The parts as blocks along the video. A press on one goes to it.
+        const line = el('<div class="af-ws-line" role="group" aria-label="The parts, in order" data-af-timeline hidden></div>');
+        vc.appendChild(line);
         // Trims from where the preview is. The preview shows the trimmed video,
         // so its place is counted from the trim's start.
         const trimRow = el('<div class="af-row"></div>');
@@ -15416,7 +16335,7 @@ export function setup(ctx, overrides) {
             v.at = 0;
             // The mix is made again with the new trim when the tab is drawn.
             v.mix = null;
-            renderTab();
+            renderWorkspace();
         };
         const tStart = button('Start here', () => trimAt(false));
         tStart.setAttribute('data-af-studio', 'trimstart');
@@ -15429,7 +16348,7 @@ export function setup(ctx, overrides) {
             v.sh.trim = undefined;
             v.at = 0;
             v.mix = null;
-            renderTab();
+            renderWorkspace();
         });
         tClear.setAttribute('data-af-studio', 'trimclear');
         trimRow.appendChild(tStart);
@@ -15445,7 +16364,7 @@ export function setup(ctx, overrides) {
         full.setAttribute('data-af-studio', 'full');
         vRow.appendChild(play);
         vRow.appendChild(full);
-        vRow.appendChild(make);
+        topActs.insertBefore(make, topActs.firstChild);
         vc.appendChild(vRow);
         const said = el('<p class="af-note" data-af-studio="said" role="status"></p>');
         vc.appendChild(said);
@@ -15730,7 +16649,12 @@ export function setup(ctx, overrides) {
         }));
         vc.appendChild(fold('Notes', (b) => drawNoteEditors(b, look)));
         vc.appendChild(fold('Watermarks', (b) => drawMarkEditors(b, look)));
-        vc.appendChild(fold('Saved looks', (b) => drawLooks(b)));
+        foldSink = null;
+        sec('looks', 'Saved looks', (b) => {
+            drawLooks(b);
+            b.appendChild(lookRow);
+            b.appendChild(hint('Put the look back asks first, then puts back the shape, words, captions, pictures, background, edges, transition and ending. Saved looks and notes stay.'));
+        });
         const lookRow = el('<div class="af-row"></div>');
         const lookBack = button('Put the look back', async () => {
             const keys = LOOK_KEYS;
@@ -15752,13 +16676,10 @@ export function setup(ctx, overrides) {
             Object.assign(patch, withBack(builtIn));
             set(patch);
             keepSaid('');
-            renderTab();
+            renderWorkspace();
         });
         lookBack.setAttribute('data-af-studio', 'lookback');
         lookRow.appendChild(lookBack);
-        vc.appendChild(lookRow);
-        vc.appendChild(hint('Put the look back asks first, then puts back the shape, words, captions, pictures, background, edges, transition and ending. Saved looks and notes stay.'));
-        page.appendChild(vc);
         // ---- censor ----
         const cc = card('Hide and bleep words', 'Covers words on screen and bleeps them in the audio, such as a name you do not want to share.');
         cc.setAttribute('data-af-card', 'studio-censor');
@@ -15813,7 +16734,7 @@ export function setup(ctx, overrides) {
             toggle('Bleep them in the audio', 'On by default. A tone covers each hidden word, in the video and in downloaded audio.', 'censorBleep', () => studioBuild(true)),
             hint('When each word is said is worked out from where the voice is, so it is close, not exact. The bleep starts a little early and ends a little late to cover the whole word.'),
         ]));
-        page.appendChild(cc);
+        sec('hide', 'Hide and bleep words', (b) => b.appendChild(cc));
         studioRefs = {
             example: exampleNote,
             canvas,
@@ -15827,7 +16748,9 @@ export function setup(ctx, overrides) {
             scrubRow,
             trimRow,
             tClear,
+            line,
         };
+        lineKey = '';
         paintStudio();
         studioBuild(false);
     }
