@@ -6303,6 +6303,91 @@ if (section("scroll areas")) {
   }
 }
 
+if (section("video matches preview")) {
+  console.log("Make a video uses the look the preview shows, frame for frame, and Quick shortcuts' Download audio is always one whole file with the cuts");
+  const fs = await import("node:fs");
+  const secsOf = (path) => { const b = fs.readFileSync(path); return b.readUInt32LE(40) / (b.readUInt16LE(22) * (b.readUInt16LE(34) / 8)) / b.readUInt32LE(24); };
+  for (const size of SIZES) {
+    const { context, page, errors } = await open(THEMES[0], size, 1, `window.__settings.audioSplit = "parts"; window.__wav = [0.3, 0.9]; window.__clipMs = 400;`);
+    await pressMessage(page);
+    await page.waitForFunction(() => document.querySelector('#mount [data-af-slot="message"]').getAttribute("aria-busy") === null && (window.__synth || []).length > 0, null, { timeout: 15000 });
+    await page.waitForTimeout(1500);
+    // Quick shortcuts' Download audio: one WAV, though Save as says a file
+    // for each part.
+    await toTab(page, "studio");
+    await page.waitForTimeout(400);
+    const line = await page.textContent("[data-af-quick]");
+    check(/Make a video uses the look in the Studio’s preview\./.test(line) && /Download audio saves the whole performance in one file, with any cuts you made in the Studio\./.test(line), size.name + ": Quick shortcuts says what each button uses");
+    const grab = async (sel) => { const dl = page.waitForEvent("download", { timeout: 20000 }).catch(() => null); await page.click(sel); const f = await dl; return f ? { name: f.suggestedFilename(), path: await f.path() } : null; };
+    const whole = await grab("[data-af-quickaudio]");
+    check(!!whole && /\.wav$/.test(whole.name), size.name + ": Download audio in Quick shortcuts saves one WAV, whatever Save as says (" + (whole && whole.name) + ")");
+    // A part cut out in the Studio is left out of it too.
+    await openWs(page);
+    await page.waitForTimeout(1000);
+    const b = page.locator(".af-ws-part").nth(1);
+    const box = await b.boundingBox();
+    if (size.touch) await page.touchscreen.tap(box.x + box.width / 2, box.y + box.height / 2); else await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+    await page.waitForTimeout(200);
+    await page.click("[data-af-cut]");
+    await page.waitForTimeout(1200);
+    await page.evaluate(() => document.querySelector('[data-af-ws="close"]').click());
+    await page.waitForTimeout(700);
+    await toTab(page, "studio");
+    await page.waitForTimeout(400);
+    const cut = await grab("[data-af-quickaudio]");
+    check(!!cut && /\.wav$/.test(cut.name) && secsOf(cut.path) < secsOf(whole.path) - 0.2, size.name + ": and with a part cut out in the Studio, it is shorter (" + (whole ? secsOf(whole.path).toFixed(2) : "?") + " s to " + (cut ? secsOf(cut.path).toFixed(2) : "?") + " s)");
+    // The video, frame for frame, for two templates.
+    await openWs(page);
+    for (const tpl of size.touch ? ["plain"] : ["plain", "film"]) {
+      await wsSec(page, "Templates");
+      await page.click('[data-af-tpl="' + tpl + '"]');
+      await page.waitForTimeout(500);
+      await page.click("[data-af-tpluse]");
+      await page.waitForTimeout(900);
+      const vid = page.waitForEvent("download", { timeout: 90000 }).catch(() => null);
+      await page.click('[data-af-studio="video"]');
+      const f = await vid;
+      if (!f) { check(false, size.name + ", " + tpl + ": the video was saved"); continue; }
+      const b64 = fs.readFileSync(await f.path()).toString("base64");
+      const got = await page.evaluate(async (b64) => {
+        const W = 160, H = 90;
+        const small = (src) => { const c = document.createElement("canvas"); c.width = W; c.height = H; const g = c.getContext("2d", { willReadFrequently: true }); g.drawImage(src, 0, 0, W, H); return g.getImageData(0, 0, W, H).data; };
+        const r = document.querySelector("[data-af-scrub] input");
+        r.step = "any";
+        const pv = document.querySelector("[data-af-videopreview]");
+        const at = async (t) => { r.value = String(t); r.dispatchEvent(new Event("input", { bubbles: true })); await new Promise((x) => requestAnimationFrame(() => requestAnimationFrame(x))); return small(pv); };
+        const diff = (a, b) => { let n = 0; for (let i = 0; i < a.length; i += 4) n += Math.abs(a[i] - b[i]) + Math.abs(a[i + 1] - b[i + 1]) + Math.abs(a[i + 2] - b[i + 2]); return n / (a.length / 4) / 3; };
+        // A moment in the preview where nothing moves.
+        let T = 0, ref = null;
+        for (let t = 2; t < 6; t += 0.25) { const a = await at(t), b2 = await at(t + 0.3); if (diff(a, b2) < 0.5) { T = t + 0.15; ref = await at(T); break; } }
+        if (!ref) return { err: "no still moment" };
+        // The video's frames near that moment, as it plays.
+        const blob = new Blob([Uint8Array.from(atob(b64), (c) => c.charCodeAt(0))], { type: "video/webm" });
+        const v = document.createElement("video");
+        v.muted = true;
+        v.src = URL.createObjectURL(blob);
+        await new Promise((x) => (v.onloadeddata = x));
+        let best = 1e9;
+        await new Promise((done) => {
+          const step = (_, meta) => {
+            const mt = meta.mediaTime;
+            if (Math.abs(mt - T) < 0.6) best = Math.min(best, diff(small(v), ref));
+            if (mt > T + 0.7 || v.ended) return done();
+            v.requestVideoFrameCallback(step);
+          };
+          v.requestVideoFrameCallback(step);
+          v.play().catch(() => done());
+          setTimeout(done, 20000);
+        });
+        return { T, best };
+      }, b64);
+      check(!got.err && got.best < 8, size.name + ", " + tpl + ": a frame of the saved video matches the preview at the same time (" + JSON.stringify(got) + ")");
+    }
+    check(!errors.length, size.name + ": no page errors. " + errors.slice(0, 2).join(" | "));
+    await context.close();
+  }
+}
+
 if (section("snapping")) {
   console.log("A shape snaps to the middle with a guide, moves freely with the switch off or Alt held, and turns onto 90 degrees");
   for (const size of SIZES) for (const zoom of [1, 1.25, 0.85]) {
@@ -7885,6 +7970,7 @@ if (section("downloads")) {
     await page.click('[data-af="studio"]');
     await page.waitForTimeout(500);
     check(await page.evaluate(() => !!document.querySelector("[data-af-ws] [data-af-videopreview]")), where + ": it opens the Studio");
+    await wsSec(page, "Audio");
     const state = () => page.evaluate(() => ["dlall", "dlpart"].map((k) => document.querySelector('[data-af-studio="' + k + '"]').disabled));
     check((await state()).join() === "true,true", where + ": with nothing played, both downloads are off (" + (await state()).join() + ")");
     await pressMessage(page);

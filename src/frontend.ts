@@ -3727,7 +3727,9 @@ export function setup(ctx: Ctx, overrides?: any) {
     return no + ' ' + fileName(speakerName(it.line)) + '.wav';
   }
 
-  async function downloadPerformance() {
+  // whole saves one file whatever Save as says, for Quick shortcuts. Both
+  // keep the cuts and the trim made on the timeline, which are the edit.
+  async function downloadPerformance(whole = false) {
     const sh = keptShow();
     if (!sh) return keepSaid('Play a message first. What you hear can then be downloaded.');
     timedKeep('Joining the audio');
@@ -3736,7 +3738,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       if (!m) return keepSaid(partsLeftOut(sh).size ? 'Every part is left out, so there is nothing to save.' : 'This browser cannot join the audio into one file.');
       let blob: Blob;
       let name: string;
-      if (S.audioSplit === 'parts') {
+      if (S.audioSplit === 'parts' && !whole) {
         const files = m.parts.map((p, n) => {
           const a = Math.max(0, Math.round(p.start * m.rate));
           const b = Math.min(m.channels[0].length, Math.round((p.start + p.len) * m.rate));
@@ -17668,13 +17670,13 @@ export function setup(ctx: Ctx, overrides?: any) {
     c.appendChild(row);
     // Quick shortcuts.
     const box = el('<div class="af-col af-quick" data-af-quick><h4 class="af-quickh">Quick shortcuts</h4></div>');
-    box.appendChild(hint('For a file in one tap, with your current look. Open the Studio to change the look first.'));
+    box.appendChild(hint('Make a video uses the look in the Studio\u2019s preview. Download audio saves the whole performance in one file, with any cuts you made in the Studio.'));
     const forLine = el('<p class="af-status" data-af-quickfor></p>');
     box.appendChild(forLine);
     const pick = button('Pick another from Saved audio', () => openStudio('saved'));
     pick.setAttribute('data-af-quickpick', '');
     const acts = el('<div class="af-row af-wrap"></div>');
-    const audio = button('Download audio', () => void quickRun(() => downloadPerformance()), '', ICON_DOWNLOAD);
+    const audio = button('Download audio', () => void quickRun(() => downloadPerformance(true)), '', ICON_DOWNLOAD);
     audio.setAttribute('data-af-quickaudio', '');
     const video = button('Make a video', () => {
       if (videoRun) return videoRun.cancel();
@@ -17724,6 +17726,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     // ---- the performance ----
     const pc = card('The performance', sh ? 'The last message played. Choose what goes into the audio and the video.' : 'Play a message first. Its audio and a video of it can then be kept here.');
     pc.setAttribute('data-af-card', 'studio-show');
+    pc.appendChild(hint('Make a video, at the top, uses the look the preview shows and the cuts you made on the timeline.'));
     if (sh) {
       pc.appendChild(
         fold('Which parts go in', (body) => {
@@ -17906,6 +17909,7 @@ export function setup(ctx: Ctx, overrides?: any) {
 
     // ---- audio ----
     const ac = card('Audio', 'A WAV file keeps the sound exactly as it was. Any audio program can save it as MP3.');
+    ac.appendChild(hint('Download audio, at the top, saves as Save as says, with the cuts you made on the timeline.'));
     ac.setAttribute('data-af-card', 'studio-audio');
     ac.appendChild(
       segmented('Save as', [
@@ -17921,6 +17925,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     const aRow = el('<div class="af-row"></div>');
     const dlall = button('Download audio', () => downloadPerformance(), '', ICON_DOWNLOAD);
     dlall.setAttribute('data-af-studio', 'dlall');
+    dlall.title = 'Saves the audio as Save as says, with the cuts you made on the timeline';
     const dlpart = button('Download this part', () => downloadPart(), '', ICON_DOWNLOAD);
     dlpart.setAttribute('data-af-studio', 'dlpart');
     topActs.appendChild(dlall);
@@ -18033,6 +18038,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     play.setAttribute('data-af-studio', 'play');
     const make = button('Make a video', () => (videoRun ? videoRun.cancel() : makeVideo()), 'af-primary', ICON_VIDEO);
     make.setAttribute('data-af-studio', 'video');
+    make.title = 'Makes the video with the look the preview shows, and the cuts you made on the timeline';
     const full = button('Full screen', () => openTheater(), '', ICON_FULL);
     full.setAttribute('data-af-studio', 'full');
     vRow.appendChild(play);
