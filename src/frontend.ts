@@ -1567,6 +1567,15 @@ textarea.af-bigta { flex: 1; min-height: 0; resize: none; }
 .af ::-webkit-scrollbar { width: 8px; height: 8px; }
 .af ::-webkit-scrollbar-track { background: transparent; }
 .af ::-webkit-scrollbar-thumb { min-height: 28px; border-radius: 999px; background: var(--af-line-hover); }
+/* The workspace's scroll areas draw no bar of their own, so none takes room
+   from the tools beside it. A thin bar laid over the edge shows while one
+   scrolls. */
+.af-ws .af-ws-panel, .af-ws .af-ws-rail, .af-ws .af-ws-stage { scrollbar-width: none; }
+.af-ws .af-ws-panel::-webkit-scrollbar, .af-ws .af-ws-rail::-webkit-scrollbar, .af-ws .af-ws-stage::-webkit-scrollbar { display: none; width: 0; height: 0; }
+.af-ws-main { position: relative; }
+.af-ws-ob { position: absolute; width: 4px; border-radius: 999px; background: var(--af-line-hover); opacity: 0; pointer-events: none; transition: opacity .2s ease; z-index: 3; }
+.af-ws-ob[data-on] { opacity: .9; }
+.af[data-af-still] .af-ws-ob, .af-ws[data-af-still] .af-ws-ob { transition: none; }
 .af :focus-visible { outline: none; }
 
 /* The button on each message and in the chat's row. It wears the host
@@ -16909,6 +16918,33 @@ export function setup(ctx: Ctx, overrides?: any) {
 
   // Draws the workspace again, on the section that was open, with the list
   // of settings scrolled where it was.
+  // A thin bar over a scroll area's right edge, shown while it scrolls and
+  // for a moment after, where it would show its own bar.
+  function overlayBar(main: HTMLElement, box: HTMLElement) {
+    const bar = el('<div class="af-ws-ob" aria-hidden="true" data-af-ws-ob></div>');
+    main.appendChild(bar);
+    let hide: any = null;
+    const paint = () => {
+      const over = box.scrollHeight - box.clientHeight;
+      if (over <= 1 || !box.isConnected) {
+        bar.removeAttribute('data-on');
+        return;
+      }
+      const h = Math.max(24, (box.clientHeight * box.clientHeight) / box.scrollHeight);
+      const top = box.offsetTop + (box.scrollTop / over) * (box.clientHeight - h);
+      bar.style.left = box.offsetLeft + box.clientWidth - 6 + 'px';
+      bar.style.top = top + 'px';
+      bar.style.height = h + 'px';
+      bar.setAttribute('data-on', '');
+      if (hide) clearTimeout(hide);
+      hide = setTimeout(() => {
+        timers.delete(hide);
+        bar.removeAttribute('data-on');
+      }, 900);
+      timers.add(hide);
+    };
+    box.addEventListener('scroll', paint, { passive: true });
+  }
   function renderWorkspace() {
     const w = ws;
     if (!w || w.closing) return;
@@ -16988,6 +17024,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     w.box.appendChild(top);
     paintProjectName();
     w.box.appendChild(main);
+    for (const region of [panel, rail, stage]) overlayBar(main, region);
     wsDraw = { panel, rail, picker: pickRow.querySelector('select') as HTMLSelectElement | null, secs, undo: undoBtn, redo: redoBtn };
     paintUndo();
     // Each button's key, in its hover text, on a computer with a mouse.

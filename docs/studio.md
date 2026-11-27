@@ -146,6 +146,7 @@ On a computer, these keys work while the Studio is open and you are not typing i
 - If **App manipulation** is taken away while the Studio is open, it opens again in Lumiverse's window, on the same part. If it is granted while the Studio is open in the window, the next time it opens it covers the screen.
 - The workspace lays itself out by its own size, so it fits the window on a tablet, a phone turned sideways and a small laptop the same way.
 - Reduce motion, in the panel or on your device, turns off its fade and slide.
+- Only the settings and the list of parts scroll, and the preview's column when the settings sit beside it. None of them keeps room for a scroll bar. A thin bar shows over the edge while you scroll, then fades.
 
 ## Projects
 

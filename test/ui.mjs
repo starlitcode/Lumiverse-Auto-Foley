@@ -6248,6 +6248,61 @@ if (section("template scenes")) {
   }
 }
 
+if (section("scroll areas")) {
+  console.log("The Studio scrolls only where it has to, one area per region, and no scroll bar takes room");
+  const MORE = [{ name: "sideways phone", width: 844, height: 390, touch: true }, { name: "tablet", width: 820, height: 1180, touch: true }];
+  const scan = (page) => page.evaluate(() => {
+    const out = [];
+    const root = document.querySelector("[data-af-ws]");
+    for (const e of [root, ...root.querySelectorAll("*")]) {
+      const cs = getComputedStyle(e);
+      if (!/(auto|scroll)/.test(cs.overflowY + cs.overflowX)) continue;
+      // Set very far down and read back: a box that fits stays at 0.
+      const was = e.scrollTop;
+      e.scrollTop = 1e6;
+      const scrolls = e.scrollTop > 0;
+      e.scrollTop = was;
+      const bl = parseFloat(cs.borderLeftWidth) || 0, br = parseFloat(cs.borderRightWidth) || 0;
+      const gutter = e.offsetWidth - bl - br - e.clientWidth;
+      const name = e.hasAttribute("data-af-ws-panel") ? "panel" : e.hasAttribute("data-af-ws-rail") ? "rail" : e.hasAttribute("data-af-ws-stage") ? "stage" : (e.className || e.tagName).toString().slice(0, 40);
+      // A bar of its own: none in the workspace, so none can take room. The
+      // test browser lays bars over the page, so the width alone cannot show
+      // it.
+      const own = cs.scrollbarWidth !== "none";
+      if (scrolls || gutter > 1 || (own && scrolls)) out.push({ name, scrolls, gutter, own });
+    }
+    return out;
+  });
+  for (const size of SIZES.concat(MORE)) {
+    const { context, page, errors } = await open(THEMES[0], size);
+    await openWs(page);
+    const bad = new Set();
+    const beside = await page.evaluate(() => { const st = document.querySelector("[data-af-ws-stage]").getBoundingClientRect(), pn = document.querySelector("[data-af-ws-panel]").getBoundingClientRect(); return pn.left >= st.right - 2; });
+    const secs = await page.evaluate(() => [...document.querySelector("[data-af-ws] .af-ws-picker select").options].map((o) => o.textContent));
+    for (const sec of secs) {
+      await wsSec(page, sec);
+      for (const z of [0.5, 0.75, 1, 1.25, 1.5]) {
+        if (z !== 1 && sec !== secs[0] && sec !== "Shape and words") continue;
+        await page.evaluate((z) => (document.documentElement.style.zoom = String(z)), z);
+        await page.waitForTimeout(120);
+        for (const r of await scan(page)) {
+          if (r.gutter > 1) bad.add(sec + " at " + z + ": " + r.name + " keeps " + r.gutter + " px for a bar");
+          if (r.own && r.scrolls) bad.add(sec + " at " + z + ": " + r.name + " draws a bar of its own");
+          // The stage is a region of its own when the tools sit beside it.
+          if (r.scrolls && !["panel", "rail"].concat(beside ? ["stage"] : []).includes(r.name)) bad.add(sec + " at " + z + ": " + r.name + " scrolls");
+        }
+      }
+      await page.evaluate(() => (document.documentElement.style.zoom = "1"));
+    }
+    // While the panel scrolls, a thin bar laid over its edge shows.
+    const shown = await page.evaluate(async () => { const p = document.querySelector("[data-af-ws-panel]"); if (p.scrollHeight <= p.clientHeight + 1) return "fits"; p.scrollTop = 40; p.dispatchEvent(new Event("scroll")); await new Promise((r) => setTimeout(r, 50)); return [...document.querySelectorAll("[data-af-ws-ob]")].some((b) => b.hasAttribute("data-on")) ? "shown" : "none"; });
+    check(shown !== "none", size.name + ": a thin bar shows over the panel's edge while it scrolls (" + shown + ")");
+    check(!bad.size, size.name + ": only the tools panel and the list of parts scroll, and no bar takes room. " + [...bad].slice(0, 6).join("; "));
+    check(!errors.length, size.name + ": no page errors. " + errors.slice(0, 2).join(" | "));
+    await context.close();
+  }
+}
+
 if (section("snapping")) {
   console.log("A shape snaps to the middle with a guide, moves freely with the switch off or Alt held, and turns onto 90 degrees");
   for (const size of SIZES) for (const zoom of [1, 1.25, 0.85]) {
