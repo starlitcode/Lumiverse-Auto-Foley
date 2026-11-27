@@ -1643,6 +1643,13 @@ html[data-af-still] .af-ws-sec.af-ws-in, .af-ws[data-af-still] .af-ws-sec.af-ws-
 .af-ws-part[data-kind="narration"] { background: var(--af-k-narrator); }
 .af-ws-part[data-kind="sound"] { background: var(--af-sound); }
 .af-ws-part[aria-current="true"] { opacity: 1; }
+.af-ws-part[data-sel] { opacity: 1; box-shadow: inset 0 0 0 2px var(--af-text); }
+.af-ws-trimh { position: absolute; top: 0; bottom: 0; width: 22px; margin-left: -11px; padding: 0; border: 0; background: transparent; cursor: ew-resize; touch-action: none; z-index: 1; }
+.af-ws-trimh::before { content: ""; position: absolute; top: 2px; bottom: 2px; left: 8px; width: 6px; border-radius: 3px; background: var(--af-accent); }
+.af-ws-trimh[data-af-trimh="start"] { margin-left: 0; }
+.af-ws-trimh[data-af-trimh="end"] { margin-left: -22px; }
+.af-ws-cutmark { position: absolute; top: 0; bottom: 0; width: 16px; margin-left: -8px; padding: 0; border: 0; background: transparent; cursor: pointer; }
+.af-ws-cutmark::before { content: ""; position: absolute; top: 3px; bottom: 3px; left: 7px; width: 2px; border-radius: 1px; background: var(--af-bad); }
 /* The list of keys, over the workspace. */
 .af-ws-pop { position: absolute; z-index: 6; top: 56px; right: 12px; display: flex; flex-direction: column; gap: 10px; width: min(440px, calc(100% - 24px)); max-height: calc(100% - 72px); overflow: auto; padding: 14px; border: 1px solid var(--af-line); border-radius: var(--af-r-md); background-color: var(--lumiverse-card-bg-solid, rgb(24,20,34)); background-image: linear-gradient(var(--lumiverse-bg-elevated, rgba(35,30,48,.98)), var(--lumiverse-bg-elevated, rgba(35,30,48,.98))); box-shadow: 0 10px 30px rgba(0,0,0,.35); opacity: 0; transform: translateY(4px); transition: opacity .18s ease-out, transform .18s ease-out; outline: none; }
 .af-ws-pop[data-af-open] { opacity: 1; transform: none; }
@@ -2686,7 +2693,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     // Scene changes made by hand, by the "i" of a scene's first line: a
     // scene started there or joined to the one before, and a background
     // picked for it. Kept with the saved script.
-    sceneHand?: { cuts: Record<string, 'start' | 'join'>; backs: Record<string, string> };
+    sceneHand?: { cuts: Record<string, 'start' | 'join'>; backs: Record<string, string>; out?: number[] };
   }
   let show: Show | null = null;
   // The parts of the last message that could not be played, for Try the
@@ -3365,6 +3372,16 @@ export function setup(ctx: Ctx, overrides?: any) {
   // Held for this page only, since they belong to one performance.
   let leftOut = new Set<number>();
   let leftOutFor: Show | null = null;
+  // The parts cut out on the timeline, by their place in the script. They
+  // are kept with the performance's hand changes, so they last.
+  function cutOut(sh: Show): Set<number> {
+    return new Set(((sh.sceneHand && sh.sceneHand.out) || []).filter((k) => Number.isInteger(k)));
+  }
+  function setCutOut(sh: Show, ks: number[]) {
+    const hand = sh.sceneHand || (sh.sceneHand = { cuts: {}, backs: {} });
+    hand.out = Array.from(new Set(ks)).sort((a, b) => a - b).slice(0, 400);
+    if (!hand.out.length) delete hand.out;
+  }
   function partsLeftOut(sh: Show): Set<number> {
     if (leftOutFor !== sh) {
       leftOutFor = sh;
@@ -3474,8 +3491,9 @@ export function setup(ctx: Ctx, overrides?: any) {
   async function mixOf(sh: Show): Promise<Mix | null> {
     const decoded = await decodeShow(sh);
     const out = partsLeftOut(sh);
+    const cut = cutOut(sh);
     const use = decoded.filter((c) => {
-      if (out.has(c.pi)) return false;
+      if (out.has(c.pi) || cut.has(c.k)) return false;
       const it = sh.items[c.k];
       if (S.studioSounds === false && it && it.kind !== 'voice') return false;
       return true;
@@ -6705,7 +6723,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       const r = await rpc({ type: 'kept_script', key: e.key }, 15000);
       if (r && r.type === 'failed') return String(r.error || SAVED_NO_ANSWER);
       sc = r && r.script ? r.script : null;
-      if (r && r.scenes && typeof r.scenes === 'object') hand = { cuts: Object.assign({}, r.scenes.cuts), backs: Object.assign({}, r.scenes.backs) };
+      if (r && r.scenes && typeof r.scenes === 'object') hand = Object.assign({ cuts: Object.assign({}, r.scenes.cuts), backs: Object.assign({}, r.scenes.backs) }, Array.isArray(r.scenes.out) ? { out: r.scenes.out.slice() } : {});
     } catch (_) {
       return SAVED_NO_ANSWER;
     }
@@ -13319,7 +13337,7 @@ export function setup(ctx: Ctx, overrides?: any) {
   // Keeping a performance: which parts go in, the audio, a video with every
   // choice of how it looks, and words to hide. A preview draws the video
   // with the choices made, and can be played.
-  let studioRefs: { example?: HTMLElement; canvas: HTMLCanvasElement; scrub: HTMLInputElement; scrubOut: HTMLElement; play: HTMLButtonElement; make: HTMLButtonElement; dlall: HTMLButtonElement; dlpart: HTMLButtonElement; said: HTMLElement; scrubRow: HTMLElement; trimRow: HTMLElement; tClear: HTMLButtonElement; line?: HTMLElement } | null = null;
+  let studioRefs: { example?: HTMLElement; canvas: HTMLCanvasElement; scrub: HTMLInputElement; scrubOut: HTMLElement; play: HTMLButtonElement; make: HTMLButtonElement; dlall: HTMLButtonElement; dlpart: HTMLButtonElement; said: HTMLElement; scrubRow: HTMLElement; trimRow: HTMLElement; tClear: HTMLButtonElement; line?: HTMLElement; cutRow?: HTMLElement } | null = null;
   // What the preview draws: the last performance, or a made-up line when
   // there is none.
   // example is true while the preview shows the example clip, which has no
@@ -15807,12 +15825,18 @@ export function setup(ctx: Ctx, overrides?: any) {
   // ---- the timeline under the preview ----
   // One block for each part, as long as the part, so a press goes to it.
   let lineKey = '';
+  // The parts picked on the timeline, by their place in the script, and a
+  // range set with Range starts here and Range ends here.
+  const lineSel = new Set<number>();
+  let rangeFrom = -1;
   function paintLine() {
     const r = studioRefs;
     if (!r || !r.line) return;
     const v = studioView;
     const intro = titleSecs(v.title);
-    const key = v.parts.map((p) => p.k + ':' + p.start.toFixed(2)).join(',') + '|' + v.length.toFixed(2);
+    const sh = v.sh;
+    const cut = sh ? cutOut(sh) : new Set<number>();
+    const key = v.parts.map((p) => p.k + ':' + p.start.toFixed(2)).join(',') + '|' + v.length.toFixed(2) + '|' + Array.from(cut).join(',');
     if (key !== lineKey || !r.line.childElementCount) {
       lineKey = key;
       r.line.replaceChildren();
@@ -15822,23 +15846,152 @@ export function setup(ctx: Ctx, overrides?: any) {
         b.style.left = ((intro + p.start) / total) * 100 + '%';
         b.style.width = Math.max(0.6, (p.len / total) * 100) + '%';
         b.setAttribute('data-kind', p.kind === 'sound' ? 'sound' : p.narration ? 'narration' : 'line');
+        b.setAttribute('data-k', String(p.k));
         const what = p.kind === 'sound' ? 'Sound: ' + (p.caption || 'a sound') : (p.name ? p.name + ': ' : '') + p.words.join(' ');
         b.setAttribute('aria-label', 'Part ' + (n + 1) + '. ' + what.slice(0, 80));
         b.title = what.slice(0, 120);
-        // A tap goes to the start of the part, a little inside it, so the
-        // part before it, which ends at the same moment, is not the one
-        // shown as current.
-        b.addEventListener('click', () => wsSeek(intro + p.start + Math.min(0.05, p.len / 4)));
+        // A tap picks the part and goes to its start, a little inside it,
+        // so the part before it, which ends at the same moment, is not the
+        // one shown as current.
+        b.addEventListener('click', () => {
+          lineSel.clear();
+          lineSel.add(p.k);
+          rangeFrom = -1;
+          wsSeek(intro + p.start + Math.min(0.05, p.len / 4));
+        });
         r.line!.appendChild(b);
       });
+      // A handle at each end of a performance: drag the start one to cut
+      // the beginning, the end one to cut the end. The preview shows the
+      // frame at the handle while it moves.
+      if (sh && v.mix) {
+        for (const end of [false, true]) {
+          const h = el('<button type="button" class="af-ws-trimh"></button>') as HTMLButtonElement;
+          h.setAttribute('data-af-trimh', end ? 'end' : 'start');
+          h.setAttribute('aria-label', end ? 'Drag to cut the end' : 'Drag to cut the start');
+          h.title = end ? 'Drag to cut the end' : 'Drag to cut the start';
+          // At the start and the end of the sound, inside the title and the
+          // fade at the end.
+          const home = end ? intro + v.total : intro;
+          h.style.left = (home / Math.max(0.1, v.length)) * 100 + '%';
+          h.addEventListener('pointerdown', (e: PointerEvent) => {
+            e.preventDefault();
+            try {
+              h.setPointerCapture(e.pointerId);
+            } catch (_) {}
+            stopPreview();
+            const rc = r.line!.getBoundingClientRect();
+            const x0 = e.clientX;
+            const from = home;
+            let t = from;
+            const move = (ev: PointerEvent) => {
+              t = Math.max(0, Math.min(v.length, from + ((ev.clientX - x0) / Math.max(1, rc.width)) * v.length));
+              h.style.left = (t / Math.max(0.1, v.length)) * 100 + '%';
+              v.at = t;
+              paintPreview();
+            };
+            const up = () => {
+              h.removeEventListener('pointermove', move);
+              h.removeEventListener('pointerup', up);
+              h.removeEventListener('pointercancel', up);
+              if (Math.abs(t - from) < 0.05 || !v.sh || !v.mix) return paintLine();
+              const was = v.sh.trim || { from: 0, to: 0 };
+              const here = v.mix.from + Math.max(0, Math.min(v.total, t - intro));
+              v.sh.trim = end ? { from: was.from, to: Math.max(here, (was.from || 0) + 0.5) } : { from: here, to: was.to && was.to > here + 0.5 ? was.to : 0 };
+              v.at = 0;
+              v.mix = null;
+              lineKey = '';
+              keepSaid(end ? 'The end is cut. Clear the trim keeps it all again.' : 'The start is cut. Clear the trim keeps it all again.');
+              studioBuild(true);
+            };
+            h.addEventListener('pointermove', move);
+            h.addEventListener('pointerup', up);
+            h.addEventListener('pointercancel', up);
+          });
+          r.line!.appendChild(h);
+        }
+      }
+      // A part cut out shows as a thin mark where it was, which puts it back.
+      if (sh) {
+        const order = sh.played.map((x) => x.k);
+        for (const k of Array.from(cut)) {
+          if (order.indexOf(k) < 0) continue;
+          const next = v.parts.find((p) => p.k > k);
+          const at = next ? intro + next.start : v.length - Math.min(5, Math.max(0, numOr(S.videoFadeOut, 1.5)));
+          const mk = el('<button type="button" class="af-ws-cutmark" data-af-cutmark></button>') as HTMLButtonElement;
+          mk.style.left = (at / total) * 100 + '%';
+          mk.setAttribute('aria-label', 'Put back part ' + (order.indexOf(k) + 1));
+          mk.title = 'Put back the part cut here';
+          mk.addEventListener('click', () => putBackCut([k]));
+          r.line!.appendChild(mk);
+        }
+      }
       r.line.hidden = !v.parts.length;
     }
     const now = v.at - intro;
-    Array.from(r.line.children).forEach((b, n) => {
-      const p = v.parts[n];
+    for (const b of Array.from(r.line.querySelectorAll('.af-ws-part'))) {
+      const k = Number(b.getAttribute('data-k'));
+      const p = v.parts.find((x) => x.k === k);
       const on = !!p && now >= p.start && now < p.start + p.len;
       if (on) b.setAttribute('aria-current', 'true');
       else b.removeAttribute('aria-current');
+      if (lineSel.has(k)) b.setAttribute('data-sel', '');
+      else b.removeAttribute('data-sel');
+    }
+    if (r.cutRow) {
+      r.cutRow.hidden = !sh || !v.parts.length;
+      const btn = r.cutRow.querySelector('[data-af-cut]') as HTMLButtonElement | null;
+      if (btn) btn.disabled = !lineSel.size;
+      const said = r.cutRow.querySelector('[data-af-cutsaid]') as HTMLElement | null;
+      if (said) setText(said, lineSel.size ? lineSel.size + (lineSel.size === 1 ? ' part picked.' : ' parts picked.') : rangeFrom >= 0 ? 'Range starts at ' + mmss(rangeFrom) + '. Go to its end, then press Range ends here.' : 'Pick a part on the timeline to cut it out.');
+    }
+  }
+  // Range starts here, and Range ends here: every part that starts in the
+  // range is picked.
+  function rangeMark(end: boolean) {
+    const v = studioView;
+    if (!v.sh) return;
+    if (!end) {
+      rangeFrom = v.at;
+      lineSel.clear();
+    } else {
+      const a = Math.min(rangeFrom < 0 ? 0 : rangeFrom, v.at);
+      const b = Math.max(rangeFrom < 0 ? 0 : rangeFrom, v.at);
+      const intro = titleSecs(v.title);
+      lineSel.clear();
+      for (const p of v.parts) if (intro + p.start + p.len > a && intro + p.start < b) lineSel.add(p.k);
+      rangeFrom = -1;
+    }
+    paintStudio();
+  }
+  // Cut it out: the parts picked leave the video and the audio, and what
+  // follows closes the gap. The saved audio itself is not changed.
+  async function cutPicked() {
+    const v = studioView;
+    const sh = v.sh;
+    if (!sh || !lineSel.size) return false;
+    if (lineSel.size > 1 && !(await askSure('Cut it out', lineSel.size + ' parts are cut out of the video and the audio. Put back, on the timeline, or Undo brings them back.', 'Cut them out'))) return true;
+    cutUndo.push(Array.from(cutOut(sh)));
+    setCutOut(sh, Array.from(cutOut(sh)).concat(Array.from(lineSel)));
+    lineSel.clear();
+    afterCut(sh, 'Cut out. Press the mark on the timeline to put it back.');
+    return true;
+  }
+  function putBackCut(ks: number[]) {
+    const sh = studioView.sh;
+    if (!sh) return;
+    cutUndo.push(Array.from(cutOut(sh)));
+    setCutOut(sh, Array.from(cutOut(sh)).filter((k) => ks.indexOf(k) < 0));
+    afterCut(sh, 'Put back.');
+  }
+  const cutUndo: number[][] = [];
+  function afterCut(sh: Show, said: string) {
+    studioView.mix = null;
+    lineKey = '';
+    keepSaid(said);
+    studioBuild(true);
+    void keepSceneHand(sh).then((why) => {
+      if (why) keepSaid(said + ' ' + why);
     });
   }
   function wsSeek(t: number) {
@@ -15981,6 +16134,8 @@ export function setup(ctx: Ctx, overrides?: any) {
     [MOD + ' and D', 'Make a copy of the shape picked'],
     [MOD + ' and ] or [', 'Bring the shape picked forward, or send it back'],
     ['Arrow keys, with the preview pressed', 'Move the shape picked 1 pixel, or 10 with Shift'],
+    ['I and O', 'A range starts or ends where the bar is'],
+    ['Delete, with parts picked', 'Cut the parts picked out, asking first for more than one'],
     [MOD + ' and S', 'Say that everything is saved'],
     ['?', 'This list'],
     ['Escape', 'Close a pop-up, then full screen, then the Studio'],
@@ -16085,6 +16240,14 @@ export function setup(ctx: Ctx, overrides?: any) {
       }
       const onPreview = !!(studioRefs && t === studioRefs.canvas);
       if ((key === 'Delete' || key === 'Backspace') && designing && shapeNow()) return shapeAct('delete');
+      if ((key === 'Delete' || key === 'Backspace') && lineSel.size && studioView.sh) {
+        void cutPicked();
+        return true;
+      }
+      if ((lower === 'i' || lower === 'o') && !e.shiftKey && studioView.sh) {
+        rangeMark(lower === 'o');
+        return true;
+      }
       if (key.startsWith('Arrow') && designing && shapeNow() && onPreview) {
         const by = e.shiftKey ? 10 : 1;
         const dx = key === 'ArrowLeft' ? -by : key === 'ArrowRight' ? by : 0;
@@ -16532,6 +16695,19 @@ export function setup(ctx: Ctx, overrides?: any) {
     // The parts as blocks along the video. A press on one goes to it.
     const line = el('<div class="af-ws-line" role="group" aria-label="The parts, in order" data-af-timeline hidden></div>');
     vc.appendChild(line);
+    // Cutting parts out: pick one by a tap, or a range, then Cut it out.
+    const cutRow = el('<div class="af-col" data-af-cutrow hidden><div class="af-row af-wrap"></div><p class="af-note" role="status" data-af-cutsaid></p></div>');
+    const cutBtns = cutRow.firstElementChild as HTMLElement;
+    const cutBtn = button('Cut it out', () => void cutPicked());
+    cutBtn.setAttribute('data-af-cut', '');
+    const rFrom = button('Range starts here', () => rangeMark(false));
+    rFrom.setAttribute('data-af-rangefrom', '');
+    const rTo = button('Range ends here', () => rangeMark(true));
+    rTo.setAttribute('data-af-rangeto', '');
+    cutBtns.appendChild(cutBtn);
+    cutBtns.appendChild(rFrom);
+    cutBtns.appendChild(rTo);
+    vc.appendChild(cutRow);
     // Trims from where the preview is. The preview shows the trimmed video,
     // so its place is counted from the trim's start.
     const trimRow = el('<div class="af-row"></div>');
@@ -16975,6 +17151,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       trimRow,
       tClear,
       line,
+      cutRow,
     };
     lineKey = '';
     paintStudio();

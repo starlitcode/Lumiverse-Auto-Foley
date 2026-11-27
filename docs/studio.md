@@ -76,6 +76,16 @@ The file is saved as an MP4 or a WebM, named with the chat's name and the day.
 2. Pick a part of the Studio and change its settings. The preview changes at once.
 3. Close it with **Close** at the top, or Escape.
 
+#### The timeline
+
+Under the preview, the parts of the performance are blocks along the video.
+
+- A tap on a block goes to the start of that part and picks it.
+- **Cut it out** takes the parts picked out of the video and the audio, and what follows closes the gap. A thin red mark shows where a part was cut; a press on the mark puts it back. Cutting more than one part asks first.
+- **Range starts here** and **Range ends here** pick every part between two moments of the bar, for cutting a run of parts.
+- A handle at the start and the end of the sound: drag the start one to cut the beginning, the end one to cut the end. The preview shows the frame at the handle while it moves. **Clear the trim** keeps it all again, and **Trim**, under **The performance and scenes**, has the same in seconds.
+- Cuts and the trim change only the video and the downloads, never the saved audio. Cuts are kept with the performance in **Saved audio**.
+
 **Undo** and **Redo**, at the top, take back a change to the Studio's settings and make it again. Deleting a background with a picture, or a watermark with a picture, deletes the picture too, so Undo goes back no further than that.
 
 ### What it sends
@@ -115,7 +125,8 @@ On a computer, these keys work while the Studio is open and you are not typing i
 | F | The preview full screen |
 | Ctrl and Z | Undo |
 | Ctrl, Shift and Z, or Ctrl and Y | Redo |
-| Delete or Backspace | Delete the shape picked, after asking |
+| Delete or Backspace | Delete the shape picked, after asking, or cut the parts picked out |
+| I and O | A range starts or ends where the bar is |
 | Ctrl and D | Copy the shape picked |
 | Ctrl and ] or [ | Bring the shape picked forward, or send it back |
 | Arrow keys, with the preview pressed | Move the shape picked 1 pixel, or 10 with Shift |

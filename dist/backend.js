@@ -2866,7 +2866,11 @@ function cleanSceneHand(v) {
         if (/^\d{1,4}$/.test(k) && id)
             backs[k] = id;
     }
-    return Object.keys(cuts).length || Object.keys(backs).length ? { cuts, backs } : undefined;
+    // Parts cut out on the timeline, by their place in the script.
+    const out = Array.isArray(v.out) ? Array.from(new Set(v.out.filter((x) => Number.isInteger(x) && x >= 0 && x < 10000))).slice(0, 400) : [];
+    if (!Object.keys(cuts).length && !Object.keys(backs).length && !out.length)
+        return undefined;
+    return out.length ? { cuts, backs, out } : { cuts, backs };
 }
 const scripts = {};
 // Past the limit, the oldest script with no name and no folder goes first,

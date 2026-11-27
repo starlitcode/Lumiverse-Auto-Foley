@@ -3384,6 +3384,7 @@ interface KeptEntry {
 interface SceneHand {
   cuts: Record<string, 'start' | 'join'>;
   backs: Record<string, string>;
+  out?: number[];
 }
 function cleanSceneHand(v: any): SceneHand | undefined {
   if (!v || typeof v !== 'object') return undefined;
@@ -3395,7 +3396,10 @@ function cleanSceneHand(v: any): SceneHand | undefined {
     const id = str(v.backs[k], 24).replace(/[^a-z0-9]/gi, '');
     if (/^\d{1,4}$/.test(k) && id) backs[k] = id;
   }
-  return Object.keys(cuts).length || Object.keys(backs).length ? { cuts, backs } : undefined;
+  // Parts cut out on the timeline, by their place in the script.
+  const out = Array.isArray(v.out) ? Array.from(new Set(v.out.filter((x: any) => Number.isInteger(x) && x >= 0 && x < 10000))).slice(0, 400) as number[] : [];
+  if (!Object.keys(cuts).length && !Object.keys(backs).length && !out.length) return undefined;
+  return out.length ? { cuts, backs, out } : { cuts, backs };
 }
 const scripts: Record<string, KeptEntry[]> = {};
 

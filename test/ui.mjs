@@ -5274,8 +5274,10 @@ if (section("workspace motion")) {
     const moving = seen.filter((f) => f.op < 0.99);
     const gaps = moving.slice(1).map((f, n) => f.t - moving[n].t);
     // Up to 50 ms, three frames, since the machine running the checks is
-    // shared and its own work can hold one frame.
-    const most = 50;
+    // shared and its own work can hold one frame. With the processor slowed
+    // four times on the phone size, up to 64 ms, which is 16 ms on the
+    // machine itself.
+    const most = size.touch ? 64 : 50;
     check(gaps.every((g) => g < most), say + ": no frame is held up while it fades in (longest " + Math.round(Math.max(0, ...gaps)) + " ms)");
     // Within a pixel, since a box moved by a part of a pixel rounds either
     // way at some UI Scales.
@@ -5718,6 +5720,66 @@ if (section("templates")) {
       return c.toDataURL("image/png").split(",")[1];
     }, shots);
     writeFileSync(OUT + "/tall-sheet.png", Buffer.from(sheet, "base64"));
+    await context.close();
+  }
+}
+
+if (section("timeline cuts")) {
+  console.log("Parts are cut out and put back on the timeline, and the start and end are trimmed with handles");
+  const fs = await import("node:fs");
+  const secsOf = (path) => { const b = fs.readFileSync(path); return b.readUInt32LE(40) / (b.readUInt16LE(22) * (b.readUInt16LE(34) / 8)) / b.readUInt32LE(24); };
+  for (const size of SIZES) {
+    const { context, page, errors } = await open(THEMES[0], size);
+    await page.evaluate(() => { window.__wav = [0.2, 0.8]; window.__clipMs = 200; });
+    await pressMessage(page);
+    await page.waitForFunction(() => document.querySelector('#mount [data-af-slot="message"]').getAttribute("aria-busy") === null && (window.__synth || []).length > 0, null, { timeout: 15000 });
+    await page.waitForTimeout(1500);
+    await openWs(page);
+    await page.waitForTimeout(1200);
+    const len = () => page.evaluate(() => Number(document.querySelector("[data-af-scrub] input").max));
+    const grab = async () => {
+      const dl = page.waitForEvent("download", { timeout: 20000 }).catch(() => null);
+      await page.click('[data-af-studio="dlall"]');
+      const f = await dl;
+      return f ? secsOf(await f.path()) : 0;
+    };
+    const L0 = await len();
+    const A0 = await grab();
+    const n0 = await page.locator(".af-ws-part").count();
+    // Cut the second part out.
+    const b = page.locator(".af-ws-part").nth(1);
+    const box = await b.boundingBox();
+    if (size.touch) await page.touchscreen.tap(box.x + box.width / 2, box.y + box.height / 2); else await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+    await page.waitForTimeout(200);
+    await page.click("[data-af-cut]");
+    await page.waitForTimeout(1500);
+    const L1 = await len();
+    const A1 = await grab();
+    check(L1 < L0 - 0.3 && (await page.locator(".af-ws-part").count()) === n0 - 1, size.name + ": Cut it out takes the part out of the video (" + L0.toFixed(2) + " s to " + L1.toFixed(2) + " s)");
+    check(A1 < A0 - 0.3 && Math.abs((A0 - A1) - (L0 - L1)) < 0.15, size.name + ": and out of the audio by the same length (" + A0.toFixed(2) + " s to " + A1.toFixed(2) + " s)");
+    check((await page.locator("[data-af-cutmark]").count()) === 1, size.name + ": a mark shows where it was");
+    await page.click("[data-af-cutmark]");
+    await page.waitForTimeout(1500);
+    check(Math.abs((await len()) - L0) < 0.05 && (await page.locator(".af-ws-part").count()) === n0, size.name + ": the mark puts it back");
+    // Drag the start handle a quarter of the way in, then the end handle.
+    const line = await page.locator("[data-af-timeline]").boundingBox();
+    const drag = async (sel, dx) => {
+      const h = await page.locator(sel).boundingBox();
+      const x = h.x + h.width / 2, y = h.y + h.height / 2;
+      await page.locator(sel).dispatchEvent("pointerdown", { clientX: x, clientY: y, pointerId: 1, pointerType: size.touch ? "touch" : "mouse", isPrimary: true, button: 0 });
+      for (let k = 1; k <= 5; k++) await page.locator(sel).dispatchEvent("pointermove", { clientX: x + (dx * k) / 5, clientY: y, pointerId: 1, pointerType: size.touch ? "touch" : "mouse", isPrimary: true });
+      await page.locator(sel).dispatchEvent("pointerup", { clientX: x + dx, clientY: y, pointerId: 1, pointerType: size.touch ? "touch" : "mouse", isPrimary: true });
+      await page.waitForTimeout(1500);
+    };
+    await drag('[data-af-trimh="start"]', line.width * 0.3);
+    const L2 = await len();
+    check(L2 < L0 - 0.5, size.name + ": dragging the start handle cuts the start (" + L0.toFixed(2) + " s to " + L2.toFixed(2) + " s)");
+    await drag('[data-af-trimh="end"]', -line.width * 0.25);
+    const L3 = await len();
+    check(L3 < L2 - 0.3, size.name + ": dragging the end handle cuts the end (" + L2.toFixed(2) + " s to " + L3.toFixed(2) + " s)");
+    const m = await page.evaluate(MEASURE, size.touch);
+    check(!m.overflow.length && !m.small.length, size.name + ": the timeline's buttons fit. " + m.overflow.concat(m.small).slice(0, 2).join("; "));
+    check(!errors.length, size.name + ": no page errors. " + errors.slice(0, 2).join(" | "));
     await context.close();
   }
 }
