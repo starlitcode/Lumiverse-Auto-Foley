@@ -126,8 +126,12 @@ window.__sounds = [
 function answer(msg) {
   const reply = (m) => setTimeout(() => backendFns.forEach((fn) => fn(Object.assign({ requestId: msg.requestId }, m))), 5);
   switch (msg.type) {
-    case 'load': return reply({ type: 'state', fresh: window.__fresh !== false, settings: window.__settings, sounds: window.__sounds, hasKey: true, musicMoods: ['calm', 'cozy', 'happy', 'playful', 'romantic', 'sad', 'tense', 'scary', 'action', 'mysterious'], builtInPrompt: '<the_director>\\nYou direct.\\n</the_director>', builtInSkips: '^[ \\\\t]*\\\\|.*\\\\|[ \\\\t]*$\\n【[^】\\\\n]*】', version: '0', decisions: true });
-    case 'save': window.__settings = msg.settings; return reply({ type: 'saved', ok: true, settings: msg.settings });
+    case 'load':
+      // An account whose settings cannot be read, for as many tries as set.
+      if (window.__loadFails > 0) { window.__loadFails--; window.__loadAsks = (window.__loadAsks || 0) + 1; return reply({ type: 'failed', of: 'load', readFailed: true, error: 'Auto Foley could not read your settings from your account. Nothing was changed. Reload the page to try again.' }); }
+      window.__loadAsks = (window.__loadAsks || 0) + 1;
+      return reply({ type: 'state', fresh: window.__fresh !== false, settings: window.__settings, sounds: window.__sounds, hasKey: true, musicMoods: ['calm', 'cozy', 'happy', 'playful', 'romantic', 'sad', 'tense', 'scary', 'action', 'mysterious'], builtInPrompt: '<the_director>\\nYou direct.\\n</the_director>', builtInSkips: '^[ \\\\t]*\\\\|.*\\\\|[ \\\\t]*$\\n【[^】\\\\n]*】', version: '0', decisions: true });
+    case 'save': window.__saves = (window.__saves || 0) + 1; window.__settings = msg.settings; return reply({ type: 'saved', ok: true, settings: msg.settings });
     case 'direct': {
       // A check can hold the answer, and send the note that the Director is
       // being asked, as the backend does when no kept script is found.
@@ -5373,6 +5377,24 @@ if (section("quick shortcuts")) {
       await context.close();
     }
   }
+}
+
+if (section("account read fails")) {
+  console.log("When the account's settings cannot be read, nothing is saved over them, the reader is told once, and it asks again");
+  const { context, page, errors } = await open(THEMES[0], SIZES[1], 1, () => { window.__loadFails = 1; });
+  await page.waitForTimeout(600);
+  // A change made before the account answers is not saved to it.
+  await page.click('.af-tab[data-tab="settings"]');
+  await page.waitForTimeout(200);
+  await page.evaluate(() => document.querySelector('[data-af-row="widgetOn"] .af-box').click());
+  await page.waitForTimeout(800);
+  const early = await page.evaluate(() => ({ saves: window.__saves || 0, told: (window.__sent || []).filter((m) => m.type === "notify" && /could not read your settings/.test(m.text)).length }));
+  check(early.saves === 0, "nothing is saved to the account while it cannot be read (" + early.saves + " saves)");
+  check(early.told === 1, "the reader is told once (" + early.told + ")");
+  await page.waitForTimeout(10500);
+  check((await page.evaluate(() => window.__loadAsks || 0)) >= 2, "it asks again after 10 seconds");
+  check(!errors.length, "no page errors. " + errors.slice(0, 2).join(" | "));
+  await context.close();
 }
 
 if (section("hint places")) {

@@ -30,6 +30,8 @@ function host(opts: {
   files?: Map<string, any>;
   hold?: boolean;
   tokens?: boolean;
+  // A read of a matching path fails, as on a busy or broken disk.
+  failRead?: (path: string) => boolean;
 } = {}): Host {
   const files = new Map<string, any>(opts.files || []);
   const keys = new Map<string, string>();
@@ -65,6 +67,7 @@ function host(opts: {
     },
     userStorage: {
       async read(path: string, userId?: string) {
+        if (opts.failRead && opts.failRead(path)) throw new Error("EIO: the disk is busy");
         if (!files.has(k(path, userId))) throw new Error("ENOENT");
         return files.get(k(path, userId));
       },
@@ -1568,6 +1571,55 @@ describe("counting the Director's tokens", () => {
   });
 });
 
+describe("a read that fails never writes", () => {
+  const good = JSON.stringify({ lines: [{ i: 0, speaker: "Wren", text: "[softly] The gate is open." }] });
+  const msg = { type: "direct", chatId: "c7", messageId: "m31", swipeId: 0, name: "Wren", text: '"The gate is open."' };
+  const filesOf = (h: Host) => new Map(h.files);
+
+  test("settings that cannot be read are left alone, and the panel is told", async () => {
+    const first = host({ answers: [good] });
+    await first.ask({ type: "save", settings: { cast: [{ id: "n1", name: "Narrator", kind: "narrator" }, { id: "p1", name: "Brannoch", kind: "character", voices: { c1: { voice: "v-low" } } }] } });
+    const saved = filesOf(first);
+    const settingsKey = [...saved.keys()].find((x) => x.endsWith("settings.json")) as string;
+    const before = saved.get(settingsKey);
+    const h = host({ answers: [good], files: saved, failRead: (p) => p === "settings.json" });
+    const out = await h.ask({ type: "load" });
+    const failed = out.find((m: any) => m.type === "failed");
+    expect(failed && failed.readFailed).toBe(true);
+    expect(failed.error).toBe("Auto Foley could not read your settings from your account. Nothing was changed. Reload the page to try again.");
+    await h.ask(msg);
+    expect(h.files.get(settingsKey)).toBe(before);
+  });
+
+  test("saved scripts that cannot be read are not written over", async () => {
+    const first = host({ answers: [good] });
+    await first.ask(msg);
+    await new Promise((r) => setTimeout(r, 20));
+    const saved = filesOf(first);
+    const key = [...saved.keys()].find((x) => x.endsWith("scripts.json")) as string;
+    const before = saved.get(key);
+    expect(JSON.parse(before).length).toBe(1);
+    const h = host({ answers: [good], files: saved, failRead: (p) => p === "scripts.json" });
+    await h.ask(Object.assign({}, msg, { messageId: "m32", text: '"Close it behind you."' }));
+    await new Promise((r) => setTimeout(r, 20));
+    expect(h.files.get(key)).toBe(before);
+  });
+
+  test("a list of kept audio that cannot be read is not written over", async () => {
+    const first = host();
+    await first.ask({ type: "clip_put", sig: "aaa111bbb", mime: "audio/mpeg", base64: first.box.toBase64(new Uint8Array(40).fill(2)) });
+    await first.ask({ type: "clip_put", sig: "ccc222ddd", mime: "audio/mpeg", base64: first.box.toBase64(new Uint8Array(40).fill(4)) });
+    const saved = filesOf(first);
+    const key = [...saved.keys()].find((x) => x.endsWith("clips/index.json")) as string;
+    const before = saved.get(key);
+    const h = host({ files: saved, failRead: (p) => p === "clips/index.json" });
+    const out = (await h.ask({ type: "clip_put", sig: "eee333fff", mime: "audio/mpeg", base64: h.box.toBase64(new Uint8Array(40).fill(6)) })).find((m: any) => m.type === "clip_kept" || m.type === "failed");
+    expect(out.ok === true).toBe(false);
+    expect(String(out.error || "")).toContain("could not be read");
+    expect(h.files.get(key)).toBe(before);
+  });
+});
+
 describe("saved audio", () => {
   const good = JSON.stringify({ lines: [{ i: 0, speaker: "Oriel", text: "[quietly] Lanterns up." }] });
   const msg = { type: "direct", chatId: "c4", messageId: "m20", swipeId: 0, name: "Oriel", text: '"Lanterns up."' };
@@ -1583,6 +1635,19 @@ describe("saved audio", () => {
     expect(list[0].author).toBe("Oriel");
     expect(list[0].first).toBe("Lanterns up.");
     expect(list[0].keptAt).toBeGreaterThan(0);
+  });
+
+  test("Clear kept audio empties Saved audio, now and after a restart", async () => {
+    const h = host({ answers: [good] });
+    await h.ask(msg);
+    await h.ask({ type: "clip_put", sig: "abc123def", mime: "audio/mpeg", base64: h.box.toBase64(new Uint8Array(50).fill(3)) });
+    expect((await h.ask({ type: "kept_list" })).find((m: any) => m.type === "kept_list").list.length).toBe(1);
+    await h.ask({ type: "clips_clear" });
+    expect((await h.ask({ type: "kept_list" })).find((m: any) => m.type === "kept_list").list.length).toBe(0);
+    await new Promise((r) => setTimeout(r, 20));
+    const again = host({ answers: [] });
+    for (const [k, v] of h.files) again.files.set(k, v);
+    expect((await again.ask({ type: "kept_list" })).find((m: any) => m.type === "kept_list").list.length).toBe(0);
   });
 
   test("Delete takes the script and its saved audio away", async () => {

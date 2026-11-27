@@ -2898,15 +2898,25 @@ function keepScript(userId, script) {
 // a message played again after Lumiverse restarts asks the Director nothing.
 const SCRIPTS_FILE = 'scripts.json';
 const scriptsRead = {};
+// The list is marked read only after a read that worked, with Keep made
+// audio on. Until then nothing is written over the file, so a read that
+// failed, or one skipped while Keep made audio was off, never costs the
+// scripts already saved. Gives back whether the list is read.
 async function readKeptScripts(userId, s) {
     if (scriptsRead[userId])
-        return;
-    scriptsRead[userId] = true;
+        return true;
     if (!s.keepAudio)
-        return;
-    const saved = await readJson(SCRIPTS_FILE, userId || undefined);
+        return false;
+    let saved = null;
+    try {
+        saved = await readJsonStrict(SCRIPTS_FILE, userId || undefined, 'Your saved scripts could not be read from your account. Nothing was changed.');
+    }
+    catch (_) {
+        return false;
+    }
+    scriptsRead[userId] = true;
     if (!Array.isArray(saved))
-        return;
+        return true;
     const mine = scripts[userId] || [];
     const old = saved
         .filter((x) => x && typeof x.key === 'string' && x.script && Array.isArray(x.script.lines) && !mine.some((m) => m.key === x.key))
@@ -2926,15 +2936,22 @@ async function readKeptScripts(userId, s) {
     const all = old.concat(mine);
     trimKept(all);
     scripts[userId] = all;
+    return true;
 }
+// Gives back an error in plain words, or '' when saved or not to be kept.
 async function saveKeptScripts(userId) {
     try {
         const s = await loadSettings(userId || undefined);
         if (!s.keepAudio)
-            return;
-        await writeJson(SCRIPTS_FILE, scripts[userId] || [], userId || undefined);
+            return '';
+        // Never written over a list that was not read.
+        if (!(await readKeptScripts(userId, s)))
+            return 'Your saved scripts could not be read from your account, so nothing was changed.';
+        return (await writeJson(SCRIPTS_FILE, scripts[userId] || [], userId || undefined)) ? '' : 'Your saved scripts could not be saved to your account.';
     }
-    catch (_) { }
+    catch (e) {
+        return e instanceof ReadFailed ? e.message : 'Your saved scripts could not be saved: ' + String((e && e.message) || e).slice(0, 160);
+    }
 }
 // ---- Made audio ----
 // Each spoken line is kept by a fingerprint of everything sent to speak it:
@@ -2945,11 +2962,13 @@ async function saveKeptScripts(userId) {
 const CLIP_INDEX = 'clips/index.json';
 const CLIP_MAX_BYTES = 2.5 * 1024 * 1024;
 const clipLists = {};
+// A list that could not be read throws ReadFailed and is not kept, so no
+// clip is written into an index that has lost the others.
 async function loadClips(userId) {
     const uid = userId || '';
     if (clipLists[uid])
         return clipLists[uid];
-    const raw = await readJson(CLIP_INDEX, userId);
+    const raw = await readJsonStrict(CLIP_INDEX, userId, 'The list of your kept audio could not be read from your account. Nothing was changed.');
     const list = Array.isArray(raw)
         ? raw
             .filter((e) => e && /^[a-z0-9]{6,40}$/.test(String(e.sig)) && /^audio\/[a-z0-9.+-]+$/i.test(String(e.mime)))
@@ -3603,6 +3622,48 @@ const SETTINGS_FILE = 'settings.json';
 const SOUND_INDEX = 'sounds/index.json';
 const KEY_NAME = 'api.elevenlabs.io';
 const FS_KEY_NAME = 'freesound.org';
+// A read that failed, as apart from a file that is not there. Whatever
+// was being read is left as it is: nothing is written over it.
+class ReadFailed extends Error {
+}
+const READ_FAILED = 'Auto Foley could not read your settings from your account. Nothing was changed. Reload the page to try again.';
+// Reads a file that something is written back over. A missing file is
+// null; a file that is there but cannot be read or is not JSON throws
+// ReadFailed, so the caller writes nothing.
+async function readJsonStrict(path, userId, what = READ_FAILED) {
+    if (!spindle.userStorage || typeof spindle.userStorage.read !== 'function')
+        return null;
+    let exists = true;
+    try {
+        exists = typeof spindle.userStorage.exists === 'function' ? await spindle.userStorage.exists(path, userId) : true;
+    }
+    catch (e) {
+        logWarn('could not check ' + path + ': ' + String((e && e.message) || e));
+        throw new ReadFailed(what);
+    }
+    if (!exists)
+        return null;
+    let raw;
+    try {
+        raw = await spindle.userStorage.read(path, userId);
+    }
+    catch (e) {
+        // A store with no exists() says a missing file this way.
+        if (typeof spindle.userStorage.exists !== 'function' && /not found|no such|enoent/i.test(String((e && e.message) || e)))
+            return null;
+        logWarn('could not read ' + path + ': ' + String((e && e.message) || e));
+        throw new ReadFailed(what);
+    }
+    if (!raw)
+        return null;
+    try {
+        return JSON.parse(raw);
+    }
+    catch (_) {
+        logWarn(path + ' could not be read as JSON');
+        throw new ReadFailed(what);
+    }
+}
 async function readJson(path, userId) {
     try {
         if (!spindle.userStorage || typeof spindle.userStorage.read !== 'function')
@@ -3658,7 +3719,7 @@ async function readVideoBg(id, userId) {
 // list. Storage cannot list its files.
 const BG_INDEX_FILE = 'video-backgrounds/index.json';
 async function bgIndex(userId) {
-    const v = await readJson(BG_INDEX_FILE, userId);
+    const v = await readJsonStrict(BG_INDEX_FILE, userId, 'The list of your background pictures could not be read from your account. Nothing was changed.');
     return Array.isArray(v) ? v.map((x) => backId(x)).filter((x, i, all) => all.indexOf(x) === i) : [];
 }
 async function keepBgIndex(ids, userId) {
@@ -3709,7 +3770,7 @@ async function dropVideoBgs(s, userId) {
 const markFile = (id) => 'video-marks/' + id + '.json';
 const MARK_INDEX_FILE = 'video-marks/index.json';
 async function markIndex(userId) {
-    const v = await readJson(MARK_INDEX_FILE, userId);
+    const v = await readJsonStrict(MARK_INDEX_FILE, userId, 'The list of your watermark pictures could not be read from your account. Nothing was changed.');
     return Array.isArray(v) ? v.map((x) => backId(x)).filter((x, i, all) => all.indexOf(x) === i) : [];
 }
 async function dropMarkPic(id, userId) {
@@ -3753,7 +3814,7 @@ const FONTS_FILE = 'video-fonts.json';
 const FONTS_MAX = 8;
 const MAX_FONT_BYTES = 3 * 1024 * 1024;
 async function loadFonts(userId) {
-    const v = await readJson(FONTS_FILE, userId);
+    const v = await readJsonStrict(FONTS_FILE, userId, 'The list of your fonts could not be read from your account. Nothing was changed.');
     if (!Array.isArray(v))
         return [];
     const out = [];
@@ -3784,7 +3845,7 @@ function fontKind(b) {
     return '';
 }
 async function loadSettings(userId) {
-    return cleanSettings(await readJson(SETTINGS_FILE, userId));
+    return cleanSettings(await readJsonStrict(SETTINGS_FILE, userId));
 }
 async function saveSettings(userId, s) {
     return writeJson(SETTINGS_FILE, cleanSettings(s), userId);
@@ -3907,7 +3968,7 @@ function cleanSoundEntry(e) {
     return entry;
 }
 async function loadSounds(userId) {
-    const raw = await readJson(SOUND_INDEX, userId);
+    const raw = await readJsonStrict(SOUND_INDEX, userId, 'Your sound library could not be read from your account. Nothing was changed.');
     const list = raw && Array.isArray(raw.sounds) ? raw.sounds : [];
     return list.map(cleanSoundEntry).filter(Boolean);
 }
@@ -4598,7 +4659,7 @@ async function onPanel(p, userId) {
             case 'load': {
                 // fresh: nothing is saved for this account yet. A new install starts
                 // on every default as it is now, so no moved default is about it.
-                const fresh = !(await readJson(SETTINGS_FILE, userId));
+                const fresh = !(await readJsonStrict(SETTINGS_FILE, userId));
                 const settings = await loadSettings(userId);
                 const sounds = await loadSounds(userId);
                 const hasKey = await hasKeyFor(userId, KEY_NAME);
@@ -5338,7 +5399,11 @@ async function onPanel(p, userId) {
     }
     catch (e) {
         logWarn('panel request ' + type + ' failed: ' + String((e && e.message) || e));
-        answer({ type: 'failed', of: type, error: 'Something went wrong in Auto Foley\'s backend: ' + String((e && e.message) || e).slice(0, 200) });
+        // A read that failed says so in its own words, and nothing was saved.
+        if (e instanceof ReadFailed)
+            answer({ type: 'failed', of: type, readFailed: true, error: e.message });
+        else
+            answer({ type: 'failed', of: type, error: 'Something went wrong in Auto Foley\'s backend: ' + String((e && e.message) || e).slice(0, 200) });
     }
     finally {
         if (beat)

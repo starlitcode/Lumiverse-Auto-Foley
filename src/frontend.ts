@@ -17589,9 +17589,27 @@ export function setup(ctx: Ctx, overrides?: any) {
     },
     () => {},
   );
-  rpc({ type: 'load' }, 20000).then(
+  // The account's settings. A read that failed, or no answer, is said once,
+  // and asked again after 10 seconds. Until the account answers, nothing is
+  // saved to it, so a failed read never costs what is there.
+  let loadWarned = false;
+  const loadAgain = (why: string) => {
+    log(why, 'bad');
+    if (!loadWarned) {
+      loadWarned = true;
+      notify('warning', why);
+    }
+    const t = setTimeout(() => {
+      timers.delete(t);
+      if (alive && !accountAnswered) loadAccount();
+    }, 10000);
+    timers.add(t);
+  };
+  const loadAccount = () => rpc({ type: 'load' }, 20000).then(
     (r: any) => {
-      if (!alive || !r || r.type !== 'state') return;
+      if (!alive || !r) return;
+      if (r.type === 'failed') return loadAgain(r.readFailed && r.error ? String(r.error) : 'Auto Foley could not read your settings from your account. Changes are kept in this browser only until you reload.');
+      if (r.type !== 'state') return;
       accountAnswered = true;
       S = Object.assign({}, DEFAULTS, r.settings || {});
       sounds = Array.isArray(r.sounds) ? r.sounds : [];
@@ -17620,10 +17638,9 @@ export function setup(ctx: Ctx, overrides?: any) {
       syncWidget();
       syncExtras();
     },
-    () => {
-      log('Your settings could not be loaded from your account. The copy kept in this browser is used, and changes are not saved until the account answers.', 'bad');
-    },
+    () => loadAgain('Auto Foley could not read your settings from your account. Changes are kept in this browser only until you reload.'),
   );
+  loadAccount();
 
   return () => {
     alive = false;
