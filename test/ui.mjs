@@ -938,8 +938,9 @@ if (section("saved looks")) {
     const asked = await page.evaluate(() => window.__asked || 0);
     await page.click('[data-af-studio="lookback"]');
     await page.waitForTimeout(600);
-    check((await page.evaluate(() => window.__asked || 0)) === asked + 1, where + ": Put the look back asks first");
-    check(await page.evaluate(() => window.__settings.videoShape === "wide" && window.__settings.videoLooks.length === 1), where + ": then puts the built-in look back, and the saved look stays");
+    check((await page.evaluate(() => window.__asked || 0)) === asked + 1, where + ": Back to the built-in look asks first");
+    // The shape of the video is the reader's choice, kept as templates keep it.
+    check(await page.evaluate(() => window.__settings.videoFont === "book" && window.__settings.videoShape === "tall" && window.__settings.videoLooks.length === 1), where + ": then puts the built-in look back, keeps the shape, and the saved look stays");
     const m = await page.evaluate(MEASURE, size.touch);
     check(!m.overflow.length && !m.small.length, where + ": the saved looks fit. " + m.overflow.concat(m.small).slice(0, 2).join("; "));
     check(!errors.length, where + ": no errors. " + errors.slice(0, 2).join("; "));
@@ -4455,7 +4456,7 @@ if (section("review fixes")) {
     await page.click('[data-af-studio="lookback"]');
     await page.waitForTimeout(600);
     const c = await page.evaluate(() => ({ ids: window.__settings.videoBacks.map((b) => b.id), main: window.__settings.videoBacks.find((b) => b.id === "main").kind, pick: window.__settings.videoBackPick }));
-    check(JSON.stringify(c.ids) === '["main","b2","b3","b9"]' && c.main === "color" && c.pick === "main", size.name + ": Put the look back puts the built-in background in place of main and keeps the others (" + JSON.stringify(c) + ")");
+    check(JSON.stringify(c.ids) === '["main","b2","b3","b9"]' && c.main === "color" && c.pick === "main", size.name + ": Back to the built-in look puts the built-in background in place of main and keeps the others (" + JSON.stringify(c) + ")");
     check(!errors.length, size.name + ": no page errors. " + errors.slice(0, 2).join(" | "));
     await context.close();
   }
@@ -6797,6 +6798,50 @@ if (section("lock and focus")) {
       check(!errors.length, say + ": no page errors. " + errors.slice(0, 2).join(" | "));
       await context.close();
     }
+  }
+}
+
+if (section("built-in look")) {
+  console.log("Back to the built-in look puts back exactly the look a fresh account draws");
+  const frame = (page) => page.evaluate(async () => {
+    const r = document.querySelector("[data-af-scrub] input");
+    r.step = "any"; r.value = "9.0"; r.dispatchEvent(new Event("input", { bubbles: true }));
+    await new Promise((x) => setTimeout(x, 150));
+    await new Promise((x) => requestAnimationFrame(() => requestAnimationFrame(x)));
+    const c = document.querySelector("[data-af-videopreview]");
+    const s = document.createElement("canvas"); s.width = 192; s.height = 108;
+    s.getContext("2d").drawImage(c, 0, 0, 192, 108);
+    return Array.from(s.getContext("2d").getImageData(0, 0, 192, 108).data);
+  });
+  const differ = (a, b) => { let n = 0; for (let i = 0; i < a.length; i += 4) if (Math.abs(a[i] - b[i]) + Math.abs(a[i + 1] - b[i + 1]) + Math.abs(a[i + 2] - b[i + 2]) > 24) n++; return n / (a.length / 4); };
+  for (const size of SIZES) {
+    const fresh = await open(THEMES[0], size);
+    await openWs(fresh.page);
+    await fresh.page.waitForTimeout(900);
+    const ref = await frame(fresh.page);
+    await fresh.context.close();
+    const { context, page, errors } = await open(THEMES[0], size);
+    await openWs(page);
+    await wsSec(page, "Templates");
+    await page.waitForTimeout(500);
+    await page.click('[data-af-tpl="neon"]');
+    await page.waitForTimeout(500);
+    await page.click("[data-af-tpluse]");
+    await page.waitForTimeout(700);
+    await wsSec(page, "Shape and words");
+    await page.evaluate(() => { const r = [...document.querySelectorAll("select")].find((s) => [...s.options].some((o) => o.value === "appear")); r.value = "appear"; r.dispatchEvent(new Event("change", { bubbles: true })); });
+    await page.waitForTimeout(400);
+    await wsSec(page, "Templates");
+    await page.waitForTimeout(400);
+    await page.click("[data-af-tplhome]");
+    await page.waitForTimeout(1200);
+    const got = await frame(page);
+    check(differ(ref, got) < 0.003, size.name + ": after a template and a change, Back to the built-in look draws the same frame as a fresh account (" + (differ(ref, got) * 100).toFixed(2) + "% differ)");
+    await page.click('[data-af-ws="undo"]');
+    await page.waitForTimeout(900);
+    check(await page.evaluate(() => window.__settings.videoWords === "appear"), size.name + ": and one Undo takes it back");
+    check(!errors.length, size.name + ": no page errors. " + errors.slice(0, 2).join(" | "));
+    await context.close();
   }
 }
 

@@ -50,6 +50,7 @@ _2026-11-26_
 
 ### Changed
 
+- **Put the look back** under **Saved looks** is now **Back to the built-in look**, and is also at the top of **Templates**. It puts back the look exactly as the built-in look template sets it, as one Undo step, and offers to save your look first. Your shape of video now stays, as it does with any template. See [Back to the built-in look](docs/studio.md#back-to-the-built-in-look).
 - **Permission notices follow Lumiverse at once.** A notice for a refused permission goes as soon as Lumiverse grants it, and comes back if it is taken away, with no reload. The Log says each change. Without **App manipulation**, the **Studio** tab and the Studio's window say that it opens in a window and how to open it full screen.
 - **The Studio's preview is drawn at the size it shows**, at the screen's pixel ratio, so it stays sharp and plays smoothly on a phone. A saved video is still drawn at full size.
 - **Autoplay and Prepare replies ahead wait for a new reply to settle.** With **Wait before autoplay** at 0, a new reply is directed once it has gone 1.5 seconds with no change, and at most 10 seconds after it ends. An extension that changes a reply just after it ends, such as Auto Refine's word swaps, then costs one Director call, not two. A Play you press starts at once.

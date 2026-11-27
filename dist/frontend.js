@@ -18132,6 +18132,29 @@ export function setup(ctx, overrides) {
         refreshSection();
         void box;
     }
+    // Back to the built-in look: the built-in look's template, used the same
+    // way as any template, so the reader's own content stays and one Undo
+    // takes it back. A look that is not saved is offered to be saved first.
+    async function backToBuiltIn(box) {
+        const t = TEMPLATES.find((x) => x.id === 'calm');
+        if (!t)
+            return;
+        const before = trying ? trying.before : lookSnapshot();
+        const saved = (Array.isArray(S.videoLooks) ? S.videoLooks : []).some((l) => TEMPLATE_KEYS.every((k) => !(k in l.look) || JSON.stringify(l.look[k]) === JSON.stringify(before[k])));
+        const plain = TEMPLATE_KEYS.every((k) => JSON.stringify(before[k]) === JSON.stringify(DEFAULTS[k]));
+        // A look that is saved, or plain, is asked about here. One that is not
+        // saved is asked about by Use this template, with a way to save it.
+        if ((saved || plain) && !(await askSure('Back to the built-in look', 'Put the whole look back to Auto Foley\u2019s built-in look? Your look is saved under Saved looks, so you can use it again.', 'Put it back')))
+            return;
+        if (!trying)
+            trying = { id: t.id, before };
+        else
+            trying.id = t.id;
+        await useTemplate(box);
+        // Canceled: the look from before comes back.
+        if (trying)
+            stopTrying();
+    }
     // Each template drawn as a frame of the example clip, kept once drawn.
     const templateThumbs = new Map();
     let realS = null;
@@ -18179,6 +18202,11 @@ export function setup(ctx, overrides) {
         return url;
     }
     function drawTemplates(box) {
+        const homeRow = el('<div class="af-row"></div>');
+        const home = button('Back to the built-in look', () => void backToBuiltIn(box));
+        home.setAttribute('data-af-tplhome', '');
+        homeRow.appendChild(home);
+        box.appendChild(homeRow);
         box.appendChild(hint('Each one sets the whole look. Your line under the title, watermarks, pictures and fonts stay. Press one to try it on the preview.'));
         // Said only to someone who used a template before. Got it keeps it away,
         // on the account.
@@ -20870,29 +20898,20 @@ export function setup(ctx, overrides) {
         sec('looks', 'Saved looks', (b) => {
             drawLooks(b);
             b.appendChild(lookRow);
-            b.appendChild(hint('Put the look back asks first, then puts back the shape, words, captions, pictures, background, edges, transition and ending. Saved looks and notes stay.'));
+            b.appendChild(hint('Back to the built-in look puts back every setting of the look, the same as the built-in look in Templates. Your saved looks, notes, watermarks and pictures stay.'));
         });
         const lookRow = el('<div class="af-row"></div>');
-        const lookBack = button('Put the look back', async () => {
-            const keys = LOOK_KEYS;
-            const builtIn = DEFAULTS.videoBacks[0];
-            if (keys.every((k) => JSON.stringify(S[k]) === JSON.stringify(DEFAULTS[k])) && sameBack(builtIn)) {
+        const lookBack = button('Back to the built-in look', async () => {
+            const t = TEMPLATES.find((x) => x.id === 'calm');
+            if (!t)
+                return;
+            const look = templateLook(t);
+            if (TEMPLATE_KEYS.every((k) => JSON.stringify(S[k] === undefined ? DEFAULTS[k] : S[k]) === JSON.stringify(look[k])) && sameBack(t.back)) {
                 keepSaid('The look is already the built-in one. Nothing changed.');
                 paintStudio();
                 return;
             }
-            // Asked first, since it puts back every choice of the look at once.
-            // A look saved under Saved looks is kept, and can be used again.
-            if (!(await askSure('Put the look back', 'The shape, words, captions, pictures, background, edges, transition and ending go back to the built-in look. Saved looks, notes, Show names and Show pictures stay as they are.', 'Put it back', true)))
-                return;
-            const patch = {};
-            for (const k of keys)
-                patch[k] = JSON.parse(JSON.stringify(DEFAULTS[k]));
-            // The built-in background goes in place of the one with its id, and
-            // every other background stays.
-            Object.assign(patch, withBack(builtIn));
-            set(patch);
-            keepSaid('');
+            await backToBuiltIn(lookRow);
             renderWorkspace();
         });
         lookBack.setAttribute('data-af-studio', 'lookback');

@@ -485,9 +485,9 @@ A note is a few words for whoever watches, in a dark box at the top or the botto
 - A look with **A picture of your own** uses the picture that background has now. A look keeps the background's settings, not its picture.
 - Up to 20 looks, saved to your account.
 
-### Put the look back
+### Back to the built-in look
 
-**Put the look back** asks first, then puts back every choice of the video's look: the shape, words, captions, pictures, edges, transition and ending. The built-in background, a soft dark blue gradient, goes into your list in place of the one with its id, and is used for every scene nothing else is for. Your other backgrounds stay. Saved looks, notes, **Show names** and **Show pictures** stay as they are. If nothing would change, it says so and asks nothing.
+**Back to the built-in look**, at the top of **Templates** and under **Saved looks**, puts back every setting of the look, exactly as the **The built-in look** template sets it. It asks first. If your look now is not saved under **Saved looks**, it offers to save it first, as **Use this template** does. Your shape of video, watermarks, the words of the line under the title, notes, pictures, fonts and projects stay. **Undo** takes it back in one step. If nothing would change, it says so and asks nothing.
 
 ### Start again
 
