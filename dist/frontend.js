@@ -21321,7 +21321,7 @@ export function setup(ctx, overrides) {
         if (!looks.length)
             box.appendChild(el('<p class="af-note">No looks are saved yet.</p>'));
         // Sharing: a look in a file, with or without your pictures and fonts.
-        const inc = personSwitch('Include my pictures and fonts', 'Off by default. On, a shared look carries its background picture, stickers and fonts.', lookShareFiles, (on) => {
+        const inc = personSwitch('Include my pictures and fonts', 'Off by default. On, the file also holds the look\u2019s background picture, stickers and fonts, so the person you share it with gets them too.', lookShareFiles, (on) => {
             lookShareFiles = on;
         });
         inc.setAttribute('data-af-row', 'lookShareFiles');
