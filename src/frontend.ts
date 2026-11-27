@@ -1972,6 +1972,7 @@ const DEFAULTS: any = {
   studioAsHeard: true,
   studioLoud: true,
   studioKeys: true,
+  studioSnap: true,
   audioSplit: 'one',
   videoShape: 'wide',
   videoFont: 'book',
@@ -14320,6 +14321,25 @@ export function setup(ctx: Ctx, overrides?: any) {
     row.appendChild(bwd);
     row.appendChild(del);
     r.editor.appendChild(row);
+    const centers = el('<div class="af-row af-wrap"></div>');
+    const cx = button('Center across', () => {
+      sh.x = 0.5;
+      saveDesignSoon(true);
+      drawDesign();
+      redrawDesign();
+    });
+    cx.setAttribute('data-af-shape-act', 'centerx');
+    const cy = button('Center up and down', () => {
+      sh.y = 0.5;
+      saveDesignSoon(true);
+      drawDesign();
+      redrawDesign();
+    });
+    cy.setAttribute('data-af-shape-act', 'centery');
+    centers.appendChild(cx);
+    centers.appendChild(cy);
+    r.editor.appendChild(centers);
+    r.editor.appendChild(toggle('Snap while moving', 'On by default. A shape snaps to the middle, the edges, the thirds and other shapes, with a thin line. Hold Alt, or Option on a Mac, to move it freely.', 'studioSnap'));
   }
   // What the buttons under a picked shape do, and the keys that do the
   // same. Each gives back whether it acted.
@@ -14365,9 +14385,29 @@ export function setup(ctx: Ctx, overrides?: any) {
     else r.canvas.removeAttribute('data-af-designing');
   }
   // The outline and the two dots of the picked shape, over the preview.
+  // The lines a shape snapped to in this drag, drawn thin over the
+  // preview only, never in full screen or a saved video.
+  let snapGuides: { x?: number; y?: number; size?: string; turn?: number }[] = [];
   function drawHandles(g: CanvasRenderingContext2D, st: VideoStage, k: number) {
     const sh = shapeNow();
     if (!sh) return;
+    if (snapGuides.length) {
+      g.save();
+      g.strokeStyle = 'rgba(255,92,180,0.95)';
+      g.lineWidth = 1.5 * k;
+      for (const gd of snapGuides) {
+        g.beginPath();
+        if (gd.x !== undefined) {
+          g.moveTo(gd.x, 0);
+          g.lineTo(gd.x, st.h);
+        } else if (gd.y !== undefined) {
+          g.moveTo(0, gd.y);
+          g.lineTo(st.w, gd.y);
+        }
+        g.stroke();
+      }
+      g.restore();
+    }
     const u = Math.min(st.w, st.h) / 1080;
     const w = sh.w * u;
     const h = sh.h * u;
@@ -14467,16 +14507,83 @@ export function setup(ctx: Ctx, overrides?: any) {
       if (!drag || !st || !sh) return;
       const p = at(e);
       const u = Math.min(st.w, st.h) / 1080;
+      // Snapping is on with Snap while moving, and off for a drag with Alt
+      // (Option) held. It reaches 6 screen pixels, so it helps without
+      // holding on.
+      const snap = S.studioSnap !== false && !e.altKey;
+      const reach = 6 * p.k;
+      snapGuides = [];
       if (drag.mode === 'move') {
-        sh.x = Math.round(Math.min(1.5, Math.max(-0.5, drag.x0 + (p.x - drag.px) / st.w)) * 1000) / 1000;
-        sh.y = Math.round(Math.min(1.5, Math.max(-0.5, drag.y0 + (p.y - drag.py) / st.h)) * 1000) / 1000;
+        let x = drag.x0 * st.w + (p.x - drag.px);
+        let y = drag.y0 * st.h + (p.y - drag.py);
+        if (snap) {
+          const others = shapesNow().filter((o) => o.id !== sh.id && !o.rot);
+          const hw = sh.rot ? 0 : (sh.w * u) / 2;
+          const hh = sh.rot ? 0 : (sh.h * u) / 2;
+          const margin = Math.min(st.w, st.h) * 0.05;
+          // Lines the middle or an edge can rest on: the frame's middle,
+          // edges, safe margin and thirds, and the other shapes' edges and
+          // middles.
+          const xs = [st.w / 2, 0, st.w, margin, st.w - margin, st.w / 3, (st.w * 2) / 3];
+          const ys = [st.h / 2, 0, st.h, margin, st.h - margin, st.h / 3, (st.h * 2) / 3];
+          for (const o of others) {
+            const ox = o.x * st.w, oy = o.y * st.h, ow = (o.w * u) / 2, oh = (o.h * u) / 2;
+            xs.push(ox, ox - ow, ox + ow);
+            ys.push(oy, oy - oh, oy + oh);
+          }
+          const best = (v: number, half: number, lines: number[]) => {
+            let pick: { to: number; at: number } | null = null;
+            for (const l of lines)
+              for (const off of half ? [0, -half, half] : [0]) {
+                const d = Math.abs(v + off - l);
+                if (d <= reach && (!pick || d < Math.abs(v + off - pick.at))) pick = { to: l - off, at: l };
+              }
+            return pick;
+          };
+          const bx = best(x, hw, xs);
+          const by = best(y, hh, ys);
+          if (bx) {
+            x = bx.to;
+            snapGuides.push({ x: bx.at });
+          }
+          if (by) {
+            y = by.to;
+            snapGuides.push({ y: by.at });
+          }
+        }
+        sh.x = Math.round(Math.min(1.5, Math.max(-0.5, x / st.w)) * 10000) / 10000;
+        sh.y = Math.round(Math.min(1.5, Math.max(-0.5, y / st.h)) * 10000) / 10000;
       } else if (drag.mode === 'size') {
         const { lx, ly } = local(sh, p.x, p.y, st);
-        sh.w = Math.round(Math.min(4000, Math.max(4, (2 * Math.abs(lx)) / u)));
-        sh.h = Math.round(Math.min(4000, Math.max(2, (2 * Math.abs(ly)) / u)));
+        let w = (2 * Math.abs(lx)) / u;
+        let h = (2 * Math.abs(ly)) / u;
+        if (snap) {
+          // A size that matches another shape's.
+          for (const o of shapesNow()) {
+            if (o.id === sh.id) continue;
+            if (Math.abs(w - o.w) * u <= reach * 2) {
+              w = o.w;
+              snapGuides.push({ size: 'w' });
+            }
+            if (Math.abs(h - o.h) * u <= reach * 2) {
+              h = o.h;
+              snapGuides.push({ size: 'h' });
+            }
+          }
+        }
+        sh.w = Math.round(Math.min(4000, Math.max(4, w)));
+        sh.h = Math.round(Math.min(4000, Math.max(2, h)));
       } else {
         let deg = (Math.atan2(p.y - sh.y * st.h, p.x - sh.x * st.w) * 180) / Math.PI + 90;
         if (deg > 180) deg -= 360;
+        // Turning rests on 0, 45, 90, 135 and 180 degrees within 4.
+        if (snap) {
+          const near = Math.round(deg / 45) * 45;
+          if (Math.abs(deg - near) <= 4) {
+            deg = near === -180 ? 180 : near;
+            snapGuides.push({ turn: deg });
+          }
+        }
         sh.rot = Math.round(deg);
       }
       redrawDesign();
@@ -14484,6 +14591,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     const end = () => {
       if (!drag) return;
       drag = null;
+      snapGuides = [];
       saveDesignSoon(true);
       drawDesign();
       redrawDesign();
@@ -16025,7 +16133,7 @@ export function setup(ctx: Ctx, overrides?: any) {
   let undoStack: { before: Record<string, any>; after: Record<string, any>; at: number }[] = [];
   let redoStack: { before: Record<string, any>; after: Record<string, any>; at: number }[] = [];
   let undoing = false;
-  const studioKey = (k: string) => /^(video|studio|censor|audioSplit)/.test(k) && k !== 'videoLooks' && k !== 'studioKeys';
+  const studioKey = (k: string) => /^(video|studio|censor|audioSplit)/.test(k) && k !== 'videoLooks' && k !== 'studioKeys' && k !== 'studioSnap';
   // What each Studio setting was after the last change, as text. Shapes
   // and watermarks are changed in place before they are saved, so the
   // value before a change is read from here, not from the settings.

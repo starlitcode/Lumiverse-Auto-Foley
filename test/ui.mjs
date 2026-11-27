@@ -5784,6 +5784,81 @@ if (section("timeline cuts")) {
   }
 }
 
+if (section("snapping")) {
+  console.log("A shape snaps to the middle with a guide, moves freely with the switch off or Alt held, and turns onto 90 degrees");
+  for (const size of SIZES) for (const zoom of [1, 1.25, 0.85]) {
+    const { context, page, errors } = await open(THEMES[0], size, zoom, scale(zoom) + `;(() => {
+      const one = { id: "s1", kind: "rect", x: 0.3, y: 0.3, w: 300, h: 200, rot: 0, fill: "#c03030", grad: "none", stops: ["#141218"], dir: "down", clear: 0, text: "" };
+      window.__settings.videoBacks = [{ id: "main", name: "Main", kind: "design", color: "#101018", fill: "solid", stops: ["#2a1f3d"], dir: "down", dim: 40, blur: 0, shapes: [one], use: "match", moods: [], places: [] }];
+      window.__settings.videoBackPick = "main";
+    })()`);
+    const say = size.name + " at " + zoom;
+    await openWs(page);
+    await wsSec(page, "Background");
+    await page.locator('[data-af-shape="s1"]').click();
+    await page.waitForTimeout(300);
+    // Drags the shape's middle to a point given as a part of the frame,
+    // read back from the shape as saved.
+    const drag = (to, alt) => page.evaluate(async ([to, alt]) => {
+      const c = document.querySelector("[data-af-videopreview]");
+      const r = c.getBoundingClientRect();
+      const s = window.__settings.videoBacks[0].shapes[0];
+      const sx = r.left + s.x * r.width, sy = r.top + s.y * r.height;
+      const ev = (type, x, y) => c.dispatchEvent(new PointerEvent(type, { clientX: x, clientY: y, pointerId: 7, bubbles: true, cancelable: true, altKey: alt, isPrimary: true, pointerType: "mouse", button: 0 }));
+      ev("pointerdown", sx, sy);
+      const tx = r.left + to[0] * r.width, ty = r.top + to[1] * r.height;
+      for (let k = 1; k <= 6; k++) ev("pointermove", sx + ((tx - sx) * k) / 6, sy + ((ty - sy) * k) / 6);
+      await new Promise((x) => requestAnimationFrame(() => requestAnimationFrame(x)));
+      // A guide is drawn on the preview while the drag goes on.
+      const g = c.getContext("2d");
+      const d = g.getImageData(Math.round(c.width / 2), Math.round(c.height * 0.08), 1, 1).data;
+      const guide = d[0] > 200 && d[1] < 150 && d[2] > 140;
+      ev("pointerup", tx, ty);
+      await new Promise((x) => setTimeout(x, 600));
+      const n = window.__settings.videoBacks[0].shapes[0];
+      return { x: n.x, y: n.y, guide };
+    }, [to, alt]);
+    // A few screen pixels off the middle: it lands on the middle.
+    const px = await page.evaluate(() => 3 / document.querySelector("[data-af-videopreview]").getBoundingClientRect().width);
+    const a = await drag([0.5 + px, 0.62], false);
+    check(Math.abs(a.x - 0.5) < 0.0005 && a.guide, say + ": dragged near the middle, it lands on it, with a guide (" + a.x + ")");
+    const b = await drag([0.5 + px * 2, 0.62], true);
+    check(Math.abs(b.x - 0.5) > px, say + ": with Alt held, it lands where it was dropped (" + b.x.toFixed(4) + ")");
+    await page.locator('[data-af-row="studioSnap-switch"] .af-box').click();
+    await page.waitForTimeout(300);
+    const c2 = await drag([0.5 - px * 2, 0.62], false);
+    check(Math.abs(c2.x - 0.5) > px, say + ": with Snap while moving off, it lands where it was dropped (" + c2.x.toFixed(4) + ")");
+    await page.locator('[data-af-row="studioSnap-switch"] .af-box').click();
+    await page.waitForTimeout(300);
+    await page.click('[data-af-shape-act="centerx"]');
+    await page.waitForTimeout(500);
+    check(await page.evaluate(() => window.__settings.videoBacks[0].shapes[0].x === 0.5), say + ": Center across centers it exactly");
+    // Turning near 90 lands on 90.
+    const rot = await page.evaluate(async () => {
+      const c = document.querySelector("[data-af-videopreview]");
+      const r = c.getBoundingClientRect();
+      const s = window.__settings.videoBacks[0].shapes[0];
+      const k = r.width / c.width;
+      const u = Math.min(c.width, c.height) / 1080;
+      const cx = r.left + s.x * r.width, cy = r.top + s.y * r.height;
+      // The turn dot sits above the shape by its half height and 34 screen
+      // pixels.
+      const dotY = cy - (s.h * u / 2) * k - 34;
+      const ev = (type, x, y) => c.dispatchEvent(new PointerEvent(type, { clientX: x, clientY: y, pointerId: 8, bubbles: true, cancelable: true, isPrimary: true, pointerType: "mouse", button: 0 }));
+      ev("pointerdown", cx, dotY);
+      const ang = (88 * Math.PI) / 180;
+      const R = 120;
+      ev("pointermove", cx + Math.sin(ang) * R, cy - Math.cos(ang) * R);
+      ev("pointerup", cx + Math.sin(ang) * R, cy - Math.cos(ang) * R);
+      await new Promise((x) => setTimeout(x, 600));
+      return window.__settings.videoBacks[0].shapes[0].rot;
+    });
+    check(rot === 90, say + ": turned near 90 degrees, it lands on 90 (" + rot + ")");
+    check(!errors.length, say + ": no page errors. " + errors.slice(0, 2).join(" | "));
+    await context.close();
+  }
+}
+
 if (section("hint places")) {
   console.log("Each description opens right by its ?, in an open fold far down a scrolled drawer, at each UI Scale");
   // Where the description is against its ?: it sits just above the row the

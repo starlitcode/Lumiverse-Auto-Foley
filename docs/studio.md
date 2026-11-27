@@ -445,6 +445,17 @@ The moon is a circle in every shape of video, since sizes are in pixels of a 108
 - While the design is shown, a finger on the preview moves shapes and does not scroll the page. Scroll above or below the preview.
 - The outline and the dots show on the preview only. They are never in full screen or in a saved video.
 
+### Snapping
+
+While you drag, size or turn a shape on the preview, it snaps to helpful places and shows a thin line where it snapped:
+
+- the middle of the frame, across and up and down, its edges, a margin of 5% inside them, and the thirds;
+- the edges and middles of the other shapes, so shapes line up;
+- the width or height of another shape, while sizing;
+- 0, 45, 90, 135 and 180 degrees, while turning.
+
+It reaches a few pixels, so it helps without holding the shape. **Snap while moving**, under the shape picked, is on by default; off, nothing snaps. On a computer, hold Alt, or Option on a Mac, while dragging to move it freely that once. **Center across** and **Center up and down** put the shape picked in the middle exactly. The lines show on the preview only, never in full screen or a saved video.
+
 ## Scenes and their backgrounds
 
 ### In short

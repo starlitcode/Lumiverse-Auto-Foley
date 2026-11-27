@@ -243,6 +243,7 @@ interface Settings {
   studioAsHeard: boolean;
   studioLoud: boolean;
   studioKeys: boolean;
+  studioSnap: boolean;
   audioSplit: 'one' | 'parts';
   // How a video looks. Names also go in the title and in the name of every
   // file saved. Sizes are in percent or in pixels of a 1080-pixel frame, and
@@ -548,6 +549,7 @@ const DEFAULT_SETTINGS: Settings = {
   studioAsHeard: true,
   studioLoud: true,
   studioKeys: true,
+  studioSnap: true,
   audioSplit: 'one',
   videoShape: 'wide',
   videoFont: 'book',
@@ -1250,6 +1252,7 @@ function cleanSettings(raw: any): Settings {
     studioAsHeard: bool(r.studioAsHeard, d.studioAsHeard),
     studioLoud: bool(r.studioLoud, d.studioLoud),
     studioKeys: bool(r.studioKeys, d.studioKeys),
+    studioSnap: bool(r.studioSnap, d.studioSnap),
     audioSplit: pick(r.audioSplit, ['one', 'parts'] as const, d.audioSplit),
     videoShape: pick(r.videoShape, ['wide', 'tall', 'square'] as const, d.videoShape),
     videoFont: fontChoice(r.videoFont, 'book'),
