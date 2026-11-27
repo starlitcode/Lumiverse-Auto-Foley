@@ -5224,9 +5224,12 @@ async function onPanel(p: any, userId: string | undefined) {
         const sig = str(p.sig, 40);
         const s = await loadSettings(userId);
         const mime = /^audio\/[a-z0-9.+-]+$/i.test(String(p.mime)) ? String(p.mime) : '';
-        if (!s.keepAudio || !/^[a-z0-9]{6,40}$/.test(sig) || !mime) return answer({ type: 'clip_kept', ok: false });
+        if (!s.keepAudio) return answer({ type: 'clip_kept', ok: false, error: 'Keep made audio is off, so the line was not kept.' });
+        if (!/^[a-z0-9]{6,40}$/.test(sig)) return answer({ type: 'clip_kept', ok: false, error: 'The line could not be kept: its fingerprint was not valid.' });
+        if (!mime) return answer({ type: 'clip_kept', ok: false, error: 'The line could not be kept: what was sent is not audio.' });
         const bytes = fromBase64(str(p.base64, CLIP_MAX_BYTES * 2));
-        if (!bytes.length || bytes.length > CLIP_MAX_BYTES) return answer({ type: 'clip_kept', ok: false });
+        if (!bytes.length) return answer({ type: 'clip_kept', ok: false, error: 'The line could not be kept: it had no sound in it.' });
+        if (bytes.length > CLIP_MAX_BYTES) return answer({ type: 'clip_kept', ok: false, error: 'A line is too long to keep (' + (bytes.length / 1048576).toFixed(1) + ' MB, the most is 2.5 MB), so it is made again each time it plays.' });
         try {
           await spindle.userStorage.writeBinary('clips/' + sig, bytes, userId);
         } catch (e: any) {
@@ -5246,7 +5249,7 @@ async function onPanel(p: any, userId: string | undefined) {
         }
         const ok = await saveClips(userId, list);
         await dropClips(userId, gone);
-        return answer({ type: 'clip_kept', ok });
+        return answer({ type: 'clip_kept', ok, error: ok ? '' : 'The line was kept, but the list of kept audio could not be saved, so it may be made again.' });
       }
       case 'clip_drop': {
         // One kept line is let go, so it is made again the next time.
@@ -5293,11 +5296,16 @@ async function onPanel(p: any, userId: string | undefined) {
           if (sc) hit.scenes = sc;
           else delete hit.scenes;
         }
-        await saveKeptScripts(uid);
+        const bad = await saveKeptScripts(uid);
+        if (bad) return answer({ type: 'kept_edited', ok: false, error: bad });
         return answer({ type: 'kept_edited', ok: true, name: hit.name || '', folder: hit.folder || '' });
       }
       case 'kept_script': {
         const key = str(p.key, 80);
+        // After a restart the list is read first, so a saved script is
+        // found rather than said to be gone.
+        const s = await loadSettings(userId);
+        await readKeptScripts(userId || '', s);
         const hit = (scripts[userId || ''] || []).find((x) => x.key === key);
         return answer({ type: 'kept_script', script: hit ? hit.script : null, scenes: hit && hit.scenes ? hit.scenes : null });
       }
@@ -5315,8 +5323,11 @@ async function onPanel(p: any, userId: string | undefined) {
         const uid = userId || '';
         const s = await loadSettings(userId);
         await readKeptScripts(uid, s);
+        const read = await readKeptScripts(uid, s);
+        if (!read && s.keepAudio) return answer({ type: 'kept_dropped', ok: false, error: 'Your saved scripts could not be read from your account, so nothing was deleted. Try again.' });
         scripts[uid] = (scripts[uid] || []).filter((x) => x.key !== key);
-        await saveKeptScripts(uid);
+        const bad = await saveKeptScripts(uid);
+        if (bad) return answer({ type: 'kept_dropped', ok: false, error: bad });
         const sigs = new Set(Array.isArray(p.sigs) ? p.sigs.map((x: any) => str(x, 40)) : []);
         const list = await loadClips(userId);
         const gone = list.filter((x) => sigs.has(x.sig));

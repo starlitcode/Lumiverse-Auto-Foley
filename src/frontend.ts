@@ -2097,17 +2097,29 @@ export function setup(ctx: Ctx, overrides?: any) {
     } catch (_) {}
   }
 
+  let saveWarned = false;
   function save() {
     keepLocal();
     if (!accountAnswered) return;
     if (saveTimer) clearTimeout(saveTimer);
     saveTimer = setTimeout(() => {
       saveTimer = null;
+      // A save that did not reach the account is said once: nothing else
+      // on screen shows it. The backend warns itself when it answers no.
+      const lost = (why: string) => {
+        log(why, 'bad');
+        if (!saveWarned) {
+          saveWarned = true;
+          notify('warning', why);
+        }
+      };
       rpc({ type: 'save', settings: S }, 15000).then(
         (r: any) => {
-          if (!r || !r.ok) log('Your settings could not be saved to your account.', 'bad');
+          if (r && r.type === 'failed') lost(String(r.error || 'Your settings could not be saved to your account.'));
+          else if (!r || !r.ok) log('Your settings could not be saved to your account.', 'bad');
+          else saveWarned = false;
         },
-        () => log('Your settings could not be saved: the backend did not answer.', 'bad'),
+        () => lost('Auto Foley could not save your settings to your account: the backend did not answer. Changes are kept in this browser only until you reload.'),
       );
     }, 400);
   }
@@ -2254,6 +2266,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     } else if (msg.type === 'directing') {
       if (busyMessage && String(msg.messageId || '') === busyMessage && !directorWriting) {
         directorWriting = true;
+        directorSince = Date.now();
         phase = busyWords();
         paintStage();
         paintFloat();
@@ -2923,8 +2936,14 @@ export function setup(ctx: Ctx, overrides?: any) {
         });
         if (res.ok) {
           const blob = await res.blob();
+          // Only audio is played or kept. A page or a message sent with a
+          // good status is said as what it is.
+          if (blob.size && blob.type && !/^audio\//i.test(blob.type)) {
+            why = who.charAt(0).toUpperCase() + who.slice(1) + ' sent back something that is not audio for line ' + (line.i + 1) + ' (' + blob.type.slice(0, 40) + ').';
+            return { why };
+          }
           if (blob.size) {
-            if (sig) keepClip(sig, blob);
+            if (sig) keepClip(sig, blob, line.i + 1);
             return { blob };
           }
           why = who.charAt(0).toUpperCase() + who.slice(1) + ' sent back no sound for line ' + (line.i + 1) + '.';
@@ -2964,15 +2983,27 @@ export function setup(ctx: Ctx, overrides?: any) {
   // How many lines of the show playing came from kept audio, for the Log.
   let keptUsed = 0;
   let keptWarned = false;
-  async function keepClip(sig: string, blob: Blob) {
+  async function keepClip(sig: string, blob: Blob, line = 0) {
+    // Only audio is kept. A clip with no type is taken as MP3, which is
+    // what every voice service here sends.
+    if (blob.type && !/^audio\//i.test(blob.type)) return;
+    const said = (why: string) => {
+      log(why, 'bad');
+      if (!keptWarned) {
+        keptWarned = true;
+        notify('warning', why);
+      }
+    };
+    const mb = blob.size / (1024 * 1024);
+    if (mb > 2.5) return said((line ? 'Line ' + line : 'A line') + ' is too long to keep (' + mb.toFixed(1) + ' MB, the most is 2.5 MB), so it is made again each time it plays.');
     try {
       const bytes = new Uint8Array(await blob.arrayBuffer());
       const r = await rpc({ type: 'clip_put', sig, mime: blob.type || 'audio/mpeg', base64: bytesToBase64(bytes) }, 30000);
-      if (r && r.ok === false && r.error && !keptWarned) {
-        keptWarned = true;
-        log(r.error, 'bad');
-      }
-    } catch (_) {}
+      if (r && r.ok === false && r.error) said(r.error);
+      else if (r && r.type === 'failed') said(String(r.error || 'The line could not be kept.'));
+    } catch (_) {
+      said('A line could not be kept: the backend did not answer. It is made again the next time it plays.');
+    }
   }
 
   // Waits, and answers false when the wait was called off by Stop.
@@ -3643,7 +3674,7 @@ export function setup(ctx: Ctx, overrides?: any) {
   async function downloadPerformance() {
     const sh = keptShow();
     if (!sh) return keepSaid('Play a message first. What you hear can then be downloaded.');
-    keepSaid('Joining the audio');
+    timedKeep('Joining the audio');
     try {
       const m = await mixOf(sh);
       if (!m) return keepSaid(partsLeftOut(sh).size ? 'Every part is left out, so there is nothing to save.' : 'This browser cannot join the audio into one file.');
@@ -3986,8 +4017,10 @@ export function setup(ctx: Ctx, overrides?: any) {
         (r: any) => {
           videoBgs.set(id, r && typeof r.picture === 'string' ? r.picture : '');
         },
-        () => {
+        (e: any) => {
+          // Asked again next time.
           videoBgAsked.delete(id);
+          throw e;
         },
       );
       videoBgAsked.set(id, ask);
@@ -4249,6 +4282,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         (r: any) => (r && typeof r.picture === 'string' ? r.picture : ''),
         () => {
           moodPics.delete(key);
+          log('A picture for the mood ' + feeling + ' could not be read: the backend did not answer. The main picture is used.', 'bad');
           return '';
         },
       );
@@ -4287,12 +4321,23 @@ export function setup(ctx: Ctx, overrides?: any) {
     const used = Array.from(new Set(times.map((x) => x.id)));
     const backs = used.map((id) => backList().find((b) => b.id === id) || backDefault());
     const walls = new Map<string, HTMLImageElement>();
+    // A picture that cannot be read is said, and the plain color is used.
+    let wallMiss = '';
     for (const bk of backs)
       if (bk.kind === 'picture') {
-        await loadVideoBg(bk.id).catch(() => {});
-        const im = await loadImage(videoBgs.get(bk.id) || '');
+        let asked = true;
+        await loadVideoBg(bk.id).catch(() => {
+          asked = false;
+        });
+        const src = videoBgs.get(bk.id) || '';
+        const im = await loadImage(src);
         if (im) walls.set(bk.id, im);
+        else if (src || !asked) wallMiss = bk.name;
       }
+    if (wallMiss) {
+      log('The background picture of ' + wallMiss + ' could not be read, so the video uses its plain color.', 'bad');
+      if (!keepLine) keepSaid('The background picture for this scene could not be read, so the video uses the plain color.');
+    }
     const layers = new Map<string, any>();
     for (const bk of backs) layers.set(bk.id, canvasOf(W, H));
     const edges = canvasOf(W, H);
@@ -5256,7 +5301,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     const Rec = w.MediaRecorder;
     const type = Rec && typeof Rec.isTypeSupported === 'function' ? types.find((t) => Rec.isTypeSupported(t)) : '';
     if (!ACtx || !Rec || !type || typeof canvas.captureStream !== 'function') return keepSaid('This browser cannot make a video.');
-    keepSaid('Getting the audio ready');
+    timedKeep('Getting the audio ready');
     let m: Mix | null = null;
     try {
       m = await mixOf(sh);
@@ -5265,27 +5310,37 @@ export function setup(ctx: Ctx, overrides?: any) {
     const mix = m;
     const parts = videoParts(sh, mix);
     const title = videoTitle(sh);
-    keepSaid('Getting the pictures ready');
-    const st = await videoStage(parts, sh);
-    canvas.width = st.w;
-    canvas.height = st.h;
-    const g = canvas.getContext('2d') as CanvasRenderingContext2D;
-    const actx = new ACtx();
-    const buf = actx.createBuffer(mix.channels.length, mix.channels[0].length, mix.rate);
-    mix.channels.forEach((d, c) => buf.getChannelData(c).set(d));
-    const src = actx.createBufferSource();
-    src.buffer = buf;
-    const dest = actx.createMediaStreamDestination();
-    src.connect(dest);
-    const stream = canvas.captureStream(30);
-    dest.stream.getAudioTracks().forEach((t: any) => stream.addTrack(t));
-    const chunks: Blob[] = [];
+    timedKeep('Getting the pictures ready');
+    // Everything from here to the recorder can throw on a browser short of
+    // memory or support. Any of it says why, and nothing is left running.
+    let st: VideoStage;
+    let g: CanvasRenderingContext2D;
+    let actx: any = null;
+    let buf: any;
+    let src: any;
     let rec: any;
+    const chunks: Blob[] = [];
     try {
+      st = await videoStage(parts, sh);
+      canvas.width = st.w;
+      canvas.height = st.h;
+      g = canvas.getContext('2d') as CanvasRenderingContext2D;
+      if (!g) throw new Error('the browser gave no drawing surface');
+      actx = new ACtx();
+      buf = actx.createBuffer(mix.channels.length, mix.channels[0].length, mix.rate);
+      mix.channels.forEach((d, c) => buf.getChannelData(c).set(d));
+      src = actx.createBufferSource();
+      src.buffer = buf;
+      const dest = actx.createMediaStreamDestination();
+      src.connect(dest);
+      const stream = canvas.captureStream(30);
+      dest.stream.getAudioTracks().forEach((t: any) => stream.addTrack(t));
       rec = new Rec(stream, { mimeType: type, videoBitsPerSecond: 12000000, audioBitsPerSecond: 256000 });
     } catch (e: any) {
-      try { actx.close(); } catch (_) {}
-      return keepSaid('This browser cannot make a video: ' + String((e && e.message) || e).slice(0, 160));
+      try {
+        if (actx) actx.close();
+      } catch (_) {}
+      return keepSaid('The video could not be made: ' + String((e && e.message) || e).slice(0, 160));
     }
     rec.ondataavailable = (e: any) => e.data && e.data.size && chunks.push(e.data);
     const total = buf.duration;
@@ -5378,7 +5433,22 @@ export function setup(ctx: Ctx, overrides?: any) {
           return;
         }
         const blob = new Blob(chunks, { type: type.split(';')[0] });
+        // An empty recording is not saved as a file that does not play.
+        if (!blob.size) {
+          keepSaid('The browser made an empty video, so nothing was saved.');
+          paintStage();
+          paintStudio();
+          return;
+        }
         const ok = saveFile(blob, showName(sh) + (/mp4/.test(type) ? '.mp4' : '.webm'));
+        void decodeShow(sh).then(
+          (got) => {
+            const skipped = sh.played.length - got.length;
+            keepSaid(!ok ? 'The browser would not save the video. Some private windows block downloads.' : skipped ? 'The video is saved. ' + skipped + (skipped === 1 ? ' part' : ' parts') + ' could not be read by the browser, so the video does not have them.' : 'The video is saved.');
+            paintStudio();
+          },
+          () => {},
+        );
         keepSaid(ok ? 'The video is saved.' : 'The browser would not save the video. Some private windows block downloads.');
         paintStage();
         paintStudio();
@@ -5394,6 +5464,12 @@ export function setup(ctx: Ctx, overrides?: any) {
       }
     };
     videoRun = { cancel: () => finish(false), paused: false, goOn: () => goOn(true) };
+    // A recorder that stops on its own says why, and keeps nothing.
+    rec.onerror = (e: any) => {
+      const why = String((e && e.error && (e.error.message || e.error.name)) || 'no reason was given');
+      finish(false);
+      keepSaid('The browser stopped making the video: ' + why.slice(0, 160) + '. Nothing was saved.');
+    };
     const tick = () => {
       raf = 0;
       if (ended || paused) return;
@@ -5405,7 +5481,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     };
     videoFrame(g, 0, parts, total, st, title);
     try {
-      await actx.resume();
+      await Promise.race([actx.resume(), new Promise((r) => setTimeout(r, 1500))]);
     } catch (_) {}
     try {
       rec.start(1000);
@@ -5414,8 +5490,16 @@ export function setup(ctx: Ctx, overrides?: any) {
       finish(false);
       return keepSaid('The video could not start: ' + String((e && e.message) || e).slice(0, 160));
     }
-    // The tab may have been left while the video got ready.
+    // The tab may have been left while the video got ready. A phone may
+    // also hold the sound until a press, after the waits above: then the
+    // video waits, and Go on with the video starts it.
     if (document.visibilityState === 'hidden') pause();
+    else if (actx.state !== 'running') {
+      pause();
+      keepSaid('Press Go on with the video to start. The browser needs a tap before it plays sound.');
+      paintStudio();
+      return;
+    }
     tick();
     paintStage();
     paintStudio();
@@ -5584,8 +5668,14 @@ export function setup(ctx: Ctx, overrides?: any) {
       (musicPlayed[mood] = musicPlayed[mood] || []).push(String(got.id));
       (sh.musicIds = sh.musicIds || {})[mood] = String(got.id);
     }
+    let url = '';
+    try {
+      url = got.url ? String(got.url) : URL.createObjectURL(base64ToBlob(got.base64, got.mime || 'audio/mpeg'));
+    } catch (e: any) {
+      log('The music for ' + mood + ' could not be read: ' + String((e && e.message) || e).slice(0, 120), 'bad');
+      return;
+    }
     const el = new AudioCtor();
-    const url = got.url ? String(got.url) : URL.createObjectURL(base64ToBlob(got.base64, got.mime || 'audio/mpeg'));
     el.src = url;
     el.loop = true;
     el.volume = 0;
@@ -5637,8 +5727,25 @@ export function setup(ctx: Ctx, overrides?: any) {
       // The player under the message says which part is playing, and whether
       // it came from saved audio, which is known once the clip is ready.
       paintPlayers();
-      const got = await clipFor(sh, at);
+      // A line still being made after a moment says so, with the seconds
+      // it has taken.
+      const coming = clipFor(sh, at);
+      let settled = false;
+      coming.then(
+        () => (settled = true),
+        () => (settled = true),
+      );
+      await Promise.race([coming.catch(() => {}), new Promise((r) => setTimeout(r, 150))]);
+      if (!settled && show === sh && sh.items[at].kind === 'voice' && !paused) {
+        timedPhase('Getting line ' + (at + 1) + ' from ' + mainEngine().label);
+        paintStage();
+      }
+      const got = await coming;
       if (show !== sh) return;
+      if (phaseBase && phase.startsWith(phaseBase)) {
+        phaseBase = '';
+        phase = sh.items[at].kind === 'voice' ? 'Speaking' : phase;
+      }
       if (sh.index !== at) continue;
       paintPlayers();
       if (!got.blob) {
@@ -5662,6 +5769,17 @@ export function setup(ctx: Ctx, overrides?: any) {
       musicFor(sh, at);
       const how = await playBlob(got.blob, sh.items[at].kind, sh.items[at].kind === 'voice' ? levelFor(sh, at) : 1);
       if (show !== sh) return;
+      if (how === 'failed') {
+        sh.failed.push(at);
+        const why = 'Line ' + (at + 1) + ' could not be played: the browser could not read the audio Lumiverse sent. Make this line again to get a new take.';
+        log(why, 'bad');
+        if (!drawerOpen() && !warnedHidden && sh.items[at].kind !== 'sound') {
+          warnedHidden = true;
+          notify('warning', why);
+        }
+        if (sh.index === at) sh.index++;
+        continue;
+      }
       // The cheer is not saved with the message: it is the audience, not
       // the performance. A linked sound cannot be saved.
       if (how === 'ended' && sh.items[at].kind !== 'applause' && typeof got.blob !== 'string') sh.played.push({ blob: got.blob, k: at });
@@ -5681,7 +5799,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     }
   }
 
-  function playBlob(blob: Blob | string, kind: string, gain = 1): Promise<'ended' | 'cut'> {
+  function playBlob(blob: Blob | string, kind: string, gain = 1): Promise<'ended' | 'cut' | 'failed'> {
     return new Promise((resolve) => {
       stopAudio();
       if (!AudioCtor) {
@@ -5708,9 +5826,15 @@ export function setup(ctx: Ctx, overrides?: any) {
         resolve('ended');
       };
       el.onended = finish;
+      // Audio the browser cannot read counts as a part that did not play.
       el.onerror = () => {
-        log('A clip could not be played by the browser.', 'bad');
-        finish();
+        if (audio !== el) return;
+        settle = null;
+        try {
+          URL.revokeObjectURL(el.src);
+        } catch (_) {}
+        audio = null;
+        resolve('failed');
       };
       // While paused, the clip waits. Play starts it from togglePause.
       if (!paused) startClip(el);
@@ -5924,9 +6048,50 @@ export function setup(ctx: Ctx, overrides?: any) {
   // says so only when it asks the Director, so a script played from what was
   // kept says it is getting the script, never that the Director is writing.
   let directorWriting = false;
+  let directorSince = 0;
+  const secsSince = (t: number) => Math.max(0, Math.floor((Date.now() - t) / 1000));
   function busyWords(): string {
-    if (directorWriting) return 'The Director is writing the script';
+    if (directorWriting) return 'The Director is writing the script, ' + secsSince(directorSince) + ' s';
     return S.directorOn ? 'Getting the script' : 'Making the script';
+  }
+  // A wait shows a number that moves: the seconds it has taken, said again
+  // every second while the same wait goes on. phaseBase is the status line's
+  // wait, and keepBase the Studio's.
+  let phaseBase = '';
+  let phaseSince = 0;
+  let keepBase = '';
+  let keepSince = 0;
+  function timedPhase(base: string) {
+    phaseBase = base;
+    phaseSince = Date.now();
+    phase = base + ', 0 s';
+  }
+  function timedKeep(base: string) {
+    keepBase = base;
+    keepSince = Date.now();
+    keepSaid(base + ', 0 s');
+  }
+  {
+    const tick = setInterval(() => {
+      if (!alive) return;
+      let paint = false;
+      if (phaseBase && phase.startsWith(phaseBase)) {
+        phase = phaseBase + ', ' + secsSince(phaseSince) + ' s';
+        paint = true;
+      } else phaseBase = '';
+      if (directorWriting && busyMessage) {
+        if (phase.startsWith('The Director is writing the script')) phase = busyWords();
+        paint = true;
+      }
+      if (paint) {
+        paintStage();
+        paintFloat();
+        paintPlayers();
+      }
+      if (keepBase && keepLine.startsWith(keepBase)) keepSaid(keepBase + ', ' + secsSince(keepSince) + ' s');
+      else keepBase = '';
+    }, 1000);
+    disposers.push(() => clearInterval(tick));
   }
   // Stop while the script is being written: the panel stops waiting, and the
   // server cancels the Director's call, so nothing more is spent on it.
@@ -5951,6 +6116,9 @@ export function setup(ctx: Ctx, overrides?: any) {
     // line is fitted again to the engine that speaks it, when a person in the
     // cast uses another one.
     if (!activeConnection()) await loadTtsConnections();
+    // With no voice to speak it, the Director is not asked, so nothing is
+    // spent on a script that cannot be read.
+    if (!activeConnection()) return { why: ttsWhy || 'Pick your TTS connection in the Settings tab.' };
     const eng = mainEngine();
     if (!eng.supported) return { why: noTagsWhy(activeConnection()) };
     const engine = { id: eng.id, label: eng.label, tags: eng.tags, list: eng.list, style: eng.style, inVoiceSounds: eng.inVoiceSounds, sing: !!(eng.singTag || eng.singStyle) };
@@ -6219,16 +6387,7 @@ export function setup(ctx: Ctx, overrides?: any) {
 
   // The newest reply in the chat on screen, for the button in the chat's row.
   async function latestReplyId(): Promise<string> {
-    const chatId = activeChatId();
-    if (!chatId) return '';
-    try {
-      const res = await api('/chats/' + encodeURIComponent(chatId) + '/messages?tail=true&limit=20');
-      if (!res.ok) return '';
-      const j = await res.json();
-      const list = Array.isArray(j && j.data) ? j.data : [];
-      for (let k = list.length - 1; k >= 0; k--) if (list[k] && !list[k].is_user) return String(list[k].id);
-    } catch (_) {}
-    return '';
+    return latestId(false);
   }
 
   async function pressBar() {
@@ -6240,9 +6399,9 @@ export function setup(ctx: Ctx, overrides?: any) {
     const id = await latestReplyId();
     if (id) perform(id);
     else {
-      phase = 'There is no reply in this chat to perform.';
-      log(phase);
-      if (!drawerOpen()) notify('info', 'Auto Foley found no reply in this chat to perform.');
+      phase = latestWhy || 'There is no reply in this chat to perform.';
+      log(phase, latestWhy ? 'bad' : undefined);
+      if (!drawerOpen()) notify(latestWhy ? 'warning' : 'info', latestWhy || 'Auto Foley found no reply in this chat to perform.');
       if (tab === 'stage') renderTab();
     }
   }
@@ -6438,12 +6597,15 @@ export function setup(ctx: Ctx, overrides?: any) {
     return out;
   }
 
-  async function savedClipsOf(sc: Script): Promise<{ blobs: Blob[]; sigs: string[]; lines: number }> {
+  async function savedClipsOf(sc: Script): Promise<{ blobs: Blob[]; sigs: string[]; lines: number; why?: string; unanswered: number }> {
     const lines = (sc.lines || []).filter((l) => l.kind === 'speech' || l.kind === 'narration');
+    let why = '';
+    let unanswered = 0;
     const sigs = (
       await fourAtATime(lines, async (l) => {
         try {
-          const r = await voiceRequest(l);
+          const r: any = await voiceRequest(l);
+          if (r && r.why && !why) why = String(r.why);
           return r && r.sig ? r.sig : '';
         } catch (_) {
           return '';
@@ -6455,10 +6617,21 @@ export function setup(ctx: Ctx, overrides?: any) {
         const r = await rpc({ type: 'clip_get', sig }, 15000);
         return r && r.found && r.base64 ? base64ToBlob(r.base64, r.mime || 'audio/mpeg') : null;
       } catch (_) {
+        unanswered++;
         return null;
       }
     });
-    return { blobs: got.filter((b): b is Blob => !!b), sigs, lines: lines.length };
+    return { blobs: got.filter((b): b is Blob => !!b), sigs, lines: lines.length, why, unanswered };
+  }
+  const SAVED_NO_ANSWER = 'Your saved audio could not be read: the backend did not answer. Try again.';
+  // Why a saved script has no audio to play, in place of a guess: Keep made
+  // audio off, no voice connection to match its lines to, no answer, or
+  // audio that is gone.
+  function savedMissWhy(lineWhy: string, unanswered: number): string {
+    if (!S.keepAudio) return 'Keep made audio is off, so no audio is saved to play. Turn it on in the Settings tab.';
+    if (unanswered) return SAVED_NO_ANSWER;
+    if (lineWhy) return lineWhy;
+    return 'The audio for this is gone. A voice changed since also makes a line new.';
   }
 
   async function joinedSaved(key: string): Promise<{ wav?: Blob; why?: string; missing: number; sigs: string[] }> {
@@ -6469,7 +6642,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     } catch (_) {}
     if (!sc) return { why: 'This script is no longer saved.', missing: 0, sigs: [] };
     const got = await savedClipsOf(sc);
-    if (!got.blobs.length) return { why: 'None of its lines have saved audio. A voice changed since makes a line new.', missing: got.lines, sigs: got.sigs };
+    if (!got.blobs.length) return { why: savedMissWhy(got.why || '', got.unanswered), missing: got.lines, sigs: got.sigs };
     const j = await joinedAudio({ played: got.blobs.map((blob, k) => ({ blob, k })) } as any);
     if (!j) return { why: 'This browser cannot join the audio into one file.', missing: 0, sigs: got.sigs };
     return { wav: wavBlob(j.channels, j.rate), missing: got.lines - got.blobs.length + j.skipped, sigs: got.sigs };
@@ -6485,14 +6658,17 @@ export function setup(ctx: Ctx, overrides?: any) {
   // it in the Studio. Voices come from Keep made audio and sounds from the
   // sound library. Nothing is made, found or directed, so nothing is spent.
   // Says what could not be included, or nothing when all of it was.
-  async function openSaved(e: any, open = true): Promise<string> {
+  async function openSaved(e: any, open = true, step?: (n: number, of: number) => void): Promise<string> {
     let sc: Script | null = null;
     let hand: Show['sceneHand'] = undefined;
     try {
       const r = await rpc({ type: 'kept_script', key: e.key }, 15000);
+      if (r && r.type === 'failed') return String(r.error || SAVED_NO_ANSWER);
       sc = r && r.script ? r.script : null;
       if (r && r.scenes && typeof r.scenes === 'object') hand = { cuts: Object.assign({}, r.scenes.cuts), backs: Object.assign({}, r.scenes.backs) };
-    } catch (_) {}
+    } catch (_) {
+      return SAVED_NO_ANSWER;
+    }
     if (!sc) return 'This script is no longer saved.';
     const items = buildItems(sc);
     const sh: Show = {
@@ -6520,13 +6696,25 @@ export function setup(ctx: Ctx, overrides?: any) {
     };
     let lines = 0;
     let sounds = 0;
+    // Why the lines had no audio, said in place of a guess.
+    let lineWhy = '';
+    let unanswered = 0;
     for (let k = 0; k < items.length; k++) {
       const it = items[k];
+      if (step) step(k + 1, items.length);
       let blob: Blob | null = null;
       try {
         if (it.kind === 'voice') {
-          const req = await voiceRequest(it.line);
-          const r = req && req.sig ? await rpc({ type: 'clip_get', sig: req.sig }, 15000) : null;
+          const req: any = await voiceRequest(it.line);
+          if (req && req.why && !lineWhy) lineWhy = String(req.why);
+          let r: any = null;
+          if (req && req.sig) {
+            try {
+              r = await rpc({ type: 'clip_get', sig: req.sig }, 15000);
+            } catch (_) {
+              unanswered++;
+            }
+          }
           if (r && r.found && r.base64) blob = base64ToBlob(r.base64, r.mime || 'audio/mpeg');
           else lines++;
         } else if (it.kind === 'applause') {
@@ -6558,7 +6746,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         }
       }
     }
-    if (!sh.played.some((p) => sh.items[p.k].kind === 'voice')) return 'None of its lines have saved audio. A voice changed since makes a line new.';
+    if (!sh.played.some((p) => sh.items[p.k].kind === 'voice')) return savedMissWhy(lineWhy, unanswered);
     if (show) stop('Stopped, to open a saved script in the Studio');
     lastShow = sh;
     keepSaid(
@@ -6855,8 +7043,17 @@ export function setup(ctx: Ctx, overrides?: any) {
       const run = ++savedRun;
       savedJoining = e.key;
       label('Getting ready');
-      say('Reading the saved audio');
-      const j = await joinedSaved(e.key);
+      const began = Date.now();
+      say('Reading the saved audio, 0 s');
+      const counting = setInterval(() => {
+        if (savedJoining === e.key) say('Reading the saved audio, ' + secsSince(began) + ' s');
+      }, 1000);
+      let j: any;
+      try {
+        j = await joinedSaved(e.key);
+      } finally {
+        clearInterval(counting);
+      }
       if (run !== savedRun) return;
       savedJoining = '';
       if (!j.wav) {
@@ -6898,7 +7095,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       say('Reading the saved audio');
       let why = '';
       try {
-        why = await openSaved(e);
+        why = await openSaved(e, true, (n, of) => say('Reading saved audio: part ' + n + ' of ' + of));
       } finally {
         savedOpening = '';
         mark('Open in the Studio');
@@ -6957,6 +7154,11 @@ export function setup(ctx: Ctx, overrides?: any) {
       } catch (_) {}
       try {
         const r = await rpc({ type: 'kept_drop', key: e.key, sigs }, 30000);
+        if (r && !r.ok && r.error) {
+          del.textContent = 'Delete';
+          say(String(r.error));
+          return;
+        }
         if (!r || !r.ok) throw new Error('no');
         if (e.messageId) playerIds.delete(String(e.messageId));
         if (savedList) savedList = savedList.filter((x) => x.key !== e.key);
@@ -7156,7 +7358,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       // Short words, so the player stays small under the message.
       const text = busy
         ? directorWriting
-          ? 'Writing the script'
+          ? 'Writing the script, ' + secsSince(directorSince) + ' s'
           : 'Getting the script'
         : mine
           ? (paused ? 'Paused · ' : '') + 'Part ' + (at + 1) + ' of ' + total
@@ -7268,7 +7470,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         if (S.autoplay) {
           const wait = Math.max(0, Math.min(30, Number(S.autoplayDelay) || 0)) * 1000;
           if (!wait) {
-            phase = 'Waiting a moment, in case the new reply is still being changed';
+            timedPhase('Waiting a moment, in case the new reply is still being changed');
             paintStage();
             whenQuiet(messageId, () => {
               if (alive && !show && !busyMessage) perform(messageId);
@@ -9120,16 +9322,25 @@ export function setup(ctx: Ctx, overrides?: any) {
     }
   }
 
+  // Why the last look for the latest message found none: the chat could
+  // not be read, which is said in place of "no reply".
+  let latestWhy = '';
   async function latestId(mine: boolean): Promise<string> {
+    latestWhy = '';
     const chatId = activeChatId();
     if (!chatId) return '';
     try {
       const res = await api('/chats/' + encodeURIComponent(chatId) + '/messages?tail=true&limit=20');
-      if (!res.ok) return '';
+      if (!res.ok) {
+        latestWhy = await hostTrouble(res, 'Reading the chat');
+        return '';
+      }
       const j = await res.json();
       const list = Array.isArray(j && j.data) ? j.data : [];
       for (let k = list.length - 1; k >= 0; k--) if (list[k] && !!list[k].is_user === mine) return String(list[k].id);
-    } catch (_) {}
+    } catch (e: any) {
+      latestWhy = netTrouble(e, 'Reading the chat');
+    }
     return '';
   }
 
@@ -9141,7 +9352,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     const id = await latestId(playerWhose === 'mine');
     if (id) perform(id);
     else {
-      phase = playerWhose === 'mine' ? 'You have no message in this chat to perform.' : 'There is no reply in this chat to perform.';
+      phase = latestWhy || (playerWhose === 'mine' ? 'You have no message in this chat to perform.' : 'There is no reply in this chat to perform.');
       log(phase);
       paintFloat();
     }
@@ -9149,11 +9360,18 @@ export function setup(ctx: Ctx, overrides?: any) {
 
   async function playerPrepare() {
     const id = await latestId(playerWhose === 'mine');
-    if (!id) return;
+    if (!id) {
+      if (latestWhy) {
+        phase = latestWhy;
+        log(latestWhy, 'bad');
+        paintFloat();
+      }
+      return;
+    }
     const run = ++aheadRun;
     aheadBusy = true;
     aheadId = id;
-    phase = 'Directing it ahead';
+    timedPhase('Directing it ahead');
     paintFloat();
     const got = await getScript(activeChatId(), id, false);
     if (run === aheadRun) aheadBusy = false;
@@ -9244,9 +9462,9 @@ export function setup(ctx: Ctx, overrides?: any) {
       const id = await latestId(key === 'mine');
       if (id) perform(id);
       else {
-        phase = key === 'mine' ? 'You have no message in this chat to perform.' : 'There is no reply in this chat to perform.';
-        log(phase);
-        notify('info', key === 'mine' ? 'Auto Foley found no message of yours in this chat to perform.' : 'Auto Foley found no reply in this chat to perform.');
+        phase = latestWhy || (key === 'mine' ? 'You have no message in this chat to perform.' : 'There is no reply in this chat to perform.');
+        log(phase, latestWhy ? 'bad' : undefined);
+        notify(latestWhy ? 'warning' : 'info', latestWhy || (key === 'mine' ? 'Auto Foley found no message of yours in this chat to perform.' : 'Auto Foley found no reply in this chat to perform.'));
       }
     } else if (key === 'hide') {
       set({ widgetOn: false });
@@ -9890,9 +10108,9 @@ export function setup(ctx: Ctx, overrides?: any) {
       const id = await latestId(true);
       if (id) perform(id);
       else {
-        phase = 'You have no message in this chat to perform.';
-        log(phase);
-        if (!drawerOpen()) notify('info', 'Auto Foley found no message of yours in this chat to perform.');
+        phase = latestWhy || 'You have no message in this chat to perform.';
+        log(phase, latestWhy ? 'bad' : undefined);
+        if (!drawerOpen()) notify(latestWhy ? 'warning' : 'info', latestWhy || 'Auto Foley found no message of yours in this chat to perform.');
       }
     });
     extra('auto-foley-stop', 'Stop Auto Foley', on && (!!show || !!busyMessage), () => {
@@ -13100,6 +13318,9 @@ export function setup(ctx: Ctx, overrides?: any) {
       }
     }
     if (ask !== studioAsk) return;
+    // A performance the browser could not read is said, rather than the
+    // example shown with nothing said.
+    if (sh && !mix && !studioExample) keepSaid(partsLeftOut(sh).size ? 'Every part is left out, so the example is shown.' : 'Your performance could not be read by this browser, so the example is shown.');
     // The example clip, with no performance, or when it is picked.
     if (!sh || !mix || studioExample) {
       const ex = exampleClip();
@@ -14286,17 +14507,27 @@ export function setup(ctx: Ctx, overrides?: any) {
     const w: any = window as any;
     const ACtx = w.AudioContext || w.webkitAudioContext;
     if (!ACtx) return keepSaid('This browser cannot play the preview.');
-    const actx = new ACtx();
-    const buf = actx.createBuffer(v.mix.channels.length, v.mix.channels[0].length, v.mix.rate);
-    v.mix.channels.forEach((d, c) => buf.getChannelData(c).set(d));
-    const src = actx.createBufferSource();
-    src.buffer = buf;
-    src.connect(actx.destination);
+    let actx: any = null;
+    let src: any;
     const intro = titleSecs(v.title);
     const from = v.at >= v.length - 0.05 ? 0 : v.at;
-    const t0 = actx.currentTime + 0.05 - from;
-    const audioFrom = Math.max(0, from - intro);
-    src.start(Math.max(actx.currentTime + 0.05, t0 + intro), audioFrom);
+    let t0 = 0;
+    try {
+      actx = new ACtx();
+      const buf = actx.createBuffer(v.mix.channels.length, v.mix.channels[0].length, v.mix.rate);
+      v.mix.channels.forEach((d, c) => buf.getChannelData(c).set(d));
+      src = actx.createBufferSource();
+      src.buffer = buf;
+      src.connect(actx.destination);
+      t0 = actx.currentTime + 0.05 - from;
+      const audioFrom = Math.max(0, from - intro);
+      src.start(Math.max(actx.currentTime + 0.05, t0 + intro), audioFrom);
+    } catch (e: any) {
+      try {
+        if (actx) actx.close();
+      } catch (_) {}
+      return keepSaid('The preview could not play: ' + String((e && e.message) || e).slice(0, 160));
+    }
     let raf = 0;
     let done = false;
     const end = () => {
@@ -14326,11 +14557,20 @@ export function setup(ctx: Ctx, overrides?: any) {
       if (t >= v.length) return end();
       raf = requestAnimationFrame(tick);
     };
-    try {
-      actx.resume();
-    } catch (_) {}
     tick();
     paintStudio();
+    // A sound the browser holds back ends the preview and says so, rather
+    // than running the picture with no sound.
+    let resumed: any = null;
+    try {
+      resumed = actx.resume();
+    } catch (_) {}
+    void Promise.race([Promise.resolve(resumed).catch(() => {}), new Promise((r) => setTimeout(r, 1500))]).then(() => {
+      if (done || actx.state === 'running') return;
+      end();
+      keepSaid('The preview could not start its sound. Press Play the preview again. On an iPhone, check that the silent switch is off.');
+      paintStudio();
+    });
   }
 
   // ---- saved looks ----
@@ -14838,6 +15078,11 @@ export function setup(ctx: Ctx, overrides?: any) {
           handle.root.appendChild(el('<div class="af-ws-dim" data-af-ws-dim aria-hidden="true"></div>'));
           handle.root.appendChild(box);
           how = 'app';
+        } else if (handle) {
+          try {
+            handle.destroy();
+          } catch (_) {}
+          handle = null;
         }
       }
     } catch (_) {
@@ -14900,7 +15145,14 @@ export function setup(ctx: Ctx, overrides?: any) {
       shell.style.willChange = 'opacity';
       box.style.willChange = 'opacity, transform';
     }
-    renderWorkspace();
+    try {
+      renderWorkspace();
+    } catch (e: any) {
+      // Nothing is left over the app: the workspace and its dim layer go.
+      dropWs();
+      notify('warning', 'The Studio could not be opened: ' + String((e && e.message) || e).slice(0, 200) + '.');
+      return;
+    }
     const paints = previewPaints;
     const from = performance.now();
     const show = () => {
@@ -16121,9 +16373,12 @@ export function setup(ctx: Ctx, overrides?: any) {
         b.appendChild(edges);
         b.appendChild(colorRow('videoEdgeColor', 'Color of the edges', 'Black by default. Another color tints the edges with it.', '--af-none', '#000000', 'Use the built-in color', look));
         const id = bk.id;
-        loadVideoBg(id).then(() => {
-          drop.disabled = !videoBgs.get(id);
-        });
+        loadVideoBg(id).then(
+          () => {
+            drop.disabled = !videoBgs.get(id);
+          },
+          () => {},
+        );
         };
         draw();
       }, (open) => {
