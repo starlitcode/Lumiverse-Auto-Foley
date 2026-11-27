@@ -324,10 +324,6 @@ interface Settings {
   videoNameShadowFar: number;
   // The floating player's shadow. Empty color and the starting darkness and
   // softness use the theme's own shadow.
-  playerShadow: boolean;
-  playerShadowInk: string;
-  playerShadowDark: number;
-  playerShadowSoft: number;
   mpShadow: boolean;
   mpShadowInk: string;
   mpShadowDark: number;
@@ -604,10 +600,6 @@ const DEFAULT_SETTINGS: Settings = {
   videoNameShadowDark: 65,
   videoNameShadowSoft: 18,
   videoNameShadowFar: 2,
-  playerShadow: true,
-  playerShadowInk: '',
-  playerShadowDark: 50,
-  playerShadowSoft: 48,
   mpShadow: true,
   mpShadowInk: '',
   mpShadowDark: 25,
@@ -1308,10 +1300,6 @@ function cleanSettings(raw: any): Settings {
     videoNameShadowDark: Math.round(num(r.videoNameShadowDark, 0, 100, d.videoNameShadowDark)),
     videoNameShadowSoft: Math.round(num(r.videoNameShadowSoft, 0, 40, d.videoNameShadowSoft)),
     videoNameShadowFar: Math.round(num(r.videoNameShadowFar, 0, 20, d.videoNameShadowFar)),
-    playerShadow: bool(r.playerShadow, d.playerShadow),
-    playerShadowInk: hexColor(r.playerShadowInk),
-    playerShadowDark: Math.round(num(r.playerShadowDark, 0, 100, d.playerShadowDark)),
-    playerShadowSoft: Math.round(num(r.playerShadowSoft, 0, 80, d.playerShadowSoft)),
     mpShadow: bool(r.mpShadow, d.mpShadow),
     mpShadowInk: hexColor(r.mpShadowInk),
     mpShadowDark: Math.round(num(r.mpShadowDark, 0, 100, d.mpShadowDark)),

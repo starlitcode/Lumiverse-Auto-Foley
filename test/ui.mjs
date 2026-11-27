@@ -4167,36 +4167,19 @@ if (section("slow move")) {
 }
 
 if (section("player shadow")) {
-  console.log("The floating player has a shadow of its own");
-  // The theme's by default, none when off, and the color picked, at once.
+  console.log("The floating player keeps the theme's own shadow, with no settings of its own");
   for (const size of SIZES) {
-    const { context, page, errors } = await open(THEMES[0], size);
+    const { context, page, errors } = await open(THEMES[0], size, 1, `document.documentElement.style.setProperty("--lumiverse-shadow-lg", "0 7px 21px rgba(1, 2, 3, 0.4)");`);
     await toTab(page, "settings");
     await page.waitForTimeout(300);
     await page.evaluate(() => document.querySelector('[data-af-row="widgetOn"] .af-box').click());
     await page.waitForTimeout(500);
     await page.evaluate(() => window.__widget.querySelector(".af-float").click());
     await page.waitForTimeout(700);
-    const shadow = () => page.evaluate(() => getComputedStyle(window.__widget.querySelector(".af-pl")).boxShadow);
-    const theme = await shadow();
-    await page.evaluate(() => document.querySelector('[data-af-row="playerShadow"] .af-box').click());
-    await page.waitForTimeout(300);
-    const none = await shadow();
-    await page.evaluate(() => document.querySelector('[data-af-row="playerShadow"] .af-box').click());
-    await page.waitForTimeout(300);
-    // Pressed from the page, since the open player can sit over the row.
-    await page.evaluate(() => document.querySelector('[data-af-colorswatch="playerShadowInk"]').click());
-    await page.waitForTimeout(300);
-    await page.evaluate(() => {
-      const box = document.querySelector('[data-af-colorcode="playerShadowInk"]');
-      box.value = "#ff0000";
-      box.dispatchEvent(new Event("change", { bubbles: true }));
-    });
-    await page.waitForTimeout(300);
-    const red = await shadow();
-    check(theme !== "none" && none === "none" && /255, 0, 0/.test(red), size.name + ": the player's shadow is the theme's, none when off, and the color picked at once (" + [theme, none, red].join(" | ") + ")");
-    const m = await page.evaluate(MEASURE, size.touch);
-    check(!m.overflow.length && !m.small.length, size.name + ": the Settings tab fits with the shadow rows open. " + m.overflow.concat(m.small).slice(0, 2).join("; "));
+    const shadow = await page.evaluate(() => getComputedStyle(window.__widget.querySelector(".af-pl")).boxShadow);
+    // 1.9.0's rule: the theme's large shadow.
+    check(shadow === "rgba(1, 2, 3, 0.4) 0px 7px 21px 0px", size.name + ": the player's shadow is the theme's large shadow, as in 1.9.0 (" + shadow + ")");
+    check(!(await page.$('[data-af-row^="playerShadow"]')), size.name + ": there are no shadow settings for the floating player");
     check(!errors.length, size.name + ": no page errors. " + errors.slice(0, 2).join(" | "));
     await context.close();
   }
@@ -6126,6 +6109,57 @@ if (section("template switching")) {
       await context.close();
     }
   }
+}
+
+if (section("no keyboard")) {
+  console.log("On a phone, no button that adds or opens something focuses a text box, so the keyboard does not open by itself");
+  const size = SIZES.find((x) => x.touch) || SIZES[0];
+  const { context, page, errors } = await open(THEMES[0], size);
+  const typing = () => page.evaluate(() => {
+    const a = document.activeElement;
+    if (!a) return "";
+    const t = a.tagName.toLowerCase();
+    if (t === "textarea" || a.isContentEditable) return t;
+    if (t === "input" && !/^(checkbox|radio|range|button|submit|file|color)$/i.test(a.type || "")) return t + ":" + a.type;
+    return "";
+  });
+  const tapText = async (label) => {
+    const b = page.locator(".af-btn", { hasText: label }).first();
+    if (!(await b.count())) return false;
+    await b.scrollIntoViewIfNeeded();
+    const box = await b.boundingBox();
+    if (!box) return false;
+    await page.touchscreen.tap(box.x + box.width / 2, box.y + box.height / 2);
+    await page.waitForTimeout(500);
+    return true;
+  };
+  const found = [];
+  const focused = [];
+  const tryOne = async (where, label) => {
+    const ok = await tapText(label);
+    found.push(label + (ok ? "" : " (not found)"));
+    if (!ok) return;
+    const f = await typing();
+    if (f) focused.push(where + ": " + label + " focused " + f);
+    await page.evaluate(() => document.activeElement && document.activeElement.blur && document.activeElement.blur());
+  };
+  // The Cast tab: a person, a group and a mood.
+  await toTab(page, "cast");
+  await page.waitForTimeout(300);
+  await tryOne("Cast", "Add someone");
+  await tryOne("Cast", "New group");
+  await page.evaluate(() => { const f = [...document.querySelectorAll(".af-fold")].find((b) => /Moods for pictures/.test(b.textContent)); if (f && f.getAttribute("aria-expanded") !== "true") f.click(); });
+  await page.waitForTimeout(400);
+  await tryOne("Cast", "Add a mood");
+  // The Studio's parts that add something with a text box.
+  await openWs(page);
+  for (const [sec, label] of [["Notes", "Add a note"], ["Notes", "Add a note here"], ["Watermarks", "Add a watermark"], ["Background", "Add a background"], ["Projects", "New project"], ["Projects", "New folder"], ["Saved audio", "New folder"]]) {
+    await wsSec(page, sec);
+    await tryOne(sec, label);
+  }
+  check(!focused.length, "no text box is focused after a tap on any of: " + found.join(", ") + ". Focused: " + focused.join("; "));
+  check(!errors.length, "no page errors. " + errors.slice(0, 2).join(" | "));
+  await context.close();
 }
 
 if (section("snapping")) {

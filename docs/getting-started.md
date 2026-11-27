@@ -164,8 +164,6 @@ Turn on **A floating player** in the Settings tab, under **Look**. A round butto
 - **Drag** it to move it.
 - **Press and hold** it, or right click it, for the menu. A ring fills round the edge while you hold. When it closes, the menu opens.
 
-**A shadow behind the player**, under **A floating player**, is on by default. It is your theme's own shadow, which sets the open player apart from the chat. Pick a **Color of the shadow**, and set **How dark** and **How soft**, to change it. It changes as you move them. Off shows the player with no shadow.
-
 The button takes your theme's accent color while a message plays. While the Director works on a message, a ring also grows out of its edge and fades, until it is done.
 
 The menu is in three groups, with a line between them:

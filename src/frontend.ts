@@ -2026,10 +2026,6 @@ const DEFAULTS: any = {
   videoNameShadowDark: 65,
   videoNameShadowSoft: 18,
   videoNameShadowFar: 2,
-  playerShadow: true,
-  playerShadowInk: '',
-  playerShadowDark: 50,
-  playerShadowSoft: 48,
   mpShadow: true,
   mpShadowInk: '',
   mpShadowDark: 25,
@@ -8226,6 +8222,16 @@ export function setup(ctx: Ctx, overrides?: any) {
     }
   };
 
+  // A text box is focused by the code only with a mouse. On a touch screen
+  // a focused box raises the keyboard over what was just added, so the box
+  // waits for a tap of its own.
+  function focusField(el: HTMLElement | null | undefined) {
+    if (!el || !fromMouse()) return;
+    try {
+      el.focus({ preventScroll: true });
+    } catch (_) {}
+  }
+
   function hintButton(text: string, label: string): HTMLElement | null {
     const say = String(text || '').trim();
     if (!say) return null;
@@ -9141,7 +9147,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     // rest of Auto Foley. It carries the panel's class for their colors.
     '.af.af-pl{max-width:none;margin:0;width:100%;gap:10px;padding:12px;overflow-x:hidden;overflow-y:auto;overscroll-behavior:contain;touch-action:pan-y;scrollbar-width:none;border:1px solid var(--af-line-hover);border-radius:var(--lumiverse-radius-lg,16px);' +
     'background-color:var(--lumiverse-card-bg-solid,#1a1526);background-image:linear-gradient(var(--lumiverse-bg-elevated,#1f1a2e),var(--lumiverse-bg-elevated,#1f1a2e));' +
-    'box-shadow:var(--af-pl-shadow,var(--lumiverse-shadow-lg,0 18px 48px rgba(0,0,0,.5)));transform-origin:var(--af-from,22px 22px)}' +
+    'box-shadow:var(--lumiverse-shadow-lg,0 18px 48px rgba(0,0,0,.5));transform-origin:var(--af-from,22px 22px)}' +
     // The top bar is where the open player is dragged from. touch-action keeps
     // a phone from taking the press as a scroll and canceling the drag.
     '.af-pl-top{display:flex;align-items:center;gap:9px;min-width:0;margin:-2px -2px 0 0;cursor:grab;user-select:none;-webkit-user-select:none;touch-action:none}' +
@@ -10297,7 +10303,6 @@ export function setup(ctx: Ctx, overrides?: any) {
       box.style.cssText = 'width:100%;display:flex;align-items:flex-start;justify-content:center';
       wroot.appendChild(box);
       floatBox = box;
-      paintPlayerShadow();
       drawFloat();
       // The card's height changes as the levels open, so the widget follows.
       try {
@@ -10485,27 +10490,6 @@ export function setup(ctx: Ctx, overrides?: any) {
           set({ widgetSize: v });
           syncWidget();
         }, 'How wide the button is, in pixels. 44 is about a comfortable thumb. Larger is easier to hit on a phone, smaller keeps it out of the way.'),
-        toggle('A shadow behind the player', 'On by default, your theme\u2019s own shadow. It sets the open player apart from the chat.', 'playerShadow', () => paintPlayerShadow(), () => [
-          colorRow('playerShadowInk', 'Color of the shadow', 'Your theme\u2019s shadow by default.', '--af-none', '#000000', 'Use the theme\u2019s shadow', paintPlayerShadow),
-          (() => {
-            const r = slider('How dark', numOr(S.playerShadowDark, 50), 0, 100, 5, (v) => (v ? v + '%' : 'None'), (v) => {
-              set({ playerShadowDark: v });
-              paintPlayerShadow();
-            }, '50% by default.');
-            r.setAttribute('data-af-byeye', '');
-            r.setAttribute('data-af-row', 'playerShadowDark');
-            return r;
-          })(),
-          (() => {
-            const r = slider('How soft', numOr(S.playerShadowSoft, 48), 0, 80, 2, (v) => (v ? v + ' px' : 'Sharp'), (v) => {
-              set({ playerShadowSoft: v });
-              paintPlayerShadow();
-            }, '48 by default.');
-            r.setAttribute('data-af-byeye', '');
-            r.setAttribute('data-af-row', 'playerShadowSoft');
-            return r;
-          })(),
-        ]),
       ]),
     );
     if (S.widgetOn && widgetFailed) c.appendChild(notice('warn', 'The floating player could not be added. Check that Auto Foley has the UI panels permission, in Lumiverse under Extensions.'));
@@ -12251,7 +12235,7 @@ export function setup(ctx: Ctx, overrides?: any) {
           keep();
           draw();
           const fresh = body.querySelector('[data-af-mood="' + id + '"] [data-af-moodname]') as HTMLInputElement | null;
-          if (fresh) fresh.focus();
+          focusField(fresh);
         });
         add.setAttribute('data-af-mood-add', '');
         add.disabled = list.length >= MOODS_MAX;
@@ -14089,21 +14073,6 @@ export function setup(ctx: Ctx, overrides?: any) {
         onChange();
       }, '2 by default.')),
     ]);
-  }
-
-  // The floating player's shadow. With no color picked and the sliders
-  // where they start, it is the theme's own large shadow, as it always was.
-  function paintPlayerShadow() {
-    if (!floatBox) return;
-    const own = /^#[0-9a-f]{6}$/i.test(String(S.playerShadowInk || ''));
-    const dark = Math.min(100, Math.max(0, numOr(S.playerShadowDark, 50)));
-    const soft = Math.min(80, Math.max(0, numOr(S.playerShadowSoft, 48)));
-    if (S.playerShadow === false) floatBox.style.setProperty('--af-pl-shadow', 'none');
-    else if (!own && dark === 50 && soft === 48) floatBox.style.removeProperty('--af-pl-shadow');
-    else {
-      const n = parseInt(hexOr(S.playerShadowInk, '#000000').slice(1), 16);
-      floatBox.style.setProperty('--af-pl-shadow', '0 ' + Math.round(soft * 0.375) + 'px ' + soft + 'px rgba(' + ((n >> 16) & 255) + ',' + ((n >> 8) & 255) + ',' + (n & 255) + ',' + dark / 100 + ')');
-    }
   }
 
   // A font choice for the video: the built-in fonts, then your own, with a
@@ -15989,7 +15958,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       drawNoteEditors(box, changed);
       const last = box.querySelectorAll('[data-af-videonote] textarea');
       const t = last[last.length - 1] as HTMLTextAreaElement | undefined;
-      if (t) t.focus();
+      focusField(t);
     };
     const addRow = el('<div class="af-row"></div>');
     const addOne = button('Add a note', () => add());
@@ -17231,7 +17200,10 @@ export function setup(ctx: Ctx, overrides?: any) {
     }, calm() ? 0 : 180);
     timers.add(t);
     try {
-      if (from && from.isConnected) from.focus({ preventScroll: true });
+      if (from && from.isConnected) {
+        if (from.matches && from.matches('input, textarea, select, [contenteditable]')) focusField(from);
+        else from.focus({ preventScroll: true });
+      }
       else focusWs();
     } catch (_) {}
   }
