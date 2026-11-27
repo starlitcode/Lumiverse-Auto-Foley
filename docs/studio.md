@@ -553,7 +553,9 @@ A note is a few words for whoever watches, in a dark box at the top or the botto
 - **Share**, beside a saved look, saves it in a file, `auto-foley-look-` and its name. The file holds the look and the version of Auto Foley.
 - It never holds the line under the title or the watermarks, which carry your name, and never keys, chat text or account ids.
 - With **Include my pictures and fonts** on, the file also holds the look's background picture, its stickers and its fonts. It is off by default.
-- **Add a look from a file** adds a shared look to **Saved looks**. A name already used gets " (copy)" after it, so nothing is replaced. Pictures and fonts in the file are put back only where you have none with the same id, and the line under the button says what was put back and what was skipped.
+- **Add a look from a file** adds a shared look to **Saved looks**. A name already used gets " (copy)" after it, so nothing is replaced.
+- The look's background picture, stickers and fonts are added as new ones of your own, so they never replace or use one you have. The line under the button says what was added.
+- Only the pictures and fonts the look uses are taken from the file. Anything else in it, such as projects, mood pictures or watermarks, is left out.
 
 ### Back to the built-in look
 

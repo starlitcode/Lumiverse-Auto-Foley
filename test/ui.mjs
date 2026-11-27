@@ -7420,6 +7420,25 @@ if (section("sharing files")) {
     await page.waitForTimeout(500);
     const names = await page.evaluate(() => window.__settings.videoLooks.map((l) => l.name));
     check(names.join("|") === "Harbor|Harbor (copy)|Harbor (copy 2)", size.name + ": Add a look from a file adds it, as a copy when the name is in use (" + names.join(", ") + ")");
+    // A shared look with pictures, a font and other files in it: only what
+    // the look uses is put back, each with a new id the look points at.
+    const pic = "data:image/png;base64,AAAA";
+    const shared = {
+      app: "Auto Foley", kind: "look", version: "1", name: "Lantern",
+      look: { videoFont: "own:f1", videoBack1: { id: "main", name: "Main", kind: "picture" }, videoStickers: [{ id: "k9", x: 0.5, y: 0.5, w: 100, h: 100 }] },
+      files: { backgrounds: { main: pic, b2: pic }, stickers: { k9: pic, k5: pic }, fonts: [{ id: "f1", name: "Lantern.ttf", base64: "AAEAAA==" }, { id: "f2", name: "Other.ttf", base64: "AAEAAA==" }], marks: { w1: pic }, moods: { "c1:calm": pic }, projects: [{ entry: { id: "pj1", name: "Quay" }, body: {} }] },
+    };
+    await page.evaluate((j) => { window.__pickJson = j; window.__restored = []; }, JSON.stringify(shared));
+    await page.evaluate(() => document.querySelector("[data-af-lookadd]").click());
+    await page.waitForTimeout(600);
+    const got = await page.evaluate(() => ({ sent: (window.__restored || [])[0] || null, look: (window.__settings.videoLooks.find((l) => l.name === "Lantern") || {}).look || null }));
+    const sent = got.sent || {};
+    const bgIds = Object.keys(sent.backgrounds || {});
+    const kIds = Object.keys(sent.stickers || {});
+    check(!!got.look && bgIds.length === 1 && bgIds[0] !== "main" && got.look.videoBack1.id === bgIds[0], size.name + ": a shared look's background picture gets a new id, and the look uses it (" + bgIds.join(",") + ")");
+    check(!!got.look && kIds.length === 1 && kIds[0] !== "k9" && got.look.videoStickers[0].id === kIds[0], size.name + ": a shared look's sticker gets a new id, and the look uses it");
+    check(!!got.look && (sent.fonts || []).length === 1 && sent.fonts[0].id !== "f1" && got.look.videoFont === "own:" + sent.fonts[0].id, size.name + ": a shared look's font gets a new id, and the look uses it");
+    check(!sent.projects && !sent.moods && !sent.marks, size.name + ": projects, mood pictures and watermarks in a shared look file are left out (" + Object.keys(sent).join(",") + ")");
     await page.click('[data-af-ws="close"]').catch(() => {});
     await page.waitForTimeout(300);
     await page.click('.af-tab[data-tab="director"]');

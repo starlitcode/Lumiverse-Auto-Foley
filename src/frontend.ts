@@ -20414,6 +20414,45 @@ export function setup(ctx: Ctx, overrides?: any) {
     if (look.videoBack1) out.videoBack1 = JSON.parse(JSON.stringify(look.videoBack1));
     return out;
   }
+  // A shared look as it is added: its background, its stickers and its
+  // fonts each get a new id, and the look is pointed at them, so it never
+  // replaces or borrows a picture or font of the reader's own. Of the files
+  // in it, only the pictures and fonts the look itself uses are kept.
+  // Projects, mood pictures, watermarks and anything else are left out.
+  function sharedLookAdded(look: Record<string, any>, files: any): any {
+    const out: any = { backgrounds: {}, stickers: {}, fonts: [] };
+    const has = files && typeof files === 'object';
+    const fresh = (prefix: string) => rid(prefix).replace(/[^a-z0-9]/gi, '').slice(0, 24);
+    const picOf = (group: any, id: any) => (has && group && typeof group === 'object' && typeof group[id] === 'string' ? group[id] : '');
+    const back = look.videoBack1;
+    if (back && typeof back === 'object') {
+      const pic = picOf(files && files.backgrounds, back.id);
+      back.id = fresh('bg');
+      if (pic) out.backgrounds[back.id] = pic;
+    }
+    if (Array.isArray(look.videoStickers))
+      look.videoStickers = look.videoStickers.map((k: any) => {
+        if (!k || typeof k !== 'object') return k;
+        const pic = picOf(files && files.stickers, k.id);
+        const id = fresh('k');
+        if (pic) out.stickers[id] = pic;
+        return Object.assign({}, k, { id });
+      });
+    const fonts: any[] = has && Array.isArray(files.fonts) ? files.fonts : [];
+    const fontIds: Record<string, string> = {};
+    for (const k of Object.keys(look)) {
+      const v = look[k];
+      if (typeof v !== 'string' || !/^own:/.test(v)) continue;
+      const old = v.slice(4);
+      if (!fontIds[old]) {
+        fontIds[old] = fresh('f');
+        const f = fonts.find((x: any) => x && String(x.id) === old);
+        if (f) out.fonts.push({ id: fontIds[old], name: f.name, base64: f.base64 });
+      }
+      look[k] = 'own:' + fontIds[old];
+    }
+    return out;
+  }
   async function shareLook(l: { id: string; name: string; look: Record<string, any> }, said: HTMLElement) {
     const body: any = { app: 'Auto Foley', kind: 'look', version: VERSION, name: l.name, look: sharedLookOnly(l.look) };
     if (lookShareFiles) {
@@ -20523,12 +20562,13 @@ export function setup(ctx: Ctx, overrides?: any) {
         for (let k = 2; now.some((x) => x.name === n); k++) n = base + ' (copy ' + k + ')';
       }
       const look = sharedLookOnly(body.look);
+      const brought = sharedLookAdded(look, body.files);
       set({ videoLooks: now.concat([{ id: rid('lk'), name: n, look }]) });
       let more = '';
-      if (body.files && typeof body.files === 'object') {
+      if (Object.keys(brought.backgrounds).length || Object.keys(brought.stickers).length || brought.fonts.length) {
         let r: any = null;
         try {
-          r = await rpc({ type: 'restore_files', files: body.files }, 180000);
+          r = await rpc({ type: 'restore_files', files: brought }, 180000);
         } catch (_) {}
         const done = countWords((r && r.done) || {});
         const skip = countWords((r && r.skip) || {});
