@@ -310,6 +310,8 @@ interface Settings {
   videoAnimsOwn: any[];
   // Your reveals, used by animations and as shapes.
   videoReveals: any[];
+  // Show effects that flash: off by default, and asked about first.
+  videoFlashOn: boolean;
   // The line under the title, and its color. Empty color is the title's.
   videoByline: string;
   videoBylineInk: string;
@@ -617,6 +619,7 @@ const DEFAULT_SETTINGS: Settings = {
   videoAnims: {},
   videoAnimsOwn: [],
   videoReveals: [],
+  videoFlashOn: false,
   videoByline: '',
   videoBylineInk: '',
   videoBylineFont: '',
@@ -999,6 +1002,9 @@ function cleanAnimPlaces(v: any): Settings['videoAnims'] {
     const id = animId(e && e.id);
     if (!id) continue;
     out[place] = { id, secs: Math.round(num(e.secs, 0, 10, 0.5) * 100) / 100, delay: Math.round(num(e.delay, 0, 10, 0) * 100) / 100 };
+    // A flashing effect's strength and speed.
+    if (e.strength != null && Number.isFinite(Number(e.strength))) (out[place] as any).strength = Math.round(num(e.strength, 0, 100, 60));
+    if (e.speed != null && Number.isFinite(Number(e.speed))) (out[place] as any).speed = Math.round(num(e.speed, 0.25, 4, 1) * 100) / 100;
   }
   return out;
 }
@@ -1558,6 +1564,7 @@ function cleanSettings(raw: any): Settings {
     videoAnims: cleanAnimPlaces(r.videoAnims),
     videoAnimsOwn: cleanOwnAnims(r.videoAnimsOwn),
     videoReveals: cleanReveals(r.videoReveals),
+    videoFlashOn: r.videoFlashOn === true,
     videoByline: str(r.videoByline, 80).replace(/[\u0000-\u001f]/g, ' ').trim(),
     videoBylineInk: hexColor(r.videoBylineInk),
     videoBylineFont: r.videoBylineFont === '' ? '' : fontChoice(r.videoBylineFont, ''),

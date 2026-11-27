@@ -1843,8 +1843,11 @@ interface AnimDef {
   // An effect drawn over the track, such as a color split. The calm ones
   // move smoothly and never flash.
   fx?: string;
+  // An effect that flashes or flickers. It is offered only while Show
+  // effects that flash is on, and never used while it is off.
+  flash?: boolean;
 }
-interface AnimState { o: number; x: number; y: number; s: number; r: number; b: number; l: number; tint: string; ta: number; mask: AnimMask; p: number; k: number; hide: boolean; fx: string }
+interface AnimState { o: number; x: number; y: number; s: number; r: number; b: number; l: number; tint: string; ta: number; mask: AnimMask; p: number; k: number; hide: boolean; fx: string; fxs?: number; fxv?: number; secs?: number }
 const EASES: { id: string; label: string; curve: number[] }[] = [
   { id: 'gentle', label: 'Gentle', curve: [0.4, 0, 0.2, 1] },
   { id: 'ease', label: 'Ease', curve: [0.25, 0.1, 0.25, 1] },
@@ -1951,6 +1954,18 @@ const BUILT_IN_ANIMS: AnimDef[] = [
   builtIn('wobble', 'Scanline wobble', 'any', FADE_IN, FADE_OUT, { secs: 0.7, fx: 'wobble' }),
   builtIn('shuffle', 'Pixel shuffle', 'any', [], [], { secs: 0.7, ease: [0, 0, 1, 1], fx: 'shuffle' }),
   builtIn('lost', 'Signal lost', 'frame', [], [], { secs: 1.2, ease: [0, 0, 1, 1], fx: 'lost' }),
+  // Effects that flash, offered only behind their switch.
+  builtIn('film', 'Film flicker', 'any', FADE_IN, FADE_OUT, { secs: 1, fx: 'film', flash: true }),
+  builtIn('candle', 'Candle flicker', 'any', FADE_IN, FADE_OUT, { secs: 1.2, fx: 'candle', flash: true }),
+  builtIn('strobe', 'Strobe', 'any', FADE_IN, FADE_OUT, { secs: 0.8, fx: 'strobe', flash: true }),
+  builtIn('lightning', 'Lightning', 'frame', FADE_IN, FADE_OUT, { secs: 1, fx: 'lightning', flash: true }),
+  builtIn('camflash', 'Camera flash', 'frame', FADE_IN, FADE_OUT, { secs: 0.6, fx: 'camflash', flash: true }),
+  builtIn('glitchx', 'Glitch', 'any', FADE_IN, FADE_OUT, { secs: 0.7, fx: 'glitchx', flash: true }),
+  builtIn('cursor', 'Blinking cursor', 'text', [], FADE_OUT, { secs: 1.4, ease: [0, 0, 1, 1], reveal: 'chars', fx: 'cursor', flash: true }),
+  builtIn('flick', 'Flicker', 'any', FADE_IN, FADE_OUT, { secs: 0.8, fx: 'flick', flash: true }),
+  builtIn('drops', 'Frame drops', 'any', FADE_IN, FADE_OUT, { secs: 0.8, fx: 'drops', flash: true }),
+  builtIn('invert', 'Inversion', 'any', FADE_IN, FADE_OUT, { secs: 0.6, fx: 'invert', flash: true }),
+  builtIn('shake', 'Shake', 'any', FADE_IN, FADE_OUT, { secs: 0.6, fx: 'shake', flash: true }),
 ];
 
 // The simple editor's effects. Each makes the keyframes and the reveal of
@@ -2307,6 +2322,7 @@ const DEFAULTS: any = {
   videoAnims: {},
   videoAnimsOwn: [],
   videoReveals: [],
+  videoFlashOn: false,
   videoPlace: 'middle',
   videoQuotes: true,
   videoNames: true,
@@ -5704,6 +5720,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       totalChars += w.length;
     }
     const wu = animFor('words');
+    let caret = null as { x: number; base: number } | null;
     shown.forEach((row, r) => {
       const ws = row.map((k) => g.measureText(words[k]).width);
       const rowW = ws.reduce((a, b) => a + b, 0) + sp * (row.length - 1);
@@ -5720,6 +5737,7 @@ export function setup(ctx: Ctx, overrides?: any) {
             return;
           }
           if (rev.kind === 'chars') text = text.slice(0, Math.max(1, Math.round(rev.frac * totalChars - startChar[k])));
+          if (rev.cursor != null) caret = { x: x + g.measureText(text).width + size * 0.08, base };
         }
         const on = k <= said;
         if (wu) {
@@ -5768,6 +5786,14 @@ export function setup(ctx: Ctx, overrides?: any) {
         x += ws[n] + sp;
       });
     });
+    // Blinking cursor: a bar after the last letter shown, while it is on.
+    const cr = caret as { x: number; base: number } | null;
+    if (cr && rev && rev.cursor) {
+      const caret = cr;
+      g.globalAlpha = alpha;
+      g.fillStyle = ink;
+      g.fillRect(caret.x, caret.base - size * 0.8, Math.max(2, size * 0.08), size * 0.95);
+    }
     g.restore();
     return [];
   }
@@ -6410,7 +6436,7 @@ export function setup(ctx: Ctx, overrides?: any) {
   // The animation picked for a place, with its length and delay, or null
   // while the place keeps its default. A text animation, such as
   // Typewriter, is never used for the whole frame.
-  interface AnimUse { def: AnimDef; secs: number; delay: number }
+  interface AnimUse { def: AnimDef; secs: number; delay: number; strength?: number; speed?: number }
   const ownAnims = (): AnimDef[] => (Array.isArray(S.videoAnimsOwn) ? S.videoAnimsOwn : []);
   const animById = (id: string): AnimDef | null => BUILT_IN_ANIMS.find((x) => x.id === id) || ownAnims().find((x) => x.id === id) || null;
   function animFor(place: string): AnimUse | null {
@@ -6420,7 +6446,9 @@ export function setup(ctx: Ctx, overrides?: any) {
     if (!def) return null;
     const pl = ANIM_PLACES.find((p) => p.id === place);
     if (pl && pl.kind === 'frame' && def.kind === 'text') return null;
-    return { def, secs: Math.min(10, Math.max(0, numOr(v.secs, def.secs))), delay: Math.min(10, Math.max(0, numOr(v.delay, def.delay))) };
+    // A flashing effect is used only while its switch is on.
+    if (def.flash && !S.videoFlashOn) return null;
+    return { def, secs: Math.min(10, Math.max(0, numOr(v.secs, def.secs))), delay: Math.min(10, Math.max(0, numOr(v.delay, def.delay))), strength: Math.min(100, Math.max(0, numOr(v.strength, 60))), speed: Math.min(4, Math.max(0.25, numOr(v.speed, 1))) };
   }
   // A canvas of the frame's size for each animation that is drawn on its
   // own, kept with the stage.
@@ -6432,7 +6460,9 @@ export function setup(ctx: Ctx, overrides?: any) {
   }
   // Typewriter and Word by word: how much of the text drawn now is shown,
   // from 0 to 1. Read by drawPart and drawTitle while it is set.
-  let textReveal: { kind: 'chars' | 'words'; frac: number } | null = null;
+  let textReveal: { kind: 'chars' | 'words'; frac: number; cursor?: number } | null = null;
+  // True while a video is being saved, as opposed to drawn on screen.
+  let videoRecording = false;
   // The reveal, as a picture of its own: solid where the layer shows.
   // Drawn on its own canvas, then laid over the layer, so the reveal itself
   // is never drawn.
@@ -6829,6 +6859,85 @@ export function setup(ctx: Ctx, overrides?: any) {
       g.globalAlpha = was;
       return;
     }
+    // The effects that flash, behind Show effects that flash. Each is
+    // strongest in the middle of its track, as strong as its strength says,
+    // and as fast as its speed says. The same moment always draws the same,
+    // so the preview and the saved video match.
+    const strength = Math.min(1, Math.max(0, s.fxs == null ? 0.6 : s.fxs));
+    const speed = Math.max(0.25, s.fxv || 1);
+    const env = Math.sin(Math.PI * Math.min(1, Math.max(0, s.k)));
+    const tick = Math.floor(s.k * (s.secs || 1) * 24 * speed);
+    const over = (color: string, a: number) => {
+      const was = g.globalAlpha;
+      plain();
+      g.save();
+      g.globalAlpha = was * Math.min(1, Math.max(0, a));
+      g.globalCompositeOperation = 'source-atop';
+      g.fillStyle = color;
+      g.fillRect(0, 0, W, H);
+      g.restore();
+    };
+    if (s.fx === 'film') return over(fxRand(tick) > 0.5 ? '#ffffff' : '#000000', env * strength * 0.35 * fxRand(tick + 7));
+    if (s.fx === 'candle') return over('#ffb14a', env * strength * (0.15 + 0.25 * fxRand(Math.floor(tick / 3))));
+    if (s.fx === 'strobe') return over('#ffffff', tick % 2 ? env * strength : 0);
+    if (s.fx === 'lightning') {
+      const k = s.k;
+      const bolt = (k > 0.28 && k < 0.34) || (k > 0.42 && k < 0.47) ? 1 : 0;
+      return over('#eef4ff', bolt * strength);
+    }
+    if (s.fx === 'camflash') return over('#ffffff', strength * Math.pow(Math.max(0, 1 - s.k * 3), 2));
+    if (s.fx === 'glitchx') {
+      const bands = 10;
+      const bh = H / bands;
+      for (let i = 0; i < bands; i++) {
+        const off = (fxRand(i + tick * 13) - 0.5) * 220 * u * env * strength;
+        const y = Math.floor(i * bh);
+        g.drawImage(src, 0, (y / H) * sh, sw, ((Math.ceil(bh) + 1) / H) * sh, off, y, W, Math.ceil(bh) + 1);
+      }
+      if (fxRand(tick + 3) > 0.6) {
+        g.save();
+        g.globalCompositeOperation = 'difference';
+        g.globalAlpha = env * strength * 0.6;
+        g.fillStyle = '#ff00ff';
+        g.fillRect(0, (fxRand(tick) * 0.8) * H, W, H * 0.12);
+        g.restore();
+      }
+      return;
+    }
+    if (s.fx === 'flick') {
+      const was = g.globalAlpha;
+      g.globalAlpha = was * (tick % 2 ? 1 : 1 - env * strength * 0.8);
+      plain();
+      g.globalAlpha = was;
+      return;
+    }
+    if (s.fx === 'drops') {
+      // Held frames: the layer jumps to where it is only every few frames.
+      const hold = Math.floor(tick / 3) % 3 === 0 && env * strength > 0.2;
+      const was = g.globalAlpha;
+      g.globalAlpha = hold ? was * 0.25 : was;
+      plain();
+      g.globalAlpha = was;
+      return;
+    }
+    if (s.fx === 'invert') {
+      plain();
+      if (tick % 4 < 2 && env * strength > 0.1) {
+        g.save();
+        g.globalCompositeOperation = 'difference';
+        g.globalAlpha = Math.min(1, env * strength * 1.4);
+        g.fillStyle = '#ffffff';
+        g.fillRect(0, 0, W, H);
+        g.restore();
+      }
+      return;
+    }
+    if (s.fx === 'shake') {
+      const dx = (fxRand(tick) - 0.5) * 40 * u * env * strength;
+      const dy = (fxRand(tick + 99) - 0.5) * 40 * u * env * strength;
+      g.drawImage(src, 0, 0, sw, sh, dx, dy, W, H);
+      return;
+    }
     plain();
   }
   // One track of an animation at k, from 0 to 1, drawn. Typewriter and Word
@@ -6836,9 +6945,15 @@ export function setup(ctx: Ctx, overrides?: any) {
   function runAnim(g: CanvasRenderingContext2D, st: VideoStage, use: AnimUse, which: 'in' | 'out', k: number, d: Drawer, slot: number) {
     const kk = Math.min(1, Math.max(0, k));
     const s = animAt(use.def, which, kk);
+    s.fxs = numOr(use.strength, 60) / 100;
+    s.fxv = numOr(use.speed, 1);
+    s.secs = use.secs;
+    // Reduce motion stops a flashing effect on screen. A saved video keeps
+    // it, since it was picked for the video.
+    if (use.def.flash && calm() && !videoRecording) s.fx = '';
     if (which === 'in' && use.def.reveal) {
       const was = textReveal;
-      textReveal = { kind: use.def.reveal === 'words' ? 'words' : 'chars', frac: s.p };
+      textReveal = { kind: use.def.reveal === 'words' ? 'words' : 'chars', frac: s.p, cursor: s.fx === 'cursor' ? (Math.floor(kk * (use.secs || 1) * 2.5 * (s.fxv || 1)) % 2 === 0 || kk >= 1 ? 1 : 0) : undefined };
       try {
         drawAnimated(g, st, s, d, slot, use.def.anchor);
       } finally {
@@ -7180,6 +7295,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       if (ended) return;
       ended = true;
       videoRun = null;
+      videoRecording = false;
       document.removeEventListener('visibilitychange', away);
       if (raf) cancelAnimationFrame(raf);
       try { src.stop(); } catch (_) {}
@@ -7223,6 +7339,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       }
     };
     videoRun = { cancel: () => finish(false), paused: false, goOn: () => goOn(true) };
+    videoRecording = true;
     // A recorder that stops on its own says why, and keeps nothing.
     rec.onerror = (e: any) => {
       const why = String((e && e.error && (e.error.message || e.error.name)) || 'no reason was given');
@@ -19154,8 +19271,41 @@ export function setup(ctx: Ctx, overrides?: any) {
     paintAnimPlaces(box, changed);
     drawOwnAnims(ownBox, changed, () => paintAnimPlaces(box, changed));
   }
+  // Whether the video uses an effect that flashes, while they are shown.
+  const flashUsed = () => !!S.videoFlashOn && ANIM_PLACES.some((p) => {
+    const u = animFor(p.id);
+    return !!(u && u.def.flash);
+  });
+  function paintFlashNote() {
+    const n = ws ? (ws.box.querySelector('[data-af-flashnote]') as HTMLElement | null) : null;
+    if (n) n.hidden = !flashUsed();
+  }
   function paintAnimPlaces(box: HTMLElement, changed: () => void) {
     box.replaceChildren();
+    // Effects that flash: off by default, and asked about before they show.
+    const flashRow = personSwitch('Show effects that flash', 'Off by default. Adds effects such as Strobe and Lightning, each marked with a warning sign.', !!S.videoFlashOn, async (on) => {
+      const input = flashRow.querySelector('input') as HTMLInputElement;
+      if (on) {
+        const ok = await askSure('Show effects that flash', 'These effects flash or flicker. They can be hard on the eyes, and they can trigger seizures in people with photosensitive epilepsy. Turn them on only if that is safe for you and for the people who will watch your video.', 'Turn them on', true, 'Keep them off');
+        if (!ok) {
+          input.checked = false;
+          return;
+        }
+      }
+      set({ videoFlashOn: on });
+      paintAnimPlaces(box, changed);
+      paintFlashNote();
+      changed();
+    });
+    flashRow.setAttribute('data-af-row', 'videoFlashOn');
+    (flashRow.querySelector('input') as HTMLInputElement).setAttribute('data-af-flashswitch', '');
+    box.appendChild(flashRow);
+    if (flashUsed()) {
+      const note = el('<p class="af-status" data-af-flashwarn></p>');
+      note.dataset.kind = 'bad';
+      note.textContent = 'This video uses an effect that flashes.';
+      box.appendChild(note);
+    }
     box.appendChild(hint('How each part of the video comes in and goes out. Each one is Default until you pick another.'));
     const now = (): Record<string, { id: string; secs: number; delay: number }> => Object.assign({}, S.videoAnims || {});
     for (const kind of ['frame', 'text'] as const) {
@@ -19164,7 +19314,8 @@ export function setup(ctx: Ctx, overrides?: any) {
       box.appendChild(h);
       for (const pl of ANIM_PLACES.filter((x) => x.kind === kind)) {
         const opts: { id: string; label: string; group?: string }[] = [{ id: '', label: 'Default: ' + pl.dflt }];
-        for (const a of BUILT_IN_ANIMS) if (kind === 'text' || a.kind !== 'text') opts.push({ id: a.id, label: a.name, group: 'Built in' });
+        for (const a of BUILT_IN_ANIMS) if ((kind === 'text' || a.kind !== 'text') && !a.flash) opts.push({ id: a.id, label: a.name, group: 'Built in' });
+        if (S.videoFlashOn) for (const a of BUILT_IN_ANIMS) if ((kind === 'text' || a.kind !== 'text') && a.flash) opts.push({ id: a.id, label: '\u26a0 ' + a.name, group: 'Effects that flash' });
         for (const a of ownAnims()) if (kind === 'text' || a.kind !== 'text') opts.push({ id: a.id, label: a.name, group: 'Your animations' });
         const cur = now()[pl.id];
         const value = cur && opts.some((o) => o.id === cur.id) ? cur.id : '';
@@ -19188,6 +19339,21 @@ export function setup(ctx: Ctx, overrides?: any) {
             len.setAttribute('data-af-animsecs', pl.id);
             inner.appendChild(len);
           }
+          if (def.flash) {
+            const put2 = (key: 'strength' | 'speed', v: number) => {
+              const all = now();
+              if (!all[pl.id]) return;
+              all[pl.id] = Object.assign({}, all[pl.id], { [key]: v }) as any;
+              set({ videoAnims: all });
+              changed();
+            };
+            const st2 = numberRow('Strength, in percent', numOr((c as any).strength, 60), 0, 100, 5, (v) => put2('strength', v), '60 by default.');
+            st2.setAttribute('data-af-animstrength', pl.id);
+            inner.appendChild(st2);
+            const sp2 = numberRow('Speed', numOr((c as any).speed, 1), 0.25, 4, 0.25, (v) => put2('speed', v), '1 by default. 2 is twice as fast.');
+            sp2.setAttribute('data-af-animspeed', pl.id);
+            inner.appendChild(sp2);
+          }
           if (pl.id !== 'end') {
             const del = numberRow('Delay, in seconds', numOr(c.delay, def.delay), 0, 10, 0.1, (v) => put('delay', v), '0 by default. It waits this long before it starts.');
             del.setAttribute('data-af-animdelay', pl.id);
@@ -19203,6 +19369,8 @@ export function setup(ctx: Ctx, overrides?: any) {
           timing();
           showUnder(under, !!def);
           changed();
+          paintAnimPlaces(box, changed);
+          paintFlashNote();
         }, pl.help);
         row.querySelector('select')!.setAttribute('data-af-animplace', pl.id);
         box.appendChild(row);
@@ -23613,6 +23781,9 @@ export function setup(ctx: Ctx, overrides?: any) {
     // Where an animation being changed puts its Play, Half speed and
     // position, under the preview's own controls.
     vc.appendChild(el('<div class="af-col" data-af-demoslot></div>'));
+    const flashNote = el('<p class="af-status" data-af-flashnote data-kind="bad">This video uses an effect that flashes.</p>');
+    flashNote.hidden = !flashUsed();
+    vc.appendChild(flashNote);
     const said = el('<p class="af-note" data-af-studio="said" role="status"></p>');
     vc.appendChild(said);
     const look = () => studioBuild(false);
@@ -25035,10 +25206,10 @@ export function setup(ctx: Ctx, overrides?: any) {
 
   // Asks before something is put back or deleted. Lumiverse's own dialog is
   // used, and the browser's when that is missing.
-  async function askSure(title: string, message: string, confirmLabel: string, danger?: boolean): Promise<boolean> {
+  async function askSure(title: string, message: string, confirmLabel: string, danger?: boolean, cancelLabel?: string): Promise<boolean> {
     try {
       if (ctx.ui && typeof ctx.ui.showConfirm === 'function') {
-        const r = await ctx.ui.showConfirm({ title, message, variant: danger ? 'danger' : 'default', confirmLabel });
+        const r = await ctx.ui.showConfirm(Object.assign({ title, message, variant: danger ? 'danger' : 'default', confirmLabel }, cancelLabel ? { cancelLabel } : {}) as any);
         return !!(r && r.confirmed);
       }
     } catch (_) {}

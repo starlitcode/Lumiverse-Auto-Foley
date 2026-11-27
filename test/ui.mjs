@@ -342,7 +342,7 @@ window.__ctx = {
       const handle = { root: r, dismiss() { if (!backdrop.isConnected) return; backdrop.remove(); window.__modals--; gone.forEach((f) => f()); }, setTitle() {}, onDismiss(f) { gone.add(f); return () => gone.delete(f); } };
       return handle;
     },
-    showConfirm: async (o) => { window.__asked = (window.__asked || 0) + 1; window.__askedTitle = o && o.title; window.__askedText = o && o.message; return { confirmed: !window.__confirmNo }; },
+    showConfirm: async (o) => { window.__asked = (window.__asked || 0) + 1; window.__askedTitle = o && o.title; window.__askedText = o && o.message; window.__askedLabels = [o && o.confirmLabel, o && o.cancelLabel]; return { confirmed: !window.__confirmNo }; },
     showContextMenu: async (o) => { window.__menu = o; return { selectedKey: window.__menuPick || null }; },
     registerInputBarAction: (o) => {
       const fns = [];
@@ -7531,6 +7531,70 @@ if (section("your reveals")) {
     check(!errors.length, size.name + ": no page errors. " + errors.slice(0, 2).join(" | "));
     await context.close();
   }
+}
+
+if (section("effects that flash")) {
+  console.log("Effects that flash: off by default, asked about first with the warning, marked with a sign, noted on the video, and stopped on screen by Reduce motion");
+  const PLAIN = `window.__settings.videoBacks = [{ id: "main", name: "Main", kind: "color", color: "#506070", fill: "solid", stops: [], dir: "down", dim: 40, blur: 0, shapes: [], use: "match", moods: [], places: [] }]; window.__settings.videoBackPick = "main"; window.__settings.videoEdges = 0; window.__settings.videoTitleOn = false;`;
+  const WARN = "These effects flash or flicker. They can be hard on the eyes, and they can trigger seizures in people with photosensitive epilepsy. Turn them on only if that is safe for you and for the people who will watch your video.";
+  for (const size of SIZES) {
+    const { context, page, errors } = await open(THEMES[0], size, 1, PLAIN);
+    await openWs(page);
+    await wsSec(page, "Animations");
+    await page.waitForTimeout(300);
+    const before = await page.evaluate(() => ({ on: document.querySelector("[data-af-flashswitch]").checked, strobe: [...document.querySelectorAll('[data-af-animplace="open"] option')].some((o) => /Strobe/.test(o.textContent)) }));
+    check(!before.on && !before.strobe, size.name + ": the switch is off by default, and no effect that flashes is offered");
+    await page.evaluate(() => { window.__confirmNo = true; window.__asked = 0; });
+    await page.evaluate(() => document.querySelector("[data-af-flashswitch]").click());
+    await page.waitForTimeout(400);
+    const no = await page.evaluate(() => ({ asked: window.__asked, text: window.__askedText, labels: window.__askedLabels, on: document.querySelector("[data-af-flashswitch]").checked, saved: !!window.__settings.videoFlashOn }));
+    check(no.asked === 1 && no.text === WARN && no.labels[0] === "Turn them on" && no.labels[1] === "Keep them off", size.name + ": turning it on asks first, with the warning and Turn them on and Keep them off");
+    check(!no.on && !no.saved, size.name + ": Keep them off leaves the switch off");
+    await page.evaluate(() => { window.__confirmNo = false; });
+    await page.evaluate(() => document.querySelector("[data-af-flashswitch]").click());
+    await page.waitForTimeout(500);
+    const opts = await page.evaluate(() => [...document.querySelectorAll('[data-af-animplace="open"] option')].map((o) => o.textContent).filter((t) => /⚠/.test(t)));
+    check(opts.length >= 8 && opts.every((t) => t.startsWith("⚠ ")), size.name + ": with it on, the effects that flash are offered, each with a warning sign (" + opts.length + ")");
+    await page.selectOption('[data-af-animplace="open"]', "strobe");
+    await page.waitForTimeout(500);
+    const ui = await page.evaluate(() => ({ strength: !!document.querySelector('[data-af-animstrength="open"]'), speed: !!document.querySelector('[data-af-animspeed="open"]'), warn: !!document.querySelector("[data-af-flashwarn]"), stage: !document.querySelector("[data-af-flashnote]").hidden }));
+    check(ui.strength && ui.speed && ui.warn && ui.stage, size.name + ": Strobe has a strength and a speed, and the panel and the preview say the video uses an effect that flashes (" + JSON.stringify(ui) + ")");
+    const m = await page.evaluate(MEASURE, size.touch);
+    check(!m.overflow.length && !m.small.length, size.name + ": it fits. " + m.overflow.concat(m.small).slice(0, 2).join("; "));
+    check(!errors.length, size.name + ": no page errors. " + errors.slice(0, 2).join(" | "));
+    await context.close();
+  }
+  // Strobe really flashes, only behind the switch, and Reduce motion stops it on screen.
+  const laptop = SIZES.find((x) => !x.touch) || SIZES[0];
+  const swings = async (extra) => {
+    const o = await open(THEMES[0], laptop, 1, PLAIN + `window.__settings.videoAnims = { open: { id: "strobe", secs: 1.5, delay: 0, strength: 80, speed: 1 } };` + extra);
+    await openWs(o.page);
+    await o.page.waitForTimeout(500);
+    const n = await o.page.evaluate(async () => {
+      const r = document.querySelector("[data-af-scrub] input");
+      r.step = "any";
+      const means = [];
+      for (let t = 0.2; t <= 1.3; t += 1 / 24) {
+        r.value = String(t); r.dispatchEvent(new Event("input", { bubbles: true }));
+        await new Promise((x) => requestAnimationFrame(() => requestAnimationFrame(x)));
+        const c = document.querySelector("[data-af-videopreview]");
+        const s = document.createElement("canvas"); s.width = 64; s.height = 36;
+        const g = s.getContext("2d"); g.drawImage(c, 0, 0, 64, 36);
+        const d = g.getImageData(0, 0, 64, 36).data;
+        let sum = 0; for (let i = 0; i < d.length; i += 4) sum += d[i];
+        means.push(sum / (d.length / 4));
+      }
+      let big = 0;
+      for (let i = 1; i < means.length; i++) if (Math.abs(means[i] - means[i - 1]) > 30) big++;
+      return big;
+    });
+    await o.context.close();
+    return n;
+  };
+  const on = await swings(`window.__settings.videoFlashOn = true;`);
+  const off = await swings(`window.__settings.videoFlashOn = false;`);
+  const calmOn = await swings(`window.__settings.videoFlashOn = true; window.__settings.reduceMotion = true;`);
+  check(on >= 6 && off === 0 && calmOn === 0, "Strobe flashes only with the switch on, and Reduce motion stops it on screen (" + [on, off, calmOn].join(", ") + " big swings)");
 }
 
 if (section("stickers")) {

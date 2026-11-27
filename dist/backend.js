@@ -124,6 +124,7 @@ const DEFAULT_SETTINGS = {
     videoAnims: {},
     videoAnimsOwn: [],
     videoReveals: [],
+    videoFlashOn: false,
     videoByline: '',
     videoBylineInk: '',
     videoBylineFont: '',
@@ -491,6 +492,11 @@ function cleanAnimPlaces(v) {
         if (!id)
             continue;
         out[place] = { id, secs: Math.round(num(e.secs, 0, 10, 0.5) * 100) / 100, delay: Math.round(num(e.delay, 0, 10, 0) * 100) / 100 };
+        // A flashing effect's strength and speed.
+        if (e.strength != null && Number.isFinite(Number(e.strength)))
+            out[place].strength = Math.round(num(e.strength, 0, 100, 60));
+        if (e.speed != null && Number.isFinite(Number(e.speed)))
+            out[place].speed = Math.round(num(e.speed, 0.25, 4, 1) * 100) / 100;
     }
     return out;
 }
@@ -1096,6 +1102,7 @@ function cleanSettings(raw) {
         videoAnims: cleanAnimPlaces(r.videoAnims),
         videoAnimsOwn: cleanOwnAnims(r.videoAnimsOwn),
         videoReveals: cleanReveals(r.videoReveals),
+        videoFlashOn: r.videoFlashOn === true,
         videoByline: str(r.videoByline, 80).replace(/[\u0000-\u001f]/g, ' ').trim(),
         videoBylineInk: hexColor(r.videoBylineInk),
         videoBylineFont: r.videoBylineFont === '' ? '' : fontChoice(r.videoBylineFont, ''),

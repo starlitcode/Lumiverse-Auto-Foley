@@ -182,6 +182,34 @@ Fast changes between light and dark can flash. Keep brightness changes slow.
 - **Duplicate** makes a copy to change.
 - **Delete** asks first, and says which places use it. Those places go back to **Default**.
 
+## Effects that flash
+
+Some effects flash or flicker. They are hidden until you turn them on.
+
+1. Open **Animations** and turn on **Show effects that flash**. It is off by default.
+2. A question asks first: "These effects flash or flicker. They can be hard on the eyes, and they can trigger seizures in people with photosensitive epilepsy. Turn them on only if that is safe for you and for the people who will watch your video." **Turn them on** turns them on. **Keep them off** leaves the switch off.
+3. The dropdowns then also list **Effects that flash**, each marked with a warning sign.
+4. Pick one. It has **Strength, in percent** and **Speed**, as well as its length and delay.
+5. While the video uses one, the Animations part and the space under the preview say "This video uses an effect that flashes."
+
+| Effect | What it does |
+| --- | --- |
+| Film flicker | The frame flickers lighter and darker, like old film. |
+| Candle flicker | A warm, uneven glow over the frame. |
+| Strobe | Fast white flashes. |
+| Lightning | Two bright flashes, close together. Frame only. |
+| Camera flash | One white flash that fades. Frame only. |
+| Glitch | Bands jump sideways and a colored bar flickers. |
+| Blinking cursor | The letters are typed in, with a cursor that blinks after them. Text only. |
+| Flicker | The layer flickers on and off. |
+| Frame drops | The layer jumps, as if frames were missing. |
+| Inversion | The colors flip to their opposites, on and off. |
+| Shake | The layer shakes. |
+
+- With the switch off, a place that uses one of these goes back to its default, and the video has no flashing.
+- **Reduce motion**, in the Settings tab or on your device, stops them in the Studio's preview. A saved video keeps them.
+- The built-in templates never use them.
+
 ## Details
 
 - **Typewriter** and **Word by word** are only offered for text.
