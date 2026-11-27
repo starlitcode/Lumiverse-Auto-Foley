@@ -4524,6 +4524,33 @@ if (section("review fixes")) {
     check(!errors.length, "broken font: no page errors. " + errors.slice(0, 2).join(" | "));
     await context.close();
   }
+  // A font still loading when the extension is taken away is never added
+  // to the page.
+  {
+    const { context, page, errors } = await open(THEMES[0], SIZES[1], 1, () => {
+      window.__settings.videoFont = "own:fslow";
+      window.__fonts = [{ id: "fslow", name: "Slow", bytes: 12 }];
+      window.__fontData = { fslow: "AAAAAAAAAAAAAAAA" };
+      window.__fontsAdded = [];
+      // A font that loads only when the check says so.
+      window.FontFace = class {
+        constructor(family) { this.family = family; }
+        load() { return new Promise((done) => (window.__fontGo = () => done(this))); }
+      };
+      const real = document.fonts.add.bind(document.fonts);
+      document.fonts.add = (f) => { window.__fontsAdded.push(f.family); try { real(f); } catch (_) {} };
+    });
+    await openWs(page);
+    await page.waitForFunction(() => typeof window.__fontGo === "function", null, { timeout: 8000 }).catch(() => {});
+    const waiting = await page.evaluate(() => typeof window.__fontGo === "function");
+    await page.evaluate(() => window.__teardown());
+    await page.evaluate(() => window.__fontGo && window.__fontGo());
+    await page.waitForTimeout(400);
+    const added = await page.evaluate(() => window.__fontsAdded.length);
+    check(waiting && added === 0, "a font that finishes loading after teardown is not added to the page (" + waiting + ", " + added + " added)");
+    check(!errors.length, "slow font: no page errors. " + errors.slice(0, 2).join(" | "));
+    await context.close();
+  }
   // A mood picture that cannot be taken out of the account is said.
   {
     const { context, page, errors } = await open(THEMES[0], SIZES[0], 1, () => {

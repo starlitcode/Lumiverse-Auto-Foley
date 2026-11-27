@@ -4195,6 +4195,12 @@ export function setup(ctx: Ctx, overrides?: any) {
         const fam = 'af-font-' + id;
         const face = new FontFace(fam, buf.buffer);
         await face.load();
+        // A font that finishes loading after the extension is taken away
+        // is not added, so nothing is left in the page.
+        if (!alive) {
+          fontLoading.delete(id);
+          return false;
+        }
         (document.fonts as any).add(face);
         fontFaces.set(id, fam);
         fontObjs.set(id, face);
