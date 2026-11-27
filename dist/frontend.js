@@ -1836,10 +1836,11 @@ function animAt(def, which, k) {
     out.mask = mask;
     out.p = e;
     out.hide = which === 'out';
+    out.fx = def.fx || '';
     out.o = Math.min(1, Math.max(0, out.o));
     return out;
 }
-const isRest = (s) => Math.abs(s.s - 100) < 0.01 && Math.abs(s.r) < 0.01 && s.b < 0.05 && Math.abs(s.l - 100) < 0.5 && s.ta < 0.5 && s.mask.type === 'none';
+const isRest = (s) => !s.fx && Math.abs(s.s - 100) < 0.01 && Math.abs(s.r) < 0.01 && s.b < 0.05 && Math.abs(s.l - 100) < 0.5 && s.ta < 0.5 && s.mask.type === 'none';
 // The built-in animations. Each has an in and an out. Slide, Wipe and the
 // others named for a side come from that side, and leave to the other.
 const ANIM_LEN = 0.5;
@@ -1866,6 +1867,12 @@ const BUILT_IN_ANIMS = [
     builtIn('type', 'Typewriter', 'text', [], FADE_OUT, { secs: 1.2, ease: EASES[5].curve.slice(), reveal: 'chars' }),
     builtIn('words', 'Word by word', 'text', [], FADE_OUT, { secs: 1, ease: EASES[5].curve.slice(), reveal: 'words' }),
     builtIn('none', 'None', 'any', [], [], { secs: 0 }),
+    // Calm glitches: each settles smoothly, and none flashes.
+    builtIn('split', 'Color split', 'any', FADE_IN, FADE_OUT, { secs: 0.6, fx: 'split' }),
+    builtIn('slice', 'Slice shift', 'any', FADE_IN, FADE_OUT, { secs: 0.6, fx: 'slice' }),
+    builtIn('wobble', 'Scanline wobble', 'any', FADE_IN, FADE_OUT, { secs: 0.7, fx: 'wobble' }),
+    builtIn('shuffle', 'Pixel shuffle', 'any', [], [], { secs: 0.7, ease: [0, 0, 1, 1], fx: 'shuffle' }),
+    builtIn('lost', 'Signal lost', 'frame', [], [], { secs: 1.2, ease: [0, 0, 1, 1], fx: 'lost' }),
 ];
 // The places an animation is used, in the frame and in the text. Each has a
 // default, which is what it did before an animation was picked for it.
@@ -6417,6 +6424,17 @@ export function setup(ctx, overrides) {
         }
         const ax = anchor === 'left' ? 0 : anchor === 'right' ? W : W / 2;
         const ay = anchor === 'top' ? 0 : anchor === 'bottom' ? H : H / 2;
+        if (s.fx) {
+            g.save();
+            g.globalAlpha = s.o;
+            g.translate(ax + s.x * u, ay + s.y * u);
+            g.rotate((s.r * Math.PI) / 180);
+            g.scale(s.s / 100, s.s / 100);
+            g.translate(-ax, -ay);
+            drawFx(g, st, src, sw, sh, s);
+            g.restore();
+            return;
+        }
         g.save();
         g.globalAlpha = s.o;
         g.translate(ax + s.x * u, ay + s.y * u);
@@ -6426,6 +6444,120 @@ export function setup(ctx, overrides) {
         g.imageSmoothingQuality = 'high';
         g.drawImage(src, 0, 0, sw, sh, 0, 0, W, H);
         g.restore();
+    }
+    // The calm glitches. Each is strongest at the start of an in track and
+    // the end of an out track, and settles smoothly to nothing.
+    const fxRand = (n) => {
+        const x = Math.sin(n * 127.1 + 311.7) * 43758.5453;
+        return x - Math.floor(x);
+    };
+    function drawFx(g, st, src, sw, sh, s) {
+        const W = st.w;
+        const H = st.h;
+        const u = Math.min(W, H) / 1080;
+        // How far from rest: 1 at the far end of the track, 0 at rest.
+        const away = s.hide ? s.p : 1 - s.p;
+        const plain = () => g.drawImage(src, 0, 0, sw, sh, 0, 0, W, H);
+        if (s.fx === 'split') {
+            // The red and the blue-green parts drift apart and back together.
+            const d = Math.sin(away * Math.PI * 0.5) * 14 * u;
+            if (d < 0.3)
+                return plain();
+            const tinted = (n, color) => {
+                const c = animLayer(st, n);
+                const cg = c.getContext('2d');
+                cg.setTransform(1, 0, 0, 1, 0, 0);
+                cg.globalAlpha = 1;
+                cg.globalCompositeOperation = 'source-over';
+                cg.clearRect(0, 0, W, H);
+                cg.drawImage(src, 0, 0, sw, sh, 0, 0, W, H);
+                cg.globalCompositeOperation = 'multiply';
+                cg.fillStyle = color;
+                cg.fillRect(0, 0, W, H);
+                cg.globalCompositeOperation = 'destination-in';
+                cg.drawImage(src, 0, 0, sw, sh, 0, 0, W, H);
+                cg.globalCompositeOperation = 'source-over';
+                return c;
+            };
+            const red = tinted(12, '#ff0000');
+            const rest = tinted(13, '#00ffff');
+            g.drawImage(red, -d, 0);
+            const was = g.globalCompositeOperation;
+            g.globalCompositeOperation = 'lighter';
+            g.drawImage(rest, d, 0);
+            g.globalCompositeOperation = was;
+            return;
+        }
+        if (s.fx === 'slice') {
+            // Bands of the frame, each moved across a little, coming back into
+            // line together.
+            const bands = 12;
+            const bh = H / bands;
+            const k = away * away;
+            for (let i = 0; i < bands; i++) {
+                const off = (fxRand(i) - 0.5) * 120 * u * k;
+                const y = Math.floor(i * bh);
+                const h = Math.ceil(bh) + 1;
+                g.drawImage(src, 0, (y / H) * sh, sw, (h / H) * sh, off, y, W, h);
+            }
+            return;
+        }
+        if (s.fx === 'wobble') {
+            // Thin rows moved by a slow wave, which flattens out.
+            const amp = 16 * u * away;
+            if (amp < 0.3)
+                return plain();
+            const step = Math.max(2, Math.round(4 * u));
+            for (let y = 0; y < H; y += step) {
+                const off = Math.sin(y / (40 * u) + away * 6) * amp;
+                g.drawImage(src, 0, (y / H) * sh, sw, (step / H) * sh, off, y, W, step);
+            }
+            return;
+        }
+        if (s.fx === 'shuffle') {
+            // Squares of the frame, each shown once at a moment of its own.
+            const n = 16;
+            const tw = W / n;
+            const rows = Math.ceil(H / tw);
+            const shown = s.hide ? 1 - s.p : s.p;
+            for (let ty = 0; ty < rows; ty++)
+                for (let tx = 0; tx < n; tx++) {
+                    const r = fxRand(ty * n + tx + 1);
+                    if (r > shown)
+                        continue;
+                    const x = Math.floor(tx * tw);
+                    const y = Math.floor(ty * tw);
+                    const w = Math.ceil(tw);
+                    g.drawImage(src, (x / W) * sw, (y / H) * sh, (w / W) * sw, (w / H) * sh, x, y, w, w);
+                }
+            return;
+        }
+        if (s.fx === 'lost') {
+            // A still card that says the signal is lost, which fades into the
+            // frame coming in, or out of it going out. Its bars are dim, so the
+            // fade is gentle.
+            const card = Math.min(1, Math.max(0, away));
+            const was = g.globalAlpha;
+            g.globalAlpha = was * (1 - card);
+            plain();
+            g.globalAlpha = was * card;
+            g.fillStyle = '#1d2330';
+            g.fillRect(0, 0, W, H);
+            const bars = ['#3a3f4d', '#3d4a45', '#3a4552', '#45403a', '#3f3a4a', '#4a3d3d', '#3a4040'];
+            const bw = W / bars.length;
+            bars.forEach((c, i) => {
+                g.fillStyle = c;
+                g.fillRect(Math.floor(i * bw), H * 0.18, Math.ceil(bw), H * 0.5);
+            });
+            g.fillStyle = '#c9ccd6';
+            g.font = '600 ' + Math.round(56 * u) + 'px system-ui, sans-serif';
+            g.textAlign = 'center';
+            g.fillText('Signal lost', W / 2, H * 0.82);
+            g.textAlign = 'left';
+            g.globalAlpha = was;
+            return;
+        }
+        plain();
     }
     // One track of an animation at k, from 0 to 1, drawn. Typewriter and Word
     // by word show the text a part at a time while they come in.

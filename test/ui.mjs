@@ -7094,6 +7094,65 @@ if (section("animation editor")) {
   }
 }
 
+if (section("calm glitches")) {
+  console.log("The calm glitches change the frame, settle smoothly, and never flash");
+  // Bars across the background, so a frame moved across shows it.
+  const bars = Array.from({ length: 16 }, (_, i) => ({ id: "s" + i, kind: "rect", x: (i + 0.5) / 16, y: 0.5, w: 60, h: 2000, rot: 0, fill: i % 2 ? "#d0d8e0" : "#202830", grad: "none", stops: [], dir: "down", clear: 0, text: "" }));
+  const PLAIN = `window.__settings.videoBacks = [{ id: "main", name: "Main", kind: "design", color: "#506070", fill: "solid", stops: [], dir: "down", dim: 40, blur: 0, shapes: ${JSON.stringify(bars)}, use: "match", moods: [], places: [] }]; window.__settings.videoBackPick = "main"; window.__settings.videoEdges = 0; window.__settings.videoTitleOn = false; window.__settings.videoInk = "#ffffff"; window.__settings.videoWords = "all";`;
+  const size = SIZES.find((x) => !x.touch) || SIZES[0];
+  const run = async (place, id) => {
+    const o = await open(THEMES[0], size, 1, PLAIN + `window.__settings.videoAnims = ${JSON.stringify({ [place]: { id, secs: 1.2, delay: 0 } })};`);
+    await openWs(o.page);
+    await o.page.waitForTimeout(600);
+    const out = await o.page.evaluate(async () => {
+      const r = document.querySelector("[data-af-scrub] input");
+      r.step = "any";
+      const frames = [];
+      for (let t = 0; t <= 2.4; t += 1 / 30) {
+        r.value = String(t);
+        r.dispatchEvent(new Event("input", { bubbles: true }));
+        await new Promise((x) => requestAnimationFrame(() => requestAnimationFrame(x)));
+        const c = document.querySelector("[data-af-videopreview]");
+        const s = document.createElement("canvas"); s.width = 192; s.height = 108;
+        const g = s.getContext("2d"); g.drawImage(c, 0, 0, 192, 108);
+        const d = g.getImageData(0, 0, 192, 108).data;
+        let sum = 0;
+        for (let i = 0; i < d.length; i += 4) sum += (d[i] + d[i + 1] + d[i + 2]) / 3;
+        frames.push({ mean: sum / (d.length / 4), px: Array.from(d.filter((_, i) => i % 4 === 0)) });
+      }
+      return frames;
+    });
+    await o.context.close();
+    return out;
+  };
+  const base = await run("open", "fade");
+  const plain = await run("open", "");
+  for (const id of ["split", "slice", "wobble", "shuffle", "lost"]) {
+    const f = await run("open", id);
+    let jump = 0;
+    let flashes = 0;
+    for (let i = 1; i < f.length; i++) {
+      const dlt = f[i].mean - f[i - 1].mean;
+      jump = Math.max(jump, Math.abs(dlt));
+      // A flash is a fast rise and a fast fall, or a fall and a rise, close together.
+      if (i + 3 < f.length && Math.abs(dlt) > 8 && Math.sign(f[i + 3].mean - f[i].mean) === -Math.sign(dlt) && Math.abs(f[i + 3].mean - f[i].mean) > 8) flashes++;
+    }
+    const away = (other) => Math.max(...f.map((fr, i) => fr.px.reduce((n, v, k) => n + (Math.abs(v - other[i].px[k]) > 25 ? 1 : 0), 0) / fr.px.length));
+    const differ = Math.min(away(base), away(plain));
+    check(jump < 12 && flashes === 0, id + ": the frame never jumps or flashes (largest step " + jump.toFixed(1) + ", " + flashes + " flashes)");
+    check(differ > 0.05, id + ": it draws something other than a plain fade (" + differ.toFixed(2) + ")");
+  }
+  // They are in the dropdowns for everyone, with no switch.
+  const { context, page, errors } = await open(THEMES[0], size, 1);
+  await openWs(page);
+  await wsSec(page, "Animations");
+  await page.waitForTimeout(300);
+  const names = await page.evaluate(() => [...document.querySelectorAll('[data-af-animplace="between"] option')].map((o) => o.textContent));
+  check(["Color split", "Slice shift", "Scanline wobble", "Pixel shuffle", "Signal lost"].every((n) => names.includes(n)), "the calm glitches are offered for between lines");
+  check(!errors.length, "no page errors. " + errors.slice(0, 2).join(" | "));
+  await context.close();
+}
+
 if (section("stickers")) {
   console.log("Stickers: drawn where they are put, flipped, mixed, filling the frame, behind the words, at their times, and edited on a phone and a laptop");
   // The pictures the checks use, drawn once in a page of their own.

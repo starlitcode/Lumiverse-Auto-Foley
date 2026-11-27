@@ -4,6 +4,7 @@
 
 - **Animations**, in the Studio, picks how each part of the video comes in and goes out.
 - There are eleven places: six for the whole frame and five for text.
+- Calm glitches, such as **Color split** and **Signal lost**, are built in too.
 - Each place has a dropdown. **Default** keeps what the Studio did before an animation was picked.
 - Pick a built-in animation, such as **Rise**, **Wipe from the left** or **Typewriter**, or one of your own.
 - Each picked animation has a typed **Length, in seconds** and **Delay, in seconds**.
@@ -76,8 +77,15 @@ Half way through the opening, the corners are still black and the middle of the 
 | Typewriter | The letters show one at a time | Fades out | 1.2 seconds, text only |
 | Word by word | The words show one at a time | Fades out | 1 second, text only |
 | None | Shows at once | Goes at once | 0 seconds |
+| Color split | Fades in as its red and blue-green parts come together | Fades out as they drift apart | 0.6 seconds |
+| Slice shift | Bands of the frame slide back into line | Bands slide out of line | 0.6 seconds |
+| Scanline wobble | Thin rows move in a slow wave that flattens out | The wave grows | 0.7 seconds |
+| Pixel shuffle | Squares of the frame appear, each at a moment of its own | Squares go, each at a moment of its own | 0.7 seconds |
+| Signal lost | A still card that says "Signal lost" fades into the frame | The frame fades into the card | 1.2 seconds, the frame only |
 
 Pixels are pixels of a 1080-pixel frame, so they look the same at any size of video.
+
+The last five are calm glitches. They move smoothly, and none of them flashes: a check draws each one at 30 frames a second and finds no fast change between light and dark.
 
 ## Your animations
 
