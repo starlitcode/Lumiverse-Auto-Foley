@@ -317,6 +317,11 @@ interface Settings {
   videoWordShadowDark: number;
   videoWordShadowSoft: number;
   videoWordShadowFar: number;
+  videoBox: boolean;
+  videoBoxColor: string;
+  videoBoxClear: number;
+  videoBoxRound: number;
+  videoBoxWidth: 'fit' | 'wide';
   videoNameShadow: boolean;
   videoNameShadowInk: string;
   videoNameShadowDark: number;
@@ -595,6 +600,11 @@ const DEFAULT_SETTINGS: Settings = {
   videoWordShadowDark: 55,
   videoWordShadowSoft: 14,
   videoWordShadowFar: 2,
+  videoBox: false,
+  videoBoxColor: '#000000',
+  videoBoxClear: 40,
+  videoBoxRound: 16,
+  videoBoxWidth: 'fit',
   videoNameShadow: true,
   videoNameShadowInk: '',
   videoNameShadowDark: 65,
@@ -1104,6 +1114,7 @@ const LOOK_KEYS = [
   'videoBylineShadow', 'videoBylineShadowInk', 'videoBylineShadowDark', 'videoBylineShadowSoft', 'videoBylineShadowFar', 'videoMarks',
   'videoWordFill', 'videoWordStops', 'videoWordDir', 'videoNameFill', 'videoNameStops', 'videoNameDir', 'videoCapFill', 'videoCapStops', 'videoCapDir',
   'videoWordShadow', 'videoWordShadowInk', 'videoWordShadowDark', 'videoWordShadowSoft', 'videoWordShadowFar',
+  'videoBox', 'videoBoxColor', 'videoBoxClear', 'videoBoxRound', 'videoBoxWidth',
   'videoNameShadow', 'videoNameShadowInk', 'videoNameShadowDark', 'videoNameShadowSoft', 'videoNameShadowFar', 'videoEdges', 'videoEdgeColor', 'videoMove', 'videoMoveSecs',
   'videoTitleOn', 'videoFadeOut', 'videoCaptions',
 ];
@@ -1295,6 +1306,11 @@ function cleanSettings(raw: any): Settings {
     videoWordShadowDark: Math.round(num(r.videoWordShadowDark, 0, 100, d.videoWordShadowDark)),
     videoWordShadowSoft: Math.round(num(r.videoWordShadowSoft, 0, 40, d.videoWordShadowSoft)),
     videoWordShadowFar: Math.round(num(r.videoWordShadowFar, 0, 20, d.videoWordShadowFar)),
+    videoBox: bool(r.videoBox, d.videoBox),
+    videoBoxColor: hexColor(r.videoBoxColor) || d.videoBoxColor,
+    videoBoxClear: Math.round(num(r.videoBoxClear, 0, 90, d.videoBoxClear)),
+    videoBoxRound: Math.round(num(r.videoBoxRound, 0, 60, d.videoBoxRound)),
+    videoBoxWidth: pick(r.videoBoxWidth, ['fit', 'wide'] as const, d.videoBoxWidth),
     videoNameShadow: bool(r.videoNameShadow, d.videoNameShadow),
     videoNameShadowInk: hexColor(r.videoNameShadowInk),
     videoNameShadowDark: Math.round(num(r.videoNameShadowDark, 0, 100, d.videoNameShadowDark)),

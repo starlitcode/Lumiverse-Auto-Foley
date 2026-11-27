@@ -266,7 +266,7 @@ With no performance in the Studio, the preview shows an example clip, about 25 s
 - It has no sound. **Play the preview** plays it silently, and it starts again at the end until you stop it.
 - It shows each part of the look, and each kind of change between parts: the title, narration, two sound captions in a row, the same person twice, two made-up people taking turns, a third who speaks after them, a line with a voice tag for a mood picture, quotation marks, a second scene, and the fade at the end. Notes and hidden words show when you have them.
 - Its people, Juniper, Ansel and Bram, have pictures drawn by Auto Foley: a darker tint of their kind's color with their initial, so the ring in the full color stands out. The mood picture is a lighter tint. It never uses a picture from your cast.
-- With two or more backgrounds, its second scene uses another background, so the crossfade shows.
+- Its second scene is a calm morning in the shop. It takes a background the same way a real scene does: one whose **Use it for** has the mood calm or a place word such as morning or shop, or else the one for every other scene.
 - Every change you make redraws it at once, at the same moment in the clip.
 - With a performance there, **Show in the preview** picks **Your performance** or **Example**.
 - The example is never saved. **Make a video** and the downloads use your performance, and stay off while there is none.
@@ -295,6 +295,11 @@ Leaving **Templates** while you try one puts your look back.
 | **By the fire** | Quiet talks indoors: kitchens, taverns, a fire at night. | Fade and rise, 0.5 seconds |
 | **Stars and moon** | Dreams, memories and night scenes. | Soft focus, 0.7 seconds |
 | **Terminal** | Hackers, robots and anything that happens on a screen. | Cut, with no movement |
+| **Dialogue box** | Roleplay, with the words in a box at the bottom like a story game. | Dissolve, 0.25 seconds |
+| **Rain on the window** | Quiet, sad or thoughtful scenes on a gray day. | Fade out, then in, 0.6 seconds |
+| **Sepia film** | Old stories, westerns and memories from long ago. | Through black, 0.8 seconds |
+| **On the radio** | Talk shows, phone calls and stories told as a broadcast. | Dissolve, 0.4 seconds |
+| **After dark** | Intimate and sexual scenes between adults, slow and warm. See [The one thing it does not direct](director.md#the-one-thing-it-does-not-direct). | Dissolve, 0.9 seconds |
 
 Each template sets every setting that changes the drawn frame, and **Music** under **The performance**, so nothing is left from the look before. Templates use only built-in transitions. Switching templates fades the preview from one frame to the next over 0.2 seconds, which Reduce motion turns off.
 
@@ -313,6 +318,7 @@ If a later update changes the templates, **Templates** says so.
 - **A shadow behind the words**: on by default, the soft dark shadow the words always had. Sound captions have it too. Under it: **Color of the shadow**, black by default, and **How dark** (65%), **How soft** (18) and **How far below** (2), set by eye on the preview. Sizes are in pixels of a 1080-pixel frame.
 
 When each word is said is worked out from where the voice is in the clip, so it is close, not exact.
+- **A box behind the words**: off by default. A box of one color behind the lines, which helps on a busy background. Under it: **Color of the box**, black by default; **How see-through, in percent**, 40 by default, where 0 is solid; **Rounded corners, in pixels**, 16 by default; and **How wide**, **To the words** or **Across the frame**.
 
 ### Speakers
 

@@ -2021,6 +2021,11 @@ const DEFAULTS: any = {
   videoWordShadowDark: 55,
   videoWordShadowSoft: 14,
   videoWordShadowFar: 2,
+  videoBox: false,
+  videoBoxColor: '#000000',
+  videoBoxClear: 40,
+  videoBoxRound: 16,
+  videoBoxWidth: 'fit',
   videoNameShadow: true,
   videoNameShadowInk: '',
   videoNameShadowDark: 65,
@@ -4012,20 +4017,25 @@ export function setup(ctx: Ctx, overrides?: any) {
       out.push({ i: line.i, k, words: words.length > 60 ? words.slice(0, 58).trimEnd() + '…' : words, place: String(line.scene || ''), mood: String(line.mood || '') || moodAt(sh, k), hand: String(hand.backs[String(line.i)] || ''), back: '' });
     });
     const list = backList();
-    const dflt = backDefault().id;
     for (const sc of out) {
       if (sc.hand && list.some((b) => b.id === sc.hand)) {
         sc.back = sc.hand;
         continue;
       }
-      const place = ' ' + sc.place.toLowerCase().replace(/[^a-z0-9' ]+/g, ' ') + ' ';
-      const hit = list.find((b) =>
-        b.id !== dflt && b.use !== 'hand' &&
-        ((!!sc.mood && (b.moods || []).indexOf(sc.mood) >= 0) ||
-          (b.places || []).some((w) => !!w && place.indexOf(' ' + w.toLowerCase().replace(/[^a-z0-9' ]+/g, ' ').trim() + ' ') >= 0)));
-      sc.back = hit ? hit.id : dflt;
+      sc.back = sceneBack(sc.place, sc.mood);
     }
     return out;
+  }
+  // The background for a scene: the first one whose Use it for matches its
+  // mood or a word of its place, or else the one for every other scene.
+  function sceneBack(placeText: string, mood: string): string {
+    const dflt = backDefault().id;
+    const place = ' ' + placeText.toLowerCase().replace(/[^a-z0-9' ]+/g, ' ') + ' ';
+    const hit = backList().find((b) =>
+      b.id !== dflt && b.use !== 'hand' &&
+      ((!!mood && (b.moods || []).indexOf(mood) >= 0) ||
+        (b.places || []).some((w) => !!w && place.indexOf(' ' + w.toLowerCase().replace(/[^a-z0-9' ]+/g, ' ').trim() + ' ') >= 0)));
+    return hit ? hit.id : dflt;
   }
   // Sends the hand changes to be kept with the saved script. A script that
   // is not kept keeps them for this visit, and the line under the scenes
@@ -4436,6 +4446,9 @@ export function setup(ctx: Ctx, overrides?: any) {
     }
     if (fixed) times.splice(0, times.length, ...fixed.map((x) => ({ ...x })));
     if (only && backList().some((b) => b.id === only)) times.splice(0, times.length, { t: 0, id: only });
+    // While a template is tried, every scene shows the template's own
+    // background, so the try shows the template alone.
+    if (trying) times.splice(0, times.length, { t: 0, id: dflt });
     if (!times.length) times.push({ t: 0, id: dflt });
     times[0].t = 0;
     const used = Array.from(new Set(times.map((x) => x.id)));
@@ -4860,6 +4873,26 @@ export function setup(ctx: Ctx, overrides?: any) {
     g.font = '400 ' + size + 'px ' + font;
     const sp = space();
     const mode = S.videoWords || 'light';
+    // A box behind the words, as wide as the longest row or as wide as the
+    // words can go.
+    if (S.videoBox && shown.length) {
+      const pad = Math.round(32 * u);
+      const widest = Math.max(...shown.map((row) => row.reduce((n, k) => n + g.measureText(words[k]).width, 0) + sp * (row.length - 1)));
+      const bw = (S.videoBoxWidth === 'wide' ? MAX_W : widest) + pad * 2;
+      const bh = shown.length * lineH + pad * 1.5;
+      const bx = cx - bw / 2;
+      const by = y - pad * 0.6;
+      g.save();
+      g.shadowColor = 'transparent';
+      g.globalAlpha = alpha * (1 - Math.min(90, Math.max(0, numOr(S.videoBoxClear, 40))) / 100);
+      g.fillStyle = hexOr(S.videoBoxColor, '#000000');
+      g.beginPath();
+      const rr = Math.min(bh / 2, Math.max(0, numOr(S.videoBoxRound, 16)) * u);
+      if (typeof (g as any).roundRect === 'function') (g as any).roundRect(bx, by, bw, bh, rr);
+      else g.rect(bx, by, bw, bh);
+      g.fill();
+      g.restore();
+    }
     shown.forEach((row, r) => {
       const ws = row.map((k) => g.measureText(words[k]).width);
       const rowW = ws.reduce((a, b) => a + b, 0) + sp * (row.length - 1);
@@ -13578,11 +13611,11 @@ export function setup(ctx: Ctx, overrides?: any) {
       }
       at += l.len;
     });
-    // A second scene from the morning, on another background when there is
-    // one, so the crossfade shows.
-    const second = backList().find((b) => b.id !== backDefault().id);
+    // A second scene, a calm morning in the shop. It takes a background the
+    // same way a real scene does: one whose Use it for matches it, or else
+    // the one for every other scene.
     const morning = parts.find((p) => p.k === 8) as VideoPart;
-    const scenes = [{ t: 0, id: backDefault().id }, { t: morning.start, id: second ? second.id : backDefault().id }];
+    const scenes = [{ t: 0, id: sceneBack('the lantern shop at night', '') }, { t: morning.start, id: sceneBack('the lantern shop in the morning', 'calm') }];
     const title = S.videoTitleOn === false ? '' : String(S.videoTitleText || '').trim() || 'The Lantern Shop';
     return { parts, title, total: at, scenes };
   }
@@ -14961,6 +14994,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     'videoBylineShadow', 'videoBylineShadowInk', 'videoBylineShadowDark', 'videoBylineShadowSoft', 'videoBylineShadowFar', 'videoMarks',
     'videoWordFill', 'videoWordStops', 'videoWordDir', 'videoNameFill', 'videoNameStops', 'videoNameDir', 'videoCapFill', 'videoCapStops', 'videoCapDir',
     'videoWordShadow', 'videoWordShadowInk', 'videoWordShadowDark', 'videoWordShadowSoft', 'videoWordShadowFar',
+    'videoBox', 'videoBoxColor', 'videoBoxClear', 'videoBoxRound', 'videoBoxWidth',
     'videoNameShadow', 'videoNameShadowInk', 'videoNameShadowDark', 'videoNameShadowSoft', 'videoNameShadowFar', 'videoEdges', 'videoEdgeColor', 'videoMove', 'videoMoveSecs',
     'videoTitleOn', 'videoFadeOut', 'videoCaptions',
   ];
@@ -15260,6 +15294,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         videoFont: 'book', videoSize: 100, videoInk: '', videoWords: 'fade', videoPlace: 'middle', videoQuotes: true, videoWordFill: 'solid',
         videoWordStops: ['#f2b880'], videoWordDir: 'down', videoWordShadow: true, videoWordShadowInk: '', videoWordShadowDark: 55,
         videoWordShadowSoft: 14, videoWordShadowFar: 2,
+        videoBox: false, videoBoxColor: '#000000', videoBoxClear: 40, videoBoxRound: 16, videoBoxWidth: 'fit',
         videoCaptions: true, videoCaptionInk: '', videoCapFill: 'solid', videoCapStops: ['#f2b880'], videoCapDir: 'right',
         videoNameFont: 'clean', videoNameSize: 100, videoNameColor: 'kind', videoNameFill: 'solid', videoNameStops: ['#f2b880'],
         videoNameDir: 'right', videoNameShadow: true, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18,
@@ -15282,6 +15317,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         videoFont: 'clean', videoSize: 104, videoInk: '#f4f1ea', videoWords: 'all', videoPlace: 'middle', videoQuotes: true, videoWordFill: 'solid',
         videoWordStops: ['#f2b880'], videoWordDir: 'down', videoWordShadow: false, videoWordShadowInk: '', videoWordShadowDark: 55,
         videoWordShadowSoft: 14, videoWordShadowFar: 2,
+        videoBox: false, videoBoxColor: '#000000', videoBoxClear: 40, videoBoxRound: 16, videoBoxWidth: 'fit',
         videoCaptions: true, videoCaptionInk: '#a9a49a', videoCapFill: 'solid', videoCapStops: ['#f2b880'], videoCapDir: 'right',
         videoNameFont: 'clean', videoNameSize: 92, videoNameColor: 'words', videoNameFill: 'solid', videoNameStops: ['#f2b880'],
         videoNameDir: 'right', videoNameShadow: false, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18,
@@ -15304,6 +15340,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         videoFont: 'book', videoSize: 106, videoInk: '#3b2a1a', videoWords: 'fade', videoPlace: 'middle', videoQuotes: true, videoWordFill: 'solid',
         videoWordStops: ['#f2b880'], videoWordDir: 'down', videoWordShadow: false, videoWordShadowInk: '', videoWordShadowDark: 55,
         videoWordShadowSoft: 14, videoWordShadowFar: 2,
+        videoBox: false, videoBoxColor: '#000000', videoBoxClear: 40, videoBoxRound: 16, videoBoxWidth: 'fit',
         videoCaptions: true, videoCaptionInk: '#9a4a1c', videoCapFill: 'solid', videoCapStops: ['#f2b880'], videoCapDir: 'right',
         videoNameFont: 'book', videoNameSize: 118, videoNameColor: 'words', videoNameFill: 'solid', videoNameStops: ['#f2b880'],
         videoNameDir: 'right', videoNameShadow: false, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18,
@@ -15333,6 +15370,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         videoFont: 'clean', videoSize: 100, videoInk: '#f5f3ee', videoWords: 'all', videoPlace: 'lower', videoQuotes: true, videoWordFill: 'solid',
         videoWordStops: ['#f2b880'], videoWordDir: 'down', videoWordShadow: true, videoWordShadowInk: '#000000', videoWordShadowDark: 90,
         videoWordShadowSoft: 6, videoWordShadowFar: 2,
+        videoBox: false, videoBoxColor: '#000000', videoBoxClear: 40, videoBoxRound: 16, videoBoxWidth: 'fit',
         videoCaptions: true, videoCaptionInk: '#f0c36a', videoCapFill: 'solid', videoCapStops: ['#f2b880'], videoCapDir: 'right',
         videoNameFont: 'clean', videoNameSize: 82, videoNameColor: 'words', videoNameFill: 'solid', videoNameStops: ['#f2b880'],
         videoNameDir: 'right', videoNameShadow: true, videoNameShadowInk: '#000000', videoNameShadowDark: 90, videoNameShadowSoft: 6,
@@ -15358,6 +15396,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         videoFont: 'clean', videoSize: 104, videoInk: '#7df9ff', videoWords: 'light', videoPlace: 'middle', videoQuotes: true,
         videoWordFill: 'solid', videoWordStops: ['#f2b880'], videoWordDir: 'down', videoWordShadow: true, videoWordShadowInk: '#00c8ff',
         videoWordShadowDark: 70, videoWordShadowSoft: 18, videoWordShadowFar: 0,
+        videoBox: false, videoBoxColor: '#000000', videoBoxClear: 40, videoBoxRound: 16, videoBoxWidth: 'fit',
         videoCaptions: true, videoCaptionInk: '#ff7ad9', videoCapFill: 'solid', videoCapStops: ['#f2b880'], videoCapDir: 'right',
         videoNameFont: 'clean', videoNameSize: 110, videoNameColor: 'words', videoNameFill: 'solid', videoNameStops: ['#f2b880'],
         videoNameDir: 'right', videoNameShadow: false, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18,
@@ -15391,6 +15430,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         videoFont: 'round', videoSize: 104, videoInk: '#4a1d3a', videoWords: 'blur', videoPlace: 'middle', videoQuotes: true, videoWordFill: 'solid',
         videoWordStops: ['#f2b880'], videoWordDir: 'down', videoWordShadow: false, videoWordShadowInk: '', videoWordShadowDark: 55,
         videoWordShadowSoft: 14, videoWordShadowFar: 2,
+        videoBox: false, videoBoxColor: '#000000', videoBoxClear: 40, videoBoxRound: 16, videoBoxWidth: 'fit',
         videoCaptions: true, videoCaptionInk: '#c25b7d', videoCapFill: 'solid', videoCapStops: ['#f2b880'], videoCapDir: 'right',
         videoNameFont: 'round', videoNameSize: 112, videoNameColor: 'words', videoNameFill: 'solid', videoNameStops: ['#f2b880'],
         videoNameDir: 'right', videoNameShadow: false, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18,
@@ -15416,6 +15456,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         videoFont: 'book', videoSize: 98, videoInk: '#d9dcd8', videoWords: 'fade', videoPlace: 'lower', videoQuotes: true, videoWordFill: 'solid',
         videoWordStops: ['#f2b880'], videoWordDir: 'down', videoWordShadow: true, videoWordShadowInk: '#000000', videoWordShadowDark: 90,
         videoWordShadowSoft: 20, videoWordShadowFar: 0,
+        videoBox: false, videoBoxColor: '#000000', videoBoxClear: 40, videoBoxRound: 16, videoBoxWidth: 'fit',
         videoCaptions: true, videoCaptionInk: '#c0504d', videoCapFill: 'solid', videoCapStops: ['#f2b880'], videoCapDir: 'right',
         videoNameFont: 'type', videoNameSize: 82, videoNameColor: 'words', videoNameFill: 'solid', videoNameStops: ['#f2b880'],
         videoNameDir: 'right', videoNameShadow: false, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18,
@@ -15438,6 +15479,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         videoFont: 'round', videoSize: 112, videoInk: '#1c1c1c', videoWords: 'light', videoPlace: 'middle', videoQuotes: true,
         videoWordFill: 'solid', videoWordStops: ['#f2b880'], videoWordDir: 'down', videoWordShadow: false, videoWordShadowInk: '',
         videoWordShadowDark: 55, videoWordShadowSoft: 14, videoWordShadowFar: 2,
+        videoBox: false, videoBoxColor: '#000000', videoBoxClear: 40, videoBoxRound: 16, videoBoxWidth: 'fit',
         videoCaptions: true, videoCaptionInk: '#c2185b', videoCapFill: 'solid', videoCapStops: ['#f2b880'], videoCapDir: 'right',
         videoNameFont: 'round', videoNameSize: 128, videoNameColor: 'kind', videoNameFill: 'solid', videoNameStops: ['#f2b880'],
         videoNameDir: 'right', videoNameShadow: false, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18,
@@ -15463,6 +15505,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         videoFont: 'type', videoSize: 96, videoInk: '#1f2a44', videoWords: 'appear', videoPlace: 'middle', videoQuotes: true, videoWordFill: 'solid',
         videoWordStops: ['#f2b880'], videoWordDir: 'down', videoWordShadow: false, videoWordShadowInk: '', videoWordShadowDark: 55,
         videoWordShadowSoft: 14, videoWordShadowFar: 2,
+        videoBox: false, videoBoxColor: '#000000', videoBoxClear: 40, videoBoxRound: 16, videoBoxWidth: 'fit',
         videoCaptions: true, videoCaptionInk: '#b03a2e', videoCapFill: 'solid', videoCapStops: ['#f2b880'], videoCapDir: 'right',
         videoNameFont: 'type', videoNameSize: 104, videoNameColor: 'words', videoNameFill: 'solid', videoNameStops: ['#f2b880'],
         videoNameDir: 'right', videoNameShadow: false, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18,
@@ -15495,6 +15538,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         videoFont: 'book', videoSize: 102, videoInk: '#ffe7c2', videoWords: 'fade', videoPlace: 'middle', videoQuotes: true, videoWordFill: 'solid',
         videoWordStops: ['#f2b880'], videoWordDir: 'down', videoWordShadow: true, videoWordShadowInk: '#1a0b02', videoWordShadowDark: 70,
         videoWordShadowSoft: 16, videoWordShadowFar: 2,
+        videoBox: false, videoBoxColor: '#000000', videoBoxClear: 40, videoBoxRound: 16, videoBoxWidth: 'fit',
         videoCaptions: true, videoCaptionInk: '#ff9f4a', videoCapFill: 'solid', videoCapStops: ['#f2b880'], videoCapDir: 'right',
         videoNameFont: 'clean', videoNameSize: 90, videoNameColor: 'words', videoNameFill: 'solid', videoNameStops: ['#f2b880'],
         videoNameDir: 'right', videoNameShadow: true, videoNameShadowInk: '#1a0b02', videoNameShadowDark: 65, videoNameShadowSoft: 18,
@@ -15517,6 +15561,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         videoFont: 'round', videoSize: 100, videoInk: '#f4f1ff', videoWords: 'blur', videoPlace: 'middle', videoQuotes: true, videoWordFill: 'solid',
         videoWordStops: ['#f2b880'], videoWordDir: 'down', videoWordShadow: true, videoWordShadowInk: '#0b1638', videoWordShadowDark: 60,
         videoWordShadowSoft: 16, videoWordShadowFar: 0,
+        videoBox: false, videoBoxColor: '#000000', videoBoxClear: 40, videoBoxRound: 16, videoBoxWidth: 'fit',
         videoCaptions: true, videoCaptionInk: '#f6d98b', videoCapFill: 'solid', videoCapStops: ['#f2b880'], videoCapDir: 'right',
         videoNameFont: 'round', videoNameSize: 108, videoNameColor: 'words', videoNameFill: 'solid', videoNameStops: ['#f2b880'],
         videoNameDir: 'right', videoNameShadow: false, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18,
@@ -15559,6 +15604,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         videoFont: 'type', videoSize: 100, videoInk: '#4dff7c', videoWords: 'appear', videoPlace: 'middle', videoQuotes: false,
         videoWordFill: 'solid', videoWordStops: ['#f2b880'], videoWordDir: 'down', videoWordShadow: true, videoWordShadowInk: '#00ff55',
         videoWordShadowDark: 45, videoWordShadowSoft: 10, videoWordShadowFar: 0,
+        videoBox: false, videoBoxColor: '#000000', videoBoxClear: 40, videoBoxRound: 16, videoBoxWidth: 'fit',
         videoCaptions: true, videoCaptionInk: '#b8ffcb', videoCapFill: 'solid', videoCapStops: ['#f2b880'], videoCapDir: 'right',
         videoNameFont: 'type', videoNameSize: 100, videoNameColor: 'words', videoNameFill: 'solid', videoNameStops: ['#f2b880'],
         videoNameDir: 'right', videoNameShadow: false, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18,
@@ -15601,6 +15647,191 @@ export function setup(ctx: Ctx, overrides?: any) {
           shape('ellipse', 0.07, 0.03, 16, 16, '#1f6b3a'),
           shape('text', 0.06, 0.93, 60, 44, '#4dff7c', { text: '>' }),
           shape('rect', 0.09, 0.93, 22, 40, '#4dff7c', { clear: 15 }),
+        ],
+      }),
+    },
+    {
+      id: 'dialogue',
+      name: 'Dialogue box',
+      suits: 'Roleplay, with the words in a box at the bottom like a story game.',
+      look: {
+        videoFont: 'clean', videoSize: 100, videoInk: '#f5f2ff', videoWords: 'appear', videoPlace: 'lower', videoQuotes: true,
+        videoWordFill: 'solid', videoWordStops: ['#f2b880'], videoWordDir: 'down', videoWordShadow: false, videoWordShadowInk: '',
+        videoWordShadowDark: 55, videoWordShadowSoft: 14, videoWordShadowFar: 2,
+        videoBox: true, videoBoxColor: '#141026', videoBoxClear: 12, videoBoxRound: 14, videoBoxWidth: 'wide',
+        videoCaptions: true, videoCaptionInk: '#c9bfff', videoCapFill: 'solid', videoCapStops: ['#f2b880'], videoCapDir: 'right',
+        videoNameFont: 'clean', videoNameSize: 110, videoNameColor: 'words', videoNameFill: 'solid', videoNameStops: ['#f2b880'],
+        videoNameDir: 'right', videoNameShadow: false, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18,
+        videoNameShadowFar: 2,
+        videoPicShape: 'rounded', videoPicSize: 200, videoPicRing: true, videoPicRingWidth: 2, videoPicMove: true, videoTwo: true,
+        videoMoodPics: true,
+        videoEdges: 25, videoEdgeColor: '#05060c', videoMove: 'dissolve', videoMoveSecs: 0.25,
+        videoTitleOn: true, videoFadeOut: 1, videoBylineInk: '#c9bfff', videoBylineFont: '', videoBylineFill: 'solid', videoBylineStops: ['#f2b880'],
+        videoBylineDir: 'right', videoBylineShadow: false, videoBylineShadowInk: '', videoBylineShadowDark: 65, videoBylineShadowSoft: 18,
+        videoBylineShadowFar: 0,
+        studioMusic: true,
+      },
+      back: backOf('Dialogue box', { color: '#3d4a6b', fill: 'linear', stops: ['#1c2238'], dir: 'down' }),
+    },
+    {
+      id: 'rain',
+      name: 'Rain on the window',
+      suits: 'Quiet, sad or thoughtful scenes on a gray day.',
+      look: {
+        videoFont: 'book', videoSize: 100, videoInk: '#f1f5f8', videoWords: 'fade', videoPlace: 'middle', videoQuotes: true, videoWordFill: 'solid',
+        videoWordStops: ['#f2b880'], videoWordDir: 'down', videoWordShadow: true, videoWordShadowInk: '#1c252d', videoWordShadowDark: 60,
+        videoWordShadowSoft: 14, videoWordShadowFar: 2,
+        videoBox: false, videoBoxColor: '#000000', videoBoxClear: 40, videoBoxRound: 16, videoBoxWidth: 'fit',
+        videoCaptions: true, videoCaptionInk: '#bcd3e3', videoCapFill: 'solid', videoCapStops: ['#f2b880'], videoCapDir: 'right',
+        videoNameFont: 'clean', videoNameSize: 96, videoNameColor: 'words', videoNameFill: 'solid', videoNameStops: ['#f2b880'],
+        videoNameDir: 'right', videoNameShadow: true, videoNameShadowInk: '#1c252d', videoNameShadowDark: 65, videoNameShadowSoft: 18,
+        videoNameShadowFar: 2,
+        videoPicShape: 'circle', videoPicSize: 140, videoPicRing: true, videoPicRingWidth: 2, videoPicMove: true, videoTwo: true,
+        videoMoodPics: true,
+        videoEdges: 40, videoEdgeColor: '#1a2128', videoMove: 'fade', videoMoveSecs: 0.6,
+        videoTitleOn: true, videoFadeOut: 2, videoBylineInk: '#bcd3e3', videoBylineFont: '', videoBylineFill: 'solid', videoBylineStops: ['#f2b880'],
+        videoBylineDir: 'right', videoBylineShadow: true, videoBylineShadowInk: '#1c252d', videoBylineShadowDark: 60, videoBylineShadowSoft: 14,
+        videoBylineShadowFar: 0,
+        studioMusic: true,
+      },
+      back: backOf('Rain on the window', {
+        kind: 'design', color: '#5d6b78', fill: 'linear', stops: ['#2c3640'], dir: 'down',
+        shapes: [
+          shape('ellipse', 0.06, 0.14, 7, 10, '#d6e2ec', { clear: 50 }),
+          shape('ellipse', 0.14, 0.33, 9, 13, '#d6e2ec', { clear: 58 }),
+          shape('ellipse', 0.21, 0.08, 11, 16, '#d6e2ec', { clear: 66 }),
+          shape('ellipse', 0.27, 0.62, 7, 10, '#d6e2ec', { clear: 74 }),
+          shape('ellipse', 0.09, 0.79, 9, 13, '#d6e2ec', { clear: 50 }),
+          shape('ellipse', 0.33, 0.88, 11, 16, '#d6e2ec', { clear: 58 }),
+          shape('ellipse', 0.42, 0.2, 7, 10, '#d6e2ec', { clear: 66 }),
+          shape('ellipse', 0.58, 0.11, 9, 13, '#d6e2ec', { clear: 74 }),
+          shape('ellipse', 0.66, 0.83, 11, 16, '#d6e2ec', { clear: 50 }),
+          shape('ellipse', 0.72, 0.27, 7, 10, '#d6e2ec', { clear: 58 }),
+          shape('ellipse', 0.79, 0.6, 9, 13, '#d6e2ec', { clear: 66 }),
+          shape('ellipse', 0.86, 0.14, 11, 16, '#d6e2ec', { clear: 74 }),
+          shape('ellipse', 0.93, 0.42, 7, 10, '#d6e2ec', { clear: 50 }),
+          shape('ellipse', 0.9, 0.86, 9, 13, '#d6e2ec', { clear: 58 }),
+          shape('ellipse', 0.17, 0.5, 11, 16, '#d6e2ec', { clear: 66 }),
+          shape('ellipse', 0.82, 0.93, 7, 10, '#d6e2ec', { clear: 74 }),
+          shape('ellipse', 0.38, 0.4, 9, 13, '#d6e2ec', { clear: 50 }),
+          shape('ellipse', 0.64, 0.46, 11, 16, '#d6e2ec', { clear: 58 }),
+          shape('rect', 0.11, 0.24, 3, 70, '#d6e2ec', { clear: 72 }),
+          shape('rect', 0.31, 0.7, 3, 100, '#d6e2ec', { clear: 72 }),
+          shape('rect', 0.69, 0.18, 3, 130, '#d6e2ec', { clear: 72 }),
+          shape('rect', 0.87, 0.55, 3, 70, '#d6e2ec', { clear: 72 }),
+          shape('rect', 0.47, 0.92, 3, 100, '#d6e2ec', { clear: 72 }),
+        ],
+      }),
+    },
+    {
+      id: 'sepia',
+      name: 'Sepia film',
+      suits: 'Old stories, westerns and memories from long ago.',
+      look: {
+        videoFont: 'book', videoSize: 104, videoInk: '#24180c', videoWords: 'all', videoPlace: 'middle', videoQuotes: true, videoWordFill: 'solid',
+        videoWordStops: ['#f2b880'], videoWordDir: 'down', videoWordShadow: false, videoWordShadowInk: '', videoWordShadowDark: 55,
+        videoWordShadowSoft: 14, videoWordShadowFar: 2,
+        videoBox: false, videoBoxColor: '#000000', videoBoxClear: 40, videoBoxRound: 16, videoBoxWidth: 'fit',
+        videoCaptions: true, videoCaptionInk: '#5a3a18', videoCapFill: 'solid', videoCapStops: ['#f2b880'], videoCapDir: 'right',
+        videoNameFont: 'book', videoNameSize: 104, videoNameColor: 'words', videoNameFill: 'solid', videoNameStops: ['#f2b880'],
+        videoNameDir: 'right', videoNameShadow: false, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18,
+        videoNameShadowFar: 2,
+        videoPicShape: 'rounded', videoPicSize: 140, videoPicRing: false, videoPicRingWidth: 3, videoPicMove: true, videoTwo: true,
+        videoMoodPics: true,
+        videoEdges: 45, videoEdgeColor: '#3a2814', videoMove: 'black', videoMoveSecs: 0.8,
+        videoTitleOn: true, videoFadeOut: 2, videoBylineInk: '#5a3a18', videoBylineFont: '', videoBylineFill: 'solid', videoBylineStops: ['#f2b880'],
+        videoBylineDir: 'right', videoBylineShadow: false, videoBylineShadowInk: '', videoBylineShadowDark: 65, videoBylineShadowSoft: 18,
+        videoBylineShadowFar: 0,
+        studioMusic: true,
+      },
+      back: backOf('Sepia film', {
+        kind: 'design', color: '#ead9b6', fill: 'radial', stops: ['#c4a578'],
+        shapes: [
+          shape('ellipse', 0.08, 0.2, 4, 4, '#2a1d10', { clear: 55 }),
+          shape('ellipse', 0.19, 0.71, 7, 7, '#2a1d10', { clear: 65 }),
+          shape('ellipse', 0.28, 0.12, 4, 4, '#2a1d10', { clear: 75 }),
+          shape('ellipse', 0.37, 0.86, 7, 7, '#2a1d10', { clear: 55 }),
+          shape('ellipse', 0.61, 0.08, 4, 4, '#2a1d10', { clear: 65 }),
+          shape('ellipse', 0.7, 0.77, 7, 7, '#2a1d10', { clear: 75 }),
+          shape('ellipse', 0.81, 0.3, 4, 4, '#2a1d10', { clear: 55 }),
+          shape('ellipse', 0.92, 0.62, 7, 7, '#2a1d10', { clear: 65 }),
+          shape('ellipse', 0.55, 0.95, 4, 4, '#2a1d10', { clear: 75 }),
+          shape('ellipse', 0.14, 0.45, 7, 7, '#2a1d10', { clear: 55 }),
+        ],
+      }),
+    },
+    {
+      id: 'radio',
+      name: 'On the radio',
+      suits: 'Talk shows, phone calls and stories told as a broadcast.',
+      look: {
+        videoFont: 'clean', videoSize: 104, videoInk: '#f2efe8', videoWords: 'light', videoPlace: 'middle', videoQuotes: true,
+        videoWordFill: 'solid', videoWordStops: ['#f2b880'], videoWordDir: 'down', videoWordShadow: true, videoWordShadowInk: '',
+        videoWordShadowDark: 55, videoWordShadowSoft: 14, videoWordShadowFar: 2,
+        videoBox: false, videoBoxColor: '#000000', videoBoxClear: 40, videoBoxRound: 16, videoBoxWidth: 'fit',
+        videoCaptions: true, videoCaptionInk: '#e0a030', videoCapFill: 'solid', videoCapStops: ['#f2b880'], videoCapDir: 'right',
+        videoNameFont: 'clean', videoNameSize: 104, videoNameColor: 'words', videoNameFill: 'solid', videoNameStops: ['#f2b880'],
+        videoNameDir: 'right', videoNameShadow: false, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18,
+        videoNameShadowFar: 2,
+        videoPicShape: 'circle', videoPicSize: 130, videoPicRing: true, videoPicRingWidth: 3, videoPicMove: true, videoTwo: true,
+        videoMoodPics: true,
+        videoEdges: 30, videoEdgeColor: '#000000', videoMove: 'dissolve', videoMoveSecs: 0.4,
+        videoTitleOn: true, videoFadeOut: 1.5, videoBylineInk: '#e0a030', videoBylineFont: '', videoBylineFill: 'solid',
+        videoBylineStops: ['#f2b880'], videoBylineDir: 'right', videoBylineShadow: false, videoBylineShadowInk: '', videoBylineShadowDark: 65,
+        videoBylineShadowSoft: 18, videoBylineShadowFar: 0,
+        studioMusic: true,
+      },
+      back: backOf('On the radio', {
+        kind: 'design', color: '#161514', fill: 'solid',
+        shapes: [
+          shape('round', 0.11, 0.1, 300, 90, '#c62828'),
+          shape('text', 0.11, 0.1, 230, 52, '#ffffff', { text: 'ON AIR' }),
+          shape('rect', 0.4, 0.86, 18, 30, '#e0a030', { clear: 15 }),
+          shape('rect', 0.42, 0.86, 18, 56, '#e0a030', { clear: 15 }),
+          shape('rect', 0.44, 0.86, 18, 90, '#e0a030', { clear: 15 }),
+          shape('rect', 0.46, 0.86, 18, 64, '#e0a030', { clear: 15 }),
+          shape('rect', 0.48, 0.86, 18, 120, '#e0a030', { clear: 15 }),
+          shape('rect', 0.5, 0.86, 18, 84, '#e0a030', { clear: 15 }),
+          shape('rect', 0.52, 0.86, 18, 46, '#e0a030', { clear: 15 }),
+          shape('rect', 0.54, 0.86, 18, 100, '#e0a030', { clear: 15 }),
+          shape('rect', 0.56, 0.86, 18, 70, '#e0a030', { clear: 15 }),
+          shape('rect', 0.58, 0.86, 18, 38, '#e0a030', { clear: 15 }),
+          shape('rect', 0.6, 0.86, 18, 60, '#e0a030', { clear: 15 }),
+        ],
+      }),
+    },
+    {
+      id: 'night',
+      name: 'After dark',
+      suits: 'Intimate and sexual scenes between adults, slow and warm.',
+      look: {
+        videoFont: 'book', videoSize: 102, videoInk: '#fbe9e7', videoWords: 'blur', videoPlace: 'middle', videoQuotes: true, videoWordFill: 'solid',
+        videoWordStops: ['#f2b880'], videoWordDir: 'down', videoWordShadow: true, videoWordShadowInk: '#12030a', videoWordShadowDark: 60,
+        videoWordShadowSoft: 16, videoWordShadowFar: 0,
+        videoBox: false, videoBoxColor: '#000000', videoBoxClear: 40, videoBoxRound: 16, videoBoxWidth: 'fit',
+        videoCaptions: true, videoCaptionInk: '#f4a6a0', videoCapFill: 'solid', videoCapStops: ['#f2b880'], videoCapDir: 'right',
+        videoNameFont: 'book', videoNameSize: 104, videoNameColor: 'words', videoNameFill: 'solid', videoNameStops: ['#f2b880'],
+        videoNameDir: 'right', videoNameShadow: false, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18,
+        videoNameShadowFar: 2,
+        videoPicShape: 'circle', videoPicSize: 140, videoPicRing: true, videoPicRingWidth: 2, videoPicMove: true, videoTwo: true,
+        videoMoodPics: true,
+        videoEdges: 45, videoEdgeColor: '#0a0205', videoMove: 'dissolve', videoMoveSecs: 0.9,
+        videoTitleOn: true, videoFadeOut: 3, videoBylineInk: '#f4a6a0', videoBylineFont: '', videoBylineFill: 'solid', videoBylineStops: ['#f2b880'],
+        videoBylineDir: 'right', videoBylineShadow: true, videoBylineShadowInk: '#12030a', videoBylineShadowDark: 60, videoBylineShadowSoft: 16,
+        videoBylineShadowFar: 0,
+        studioMusic: true,
+      },
+      back: backOf('After dark', {
+        kind: 'design', color: '#14040b', fill: 'linear', stops: ['#2e0914', '#5c1628'], dir: 'down',
+        shapes: [
+          shape('ellipse', 0.12, 0.2, 160, 160, '#ff7a6b', { clear: 86 }),
+          shape('ellipse', 0.22, 0.72, 90, 90, '#c2185b', { clear: 80 }),
+          shape('ellipse', 0.08, 0.55, 60, 60, '#ffb38a', { clear: 84 }),
+          shape('ellipse', 0.83, 0.18, 120, 120, '#c2185b', { clear: 84 }),
+          shape('ellipse', 0.91, 0.62, 180, 180, '#ff7a6b', { clear: 88 }),
+          shape('ellipse', 0.74, 0.85, 70, 70, '#ffb38a', { clear: 82 }),
+          shape('ellipse', 0.33, 0.1, 50, 50, '#ffb38a', { clear: 85 }),
+          shape('ellipse', 0.64, 0.06, 80, 80, '#ff7a6b', { clear: 88 }),
         ],
       }),
     },
@@ -17798,6 +18029,24 @@ export function setup(ctx: Ctx, overrides?: any) {
           set({ videoWords: v });
           look();
         }, 'Fade in by default: each word fades in as it is said.'));
+        b.appendChild(toggle('A box behind the words', 'Off by default. A box of one color behind the lines, which helps on a busy background.', 'videoBox', () => look(), () => [
+          colorRow('videoBoxColor', 'Color of the box', 'Black by default.', '--af-none', '#000000', 'Use black', look),
+          numberRow('How see-through, in percent', numOr(S.videoBoxClear, 40), 0, 90, 5, (v) => {
+            set({ videoBoxClear: v });
+            look();
+          }, '40 by default. 0 is solid.'),
+          numberRow('Rounded corners, in pixels', numOr(S.videoBoxRound, 16), 0, 60, 2, (v) => {
+            set({ videoBoxRound: v });
+            look();
+          }, '16 by default. 0 is square.'),
+          segmented('How wide', [
+            { id: 'fit', label: 'To the words' },
+            { id: 'wide', label: 'Across the frame' },
+          ], S.videoBoxWidth === 'wide' ? 'wide' : 'fit', (v) => {
+            set({ videoBoxWidth: v === 'wide' ? 'wide' : 'fit' });
+            look();
+          }),
+        ]));
         b.appendChild(segmented('Where the words sit', [
           { id: 'middle', label: 'Middle' },
           { id: 'lower', label: 'Lower third' },

@@ -5647,7 +5647,7 @@ if (section("templates")) {
     await wsSec(page, "Templates");
     await page.waitForFunction(() => [...document.querySelectorAll("[data-af-tpl] img")].every((i) => i.getAttribute("src")), null, { timeout: 30000 }).catch(() => {});
     const thumbs = await page.evaluate(() => [...document.querySelectorAll("[data-af-tpl] img")].map((i) => i.getAttribute("src") || ""));
-    check(thumbs.length >= 8 && thumbs.length <= 12 && thumbs.every(Boolean), size.name + ": there are 8 to 12 templates, each with a picture drawn (" + thumbs.length + ")");
+    check(thumbs.length >= 8 && thumbs.length <= 17 && thumbs.every(Boolean), size.name + ": there are 8 to 17 templates, each with a picture drawn (" + thumbs.length + ")");
     check(new Set(thumbs).size === thumbs.length, size.name + ": no two pictures are the same");
     // Each one tried on the preview, at the same moment: readable words.
     const ids = await page.evaluate(() => [...document.querySelectorAll("[data-af-tpl]")].map((b) => b.getAttribute("data-af-tpl")));
@@ -5658,7 +5658,7 @@ if (section("templates")) {
       await page.waitForTimeout(700);
       const got = await page.evaluate(async () => {
         const r = document.querySelector("[data-af-scrub] input");
-        r.value = "9.6";
+        r.value = "9.0"; // well inside a line, so a slow transition through black is not read as the words
         r.dispatchEvent(new Event("input", { bubbles: true }));
         await new Promise((x) => requestAnimationFrame(() => requestAnimationFrame(x)));
         const c = document.querySelector("[data-af-videopreview]");
@@ -5673,10 +5673,14 @@ if (section("templates")) {
         const bgs = [];
         for (let y = Math.floor(H * 0.35); y < H * 0.75; y += 4) for (const x of [Math.floor(W * 0.08), Math.floor(W * 0.92)]) bgs.push(lum((y * W + x) * 4));
         const bg = bgs.sort((a, b) => a - b)[Math.floor(bgs.length / 2)];
-        // The words: the pixels that differ most from it in the middle band.
+        // The words: the pixels with the most contrast against it in the
+        // middle band. Contrast, not distance: on a middle tone, the white
+        // letter on a picture is further from the background than dark
+        // words are, but reads less well.
         const vals = [];
         for (let y = Math.floor(H * 0.35); y < H * 0.85; y += 2) for (let x = Math.floor(W * 0.2); x < W * 0.8; x += 2) vals.push(lum((y * W + x) * 4));
-        vals.sort((a, b) => Math.abs(b - bg) - Math.abs(a - bg));
+        const ratioOf = (v) => (Math.max(v, bg) + 0.05) / (Math.min(v, bg) + 0.05);
+        vals.sort((a, b) => ratioOf(b) - ratioOf(a));
         const ink = vals[Math.floor(vals.length * 0.002)];
         const hi = Math.max(ink, bg), lo = Math.min(ink, bg);
         return { ratio: (hi + 0.05) / (lo + 0.05), png: c.toDataURL("image/png").split(",")[1] };
@@ -6162,6 +6166,88 @@ if (section("no keyboard")) {
   await context.close();
 }
 
+if (section("word box")) {
+  console.log("A box behind the words is drawn behind the lines, in its color, to the words or across the frame");
+  for (const size of SIZES) {
+    const count = (page) => page.evaluate(async () => {
+      const r = document.querySelector("[data-af-scrub] input");
+      r.step = "any";
+      r.value = "9.0";
+      r.dispatchEvent(new Event("input", { bubbles: true }));
+      await new Promise((x) => requestAnimationFrame(() => requestAnimationFrame(x)));
+      const c = document.querySelector("[data-af-videopreview]");
+      const d = c.getContext("2d").getImageData(0, 0, c.width, c.height).data;
+      let n = 0, lo = c.width, hi = 0;
+      for (let y = 0; y < c.height; y += 4) for (let x = 0; x < c.width; x += 4) { const i = (y * c.width + x) * 4; if (d[i] > 200 && d[i + 1] < 40 && d[i + 2] < 40) { n++; lo = Math.min(lo, x); hi = Math.max(hi, x); } }
+      return { n, span: n ? (hi - lo) / c.width : 0 };
+    });
+    const base = `Object.assign(window.__settings, { videoBoxColor: "#ff0000", videoBoxClear: 0, videoBoxRound: 8 });`;
+    const off = await open(THEMES[0], size, 1, base);
+    await openWs(off.page);
+    await off.page.waitForTimeout(800);
+    const a = await count(off.page);
+    await off.context.close();
+    const fit = await open(THEMES[0], size, 1, base + `window.__settings.videoBox = true;`);
+    await openWs(fit.page);
+    await fit.page.waitForTimeout(800);
+    const b = await count(fit.page);
+    await fit.context.close();
+    const wide = await open(THEMES[0], size, 1, base + `window.__settings.videoBox = true; window.__settings.videoBoxWidth = "wide";`);
+    await openWs(wide.page);
+    await wide.page.waitForTimeout(800);
+    const c = await count(wide.page);
+    const m = await wide.page.evaluate(MEASURE, size.touch);
+    check(a.n === 0 && b.n > 200 && c.span > b.span + 0.05, size.name + ": off draws no box, on draws one behind the line, and Across the frame is wider (" + [a.n, b.n, b.span.toFixed(2), c.span.toFixed(2)].join(", ") + ")");
+    check(!m.overflow.length && !m.small.length, size.name + ": the Studio fits. " + m.overflow.concat(m.small).slice(0, 2).join("; "));
+    await wide.context.close();
+  }
+}
+
+if (section("template scenes")) {
+  console.log("A template's background shows in every scene of the example, while tried and once used, even with an old second background in the list");
+  // An old background with no Use it for, as a reader may have.
+  const OLD = `window.__settings.videoBacks = [{ id: "main", name: "Main", kind: "color", color: "#101010", fill: "solid", stops: [], dir: "down", dim: 40, blur: 0, shapes: [], use: "match", moods: [], places: [] }, { id: "old2", name: "Old", kind: "color", color: "#00ff00", fill: "solid", stops: [], dir: "down", dim: 40, blur: 0, shapes: [], use: "match", moods: [], places: [] }]; window.__settings.videoBackPick = "main";`;
+  for (const size of SIZES) {
+    const { context, page, errors } = await open(THEMES[0], size, 1, OLD);
+    await openWs(page);
+    await wsSec(page, "Templates");
+    await page.waitForTimeout(800);
+    // The frame's edge, away from the words, in each scene, well inside
+    // each scene so no transition is under way.
+    const edges = (at) => page.evaluate(async (at) => {
+      const r = document.querySelector("[data-af-scrub] input");
+      r.step = "any";
+      r.value = String(at);
+      r.dispatchEvent(new Event("input", { bubbles: true }));
+      await new Promise((x) => requestAnimationFrame(() => requestAnimationFrame(x)));
+      const c = document.querySelector("[data-af-videopreview]");
+      const g = c.getContext("2d");
+      const out = [];
+      for (const [fx, fy] of [[0.03, 0.5], [0.97, 0.5], [0.5, 0.03], [0.25, 0.25], [0.75, 0.75]]) { const d = g.getImageData(Math.floor(c.width * fx), Math.floor(c.height * fy), 1, 1).data; out.push(d[0], d[1], d[2]); }
+      return out;
+    }, at);
+    const greenIn = (px) => { for (let i = 0; i < px.length; i += 3) if (px[i + 1] > 200 && px[i] < 60 && px[i + 2] < 60) return true; return false; };
+    const bad = [];
+    for (const t of TEMPLATE_LOOKS.map((x) => x.id).filter((id) => !process.env.UI_TPL_IDS || process.env.UI_TPL_IDS.split(",").includes(id))) {
+      await page.click('[data-af-tpl="' + t + '"]');
+      await page.waitForTimeout(900);
+      const a = await edges(9.0), b = await edges(20.2);
+      const far = a.some((v, i) => Math.abs(v - b[i]) > 40);
+      if (greenIn(b) || far) bad.push(t + (greenIn(b) ? " shows the old background" : " differs"));
+    }
+    check(!bad.length, size.name + ": every template tried shows its own background in both scenes. Not: " + bad.join(", "));
+    await page.click('[data-af-tpl="blush"]');
+    await page.waitForTimeout(600);
+    await page.click("[data-af-tpluse]");
+    await page.waitForTimeout(900);
+    const used = await edges(20.2);
+    check(!greenIn(used), size.name + ": after Use this template, the second scene uses the template's background, and the old one with no Use it for is not used");
+    check(await page.evaluate(() => window.__settings.videoBacks.some((b) => b.id === "old2")), size.name + ": and the old background stays in the list");
+    check(!errors.length, size.name + ": no page errors. " + errors.slice(0, 2).join(" | "));
+    await context.close();
+  }
+}
+
 if (section("snapping")) {
   console.log("A shape snaps to the middle with a guide, moves freely with the switch off or Alt held, and turns onto 90 degrees");
   for (const size of SIZES) for (const zoom of [1, 1.25, 0.85]) {
@@ -6451,7 +6537,8 @@ if (section("transition sweep")) {
         const one = (id, name, color) => ({ id, name, kind: "color", color, fill: "solid", stops: ["#2a1f3d"], dir: "down", dim: 40, blur: 0, shapes: [], use: "match", moods: [], places: [] });
         window.__settings.videoBacks = [one("main", "Main", "#000000")];
         window.__settings.videoBackPick = "main";
-        if (set.two) window.__settings.videoBacks.push(one("b2", "Morning", "#202838"));
+        // Used for the example's second scene, a calm morning.
+        if (set.two) window.__settings.videoBacks.push(Object.assign(one("b2", "Morning", "#202838"), { moods: ["calm"] }));
         const rest = Object.assign({}, set); delete rest.two;
         Object.assign(window.__settings, rest);
       })()`);
