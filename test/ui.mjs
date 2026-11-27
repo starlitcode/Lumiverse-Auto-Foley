@@ -414,7 +414,7 @@ window.__ctx = {
       return [{ name: 'face.png', mimeType: 'image/png', bytes: new Uint8Array(await b.arrayBuffer()) }];
     },
   },
-  permissions: { getGranted: async () => (window.__granted || ['generation', 'decisions', 'ui_panels', 'app_manipulation']).slice() },
+  permissions: { getGranted: async () => (window.__granted || ['generation', 'decisions', 'cors_proxy', 'ui_panels', 'app_manipulation']).slice() },
   events: { on(name, fn) { (listeners[name] = listeners[name] || []).push(fn); return () => { listeners[name] = listeners[name].filter((f) => f !== fn); }; } },
   sendToBackend(msg) { window.__sent.push(msg); answer(msg); },
   onBackendMessage(fn) { backendFns.add(fn); return () => backendFns.delete(fn); },
@@ -634,7 +634,8 @@ if (section("scale")) {
 
 if (section("perform")) {
   console.log("Performing a message from its button");
-  const { context, page, errors } = await open(THEMES[0], SIZES[1]);
+  // CORS proxy refused, so Debug info can be seen to name it.
+  const { context, page, errors } = await open(THEMES[0], SIZES[1], 1, "window.__granted = ['generation', 'decisions', 'ui_panels', 'app_manipulation'];");
   const btn = page.locator('#mount [data-af-slot="message"]');
   check((await btn.count()) === 1, "the message gets one Auto Foley button");
   check((await btn.getAttribute("class")).includes("_actionBtn_ab12c_3"), "the button wears the host button's class");
@@ -4995,7 +4996,8 @@ if (section("workspace")) {
   // Without App manipulation: Lumiverse's own window, as large as it goes,
   // with a note on how to get full screen.
   for (const size of SIZES) {
-    const { context, page, errors } = await open(THEMES[0], size, 1, () => { window.__noApp = true; });
+    // App manipulation refused, as Lumiverse reports it.
+    const { context, page, errors } = await open(THEMES[0], size, 1, "window.__noApp = true; window.__granted = ['generation', 'decisions', 'ui_panels'];");
     await openWs(page);
     const m = await page.evaluate(() => {
       const w = document.querySelector("[data-af-ws]");
@@ -6707,6 +6709,95 @@ if (section("quiet speaker")) {
   // The quiet one is the half whose picture changed most from No change.
   const side = Math.abs(fade.left.dist - none.left.dist) > Math.abs(fade.right.dist - none.right.dist) ? "left" : "right";
   check(none[side].n > 0 && fade[side].dist < none[side].dist - 10 && fade[side].lum > dark[side].lum + 20, size.name + ": with Fade the quiet picture moves toward the background color, and with Darken it goes darker (" + JSON.stringify({ side, none: none[side], fade: fade[side], dark: dark[side] }) + ")");
+}
+
+if (section("lock and focus")) {
+  console.log("A locked shape stays put but can be picked; Lock all stops every shape; the timeline locks; focus mode shows only the preview");
+  const SHAPES = `window.__settings.videoBacks = [{ id: "main", name: "Main", kind: "design", color: "#202020", fill: "solid", stops: [], dir: "down", dim: 40, blur: 0, shapes: [{ id: "s1", kind: "rect", x: 0.3, y: 0.3, w: 300, h: 200, rot: 0, fill: "#ff0000", grad: "none", stops: [], dir: "down", clear: 0, text: "", lock: true }, { id: "s2", kind: "ellipse", x: 0.7, y: 0.7, w: 240, h: 240, rot: 0, fill: "#00ff00", grad: "none", stops: [], dir: "down", clear: 0, text: "" }], use: "match", moods: [], places: [] }]; window.__settings.videoBackPick = "main";`;
+  for (const size of SIZES) {
+    for (const z of size.touch ? [1] : [1, 1.25, 0.85]) {
+      const say = size.name + (z !== 1 ? " at " + z : "");
+      const { context, page, errors } = await open(THEMES[0], size, z, SHAPES);
+      await openWs(page);
+      await wsSec(page, "Background");
+      await page.waitForTimeout(600);
+      const pos = () => page.evaluate(() => window.__settings.videoBacks[0].shapes.map((x) => [x.id, x.x, x.y, x.w, x.rot]));
+      const canvasAt = async (fx, fy) => { const r = await page.locator("[data-af-videopreview]").boundingBox(); return [r.x + r.width * fx, r.y + r.height * fy]; };
+      const dragFrom = async (fx, fy, dx, dy) => {
+        const [x, y] = await canvasAt(fx, fy);
+        await page.mouse.move(x, y); await page.mouse.down();
+        for (let k = 1; k <= 5; k++) await page.mouse.move(x + (dx * k) / 5, y + (dy * k) / 5);
+        await page.mouse.up(); await page.waitForTimeout(500);
+      };
+      const before = await pos();
+      await dragFrom(0.3, 0.3, 80, 40);
+      const afterLocked = await pos();
+      const picked = await page.evaluate(() => !!document.querySelector('[data-af-shape-act="lock"][aria-pressed="true"]'));
+      check(JSON.stringify(afterLocked[0]) === JSON.stringify(before[0]) && picked, say + ": a drag on a locked shape picks it but does not move it");
+      await page.keyboard.press("Delete");
+      await page.waitForTimeout(300);
+      await page.locator("[data-af-videopreview]").focus();
+      await page.keyboard.press("ArrowRight");
+      await page.waitForTimeout(400);
+      check((await pos()).length === 2 && JSON.stringify((await pos())[0]) === JSON.stringify(before[0]), say + ": Delete and the arrow keys leave it as it is");
+      await dragFrom(0.7, 0.7, -60, -30);
+      const moved = await pos();
+      check(moved[1][1] !== before[1][1], say + ": an unlocked shape still moves");
+      await page.click('[data-af-ws="lockall"]');
+      await page.waitForTimeout(300);
+      const was = await pos();
+      await dragFrom(0.7 + (moved[1][1] - before[1][1]), 0.7 + (moved[1][2] - before[1][2]), 60, 30);
+      check(JSON.stringify(await pos()) === JSON.stringify(was) && (await page.getAttribute('[data-af-ws="lockall"]', "aria-pressed")) === "true", say + ": Lock all stops every shape, and shows that it is on");
+      await page.click('[data-af-ws="lockall"]');
+      // Focus mode.
+      const panelScroll = await page.evaluate(() => { const p = document.querySelector("[data-af-ws-panel]"); p.scrollTop = 120; return p.scrollTop; });
+      const pvBefore = (await page.locator("[data-af-videopreview]").boundingBox()).width;
+      await page.click('[data-af-ws="focus"]');
+      await page.waitForTimeout(600);
+      const inFocus = await page.evaluate(() => ({ rail: getComputedStyle(document.querySelector("[data-af-ws-rail]")).display, panel: getComputedStyle(document.querySelector("[data-af-ws-panel]")).display, line: (() => { const l = document.querySelector("[data-af-timeline]"); return !l || getComputedStyle(l).display === "none" || l.hidden; })(), play: !!document.querySelector('[data-af-studio="play"]').offsetParent }));
+      const pvFocus = (await page.locator("[data-af-videopreview]").boundingBox()).width;
+      check(inFocus.rail === "none" && inFocus.panel === "none" && inFocus.line && inFocus.play && pvFocus >= pvBefore, say + ": focus hides the rails and the timeline, keeps Play, and the preview takes the space (" + Math.round(pvBefore) + " to " + Math.round(pvFocus) + ")");
+      if (size.touch) {
+        const [x, y] = await canvasAt(0.95, 0.05);
+        await page.touchscreen.tap(x, y);
+        await page.waitForTimeout(300);
+        const hidden = await page.evaluate(() => document.querySelector("[data-af-ws]").hasAttribute("data-af-focus-idle"));
+        await page.touchscreen.tap(x, y);
+        await page.waitForTimeout(300);
+        const shown = await page.evaluate(() => !document.querySelector("[data-af-ws]").hasAttribute("data-af-focus-idle"));
+        check(hidden && shown, say + ": a tap on the preview hides the controls, and another shows them");
+      } else {
+        await page.waitForTimeout(3300);
+        const idle = await page.evaluate(() => document.querySelector("[data-af-ws]").hasAttribute("data-af-focus-idle"));
+        await page.mouse.move(20, 20);
+        await page.waitForTimeout(200);
+        const back = await page.evaluate(() => !document.querySelector("[data-af-ws]").hasAttribute("data-af-focus-idle"));
+        check(idle && back, say + ": the controls fade after a few seconds, and come back when the mouse moves");
+      }
+      await page.keyboard.press("Escape");
+      await page.waitForTimeout(600);
+      const after = await page.evaluate(() => ({ focus: document.querySelector("[data-af-ws]").hasAttribute("data-af-focus"), open: !!document.querySelector("[data-af-ws]"), scroll: document.querySelector("[data-af-ws-panel]").scrollTop }));
+      check(!after.focus && after.open && after.scroll === panelScroll, say + ": Escape leaves focus first, with the panel where it was (" + JSON.stringify(after) + ")");
+      // The timeline lock, with a performance.
+      if (z === 1) {
+        await page.evaluate(() => { window.__wav = [0.2, 0.8]; window.__clipMs = 200; });
+        await pressMessage(page);
+        await page.waitForTimeout(2500);
+        await wsSec(page, "The performance and scenes");
+        await page.waitForTimeout(800);
+        if (await page.$("[data-af-linelock]")) {
+          await page.click("[data-af-linelock]");
+          await page.waitForTimeout(800);
+          const locked = await page.evaluate(() => ({ handles: document.querySelectorAll("[data-af-trimh]").length, cut: document.querySelector("[data-af-cut]").disabled }));
+          check(locked.handles === 0 && locked.cut, say + ": Lock the timeline takes the trim handles away and turns Cut it out off");
+        }
+      }
+      const m = await page.evaluate(MEASURE, size.touch);
+      check(!m.overflow.length && !m.small.length, say + ": it fits. " + m.overflow.concat(m.small).slice(0, 2).join("; "));
+      check(!errors.length, say + ": no page errors. " + errors.slice(0, 2).join(" | "));
+      await context.close();
+    }
+  }
 }
 
 if (section("snapping")) {

@@ -1575,6 +1575,16 @@ textarea.af-bigta { flex: 1; min-height: 0; resize: none; }
 .af-ws-main { position: relative; }
 .af-ws-ob { position: absolute; width: 4px; border-radius: 999px; background: var(--af-line-hover); opacity: 0; pointer-events: none; transition: opacity .2s ease; z-index: 3; }
 .af-ws-ob[data-on] { opacity: .9; }
+/* Focus: only the preview, where it plays, and Exit focus. */
+.af-ws[data-af-focus] .af-ws-rail, .af-ws[data-af-focus] .af-ws-panel, .af-ws[data-af-focus] .af-ws-picker, .af-ws[data-af-focus] .af-ws-ob { display: none !important; }
+.af-ws[data-af-focus] .af-ws-main { display: flex; flex-direction: column; }
+.af-ws[data-af-focus] .af-ws-stage { flex: 1 1 auto; max-height: none; border: 0; justify-content: center; }
+.af-ws[data-af-focus] .af-ws-stage *:not([data-af-focuskeep]):not(:has([data-af-focuskeep])):not([data-af-focuskeep] *) { display: none !important; }
+.af-ws[data-af-focus] .af-ws-stage .af-videopreview { max-height: calc(100cqh - 150px); }
+.af-ws[data-af-focus] .af-ws-acts > :not([data-af-ws="focus"]) { display: none; }
+.af-ws [data-af-focuskeep]:not(canvas), .af-ws .af-ws-top { transition: opacity .4s ease; }
+.af-ws[data-af-focus][data-af-focus-idle] [data-af-focuskeep]:not(canvas), .af-ws[data-af-focus][data-af-focus-idle] .af-ws-top { opacity: 0; pointer-events: none; }
+.af-ws[data-af-still] [data-af-focuskeep], .af-ws[data-af-still] .af-ws-top { transition: none; }
 .af[data-af-still] .af-ws-ob, .af-ws[data-af-still] .af-ws-ob { transition: none; }
 .af :focus-visible { outline: none; }
 
@@ -1991,6 +2001,8 @@ const DEFAULTS: any = {
   studioLoud: true,
   studioKeys: true,
   studioSnap: true,
+  studioLockAll: false,
+  studioLockLine: false,
   audioSplit: 'one',
   videoShape: 'wide',
   videoFont: 'book',
@@ -3996,7 +4008,7 @@ export function setup(ctx: Ctx, overrides?: any) {
   // speech bubble's tail points to, thick a ring's thickness in percent.
   // line and lineW are an outline, flipX and flipY mirror it. ink is the
   // color of a face's eyes and nose, and blush gives a face pink cheeks.
-  interface VideoShapeDef { id: string; kind: ShapeKind; x: number; y: number; w: number; h: number; rot: number; fill: string; grad: 'none' | 'linear' | 'radial'; stops: string[]; dir: string; clear: number; text: string; fill2?: string; points?: number; depth?: number; sides?: number; tail?: string; thick?: number; line?: string; lineW?: number; flipX?: boolean; flipY?: boolean; ink?: string; blush?: boolean }
+  interface VideoShapeDef { id: string; kind: ShapeKind; x: number; y: number; w: number; h: number; rot: number; fill: string; grad: 'none' | 'linear' | 'radial'; stops: string[]; dir: string; clear: number; text: string; fill2?: string; points?: number; depth?: number; sides?: number; tail?: string; thick?: number; line?: string; lineW?: number; flipX?: boolean; flipY?: boolean; ink?: string; blush?: boolean; lock?: boolean }
   // fill, stops and dir are A color of your own's fill: one color, or a
   // gradient from color through each stop.
   interface VideoBack { id: string; name: string; kind: 'dark' | 'color' | 'picture' | 'design'; color: string; fill: 'solid' | 'linear' | 'radial'; stops: string[]; dir: string; dim: number; blur: number; shapes: VideoShapeDef[]; use: 'match' | 'hand'; moods: string[]; places: string[] }
@@ -14657,7 +14669,7 @@ export function setup(ctx: Ctx, overrides?: any) {
   const shapeName = (sh: VideoShapeDef, n: number) => {
     const kind = (SHAPE_KINDS.find((k) => k.id === sh.kind) || SHAPE_KINDS[0]).label;
     const words = sh.kind === 'text' && String(sh.text || '').trim() ? ': ' + String(sh.text).trim().slice(0, 24) : '';
-    return n + 1 + '. ' + kind + words;
+    return n + 1 + '. ' + kind + words + (sh.lock ? ', locked' : '');
   };
   // The background drawn again with the shapes as they are now, then the
   // preview. Once a frame at most, since a drag moves many times a frame.
@@ -14943,6 +14955,21 @@ export function setup(ctx: Ctx, overrides?: any) {
     box('h', 'Height', sh.h, 2, 4000, 'In pixels of a 1080-pixel frame.', (v) => (sh.h = v));
     box('rot', 'Turn, in degrees', sh.rot, -180, 180, '0 is level.', (v) => (sh.rot = v));
     r.editor.appendChild(grid);
+    const locked = shapeLocked(sh);
+    for (const b of Array.from(grid.querySelectorAll('input'))) (b as HTMLInputElement).disabled = locked;
+    const lockRow = el('<div class="af-row af-wrap"></div>');
+    const lockBtn = button(sh.lock ? 'Unlock' : 'Lock', () => {
+      sh.lock = !sh.lock;
+      saveDesignSoon(true);
+      drawDesign();
+      redrawDesign();
+    });
+    lockBtn.setAttribute('aria-pressed', sh.lock ? 'true' : 'false');
+    lockBtn.setAttribute('data-af-shape-act', 'lock');
+    lockRow.appendChild(lockBtn);
+    if (S.studioLockAll) lockRow.appendChild(hint('Lock all is on, at the top, so every shape stays where it is.'));
+    else if (sh.lock) lockRow.appendChild(hint('Locked: it cannot be moved, sized, turned or deleted.'));
+    r.editor.appendChild(lockRow);
     const row = el('<div class="af-row af-wrap"></div>');
     const keyed = (b: HTMLButtonElement, keys: string) => {
       if (S.studioKeys === false) return;
@@ -14990,9 +15017,16 @@ export function setup(ctx: Ctx, overrides?: any) {
   }
   // What the buttons under a picked shape do, and the keys that do the
   // same. Each gives back whether it acted.
+  // A locked shape, or every shape while Lock all is on, cannot be moved,
+  // sized, turned, nudged or deleted. It can still be picked.
+  const shapeLocked = (sh: VideoShapeDef | null | undefined) => !!sh && (!!sh.lock || !!S.studioLockAll);
   function shapeAct(what: 'dup' | 'forward' | 'back' | 'delete'): boolean {
     const sh = shapeNow();
     if (!sh) return false;
+    if (what === 'delete' && shapeLocked(sh)) {
+      keepSaid('This shape is locked. Unlock it to delete it.');
+      return true;
+    }
     const all = shapesNow();
     const at = all.indexOf(sh);
     if (what === 'dup') {
@@ -15129,6 +15163,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         }
       }
       stopPreview();
+      designHit = !!(hit && mode);
       if (!hit || !mode) {
         if (designSel) {
           designSel = '';
@@ -15141,6 +15176,11 @@ export function setup(ctx: Ctx, overrides?: any) {
       if (designSel !== hit.id) {
         designSel = hit.id;
         drawDesign();
+      }
+      // A locked shape is picked, so it can be unlocked, and never moved.
+      if (shapeLocked(hit)) {
+        redrawDesign();
+        return;
       }
       drag = { mode, id: hit.id, px: p.x, py: p.y, x0: hit.x, y0: hit.y };
       try {
@@ -18214,6 +18254,8 @@ export function setup(ctx: Ctx, overrides?: any) {
   function openStudio(section?: string, then?: () => void) {
     if (section) wsSection = section;
     closeDrawer();
+    // Read again, so a notice about a permission is right in the Studio.
+    void readGranted();
     if (ws && ws.box.isConnected && !ws.closing) {
       if (section) renderWorkspace();
       focusWs();
@@ -18363,6 +18405,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     if (!w) return;
     ws = null;
     keptScale = 0;
+    wsFocus = false;
     wsDraw = null;
     clearInterval(w.watch);
     w.box.removeEventListener('keydown', wsKey);
@@ -18449,6 +18492,60 @@ export function setup(ctx: Ctx, overrides?: any) {
     };
     box.addEventListener('scroll', paint, { passive: true });
   }
+  // Focus: the parts list, the settings and the timeline fade away, and the
+  // preview takes the space, still editable. Its few controls stay, and on
+  // a laptop they fade after a few seconds without the mouse moving.
+  let wsFocus = false;
+  let focusIdle: any = null;
+  // Where the settings were scrolled when focus mode began.
+  let focusScroll = 0;
+  // Whether the last press on the preview picked a shape.
+  let designHit = false;
+  function setFocus(on: boolean) {
+    const w = ws;
+    if (!w || wsFocus === on) return;
+    const main = w.box.querySelector('.af-ws-main') as HTMLElement | null;
+    const panel = w.box.querySelector('[data-af-ws-panel]') as HTMLElement | null;
+    if (on && panel) focusScroll = panel.scrollTop;
+    const swap = () => {
+      wsFocus = on;
+      if (on) w.box.setAttribute('data-af-focus', '');
+      else w.box.removeAttribute('data-af-focus');
+      const btn = w.box.querySelector('[data-af-ws="focus"] span:last-child') as HTMLElement | null;
+      if (btn) setText(btn, on ? 'Exit focus' : 'Focus');
+      if (panel && !on) panel.scrollTop = focusScroll;
+      focusAwake();
+      paintPreview();
+    };
+    if (!main || calm()) return swap();
+    // Fade out, change the layout, fade in with a short slide, so the
+    // preview never jumps to its new size in view.
+    try {
+      const out = main.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 120, easing: 'ease-in', fill: 'forwards' });
+      out.onfinish = () => {
+        swap();
+        out.cancel();
+        main.animate([{ opacity: 0, transform: 'translateY(4px)' }, { opacity: 1, transform: 'none' }], { duration: 180, easing: 'ease-out' });
+      };
+    } catch (_) {
+      swap();
+    }
+  }
+  // The controls show, then fade after three seconds with no mouse move.
+  // A tap on the preview shows or hides them on a phone.
+  function focusAwake() {
+    const w = ws;
+    if (!w) return;
+    w.box.removeAttribute('data-af-focus-idle');
+    if (focusIdle) clearTimeout(focusIdle);
+    focusIdle = null;
+    if (!wsFocus || !fromMouse()) return;
+    focusIdle = setTimeout(() => {
+      timers.delete(focusIdle);
+      if (wsFocus && ws) ws.box.setAttribute('data-af-focus-idle', '');
+    }, 3000);
+    timers.add(focusIdle);
+  }
   function renderWorkspace() {
     const w = ws;
     if (!w || w.closing) return;
@@ -18496,6 +18593,20 @@ export function setup(ctx: Ctx, overrides?: any) {
     redoBtn.setAttribute('data-af-ws', 'redo');
     acts.appendChild(undoBtn);
     acts.appendChild(redoBtn);
+    const lockAll = button(S.studioLockAll ? 'Locked' : 'Lock all', () => {
+      set({ studioLockAll: !S.studioLockAll });
+      setText(lockAll.querySelector('span:last-child') as HTMLElement, S.studioLockAll ? 'Locked' : 'Lock all');
+      lockAll.setAttribute('aria-pressed', S.studioLockAll ? 'true' : 'false');
+      drawDesign();
+    }, 'af-ws-undo');
+    lockAll.setAttribute('aria-pressed', S.studioLockAll ? 'true' : 'false');
+    lockAll.setAttribute('data-af-ws', 'lockall');
+    lockAll.title = 'Lock every shape where it is, so nothing moves by accident';
+    acts.appendChild(lockAll);
+    const focusBtn = button('Focus', () => setFocus(!wsFocus), 'af-ws-undo');
+    focusBtn.setAttribute('data-af-ws', 'focus');
+    focusBtn.title = 'Show only the preview (\\)';
+    acts.appendChild(focusBtn);
     const keysBtn = button('Keyboard shortcuts', () => showKeyList(keysBtn), 'af-ws-keysbtn', ICON_KEYS);
     keysBtn.setAttribute('data-af-ws', 'keys');
     keysBtn.title = 'Keyboard shortcuts (?)';
@@ -18529,6 +18640,15 @@ export function setup(ctx: Ctx, overrides?: any) {
     paintProjectName();
     w.box.appendChild(main);
     for (const region of [panel, rail, stage]) overlayBar(main, region);
+    if (wsFocus) w.box.setAttribute('data-af-focus', '');
+    // Listened for once on the workspace, which stays while it is drawn
+    // again.
+    if (!w.box.hasAttribute('data-af-focuswatch')) {
+      w.box.setAttribute('data-af-focuswatch', '');
+      w.box.addEventListener('pointermove', (e: PointerEvent) => {
+        if (wsFocus && e.pointerType === 'mouse') focusAwake();
+      });
+    }
     paintPermissionNotes();
     wsDraw = { panel, rail, picker: pickRow.querySelector('select') as HTMLSelectElement | null, secs, undo: undoBtn, redo: redoBtn };
     paintUndo();
@@ -18642,7 +18762,9 @@ export function setup(ctx: Ctx, overrides?: any) {
       // A handle at each end of a performance: drag the start one to cut
       // the beginning, the end one to cut the end. The preview shows the
       // frame at the handle while it moves.
-      if (sh && v.mix) {
+      // Locked, the timeline shows no handles, so nothing is trimmed by
+      // accident.
+      if (sh && v.mix && !S.studioLockLine) {
         for (const end of [false, true]) {
           const h = el('<button type="button" class="af-ws-trimh"></button>') as HTMLButtonElement;
           h.setAttribute('data-af-trimh', end ? 'end' : 'start');
@@ -18749,6 +18871,10 @@ export function setup(ctx: Ctx, overrides?: any) {
     const v = studioView;
     const sh = v.sh;
     if (!sh || !lineSel.size) return false;
+    if (S.studioLockLine) {
+      keepSaid('The timeline is locked. Unlock it to cut or trim.');
+      return true;
+    }
     if (lineSel.size > 1 && !(await askSure('Cut it out', lineSel.size + ' parts are cut out of the video and the audio. Put back, on the timeline, or Undo brings them back.', 'Cut them out'))) return true;
     cutUndo.push(Array.from(cutOut(sh)));
     setCutOut(sh, Array.from(cutOut(sh)).concat(Array.from(lineSel)));
@@ -18759,6 +18885,7 @@ export function setup(ctx: Ctx, overrides?: any) {
   function putBackCut(ks: number[]) {
     const sh = studioView.sh;
     if (!sh) return;
+    if (S.studioLockLine) return keepSaid('The timeline is locked. Unlock it to put a part back.');
     cutUndo.push(Array.from(cutOut(sh)));
     setCutOut(sh, Array.from(cutOut(sh)).filter((k) => ks.indexOf(k) < 0));
     afterCut(sh, 'Put back.');
@@ -18916,8 +19043,9 @@ export function setup(ctx: Ctx, overrides?: any) {
     ['I and O', 'A range starts or ends where the bar is'],
     ['Delete, with parts picked', 'Cut the parts picked out, asking first for more than one'],
     [MOD + ' and S', 'Say that everything is saved'],
+    ['\\', 'Focus: only the preview, or back'],
     ['?', 'This list'],
-    ['Escape', 'Close a pop-up, then full screen, then the Studio'],
+    ['Escape', 'Close a pop-up, then full screen, then focus, then the Studio'],
   ];
   function drawKeyHelp(b: HTMLElement) {
     b.appendChild(toggle('Keyboard shortcuts', 'On by default. Turn off if a key clashes with something else you use. Every action also has a button.', 'studioKeys'));
@@ -18999,6 +19127,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       if (key === 'Escape') {
         if (hintPop) hideHint();
         else if (keyPop) hideKeyList();
+        else if (wsFocus) setFocus(false);
         else closeStudio();
         return true;
       }
@@ -19040,6 +19169,10 @@ export function setup(ctx: Ctx, overrides?: any) {
         showKeyList();
         return true;
       }
+      if (key === '\\' && !e.shiftKey) {
+        setFocus(!wsFocus);
+        return true;
+      }
       if (!studioRefs) return false;
       const v = studioView;
       const shown = !!v.sh || !!v.example;
@@ -19079,6 +19212,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     const sh = shapeNow();
     const st = studioView.st;
     if (!sh || !st) return false;
+    if (shapeLocked(sh)) return true;
     const u = Math.min(st.w, st.h) / 1080;
     sh.x = Math.max(-0.5, Math.min(1.5, sh.x + (dx * u) / st.w));
     sh.y = Math.max(-0.5, Math.min(1.5, sh.y + (dy * u) / st.h));
@@ -19469,6 +19603,14 @@ export function setup(ctx: Ctx, overrides?: any) {
       vc.appendChild(pick);
     }
     vc.appendChild(canvas);
+    canvas.setAttribute('data-af-focuskeep', '');
+    // In focus mode on a phone, a tap on the preview shows or hides its
+    // controls. A tap that picks a shape keeps them as they are.
+    canvas.addEventListener('pointerup', (e: PointerEvent) => {
+      if (!wsFocus || !ws || e.pointerType === 'mouse' || (designing && designHit)) return;
+      if (ws.box.hasAttribute('data-af-focus-idle')) ws.box.removeAttribute('data-af-focus-idle');
+      else ws.box.setAttribute('data-af-focus-idle', '');
+    });
     const exampleNote = el('<p class="af-note" data-af-example role="status" hidden></p>');
     vc.appendChild(exampleNote);
     // Where in the video the preview is. Its length changes with the
@@ -19487,6 +19629,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       paintStudio();
     });
     scrubRow.appendChild(scrub);
+    scrubRow.setAttribute('data-af-focuskeep', '');
     vc.appendChild(scrubRow);
     // The parts as blocks along the video. A press on one goes to it.
     const line = el('<div class="af-ws-line" role="group" aria-label="The parts, in order" data-af-timeline hidden></div>');
@@ -19503,6 +19646,14 @@ export function setup(ctx: Ctx, overrides?: any) {
     cutBtns.appendChild(cutBtn);
     cutBtns.appendChild(rFrom);
     cutBtns.appendChild(rTo);
+    const lineLock = button(S.studioLockLine ? 'Unlock the timeline' : 'Lock the timeline', () => {
+      set({ studioLockLine: !S.studioLockLine });
+      renderWorkspace();
+    });
+    lineLock.setAttribute('aria-pressed', S.studioLockLine ? 'true' : 'false');
+    lineLock.setAttribute('data-af-linelock', '');
+    cutBtns.appendChild(lineLock);
+    if (S.studioLockLine) cutBtn.disabled = true;
     vc.appendChild(cutRow);
     // Trims from where the preview is. The preview shows the trimmed video,
     // so its place is counted from the trim's start.
@@ -19547,6 +19698,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     full.setAttribute('data-af-studio', 'full');
     vRow.appendChild(play);
     vRow.appendChild(full);
+    vRow.setAttribute('data-af-focuskeep', '');
     topActs.insertBefore(make, topActs.firstChild);
     vc.appendChild(vRow);
     const said = el('<p class="af-note" data-af-studio="said" role="status"></p>');
@@ -20827,7 +20979,10 @@ export function setup(ctx: Ctx, overrides?: any) {
     if (!Array.isArray(got)) return;
     const was = JSON.stringify(granted);
     granted = got.slice();
-    if (JSON.stringify(granted) !== was && alive) renderTab();
+    if (JSON.stringify(granted) !== was && alive) {
+      renderTab();
+      if (ws && !ws.closing) paintPermissionNotes();
+    }
   }
   // A mark of every built-in text the panel can show: the prompt, the notes,
   // the Decision questions and the patterns to leave out.

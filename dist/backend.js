@@ -96,6 +96,8 @@ const DEFAULT_SETTINGS = {
     studioLoud: true,
     studioKeys: true,
     studioSnap: true,
+    studioLockAll: false,
+    studioLockLine: false,
     audioSplit: 'one',
     videoShape: 'wide',
     videoFont: 'book',
@@ -361,6 +363,7 @@ function cleanShape(v) {
         flipY: v.flipY === true,
         ink: hexColor(v.ink),
         blush: v.blush !== false,
+        lock: v.lock === true,
     };
 }
 // The backgrounds and the one picked. Settings saved before there was a
@@ -851,6 +854,8 @@ function cleanSettings(raw) {
         studioLoud: bool(r.studioLoud, d.studioLoud),
         studioKeys: bool(r.studioKeys, d.studioKeys),
         studioSnap: bool(r.studioSnap, d.studioSnap),
+        studioLockAll: bool(r.studioLockAll, d.studioLockAll),
+        studioLockLine: bool(r.studioLockLine, d.studioLockLine),
         audioSplit: pick(r.audioSplit, ['one', 'parts'], d.audioSplit),
         videoShape: pick(r.videoShape, ['wide', 'tall', 'square'], d.videoShape),
         videoFont: fontChoice(r.videoFont, 'book'),

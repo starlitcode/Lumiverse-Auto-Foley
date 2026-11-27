@@ -106,6 +106,8 @@ interface VideoShapeDef {
   // A face's eye color, or a rose's curl, and pink cheeks on a face.
   ink: string;
   blush: boolean;
+  // A locked shape stays where it is.
+  lock: boolean;
 }
 interface VideoMark {
   id: string;
@@ -259,6 +261,8 @@ interface Settings {
   studioLoud: boolean;
   studioKeys: boolean;
   studioSnap: boolean;
+  studioLockAll: boolean;
+  studioLockLine: boolean;
   audioSplit: 'one' | 'parts';
   // How a video looks. Names also go in the title and in the name of every
   // file saved. Sizes are in percent or in pixels of a 1080-pixel frame, and
@@ -573,6 +577,8 @@ const DEFAULT_SETTINGS: Settings = {
   studioLoud: true,
   studioKeys: true,
   studioSnap: true,
+  studioLockAll: false,
+  studioLockLine: false,
   audioSplit: 'one',
   videoShape: 'wide',
   videoFont: 'book',
@@ -842,6 +848,7 @@ function cleanShape(v: any): VideoShapeDef | null {
     flipY: v.flipY === true,
     ink: hexColor(v.ink),
     blush: v.blush !== false,
+    lock: v.lock === true,
   };
 }
 // The backgrounds and the one picked. Settings saved before there was a
@@ -1309,6 +1316,8 @@ function cleanSettings(raw: any): Settings {
     studioLoud: bool(r.studioLoud, d.studioLoud),
     studioKeys: bool(r.studioKeys, d.studioKeys),
     studioSnap: bool(r.studioSnap, d.studioSnap),
+    studioLockAll: bool(r.studioLockAll, d.studioLockAll),
+    studioLockLine: bool(r.studioLockLine, d.studioLockLine),
     audioSplit: pick(r.audioSplit, ['one', 'parts'] as const, d.audioSplit),
     videoShape: pick(r.videoShape, ['wide', 'tall', 'square'] as const, d.videoShape),
     videoFont: fontChoice(r.videoFont, 'book'),

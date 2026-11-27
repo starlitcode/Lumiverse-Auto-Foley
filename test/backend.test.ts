@@ -2097,7 +2097,7 @@ describe("video backgrounds, fonts and names", () => {
     expect(out.length).toBe(40);
     // A shape with the one second color it had before stops keeps it, as a
     // linear gradient.
-    expect(out[0]).toEqual({ id: "s0", kind: "rect", x: 1.5, y: -0.5, w: 4000, h: 2, rot: 180, fill: "", grad: "linear", stops: ["#00ff00"], dir: "down", clear: 95, text: "", points: 5, depth: 50, sides: 6, tail: "down", thick: 18, line: "", lineW: 0, flipX: false, flipY: false, ink: "", blush: true });
+    expect(out[0]).toEqual({ id: "s0", kind: "rect", x: 1.5, y: -0.5, w: 4000, h: 2, rot: 180, fill: "", grad: "linear", stops: ["#00ff00"], dir: "down", clear: 95, text: "", points: 5, depth: 50, sides: 6, tail: "down", thick: 18, line: "", lineW: 0, flipX: false, flipY: false, ink: "", blush: true, lock: false });
     expect(s.videoBackPick).toBe("d1");
   });
 

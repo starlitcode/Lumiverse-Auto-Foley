@@ -573,6 +573,14 @@ The moon is a circle in every shape of video, since sizes are in pixels of a 108
 - While the design is shown, a finger on the preview moves shapes and does not scroll the page. Scroll above or below the preview.
 - The outline and the dots show on the preview only. They are never in full screen or in a saved video.
 
+### Locks and focus
+
+- **Lock**, in a shape's settings, keeps it where it is: it cannot be dragged, sized, turned, moved with the arrow keys or deleted. A press on it in the preview still picks it, so it can be unlocked. The list of shapes says **locked** after its name.
+- **Lock all**, at the top of the Studio, locks every shape at once, and reads **Locked** while it is on.
+- **Lock the timeline**, beside **Cut it out**, takes the trim handles away and turns **Cut it out** and putting a part back off, so nothing is cut by accident.
+- Locks are saved with the shapes, in looks and in projects. **Undo** takes back a lock.
+- **Focus**, at the top, hides the list of parts, the settings and the timeline, and the preview takes the space. Play, the bar for where you are and **Exit focus** stay. On a laptop they fade after three seconds without the mouse moving and come back when it moves. On a phone, a tap on the preview where there is no shape hides or shows them. Shapes can still be picked and moved. **\\** turns focus on and off, and Escape leaves it. The settings are where you left them.
+
 ### Snapping
 
 While you drag, size or turn a shape on the preview, it snaps to helpful places and shows a thin line where it snapped:
