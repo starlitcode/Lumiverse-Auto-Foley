@@ -609,3 +609,24 @@ describe("animations", () => {
     expect(ANIM_PLACES.filter((p: any) => p.kind === "text").length).toBe(5);
   });
 });
+
+describe("templates and animations", () => {
+  test("a template uses only built-in animations, and never one that flashes", () => {
+    const src = readFileSync(new URL("../src/frontend.ts", import.meta.url), "utf8");
+    const { BUILT_IN_ANIMS } = __testing as any;
+    const calm = new Set(BUILT_IN_ANIMS.filter((a: any) => !a.flash).map((a: any) => a.id));
+    const block = src.slice(src.indexOf("  const TEMPLATES: Template[] = ["), src.indexOf("\n  ];\n", src.indexOf("  const TEMPLATES: Template[] = [")));
+    const used = [...block.matchAll(/videoAnims: \{([^\n]*?)\},\s/g)].flatMap((m) => [...m[1].matchAll(/id: '([^']+)'/g)].map((x) => x[1]));
+    expect(used.length).toBeGreaterThan(10);
+    for (const id of used) expect(calm.has(id)).toBe(true);
+  });
+});
+
+describe("built-in animation ids", () => {
+  test("the backend keeps exactly the panel's built-in animations", () => {
+    const { BUILT_IN_ANIMS } = __testing as any;
+    const src = readFileSync(new URL("../src/backend.ts", import.meta.url), "utf8");
+    const back = JSON.parse((src.match(/const BUILT_IN_ANIM_IDS = (\[[^\]]*\]);/) as RegExpMatchArray)[1].replace(/'/g, '"'));
+    expect(back.slice().sort()).toEqual(BUILT_IN_ANIMS.map((a: any) => a.id).sort());
+  });
+});

@@ -1698,19 +1698,11 @@ html[data-af-still] .af-ws-sec.af-ws-in, .af-ws[data-af-still] .af-ws-sec.af-ws-
 .af-ws-pop { position: absolute; z-index: 6; top: 56px; right: 12px; display: flex; flex-direction: column; gap: 10px; width: min(440px, calc(100% - 24px)); max-height: calc(100% - 72px); overflow: auto; padding: 14px; border: 1px solid var(--af-line); border-radius: var(--af-r-md); background-color: var(--lumiverse-card-bg-solid, rgb(24,20,34)); background-image: linear-gradient(var(--lumiverse-bg-elevated, rgba(35,30,48,.98)), var(--lumiverse-bg-elevated, rgba(35,30,48,.98))); box-shadow: 0 10px 30px rgba(0,0,0,.35); opacity: 0; transform: translateY(4px); transition: opacity .18s ease-out, transform .18s ease-out; outline: none; }
 .af-ws-pop[data-af-open] { opacity: 1; transform: none; }
 .af-ws-morebtn { display: none; }
-.af-ease-canvas { flex: none; width: 96px; height: 96px; }
-.af-pen-wrap { position: absolute; z-index: 2; }
-.af-pen { display: block; width: 100%; height: 100%; touch-action: none; cursor: crosshair; }
-.af-demo { gap: 4px; }
-/* While an animation is being changed, the preview plays it, with its own
-   Play under it in place of the video's. */
-.af-ws[data-af-demoing] [data-af-studio="play"] { display: none; }
 .af-effect-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 8px; }
 .af-effect-card { display: flex; flex-direction: column; align-items: center; gap: 4px; min-height: 32px; padding: 6px; border-radius: var(--af-r); border: 1px solid var(--af-line); background: var(--af-fill-subtle); color: var(--af-text); font: 12px/1.3 var(--lumiverse-font-family, system-ui); cursor: pointer; }
 .af-effect-card canvas { display: block; width: 100%; max-width: 88px; height: auto; aspect-ratio: 88 / 50; border-radius: 6px; }
 .af-effect-card[aria-pressed="true"] { border-color: var(--af-accent); box-shadow: 0 0 0 2px var(--af-accent-soft); }
 @media (hover: hover) { .af-effect-card:not([aria-pressed="true"]):hover { border-color: var(--af-line-hover); } }
-.af-anim-side { gap: 8px; }
 .af-ws-menu { width: auto; min-width: 200px; max-width: calc(100% - 24px); gap: 4px; padding: 6px; top: calc(52px + env(safe-area-inset-top, 0px)); right: 8px; }
 .af-ws-menu .af-ws-item { justify-content: flex-start; width: 100%; min-height: 40px; border-color: transparent; background: transparent; }
 .af-ws-menu .af-ws-item:hover:not(:disabled) { background: var(--af-fill-subtle); }
@@ -1879,6 +1871,19 @@ const BUILT_IN_ANIMS = [
     builtIn('type', 'Typewriter', 'text', [], FADE_OUT, { secs: 1.2, ease: EASES[5].curve.slice(), reveal: 'chars' }),
     builtIn('words', 'Word by word', 'text', [], FADE_OUT, { secs: 1, ease: EASES[5].curve.slice(), reveal: 'words' }),
     builtIn('none', 'None', 'any', [], [], { secs: 0 }),
+    // Reveals through a shape, opening from the middle.
+    builtIn('thru-circle', 'Through a circle', 'any', [], [], { secs: 0.8 }, { type: 'iris', angle: 0, feather: 8 }),
+    builtIn('thru-heart', 'Through a heart', 'any', [], [], { secs: 1.2, ease: [0.42, 0, 0.58, 1] }, { type: 'shape', angle: 0, feather: 16, shape: 'heart' }),
+    builtIn('thru-star', 'Through a star', 'any', [], [], { secs: 1.2, ease: [0.42, 0, 0.58, 1] }, { type: 'shape', angle: 0, feather: 16, shape: 'star' }),
+    builtIn('box', 'Box opening', 'any', [], [], { secs: 0.9, ease: [0.42, 0, 0.58, 1] }, { type: 'box', angle: 0, feather: 10 }),
+    builtIn('diamond', 'Diamond opening', 'any', [], [], { secs: 1, ease: [0.42, 0, 0.58, 1] }, { type: 'diamond', angle: 0, feather: 14 }),
+    builtIn('clock', 'Clock sweep', 'any', [], [], { secs: 0.9, ease: [0.42, 0, 0.58, 1] }, { type: 'clock', angle: 0, feather: 0 }),
+    builtIn('wipe-angle', 'Soft wipe at an angle', 'any', [], [], { secs: 1.1, ease: [0.42, 0, 0.58, 1] }, { type: 'linear', angle: 45, feather: 70 }),
+    // Text that comes in a part at a time, with a gentle move.
+    builtIn('words-rise', 'Word by word, rising', 'text', [{ at: 0, y: 18 }, { at: 1, y: 0 }], FADE_OUT, { secs: 1.2, ease: [0, 0, 0.58, 1], reveal: 'words' }),
+    builtIn('letters-fall', 'Letters falling in', 'text', [{ at: 0, y: -22 }, { at: 1, y: 0 }], FADE_OUT, { secs: 1.2, ease: [0, 0, 0.58, 1], reveal: 'chars' }),
+    builtIn('blur-rise', 'Blur and rise', 'any', [{ at: 0, o: 0, y: 24, b: 10 }, { at: 1, o: 1, y: 0, b: 0 }], [{ at: 0, o: 1, y: 0, b: 0 }, { at: 1, o: 0, y: -24, b: 10 }]),
+    builtIn('slide-angle', 'Slide and fade at an angle', 'any', [{ at: 0, o: 0, x: -90, y: 60 }, { at: 1, o: 1, x: 0, y: 0 }], [{ at: 0, o: 1, x: 0, y: 0 }, { at: 1, o: 0, x: 90, y: -60 }]),
     // Calm glitches: each settles smoothly, and none flashes.
     builtIn('split', 'Color split', 'any', FADE_IN, FADE_OUT, { secs: 0.6, fx: 'split' }),
     builtIn('slice', 'Slice shift', 'any', FADE_IN, FADE_OUT, { secs: 0.6, fx: 'slice' }),
@@ -1898,77 +1903,6 @@ const BUILT_IN_ANIMS = [
     builtIn('invert', 'Inversion', 'any', FADE_IN, FADE_OUT, { secs: 0.6, fx: 'invert', flash: true }),
     builtIn('shake', 'Shake', 'any', FADE_IN, FADE_OUT, { secs: 0.6, fx: 'shake', flash: true }),
 ];
-const SIMPLE_EFFECTS = [
-    { id: 'fade', label: 'Fade' },
-    { id: 'rise', label: 'Rise' },
-    { id: 'drop', label: 'Drop' },
-    { id: 'slide', label: 'Slide' },
-    { id: 'focus', label: 'Soft focus' },
-    { id: 'wipe', label: 'Wipe' },
-    { id: 'grow', label: 'Grow' },
-    { id: 'iris', label: 'Iris' },
-    { id: 'shape', label: 'Through a shape' },
-    { id: 'type', label: 'Typewriter', textIn: true },
-    { id: 'words', label: 'Word by word', textIn: true },
-    { id: 'none', label: 'None' },
-];
-const EFFECT_DEFAULTS = { slide: { dir: 'l' }, wipe: { dir: 'l', soft: 25 }, iris: { cx: 0.5, cy: 0.5, soft: 6 }, shape: { through: 'iris', cx: 0.5, cy: 0.5, size: 100, soft: 10, kind: 'heart' } };
-const WIPE_ANGLE = { l: 0, r: 180, t: 90, b: 270 };
-function presetTrack(which, pr) {
-    const base = pr.id === 'slide' ? 'slide-' + (pr.dir || 'l') : pr.id === 'wipe' ? 'wipe-' + (pr.dir || 'l') : pr.id === 'shape' ? 'none' : pr.id;
-    const b = BUILT_IN_ANIMS.find((x) => x.id === base) || BUILT_IN_ANIMS[0];
-    const src = which === 'in' ? b.inT : b.outT;
-    const keys = JSON.parse(JSON.stringify(src.keys));
-    let mask = JSON.parse(JSON.stringify(src.mask));
-    if (pr.id === 'wipe')
-        mask = { type: 'linear', angle: WIPE_ANGLE[pr.dir || 'l'], feather: keyOr(pr.soft, 25) };
-    if (pr.id === 'iris')
-        mask = { type: 'iris', angle: 0, feather: keyOr(pr.soft, 6), cx: keyOr(pr.cx, 0.5), cy: keyOr(pr.cy, 0.5) };
-    if (pr.id === 'shape') {
-        mask = { type: pr.through || 'iris', angle: 0, feather: pr.through === 'clock' ? 0 : keyOr(pr.soft, 10), cx: keyOr(pr.cx, 0.5), cy: keyOr(pr.cy, 0.5) };
-        if (pr.through !== 'clock')
-            mask.size = keyOr(pr.size, 100);
-        if (pr.through === 'shape')
-            mask.shape = pr.kind || 'heart';
-        if (pr.through === 'own')
-            mask.own = pr.own || '';
-        if (pr.invert)
-            mask.invert = true;
-    }
-    if ((which === 'out' && (pr.id === 'type' || pr.id === 'words')))
-        return { keys: JSON.parse(JSON.stringify(FADE_OUT)), mask: NO_MASK };
-    return { keys, mask };
-}
-// The preset a track was made from, if it still matches what it makes.
-function presetOf(a, which) {
-    const tr = which === 'in' ? a.inT : a.outT;
-    return tr && tr.preset && typeof tr.preset === 'object' ? tr.preset : null;
-}
-function samePreset(a, which, pr) {
-    const tr = which === 'in' ? a.inT : a.outT;
-    const made = presetTrack(which, pr);
-    const want = (pr.id === 'type' || pr.id === 'words') && which === 'in' ? (pr.id === 'type' ? 'chars' : 'words') : '';
-    return JSON.stringify(made.keys) === JSON.stringify(tr.keys) && JSON.stringify(made.mask) === JSON.stringify(tr.mask) && (which === 'out' || (a.reveal || '') === want) && !a.fx;
-}
-function applyPreset(a, which, pr) {
-    const t = presetTrack(which, pr);
-    const tr = which === 'in' ? a.inT : a.outT;
-    tr.keys = t.keys;
-    tr.mask = t.mask;
-    tr.preset = pr;
-    if (which === 'in')
-        a.reveal = pr.id === 'type' ? 'chars' : pr.id === 'words' ? 'words' : '';
-    a.fx = '';
-}
-// The preset for a built-in, so an animation made from one starts simple.
-function presetFor(id) {
-    const m = /^(slide|wipe)-([lrtb])$/.exec(id);
-    if (m)
-        return Object.assign({}, EFFECT_DEFAULTS[m[1]], { id: m[1], dir: m[2] });
-    if (SIMPLE_EFFECTS.some((x) => x.id === id))
-        return Object.assign({}, EFFECT_DEFAULTS[id] || {}, { id });
-    return null;
-}
 // The places an animation is used, in the frame and in the text. Each has a
 // default, which is what it did before an animation was picked for it.
 const ANIM_PLACES = [
@@ -2169,8 +2103,6 @@ const DEFAULTS = {
     videoCaptionInk: '',
     videoWords: 'fade',
     videoAnims: {},
-    videoAnimsOwn: [],
-    videoReveals: [],
     videoFlashOn: false,
     videoPlace: 'middle',
     videoQuotes: true,
@@ -4559,16 +4491,6 @@ export function setup(ctx, overrides) {
     function shapePath(g, sh, w, h) {
         g.beginPath();
         const k = sh.kind;
-        if (k === 'own') {
-            // Your own shape: a drawn reveal, stretched to the box. With none
-            // drawn yet, a plain box.
-            const rv = revealsNow().find((r) => r.id === sh.own);
-            if (rv && rv.kind === 'draw' && rv.pts.length >= 3)
-                revealOutline(g, rv, 0, 0, w / 2, h / 2);
-            else
-                g.rect(-w / 2, -h / 2, w, h);
-            return;
-        }
         const poly = (pts) => {
             pts.forEach(([x, y], i) => (i ? g.lineTo(x, y) : g.moveTo(x, y)));
             g.closePath();
@@ -5214,9 +5136,6 @@ export function setup(ctx, overrides) {
                 await loadMarkPic(m.id).catch(() => { });
         for (const k of stickersNow())
             await loadStickerPic(k.id).catch(() => { });
-        for (const r of revealsNow())
-            if (r.kind === 'picture')
-                await loadStickerPic(r.id).catch(() => { });
     }
     function stageNow(parts, sh, only, fixed, scale = 1) {
         const full = videoSize();
@@ -6404,8 +6323,9 @@ export function setup(ctx, overrides) {
         if (layered)
             g.drawImage(st.a, 0, 0);
     }
-    const ownAnims = () => (Array.isArray(S.videoAnimsOwn) ? S.videoAnimsOwn : []);
-    const animById = (id) => BUILT_IN_ANIMS.find((x) => x.id === id) || ownAnims().find((x) => x.id === id) || null;
+    // Only built-in animations are used. A place that names any other, such
+    // as one saved by an older build, keeps its default.
+    const animById = (id) => BUILT_IN_ANIMS.find((x) => x.id === id) || null;
     function animFor(place) {
         const v = (S.videoAnims || {})[place];
         if (!v || !v.id)
@@ -6435,87 +6355,9 @@ export function setup(ctx, overrides) {
     let textReveal = null;
     // True while a video is being saved, as opposed to drawn on screen.
     let videoRecording = false;
-    const REVEALS_MAX = 20;
-    const revealsNow = () => (Array.isArray(S.videoReveals) ? S.videoReveals : []);
-    // The outline of a drawn reveal. A point with a bend reaches it along a
-    // curve through the bend; the first point's bend is the closing line's.
-    function revealOutline(g, rv, x, y, hw, hh) {
-        const p = rv.pts;
-        if (!p.length)
-            return;
-        g.moveTo(x + p[0].x * hw, y + p[0].y * hh);
-        for (let i = 1; i <= p.length; i++) {
-            const q = p[i % p.length];
-            if (q.bx != null && q.by != null)
-                g.quadraticCurveTo(x + q.bx * hw, y + q.by * hh, x + q.x * hw, y + q.y * hh);
-            else
-                g.lineTo(x + q.x * hw, y + q.y * hh);
-        }
-        g.closePath();
-    }
-    // A picture used by brightness: light parts show and dark parts hide.
-    const brightPics = new Map();
-    function revealPicture(rv) {
-        const pic = stickerPics.get(rv.id);
-        if (!pic || !pic.width)
-            return null;
-        if (rv.by !== 'bright')
-            return pic;
-        let c = brightPics.get(rv.id);
-        if (c && c._pic === pic)
-            return c;
-        c = canvasOf(pic.width, pic.height);
-        const g = c.getContext('2d');
-        g.drawImage(pic, 0, 0);
-        try {
-            const d = g.getImageData(0, 0, c.width, c.height);
-            for (let i = 0; i < d.data.length; i += 4) {
-                const lum = (d.data[i] * 0.2126 + d.data[i + 1] * 0.7152 + d.data[i + 2] * 0.0722) * (d.data[i + 3] / 255);
-                d.data[i] = d.data[i + 1] = d.data[i + 2] = 0;
-                d.data[i + 3] = lum;
-            }
-            g.putImageData(d, 0, 0);
-        }
-        catch (_) { }
-        c._pic = pic;
-        brightPics.set(rv.id, c);
-        return c;
-    }
-    // A reveal filled solid, as large as half (its half side), around x, y.
-    function revealFill(g, rv, x, y, half) {
-        if (half <= 0)
-            return;
-        if (rv.kind === 'draw') {
-            if (rv.pts.length < 3)
-                return;
-            g.beginPath();
-            revealOutline(g, rv, x, y, half, half);
-            g.fill();
-        }
-        else if (rv.kind === 'text') {
-            const words = String(rv.text || '').trim();
-            if (!words)
-                return;
-            g.save();
-            g.textAlign = 'center';
-            g.textBaseline = 'middle';
-            let size = half * 0.9;
-            g.font = '800 ' + Math.max(1, Math.round(size)) + 'px ' + fontStack(rv.font || 'clean');
-            const w = g.measureText(words).width;
-            if (w > half * 1.9)
-                size *= (half * 1.9) / w;
-            g.font = '800 ' + Math.max(1, Math.round(size)) + 'px ' + fontStack(rv.font || 'clean');
-            g.fillText(words, x, y);
-            g.restore();
-        }
-        else {
-            const pic = revealPicture(rv);
-            if (!pic)
-                return;
-            const k = (half * 2) / Math.max(pic.width, pic.height);
-            g.drawImage(pic, x - (pic.width * k) / 2, y - (pic.height * k) / 2, pic.width * k, pic.height * k);
-        }
-    }
+    // The reveal, as a picture of its own: solid where the layer shows.
+    // Drawn on its own canvas, then laid over the layer, so the reveal itself
+    // is never drawn.
     let revealCanvas = null;
     function revealOpen(s) {
         const m = s.mask;
@@ -6552,7 +6394,7 @@ export function setup(ctx, overrides) {
         else if (m.type === 'shape') {
             // A shape from the shape picker, large enough at full size to cover
             // the frame from its middle.
-            const ext = Math.hypot(dx, dy) * 1.7 * scale * size;
+            const ext = Math.hypot(dx, dy) * 1.35 * scale * size;
             const def = { id: 'r', kind: m.shape || 'heart', x: 0, y: 0, w: ext * 2, h: ext * 2, rot: 0, fill: '', grad: 'none', stops: [], dir: 'down', clear: 0, text: '' };
             g.save();
             g.translate(cx, cy);
@@ -6624,26 +6466,6 @@ export function setup(ctx, overrides) {
                 mg.fillRect(0, 0, W, H);
             else if (p > 0)
                 mg.fill();
-        }
-        else if (m.type === 'own') {
-            // One of Your reveals: drawn, a picture or text, grown from its
-            // middle the same way, with the soft edge made the same way.
-            const rv = revealsNow().find((r) => r.id === m.own);
-            if (!rv)
-                mg.fillRect(0, 0, W, H);
-            else {
-                const cx = keyOr(m.cx, 0.5) * W;
-                const cy = keyOr(m.cy, 0.5) * H;
-                const ext = Math.hypot(Math.max(cx, W - cx), Math.max(cy, H - cy)) * 1.7 * (Math.max(0, keyOr(m.size, 100)) / 100);
-                const steps = f > 0 ? 12 : 1;
-                mg.globalCompositeOperation = 'lighter';
-                for (let i = 0; i < steps; i++) {
-                    mg.globalAlpha = 1 / steps;
-                    revealFill(mg, rv, cx, cy, Math.max(0, ext * open * (1 + (f * i) / Math.max(1, steps - 1))));
-                }
-                mg.globalCompositeOperation = 'source-over';
-                mg.globalAlpha = 1;
-            }
         }
         else if (m.type === 'box' || m.type === 'diamond' || m.type === 'shape') {
             // A soft edge is the shape drawn a few times, each a little larger and
@@ -16830,7 +16652,6 @@ export function setup(ctx, overrides) {
         { id: 'shamrock', label: 'Shamrock' },
         { id: 'egg', label: 'Egg' },
         { id: 'flower', label: 'Flower' },
-        { id: 'own', label: 'Your own shape' },
     ];
     const SHAPES_MAX = 40;
     // Whether the Background is set to a design while the Studio is drawn, so
@@ -16914,7 +16735,7 @@ export function setup(ctx, overrides) {
     });
     function newShape(kind) {
         const n = shapesNow().length;
-        const size = { rect: [520, 300], round: [520, 300], ellipse: [360, 360], tri: [420, 360], line: [640, 14], text: [760, 120], heart: [340, 320], star: [360, 360], poly: [360, 360], diamond: [300, 380], arrow: [480, 220], bubble: [520, 340], ring: [360, 360], moon: [300, 300], cloud: [520, 300], sparkle: [260, 260], cat: [300, 300], dog: [320, 300], bunny: [280, 340], paw: [240, 240], bone: [300, 120], fish: [300, 180], carrot: [160, 320], bat: [420, 220], rose: [260, 260], checker: [900, 80], broken: [320, 300], stripes: [900, 120], snowflake: [260, 260], ornament: [220, 260], holly: [300, 200], pumpkin: [300, 260], ghost: [240, 300], leaf: [220, 280], firework: [320, 320], lantern: [220, 300], diya: [300, 200], menorah: [420, 300], shamrock: [240, 280], egg: [200, 260], flower: [260, 260], own: [300, 300] };
+        const size = { rect: [520, 300], round: [520, 300], ellipse: [360, 360], tri: [420, 360], line: [640, 14], text: [760, 120], heart: [340, 320], star: [360, 360], poly: [360, 360], diamond: [300, 380], arrow: [480, 220], bubble: [520, 340], ring: [360, 360], moon: [300, 300], cloud: [520, 300], sparkle: [260, 260], cat: [300, 300], dog: [320, 300], bunny: [280, 340], paw: [240, 240], bone: [300, 120], fish: [300, 180], carrot: [160, 320], bat: [420, 220], rose: [260, 260], checker: [900, 80], broken: [320, 300], stripes: [900, 120], snowflake: [260, 260], ornament: [220, 260], holly: [300, 200], pumpkin: [300, 260], ghost: [240, 300], leaf: [220, 280], firework: [320, 320], lantern: [220, 300], diya: [300, 200], menorah: [420, 300], shamrock: [240, 280], egg: [200, 260], flower: [260, 260] };
         const [w, h] = size[kind] || [400, 240];
         return {
             id: rid('sh').replace(/[^a-z0-9]/gi, '').slice(0, 24),
@@ -17090,21 +16911,6 @@ export function setup(ctx, overrides) {
             row.setAttribute('data-af-shape-num', key);
             r.editor.appendChild(row);
         };
-        if (sh.kind === 'own') {
-            const drawn = revealsNow().filter((r) => r.kind === 'draw' && r.pts.length >= 3);
-            if (!drawn.length)
-                r.editor.appendChild(hint('Draw a shape first: under Animations, make an animation, pick Through a shape, then Draw your own.'));
-            else {
-                if (!drawn.some((x) => x.id === sh.own))
-                    sh.own = drawn[0].id;
-                const pickOwn = select('Which of your shapes', drawn.map((x) => ({ id: x.id, label: x.name })), sh.own || drawn[0].id, (v) => {
-                    sh.own = v;
-                    changed();
-                }, 'Shapes you drew as reveals.');
-                pickOwn.querySelector('select').setAttribute('data-af-shapeown', '');
-                r.editor.appendChild(pickOwn);
-            }
-        }
         if (sh.kind === 'star') {
             own('Points', 'points', 5, 4, 12, '5 by default, from 4 to 12.');
             own('How deep the points are, in percent', 'depth', 50, 10, 90, '50 by default. More makes thinner points.');
@@ -17976,9 +17782,7 @@ export function setup(ctx, overrides) {
                 fitTheater();
         }
         const g = r.canvas.getContext('2d');
-        if (g && animDemo)
-            drawDemo(g, v.st);
-        else if (g)
+        if (g)
             videoFrame(g, v.at, v.parts, v.total, v.st, v.title);
         // The picked shape's outline and dots, on the preview only. Never in
         // full screen, and never in a saved video, which draws its own frames.
@@ -18229,7 +18033,7 @@ export function setup(ctx, overrides) {
         'videoWordShadow', 'videoWordShadowInk', 'videoWordShadowDark', 'videoWordShadowSoft', 'videoWordShadowFar',
         'videoBox', 'videoBoxColor', 'videoBoxClear', 'videoBoxRound', 'videoBoxWidth', 'videoOwnColors', 'videoKindColors', 'videoBackRules', 'videoQuiet', 'videoQuietStrength',
         'videoNameShadow', 'videoNameShadowInk', 'videoNameShadowDark', 'videoNameShadowSoft', 'videoNameShadowFar', 'videoEdges', 'videoEdgeColor', 'videoMove', 'videoMoveSecs',
-        'videoAnims', 'videoAnimsOwn', 'videoReveals', 'videoTitleOn', 'videoFadeOut', 'videoCaptions',
+        'videoAnims', 'videoTitleOn', 'videoFadeOut', 'videoCaptions',
     ];
     const LOOKS_MAX = 20;
     // A look holds one background: the one in use, with its design and
@@ -18618,1526 +18422,13 @@ export function setup(ctx, overrides) {
         r.appendChild(add);
         box.appendChild(r);
     }
-    // ---- your animations: the advanced editor ----
-    // The reader's own animations, each made from a built-in or from nothing,
-    // with its keyframes, easing and mask, and a preview that loops.
-    let animEditId = '';
-    // The editor's own state: whether the timeline shows, the track being
-    // changed, and which of Coming in and Going out are open.
-    let animTimeline = false;
-    let animSide = 'in';
-    const animOpenSides = {};
-    // The small moving examples on the effect cards, drawn by one loop.
-    const fxCards = new Set();
-    let fxFrame = 0;
-    const fxSample = (g, al, x, y) => {
-        g.save();
-        g.globalAlpha = al;
-        g.fillStyle = '#ffffff';
-        g.font = '700 17px system-ui, sans-serif';
-        const words = 'Aa Bb';
-        const rev = textReveal;
-        const shown = rev ? (rev.kind === 'words' ? words.split(' ').slice(0, Math.floor(rev.frac * 2 + 1e-6)).join(' ') : words.slice(0, Math.round(rev.frac * words.length))) : words;
-        const full = g.measureText(words).width;
-        g.fillText(shown, 44 - full / 2 + x, 31 + y);
-        g.restore();
-    };
-    function drawFxCard(e, k) {
-        const g = e.c.getContext('2d');
-        if (!g)
-            return;
-        g.setTransform(1, 0, 0, 1, 0, 0);
-        g.globalAlpha = 1;
-        g.fillStyle = '#20243a';
-        g.fillRect(0, 0, 88, 50);
-        runAnim(g, e.st, { def: e.def, secs: 1, delay: 0 }, e.which, k, fxSample, 0);
-    }
-    function effectExample(c, id, which) {
-        const pr = Object.assign({}, EFFECT_DEFAULTS[id] || {}, { id });
-        const def = Object.assign(JSON.parse(JSON.stringify(BUILT_IN_ANIMS[0])), { id: 'x', secs: 1, inT: presetTrack('in', pr), outT: presetTrack('out', pr), reveal: id === 'type' ? 'chars' : id === 'words' ? 'words' : '' });
-        const e = { c, def, st: { w: 88, h: 50 }, which };
-        fxCards.add(e);
-        drawFxCard(e, 0.6);
-        if (calm() || fxFrame)
-            return;
-        const step = (now) => {
-            fxFrame = 0;
-            const t = (now / 1000) % 1.8;
-            const k = Math.min(1, t / 1.2);
-            for (const x of Array.from(fxCards)) {
-                if (!x.c.isConnected) {
-                    fxCards.delete(x);
-                    continue;
-                }
-                drawFxCard(x, k);
-            }
-            if (fxCards.size && !calm())
-                fxFrame = requestAnimationFrame(step);
-        };
-        fxFrame = requestAnimationFrame(step);
-    }
-    disposers.push(() => {
-        if (fxFrame)
-            cancelAnimationFrame(fxFrame);
-        fxFrame = 0;
-        fxCards.clear();
-    });
-    let animSave = null;
-    function saveOwnAnims(now) {
-        if (animSave)
-            clearTimeout(animSave);
-        animSave = null;
-        const go = () => {
-            animSave = null;
-            set({ videoAnimsOwn: ownAnims().slice() });
-        };
-        if (now)
-            go();
-        else
-            animSave = setTimeout(go, 400);
-    }
-    disposers.push(() => {
-        if (animSave) {
-            clearTimeout(animSave);
-            animSave = null;
-            try {
-                set({ videoAnimsOwn: ownAnims().slice() });
-            }
-            catch (_) { }
-        }
-    });
-    const newAnimId = () => {
-        let id = '';
-        do
-            id = 'u' + Math.random().toString(36).replace(/[^a-z0-9]/g, '').slice(0, 9);
-        while (ownAnims().some((x) => x.id === id) || BUILT_IN_ANIMS.some((x) => x.id === id));
-        return id;
-    };
-    const copyAnim = (a, name) => Object.assign(JSON.parse(JSON.stringify(a)), { id: newAnimId(), name: name.slice(0, 40) });
-    function ownList() {
-        if (!Array.isArray(S.videoAnimsOwn))
-            S.videoAnimsOwn = [];
-        return S.videoAnimsOwn;
-    }
-    // The animation being changed plays on the Studio's own preview, at the
-    // top, on the look's background, so there is one preview and nothing in
-    // the settings stays pinned. Its Play, Half speed and position are in a
-    // row under the preview's own controls.
-    let animDemo = null;
-    const demoCycle = (a) => Math.max(0.2, a.delay + a.secs) * 2 + 1;
-    // The words the demo moves, in the middle of the frame.
-    const demoWords = (g, al, x, y) => {
-        const st = studioView.st;
-        if (!st)
-            return;
-        const u = Math.min(st.w, st.h) / 1080;
-        g.save();
-        g.globalAlpha = al;
-        g.fillStyle = hexOr(S.videoInk, STORY_INK);
-        g.font = '600 ' + Math.round(84 * u) + 'px ' + st.font;
-        const words = 'Your words here';
-        const rev = textReveal;
-        const shown = rev ? (rev.kind === 'words' ? words.split(' ').slice(0, Math.floor(rev.frac * 3 + 1e-6)).join(' ') : words.slice(0, Math.round(rev.frac * words.length))) : words;
-        const full = g.measureText(words).width;
-        g.textBaseline = 'middle';
-        g.fillText(shown, st.w / 2 - full / 2 + x, st.h / 2 + y);
-        g.restore();
-    };
-    function drawDemo(g, st) {
-        const d = animDemo;
-        const a = d && d.get();
-        if (!d || !a)
-            return;
-        g.save();
-        g.globalAlpha = 1;
-        g.globalCompositeOperation = 'source-over';
-        st.from = 0;
-        st.to = 1;
-        drawBackAt(g, st, 0);
-        const L = Math.max(0.01, a.secs);
-        const t = d.pos * demoCycle(a);
-        const use = { def: a, secs: L, delay: a.delay };
-        const inEnd = a.delay + L;
-        if (t >= a.delay) {
-            if (t < inEnd)
-                runAnim(g, st, use, 'in', (t - a.delay) / L, demoWords, 0);
-            else if (t < inEnd + 1)
-                demoWords(g, 1, 0, 0);
-            else if (t < inEnd + 1 + L)
-                runAnim(g, st, use, 'out', (t - inEnd - 1) / L, demoWords, 0);
-        }
-        g.restore();
-    }
-    function stopDemo() {
-        const d = animDemo;
-        if (!d)
-            return;
-        animDemo = null;
-        if (d.frame)
-            cancelAnimationFrame(d.frame);
-        if (penNow)
-            penNow.stop();
-        d.row.remove();
-        if (ws)
-            ws.box.removeAttribute('data-af-demoing');
-        paintPreview();
-    }
-    disposers.push(() => stopDemo());
-    function animDemoStart(get, centerOf, moved) {
-        const note = el('<p class="af-note" data-af-animpreview></p>');
-        note.textContent = 'The preview at the top plays this animation, coming in and going out.';
-        const slot = ws ? ws.box.querySelector('[data-af-demoslot]') : null;
-        if (animDemo) {
-            animDemo.get = get;
-            animDemo.centerOf = centerOf;
-            animDemo.moved = moved;
-            paintPreview();
-            return note;
-        }
-        if (!slot)
-            return note;
-        stopPreview();
-        const row = el('<div class="af-col af-demo" data-af-demo data-af-focuskeep></div>');
-        const scrubId = rid('as');
-        const scrubRow = el('<div class="af-col af-anim-scrub"></div>');
-        scrubRow.appendChild(labelRow('Where in the animation', '', scrubId));
-        const scrub = el('<input type="range" min="0" max="1000" step="1" id="' + scrubId + '" data-af-animscrub>');
-        scrub.value = '0';
-        // Filled to the knob by the same code as every other slider.
-        fillTo(scrub, 0);
-        scrubRow.appendChild(scrub);
-        const btns = el('<div class="af-row af-wrap"></div>');
-        const play = button('Pause', () => {
-            const d = animDemo;
-            if (!d)
-                return;
-            d.playing = !d.playing;
-            paintPlay();
-            if (d.playing)
-                loop();
-        });
-        play.setAttribute('data-af-animplay', '');
-        const slow = button('Half speed', () => {
-            const d = animDemo;
-            if (!d)
-                return;
-            d.half = !d.half;
-            slow.setAttribute('aria-pressed', d.half ? 'true' : 'false');
-        });
-        slow.setAttribute('aria-pressed', 'false');
-        slow.setAttribute('data-af-animhalf', '');
-        btns.appendChild(play);
-        btns.appendChild(slow);
-        row.appendChild(btns);
-        row.appendChild(scrubRow);
-        slot.appendChild(row);
-        if (ws)
-            ws.box.setAttribute('data-af-demoing', '');
-        animDemo = { get, pos: 0, playing: !calm(), half: false, row, frame: 0, centerOf, moved };
-        const paintPlay = () => setText(play.querySelector('span'), animDemo && animDemo.playing ? 'Pause' : 'Play');
-        scrub.addEventListener('input', () => {
-            const d = animDemo;
-            if (!d)
-                return;
-            d.pos = Number(scrub.value) / 1000;
-            fillTo(scrub, d.pos);
-            d.playing = false;
-            paintPlay();
-            paintPreview();
-        });
-        const loop = () => {
-            const d = animDemo;
-            if (!d)
-                return;
-            if (d.frame)
-                cancelAnimationFrame(d.frame);
-            let last = performance.now();
-            const step = (now) => {
-                const e = animDemo;
-                if (!e)
-                    return;
-                e.frame = 0;
-                const a = e.get();
-                if (!e.playing || !a || !e.row.isConnected)
-                    return;
-                e.pos = (e.pos + ((now - last) / 1000 / demoCycle(a)) * (e.half ? 0.5 : 1)) % 1;
-                last = now;
-                scrub.value = String(Math.round(e.pos * 1000));
-                fillTo(scrub, e.pos);
-                paintPreview();
-                e.frame = requestAnimationFrame(step);
-            };
-            d.frame = requestAnimationFrame(step);
-        };
-        paintPlay();
-        paintPreview();
-        if (animDemo.playing)
-            loop();
-        return note;
-    }
-    // The middle of a circle, box, diamond, clock or shape reveal is dragged
-    // on the Studio's preview while an animation is being changed, and snaps
-    // to the middle and the thirds.
-    function hookDemo(canvas) {
-        let dragging = false;
-        const put = (e) => {
-            const d = animDemo;
-            const m = d && d.centerOf ? d.centerOf() : null;
-            if (!d || !m)
-                return;
-            const rc = canvas.getBoundingClientRect();
-            const snap = (v) => {
-                for (const t of [0.5, 1 / 3, 2 / 3])
-                    if (Math.abs(v - t) < 0.03)
-                        return Math.round(t * 1000) / 1000;
-                return Math.round(Math.min(1, Math.max(0, v)) * 1000) / 1000;
-            };
-            m.cx = snap((e.clientX - rc.left) / Math.max(1, rc.width));
-            m.cy = snap((e.clientY - rc.top) / Math.max(1, rc.height));
-            const a = d.get();
-            const tr = a ? (animSide === 'out' ? a.outT : a.inT) : null;
-            if (tr && tr.preset && (tr.preset.id === 'iris' || tr.preset.id === 'shape')) {
-                tr.preset.cx = m.cx;
-                tr.preset.cy = m.cy;
-            }
-            paintPreview();
-        };
-        canvas.addEventListener('pointerdown', (e) => {
-            const d = animDemo;
-            if (!d || !d.centerOf || !d.centerOf() || penNow)
-                return;
-            dragging = true;
-            d.playing = false;
-            const pb = d.row.querySelector('[data-af-animplay] span');
-            if (pb)
-                setText(pb, 'Play');
-            e.preventDefault();
-            e.stopPropagation();
-            try {
-                canvas.setPointerCapture(e.pointerId);
-            }
-            catch (_) { }
-            put(e);
-        });
-        canvas.addEventListener('pointermove', (e) => {
-            if (dragging)
-                put(e);
-        });
-        const end = () => {
-            if (!dragging)
-                return;
-            dragging = false;
-            if (animDemo && animDemo.moved)
-                animDemo.moved();
-        };
-        canvas.addEventListener('pointerup', end);
-        canvas.addEventListener('pointercancel', end);
-    }
-    // The small drawing of an easing curve.
-    function easeDrawing(curve) {
-        const c = canvasOf(96, 96);
-        c.className = 'af-ease-canvas';
-        c.setAttribute('role', 'img');
-        c.setAttribute('aria-label', 'The easing curve');
-        const g = c.getContext('2d');
-        if (!g)
-            return c;
-        let ink = '#cccccc';
-        try {
-            ink = getComputedStyle(root).color || ink;
-        }
-        catch (_) { }
-        g.strokeStyle = ink;
-        g.globalAlpha = 0.35;
-        g.strokeRect(8, 8, 80, 80);
-        g.globalAlpha = 1;
-        g.lineWidth = 2;
-        g.beginPath();
-        for (let i = 0; i <= 40; i++) {
-            const k = i / 40;
-            const x = 8 + k * 80;
-            const y = 88 - bezier(curve, k) * 80;
-            if (i)
-                g.lineTo(x, y);
-            else
-                g.moveTo(x, y);
-        }
-        g.stroke();
-        return c;
-    }
-    // A small picture of a reveal, part of the way through: the shown part
-    // light, the rest dim.
-    function revealIcon(c, type, own) {
-        const g = c.getContext('2d');
-        if (!g)
-            return;
-        let ink = '#cccccc';
-        try {
-            ink = getComputedStyle(root).color || ink;
-        }
-        catch (_) { }
-        const N = 56;
-        g.clearRect(0, 0, N, N);
-        g.fillStyle = ink;
-        g.globalAlpha = 0.18;
-        g.fillRect(8, 12, 40, 32);
-        const st = { w: N, h: N };
-        const layer = canvasOf(N, N);
-        const lg = layer.getContext('2d');
-        lg.fillStyle = ink;
-        lg.fillRect(8, 12, 40, 32);
-        if (type !== 'none')
-            maskOn(lg, N, N, { mask: { type, angle: 0, feather: type === 'linear' ? 20 : 4, shape: 'heart', own, size: type === 'own' ? 40 : 100 }, p: type === 'own' ? 1 : 0.6, k: type === 'own' ? 1 : 0.6, hide: false });
-        void st;
-        g.globalAlpha = 1;
-        g.drawImage(layer, 0, 0);
-    }
-    // ---- Your reveals: drawn, from a picture, or from text ----
-    let revealSave = null;
-    function saveReveals(now) {
-        if (revealSave)
-            clearTimeout(revealSave);
-        revealSave = null;
-        const go = () => {
-            revealSave = null;
-            set({ videoReveals: revealsNow().slice() });
-        };
-        if (now)
-            go();
-        else
-            revealSave = setTimeout(go, 400);
-    }
-    disposers.push(() => {
-        if (revealSave) {
-            clearTimeout(revealSave);
-            revealSave = null;
-            try {
-                set({ videoReveals: revealsNow().slice() });
-            }
-            catch (_) { }
-        }
-    });
-    function newReveal(kind) {
-        if (!Array.isArray(S.videoReveals))
-            S.videoReveals = [];
-        const list = S.videoReveals;
-        if (list.length >= REVEALS_MAX)
-            return null;
-        let id = '';
-        do
-            id = 'r' + Math.random().toString(36).replace(/[^a-z0-9]/g, '').slice(0, 9);
-        while (list.some((x) => x.id === id));
-        const n = list.length + 1;
-        const rv = { id, name: (kind === 'draw' ? 'My shape ' : kind === 'text' ? 'My words ' : 'My picture ') + n, kind, pts: [], text: kind === 'text' ? 'Hello' : '', font: kind === 'text' ? 'clean' : '', by: 'alpha' };
-        list.push(rv);
-        saveReveals(true);
-        return rv;
-    }
-    // The pen: a layer over the preview, for drawing a reveal's outline.
-    // A tap adds a point. Dragging a point moves it. Dragging the small
-    // square in the middle of a line bends that line into a curve. A tap on
-    // the first point closes the shape. Points snap to a grid and to each
-    // other's lines.
-    let penNow = null;
-    function penOver(view, rv, changed) {
-        if (penNow)
-            penNow.stop();
-        // A layer of its own, laid exactly over the preview, so the preview is
-        // not moved or drawn on.
-        const host = view.parentElement;
-        if (getComputedStyle(host).position === 'static')
-            host.style.position = 'relative';
-        const wrap = el('<div class="af-pen-wrap"></div>');
-        const place = () => {
-            wrap.style.left = view.offsetLeft + 'px';
-            wrap.style.top = view.offsetTop + 'px';
-            wrap.style.width = view.offsetWidth + 'px';
-            wrap.style.height = view.offsetHeight + 'px';
-        };
-        host.appendChild(wrap);
-        place();
-        const ro = typeof ResizeObserver === 'function' ? new ResizeObserver(place) : null;
-        if (ro)
-            ro.observe(view);
-        const pen = canvasOf(Math.max(320, Math.round(view.width / 3)), Math.max(180, Math.round(view.height / 3)));
-        pen.className = 'af-pen';
-        pen.setAttribute('data-af-pen', '');
-        pen.setAttribute('role', 'img');
-        pen.setAttribute('aria-label', 'Draw the shape here');
-        wrap.appendChild(pen);
-        const W = pen.width;
-        const H = pen.height;
-        const half = Math.min(W, H) * 0.45;
-        const toPx = (x, y) => [W / 2 + x * half, H / 2 + y * half];
-        let closed = rv.pts.length >= 3;
-        let drag = null;
-        const at = (e) => {
-            const rc = pen.getBoundingClientRect();
-            const px = ((e.clientX - rc.left) / Math.max(1, rc.width)) * W;
-            const py = ((e.clientY - rc.top) / Math.max(1, rc.height)) * H;
-            return { px, py, x: (px - W / 2) / half, y: (py - H / 2) / half, reach: (14 * W) / Math.max(1, rc.width) };
-        };
-        const snap = (x, y, skip) => {
-            const g = (v) => {
-                const r = Math.round(v * 8) / 8;
-                return Math.abs(r - v) < 0.04 ? r : v;
-            };
-            let sx = g(x);
-            let sy = g(y);
-            rv.pts.forEach((q, i) => {
-                if (i === skip)
-                    return;
-                if (Math.abs(q.x - sx) < 0.04)
-                    sx = q.x;
-                if (Math.abs(q.y - sy) < 0.04)
-                    sy = q.y;
-            });
-            return { x: Math.max(-1, Math.min(1, sx)), y: Math.max(-1, Math.min(1, sy)) };
-        };
-        const mids = () => rv.pts.map((q, i) => {
-            if (!closed && i === 0)
-                return null;
-            const p0 = rv.pts[(i - 1 + rv.pts.length) % rv.pts.length];
-            return q.bx != null && q.by != null ? { x: (p0.x + 2 * q.bx + q.x) / 4, y: (p0.y + 2 * q.by + q.y) / 4 } : { x: (p0.x + q.x) / 2, y: (p0.y + q.y) / 2 };
-        });
-        const paint = () => {
-            const g = pen.getContext('2d');
-            if (!g)
-                return;
-            g.clearRect(0, 0, W, H);
-            if (!rv.pts.length)
-                return;
-            g.save();
-            g.lineWidth = 2;
-            g.strokeStyle = '#ffd166';
-            g.setLineDash(closed ? [] : [6, 4]);
-            g.beginPath();
-            const [x0, y0] = toPx(rv.pts[0].x, rv.pts[0].y);
-            g.moveTo(x0, y0);
-            const n = closed ? rv.pts.length : rv.pts.length - 1;
-            for (let i = 1; i <= n; i++) {
-                const q = rv.pts[i % rv.pts.length];
-                const [x, y] = toPx(q.x, q.y);
-                if (q.bx != null && q.by != null) {
-                    const [bx, by] = toPx(q.bx, q.by);
-                    g.quadraticCurveTo(bx, by, x, y);
-                }
-                else
-                    g.lineTo(x, y);
-            }
-            g.stroke();
-            g.setLineDash([]);
-            rv.pts.forEach((q, i) => {
-                const [x, y] = toPx(q.x, q.y);
-                g.beginPath();
-                g.arc(x, y, i === 0 ? 7 : 5, 0, Math.PI * 2);
-                g.fillStyle = i === 0 ? '#ffd166' : '#ffffff';
-                g.fill();
-                g.strokeStyle = 'rgba(0,0,0,.6)';
-                g.stroke();
-            });
-            mids().forEach((m) => {
-                if (!m)
-                    return;
-                const [x, y] = toPx(m.x, m.y);
-                g.fillStyle = '#ffd166';
-                g.fillRect(x - 3.5, y - 3.5, 7, 7);
-            });
-            g.restore();
-        };
-        const near = (p) => {
-            for (let i = 0; i < rv.pts.length; i++) {
-                const [x, y] = toPx(rv.pts[i].x, rv.pts[i].y);
-                if (Math.hypot(x - p.px, y - p.py) <= p.reach)
-                    return { kind: 'point', i };
-            }
-            const ms = mids();
-            for (let i = 0; i < ms.length; i++) {
-                const m = ms[i];
-                if (!m)
-                    continue;
-                const [x, y] = toPx(m.x, m.y);
-                if (Math.hypot(x - p.px, y - p.py) <= p.reach)
-                    return { kind: 'bend', i };
-            }
-            return null;
-        };
-        pen.addEventListener('pointerdown', (e) => {
-            e.preventDefault();
-            const p = at(e);
-            const hit = near(p);
-            try {
-                pen.setPointerCapture(e.pointerId);
-            }
-            catch (_) { }
-            if (hit) {
-                drag = { kind: hit.kind, i: hit.i, moved: false, x0: p.px, y0: p.py };
-                return;
-            }
-            if (closed)
-                return;
-            const q = snap(p.x, p.y, -1);
-            if (rv.pts.length >= 64)
-                return;
-            rv.pts.push({ x: q.x, y: q.y });
-            changed();
-            paint();
-        });
-        pen.addEventListener('pointermove', (e) => {
-            if (!drag)
-                return;
-            const p = at(e);
-            if (!drag.moved && Math.hypot(p.px - drag.x0, p.py - drag.y0) < p.reach / 2)
-                return;
-            drag.moved = true;
-            const q = rv.pts[drag.i];
-            if (drag.kind === 'point') {
-                const sn = snap(p.x, p.y, drag.i);
-                q.x = sn.x;
-                q.y = sn.y;
-            }
-            else {
-                // The curve passes through where the finger is, half way along.
-                const p0 = rv.pts[(drag.i - 1 + rv.pts.length) % rv.pts.length];
-                q.bx = Math.max(-2, Math.min(2, 2 * p.x - (p0.x + q.x) / 2));
-                q.by = Math.max(-2, Math.min(2, 2 * p.y - (p0.y + q.y) / 2));
-            }
-            changed();
-            paint();
-        });
-        const up = () => {
-            if (!drag)
-                return;
-            // A tap on the first point closes the shape.
-            if (!drag.moved && drag.kind === 'point' && drag.i === 0 && !closed && rv.pts.length >= 3)
-                closed = true;
-            drag = null;
-            changed();
-            paint();
-        };
-        pen.addEventListener('pointerup', up);
-        pen.addEventListener('pointercancel', up);
-        paint();
-        const api = {
-            undo: () => {
-                rv.pts.pop();
-                closed = false;
-                changed();
-                paint();
-            },
-            clear: () => {
-                rv.pts = [];
-                closed = false;
-                changed();
-                paint();
-            },
-            stop: () => {
-                if (ro)
-                    ro.disconnect();
-                wrap.remove();
-                if (penNow === api)
-                    penNow = null;
-            },
-        };
-        penNow = api;
-        return api;
-    }
-    // The settings of one of Your reveals, under the shape picker.
-    function revealEditorBox(rv, preview, changed, gone) {
-        const box = el('<div class="af-col af-moodedit" data-af-reveal-edit></div>');
-        box.setAttribute('data-af-reveal-edit', rv.id);
-        const touched = () => {
-            saveReveals();
-            changed();
-        };
-        const nameId = rid('rn');
-        box.appendChild(labelRow('Name', '', nameId));
-        const name = el('<input type="text" class="af-field" maxlength="40" autocomplete="off" id="' + nameId + '" data-af-revealname>');
-        name.value = rv.name;
-        name.addEventListener('change', () => {
-            const v = name.value.trim().slice(0, 40);
-            if (!v) {
-                name.value = rv.name;
-                return;
-            }
-            rv.name = v;
-            saveReveals(true);
-            changed();
-        });
-        box.appendChild(name);
-        const said = el('<p class="af-status" role="status"></p>');
-        if (rv.kind === 'draw') {
-            box.appendChild(hint('Tap the preview to add points. Drag a point to move it, or the square in a line to bend it. Tap the first point to close the shape.'));
-            const tools = el('<div class="af-row af-wrap"></div>');
-            let pen = null;
-            const drawBtn = button('Draw on the preview', () => {
-                if (pen) {
-                    pen.stop();
-                    pen = null;
-                    drawBtn.setAttribute('aria-pressed', 'false');
-                    return;
-                }
-                const view = studioRefs ? studioRefs.canvas : null;
-                if (!view)
-                    return;
-                pen = penOver(view, rv, touched);
-                drawBtn.setAttribute('aria-pressed', 'true');
-            });
-            drawBtn.setAttribute('aria-pressed', 'false');
-            drawBtn.setAttribute('data-af-pendraw', '');
-            const undo = button('Undo a point', () => {
-                if (pen)
-                    pen.undo();
-                else {
-                    rv.pts.pop();
-                    touched();
-                }
-            });
-            undo.setAttribute('data-af-penundo', '');
-            const clear = button('Start the shape again', () => {
-                if (pen)
-                    pen.clear();
-                else {
-                    rv.pts = [];
-                    touched();
-                }
-            });
-            tools.appendChild(drawBtn);
-            tools.appendChild(undo);
-            tools.appendChild(clear);
-            box.appendChild(tools);
-            // Drawing starts at once for a new shape.
-            if (!rv.pts.length && studioRefs) {
-                pen = penOver(studioRefs.canvas, rv, touched);
-                drawBtn.setAttribute('aria-pressed', 'true');
-            }
-            disposers.push(() => {
-                if (pen)
-                    pen.stop();
-            });
-            box._stop = () => {
-                if (pen)
-                    pen.stop();
-                pen = null;
-            };
-        }
-        else if (rv.kind === 'text') {
-            const tid = rid('rt');
-            box.appendChild(labelRow('Words', 'A word or two. The layer shows through the letters.', tid));
-            const words = el('<input type="text" class="af-field" maxlength="40" autocomplete="off" id="' + tid + '" data-af-revealtext>');
-            words.value = rv.text;
-            words.addEventListener('input', () => {
-                rv.text = words.value.slice(0, 40);
-                touched();
-            });
-            box.appendChild(words);
-            box.appendChild(fontPicker('revealFont' + rv.id, 'Font', 'Clean by default.', false, () => touched(), {
-                get: () => rv.font || 'clean',
-                set: (v) => {
-                    rv.font = v;
-                },
-            }));
-        }
-        else {
-            const keepPic = async (picture) => {
-                let r = null;
-                try {
-                    r = await rpc({ type: 'sticker_put', id: rv.id, picture }, 60000);
-                }
-                catch (_) { }
-                if (!r || !r.ok) {
-                    said.textContent = (r && r.error) || 'The picture could not be saved to your account. Try again.';
-                    said.dataset.kind = 'bad';
-                    return;
-                }
-                said.textContent = '';
-                stickerPics.set(rv.id, await loadImage(picture));
-                stickerAsked.set(rv.id, Promise.resolve());
-                brightPics.delete(rv.id);
-                touched();
-            };
-            const pickRow = el('<div class="af-row af-wrap"></div>');
-            const choose = button('Choose a picture', async () => {
-                let files = [];
-                try {
-                    files = await ctx.uploads.pickFile({ accept: ['image/png', 'image/webp', '.png', '.webp'], multiple: false, maxSizeBytes: 20 * 1024 * 1024 });
-                }
-                catch (e) {
-                    said.textContent = 'The file picker could not open: ' + String((e && e.message) || e).slice(0, 200);
-                    said.dataset.kind = 'bad';
-                    return;
-                }
-                const f = files && files[0];
-                if (!f)
-                    return;
-                const url = URL.createObjectURL(new Blob([f.bytes], { type: f.mimeType || 'image/png' }));
-                const im = await loadImage(url);
-                URL.revokeObjectURL(url);
-                if (!im || !im.width) {
-                    said.textContent = 'That file is not a picture Auto Foley can read. Use PNG or WebP.';
-                    said.dataset.kind = 'bad';
-                    return;
-                }
-                const picture = await stickerPicture(im);
-                if (!picture) {
-                    said.textContent = 'That picture is too large to keep. Pick a smaller one.';
-                    said.dataset.kind = 'bad';
-                    return;
-                }
-                await keepPic(picture);
-            });
-            choose.setAttribute('data-af-revealpic', '');
-            pickRow.appendChild(choose);
-            box.appendChild(pickRow);
-            if (stickersNow().length) {
-                const use = select('Or use a sticker', [{ id: '', label: 'Pick a sticker' }].concat(stickersNow().map((k, n) => ({ id: k.id, label: 'Sticker ' + (n + 1) }))), '', async (v) => {
-                    if (!v)
-                        return;
-                    let got = null;
-                    try {
-                        got = await rpc({ type: 'sticker_get', id: v }, 15000);
-                    }
-                    catch (_) { }
-                    if (!got || !got.picture) {
-                        said.textContent = 'That sticker’s picture could not be read from your account.';
-                        said.dataset.kind = 'bad';
-                        return;
-                    }
-                    await keepPic(String(got.picture));
-                });
-                use.querySelector('select').setAttribute('data-af-revealsticker', '');
-                box.appendChild(use);
-            }
-            box.appendChild(segmented('Shows through', [
-                { id: 'alpha', label: 'Its solid parts' },
-                { id: 'bright', label: 'Its light parts' },
-            ], rv.by === 'bright' ? 'bright' : 'alpha', (v) => {
-                rv.by = v === 'bright' ? 'bright' : 'alpha';
-                touched();
-            }, 'Solid parts by default: see-through parts hide the layer.'));
-            void loadStickerPic(rv.id).then(() => changed());
-        }
-        box.appendChild(said);
-        const acts = el('<div class="af-row af-wrap"></div>');
-        const dup = button('Duplicate', async () => {
-            const c = newReveal(rv.kind);
-            if (!c)
-                return;
-            Object.assign(c, JSON.parse(JSON.stringify(Object.assign({}, rv, { id: c.id, name: (rv.name.slice(0, 33) + ' (copy)').slice(0, 40) }))));
-            if (rv.kind === 'picture') {
-                let got = null;
-                try {
-                    got = await rpc({ type: 'sticker_get', id: rv.id }, 15000);
-                    if (got && got.picture)
-                        await rpc({ type: 'sticker_put', id: c.id, picture: got.picture }, 60000);
-                }
-                catch (_) { }
-            }
-            saveReveals(true);
-            changed();
-        });
-        dup.setAttribute('data-af-revealact', 'dup');
-        const del = button('Delete', async () => {
-            const uses = ownAnims().filter((a) => [a.inT, a.outT].some((t) => t && t.mask && t.mask.own === rv.id)).map((a) => a.name);
-            if (!(await askSure('Delete ' + rv.name, 'Delete the reveal ' + rv.name + '?' + (uses.length ? ' ' + uses.join(', ') + ' show through a circle in its place.' : '') + ' There is no undo.', 'Delete', true)))
-                return;
-            if (box._stop)
-                box._stop();
-            await leave(box);
-            for (const a of ownAnims())
-                for (const w of ['in', 'out']) {
-                    const t = w === 'in' ? a.inT : a.outT;
-                    if (t && t.mask && t.mask.own === rv.id) {
-                        t.mask.type = 'iris';
-                        delete t.mask.own;
-                        if (t.preset)
-                            t.preset = Object.assign({}, t.preset, { through: 'iris', own: undefined });
-                    }
-                }
-            S.videoReveals = revealsNow().filter((x) => x.id !== rv.id);
-            set({ videoReveals: S.videoReveals.slice(), videoAnimsOwn: ownAnims().slice() });
-            gone();
-        });
-        del.setAttribute('data-af-revealact', 'delete');
-        acts.appendChild(dup);
-        acts.appendChild(del);
-        box.appendChild(acts);
-        return box;
-    }
-    function drawOwnAnims(box, changed, redrawPlaces) {
-        box.replaceChildren();
-        const h = el('<h3 class="af-ws-h">Your animations</h3>');
-        box.appendChild(h);
-        box.appendChild(hint('Make your own from a built-in or from nothing. Fast changes between light and dark can flash.'));
-        const said = el('<p class="af-status" role="status" data-af-animsaid></p>');
-        const say = (t, bad) => {
-            said.textContent = t;
-            if (bad)
-                said.dataset.kind = 'bad';
-            else
-                delete said.dataset.kind;
-        };
-        const list = ownList();
-        const redraw = () => {
-            drawOwnAnims(box, changed, redrawPlaces);
-            redrawPlaces();
-        };
-        const listBox = el('<div class="af-col af-shapes" data-af-ownanims role="group" aria-label="Your animations"></div>');
-        for (const a of list) {
-            const b = button(a.name, () => {
-                animEditId = animEditId === a.id ? '' : a.id;
-                redraw();
-            });
-            b.classList.add('af-shape-pick');
-            b.setAttribute('data-af-ownanim', a.id);
-            b.setAttribute('aria-pressed', a.id === animEditId ? 'true' : 'false');
-            listBox.appendChild(b);
-        }
-        if (!list.length)
-            listBox.appendChild(el('<p class="af-note">None yet.</p>'));
-        box.appendChild(listBox);
-        // Making one: from a built-in, or a plain fade.
-        let from = 'fade';
-        const fromRow = select('Start from', BUILT_IN_ANIMS.map((a) => ({ id: a.id, label: a.name })), from, (v) => {
-            from = v;
-        }, 'A copy of it is made, which you can change.');
-        fromRow.querySelector('select').setAttribute('data-af-animfrom', '');
-        box.appendChild(fromRow);
-        const tools = el('<div class="af-row af-wrap"></div>');
-        const make = button('Make an animation', () => {
-            if (list.length >= 30)
-                return say('You have 30 animations, which is the most there can be.', true);
-            const base = animById(from) || BUILT_IN_ANIMS[0];
-            const a = copyAnim(base, 'My ' + base.name.toLowerCase());
-            // Made from a built-in the simple editor knows, it starts simple.
-            const pr = presetFor(base.id);
-            if (pr) {
-                applyPreset(a, 'in', pr);
-                applyPreset(a, 'out', pr);
-            }
-            list.push(a);
-            animEditId = a.id;
-            saveOwnAnims(true);
-            redraw();
-        });
-        make.setAttribute('data-af-animmake', '');
-        make.disabled = list.length >= 30;
-        const imp = button('Add from a file', async () => {
-            let files = [];
-            try {
-                files = await ctx.uploads.pickFile({ accept: ['application/json', '.json'], multiple: false, maxSizeBytes: 512 * 1024 });
-            }
-            catch (e) {
-                return say('The file picker could not open: ' + String((e && e.message) || e).slice(0, 200), true);
-            }
-            const f = files && files[0];
-            if (!f)
-                return;
-            let got = null;
-            try {
-                got = JSON.parse(new TextDecoder().decode(f.bytes));
-            }
-            catch (_) {
-                return say('That file is not an animation Auto Foley can read.', true);
-            }
-            const items = Array.isArray(got && got.animations) ? got.animations : got && got.inT ? [got] : [];
-            if (!items.length)
-                return say('That file has no animation in it.', true);
-            let added = 0;
-            for (const it of items) {
-                if (list.length >= 30)
-                    break;
-                if (!it || typeof it !== 'object' || !it.inT || !it.outT)
-                    continue;
-                let name = String(it.name || 'An animation').slice(0, 40);
-                // A name already used gets a copy of its own, so nothing is lost.
-                if (list.some((x) => x.name === name))
-                    name = (name.slice(0, 33) + ' (copy)').slice(0, 40);
-                list.push(Object.assign(copyAnim(it, name), { kind: ['text', 'frame', 'any'].indexOf(it.kind) >= 0 ? it.kind : 'any' }));
-                added++;
-            }
-            saveOwnAnims(true);
-            redraw();
-            say(added ? 'Added ' + (added === 1 ? 'one animation' : added + ' animations') + '.' : 'Nothing was added: there is no room, or the file has no animation in it.', !added);
-        });
-        imp.setAttribute('data-af-animimport', '');
-        tools.appendChild(make);
-        tools.appendChild(imp);
-        box.appendChild(tools);
-        box.appendChild(said);
-        const a = list.find((x) => x.id === animEditId);
-        if (!a) {
-            stopDemo();
-            return;
-        }
-        const ed = el('<div class="af-col af-anim-edit" data-af-animedit></div>');
-        box.appendChild(ed);
-        let preview = null;
-        const touched = () => {
-            saveOwnAnims();
-            changed();
-            paintPreview();
-        };
-        // The name and what can be done with it, in one short row at the top.
-        const top = el('<div class="af-col" data-af-animtop></div>');
-        ed.appendChild(top);
-        const nameId = rid('an');
-        top.appendChild(labelRow('Name', '', nameId));
-        const name = el('<input type="text" class="af-field" maxlength="40" autocomplete="off" id="' + nameId + '" data-af-animname>');
-        name.value = a.name;
-        name.addEventListener('change', () => {
-            const v = name.value.trim().slice(0, 40);
-            if (!v) {
-                name.value = a.name;
-                return;
-            }
-            a.name = v;
-            saveOwnAnims(true);
-            redraw();
-        });
-        top.appendChild(name);
-        // The preview stays in view while the settings under it scroll.
-        preview = animDemoStart(() => ownList().find((x) => x.id === a.id) || null, () => {
-            const tr = animSide === 'out' ? a.outT : a.inT;
-            return tr && tr.mask && tr.mask.type !== 'none' && tr.mask.type !== 'linear' ? tr.mask : null;
-        }, () => {
-            touched();
-            paintSimple();
-            if (animTimeline)
-                paintTrack();
-        });
-        ed.appendChild(preview);
-        ed.appendChild(segmented('What does it move?', [
-            { id: 'any', label: 'Both' },
-            { id: 'text', label: 'Text' },
-            { id: 'frame', label: 'The frame' },
-        ], a.kind, (v) => {
-            a.kind = v === 'text' || v === 'frame' ? v : 'any';
-            touched();
-            redrawPlaces();
-        }));
-        const grid = el('<div class="af-shape-grid"></div>');
-        const num = (key, label, value, min, max, step, help, take) => {
-            const r = numberRow(label, value, min, max, step, (v) => {
-                take(v);
-                touched();
-            }, help);
-            r.setAttribute('data-af-animnum', key);
-            grid.appendChild(r);
-        };
-        num('secs', 'Length, in seconds', a.secs, 0, 10, 0.1, 'How long each of in and out takes.', (v) => (a.secs = v));
-        num('delay', 'Delay, in seconds', a.delay, 0, 10, 0.1, 'It waits this long before it starts.', (v) => (a.delay = v));
-        ed.appendChild(grid);
-        // Coming in and going out, each chosen by look. The timeline under them
-        // shows every keyframe.
-        const simple = el('<div class="af-col" data-af-animsimple></div>');
-        ed.appendChild(simple);
-        const adv = el('<div class="af-sub"><div class="af-under af-col" data-af-animadvanced></div></div>');
-        const advIn = adv.firstElementChild;
-        const tl = personSwitch('Show the timeline', 'Every keyframe, the easing curve and each reveal setting. Off by default.', animTimeline, (on) => {
-            animTimeline = on;
-            showUnder(adv, animTimeline);
-            if (animTimeline)
-                paintTrack();
-            paintSimple();
-        });
-        tl.setAttribute('data-af-row', 'animTimeline');
-        const tlBox = tl.querySelector('input');
-        tlBox.setAttribute('data-af-animtimeline', '');
-        ed.appendChild(tl);
-        adv.hidden = !animTimeline;
-        ed.appendChild(adv);
-        const ov = numberRow('Overlap, in percent', Math.round(numOr(a.overlap, 1) * 100), 0, 100, 5, (v) => {
-            a.overlap = v / 100;
-            touched();
-        }, '100 moves the leaving and the arriving part at once.');
-        ov.setAttribute('data-af-animnum', 'overlap');
-        advIn.appendChild(ov);
-        advIn.appendChild(select('Turns and sizes around', [
-            { id: 'center', label: 'The middle' },
-            { id: 'top', label: 'The top' },
-            { id: 'bottom', label: 'The bottom' },
-            { id: 'left', label: 'The left' },
-            { id: 'right', label: 'The right' },
-        ], a.anchor || 'center', (v) => {
-            a.anchor = v;
-            touched();
-        }, 'The middle of the frame by default.'));
-        if (a.kind !== 'frame')
-            advIn.appendChild(select('Show the text', [
-                { id: '', label: 'All at once' },
-                { id: 'chars', label: 'A letter at a time, as Typewriter does' },
-                { id: 'words', label: 'A word at a time, as Word by word does' },
-            ], a.reveal || '', (v) => {
-                a.reveal = v === 'chars' || v === 'words' ? v : '';
-                touched();
-            }, 'While it comes in. All at once by default.'));
-        // Easing: a preset, or the curve's four numbers.
-        const easeBox = el('<div class="af-col" data-af-animease></div>');
-        const paintEase = () => {
-            easeBox.replaceChildren();
-            const match = EASES.find((e) => e.curve.every((v, i) => Math.abs(v - (a.ease[i] || 0)) < 1e-6));
-            const pick = select('Easing', EASES.map((e) => ({ id: e.id, label: e.label })).concat(match ? [] : [{ id: 'own', label: 'Your own curve' }]), match ? match.id : 'own', (v) => {
-                const e = EASES.find((x) => x.id === v);
-                if (!e)
-                    return;
-                a.ease = e.curve.slice();
-                touched();
-                paintEase();
-            }, 'Gentle by default. The four numbers below are the curve, as in CSS cubic-bezier.');
-            pick.querySelector('select').setAttribute('data-af-animeasepick', '');
-            easeBox.appendChild(pick);
-            const row = el('<div class="af-row af-wrap"></div>');
-            row.appendChild(easeDrawing(a.ease));
-            const g2 = el('<div class="af-shape-grid af-grow"></div>');
-            ['First x', 'First y', 'Second x', 'Second y'].forEach((label, i) => {
-                const r = numberRow(label, a.ease[i], i % 2 ? -1 : 0, i % 2 ? 2 : 1, 0.05, (v) => {
-                    a.ease[i] = v;
-                    touched();
-                    paintEase();
-                });
-                r.setAttribute('data-af-animcurve', String(i));
-                g2.appendChild(r);
-            });
-            row.appendChild(g2);
-            easeBox.appendChild(row);
-        };
-        paintEase();
-        advIn.appendChild(easeBox);
-        // The two tracks, each with its keyframes and its mask.
-        let side = animSide;
-        const trackBox = el('<div class="af-col" data-af-animtrack></div>');
-        const PROPS = [
-            { key: 'o', label: 'Strength, in percent', min: 0, max: 100, step: 5 },
-            { key: 'x', label: 'Across, in pixels', min: -2000, max: 2000, step: 1 },
-            { key: 'y', label: 'Down, in pixels', min: -2000, max: 2000, step: 1 },
-            { key: 's', label: 'Size, in percent', min: 0, max: 400, step: 1 },
-            { key: 'r', label: 'Turn, in degrees', min: -720, max: 720, step: 1 },
-            { key: 'b', label: 'Blur, in pixels', min: 0, max: 60, step: 1 },
-            { key: 'l', label: 'Brightness, in percent', min: 0, max: 200, step: 5 },
-            { key: 'ta', label: 'Tint, in percent', min: 0, max: 100, step: 5 },
-        ];
-        const paintTrack = () => {
-            trackBox.replaceChildren();
-            trackBox.appendChild(segmented('Track', [
-                { id: 'in', label: 'Coming in' },
-                { id: 'out', label: 'Going out' },
-            ], side, (v) => {
-                side = v === 'out' ? 'out' : 'in';
-                animSide = side;
-                paintTrack();
-            }));
-            const tr = side === 'in' ? a.inT : a.outT;
-            if (!Array.isArray(tr.keys))
-                tr.keys = [];
-            tr.keys.sort((x, y) => x.at - y.at);
-            tr.keys.forEach((k, n) => {
-                const one = el('<div class="af-col af-moodedit" data-af-animkey></div>');
-                one.setAttribute('data-af-animkey', String(n));
-                const g3 = el('<div class="af-shape-grid"></div>');
-                const at = numberRow('When, in percent of the length', Math.round(k.at * 100), 0, 100, 1, (v) => {
-                    k.at = v / 100;
-                    touched();
-                });
-                at.setAttribute('data-af-keyat', String(n));
-                g3.appendChild(at);
-                for (const p of PROPS) {
-                    const has = k[p.key] != null;
-                    const shownV = p.key === 'o' ? Math.round(numOr(k.o, 1) * 100) : numOr(k[p.key], p.key === 's' || p.key === 'l' ? 100 : 0);
-                    const r = numberRow(p.label, shownV, p.min, p.max, p.step, (v) => {
-                        k[p.key] = p.key === 'o' ? v / 100 : v;
-                        touched();
-                    }, has ? '' : 'Not set: it stays as it is.');
-                    r.setAttribute('data-af-keyprop', p.key);
-                    g3.appendChild(r);
-                }
-                one.appendChild(g3);
-                one.appendChild(colorRow('animTint' + a.id + side + n, 'Tint color', 'Used with Tint, in percent.', '--af-none', '#ffffff', 'Use white', () => touched(), {
-                    get: () => String(k.tint || ''),
-                    put: (hex) => {
-                        k.tint = hex || undefined;
-                    },
-                }));
-                const rm = button('Delete this keyframe', async () => {
-                    await leave(one);
-                    tr.keys.splice(tr.keys.indexOf(k), 1);
-                    touched();
-                    paintTrack();
-                });
-                rm.setAttribute('data-af-keydel', String(n));
-                const rr = el('<div class="af-row"></div>');
-                rr.appendChild(rm);
-                one.appendChild(rr);
-                trackBox.appendChild(one);
-            });
-            const addKey = button('Add a keyframe', () => {
-                if (tr.keys.length >= 12)
-                    return;
-                const lastAt = tr.keys.length ? tr.keys[tr.keys.length - 1].at : -0.5;
-                tr.keys.push({ at: Math.min(1, lastAt + 0.5), o: 1 });
-                touched();
-                paintTrack();
-            });
-            addKey.setAttribute('data-af-keyadd', '');
-            addKey.disabled = tr.keys.length >= 12;
-            const ar = el('<div class="af-row"></div>');
-            ar.appendChild(addKey);
-            trackBox.appendChild(ar);
-            // How this track reveals the layer. The saved name is mask. A reveal
-            // only decides which part of the layer shows. It is never drawn.
-            if (!tr.mask)
-                tr.mask = { type: 'none', angle: 0, feather: 0 };
-            const m = tr.mask;
-            const REVEALS = [
-                { id: 'none', label: 'None' },
-                { id: 'linear', label: 'Wipe' },
-                { id: 'iris', label: 'Circle' },
-                { id: 'box', label: 'Box' },
-                { id: 'diamond', label: 'Diamond' },
-                { id: 'clock', label: 'Clock' },
-                { id: 'shape', label: 'A shape' },
-            ];
-            const rv = el('<div class="af-col" data-af-row="animReveal"></div>');
-            rv.appendChild(labelRow('Reveal', 'Shows the layer bit by bit, through a shape: a wipe across, or a circle that opens.'));
-            const picks = el('<div class="af-shape-kinds" role="group" aria-label="Reveal" data-af-animmask></div>');
-            const shownType = m.type === 'radial' ? 'iris' : m.type;
-            for (const r of REVEALS) {
-                const b = el('<button type="button" class="af-shape-kind" aria-pressed="false"><canvas width="56" height="56" aria-hidden="true"></canvas><span></span></button>');
-                b.setAttribute('data-af-reveal', r.id);
-                b.setAttribute('aria-pressed', shownType === r.id ? 'true' : 'false');
-                setText(b.querySelector('span'), r.label);
-                revealIcon(b.querySelector('canvas'), r.id);
-                b.addEventListener('click', () => {
-                    m.type = r.id;
-                    if (r.id === 'shape' && !m.shape)
-                        m.shape = 'heart';
-                    touched();
-                    paintTrack();
-                });
-                picks.appendChild(b);
-            }
-            rv.appendChild(picks);
-            trackBox.appendChild(rv);
-            if (m.type !== 'none') {
-                const ctl = el('<div class="af-col" data-af-revealctl></div>');
-                const num2 = (key, label, value, min, max, step, help, take) => {
-                    const r = numberRow(label, value, min, max, step, (v) => {
-                        take(v);
-                        touched();
-                    }, help);
-                    r.setAttribute('data-af-reveal-num', key);
-                    return r;
-                };
-                if (m.type === 'shape') {
-                    const sp = select('Shape', SHAPE_KINDS.filter((k) => k.id !== 'text' && k.id !== 'line' && k.id !== 'own').map((k) => ({ id: k.id, label: k.label })), m.shape || 'heart', (v) => {
-                        m.shape = v;
-                        touched();
-                    }, 'Any shape from the shape picker, such as a heart or a star.');
-                    sp.querySelector('select').setAttribute('data-af-revealshape', '');
-                    ctl.appendChild(sp);
-                }
-                if (m.type === 'linear') {
-                    const dirs = [
-                        { id: '0', label: 'From the left' },
-                        { id: '180', label: 'From the right' },
-                        { id: '90', label: 'From the top' },
-                        { id: '270', label: 'From the bottom' },
-                    ];
-                    const ang = String(((Math.round(Number(m.angle) || 0) % 360) + 360) % 360);
-                    ctl.appendChild(segmented('Direction', dirs, dirs.some((d) => d.id === ang) ? ang : '', (v) => {
-                        m.angle = Number(v);
-                        touched();
-                        paintTrack();
-                    }));
-                    ctl.appendChild(num2('angle', 'Angle, in degrees', Math.round(Number(m.angle) || 0), -360, 360, 1, '0 wipes from the left, 90 from the top.', (v) => (m.angle = v)));
-                }
-                if (m.type === 'clock') {
-                    ctl.appendChild(segmented('Which way it turns', [
-                        { id: 'cw', label: 'Clockwise' },
-                        { id: 'ccw', label: 'Counterclockwise' },
-                    ], m.dir === 'ccw' ? 'ccw' : 'cw', (v) => {
-                        m.dir = v === 'ccw' ? 'ccw' : 'cw';
-                        touched();
-                    }));
-                    ctl.appendChild(num2('start', 'Where it starts, in degrees', Math.round(keyOr(m.start, 0)), -360, 360, 1, '0 is the top, 90 the right.', (v) => (m.start = v)));
-                }
-                if (m.type !== 'linear') {
-                    const g5 = el('<div class="af-shape-grid"></div>');
-                    g5.appendChild(num2('cx', 'Middle across, in percent', Math.round(keyOr(m.cx, 0.5) * 100), 0, 100, 1, 'Or drag on the preview.', (v) => (m.cx = v / 100)));
-                    g5.appendChild(num2('cy', 'Middle down, in percent', Math.round(keyOr(m.cy, 0.5) * 100), 0, 100, 1, '50 is the middle.', (v) => (m.cy = v / 100)));
-                    ctl.appendChild(g5);
-                }
-                if (m.type !== 'linear' && m.type !== 'clock')
-                    ctl.appendChild(num2('size', 'Size, in percent', Math.round(keyOr(m.size, 100)), 0, 400, 5, '100 opens to cover the frame. More opens past its edge.', (v) => (m.size = v)));
-                if (m.type !== 'clock') {
-                    const soft = slider('Soft edge', Math.round(Number(m.feather) || 0), 0, 100, 1, (v) => (v ? v + '%' : 'Sharp'), (v) => {
-                        m.feather = v;
-                        touched();
-                    });
-                    soft.setAttribute('data-af-byeye', '');
-                    soft.setAttribute('data-af-reveal-soft', '');
-                    ctl.appendChild(soft);
-                }
-                const g6 = el('<div class="af-shape-grid"></div>');
-                const dFrom = side === 'in' ? 0 : 100;
-                g6.appendChild(num2('from', 'How open at the start, in percent', Math.round(keyOr(m.from, dFrom)), 0, 100, 5, '', (v) => {
-                    m.from = v;
-                    if (m.to == null)
-                        m.to = 100 - dFrom;
-                }));
-                g6.appendChild(num2('to', 'How open at the end, in percent', Math.round(keyOr(m.to, 100 - dFrom)), 0, 100, 5, '', (v) => {
-                    m.to = v;
-                    if (m.from == null)
-                        m.from = dFrom;
-                }));
-                ctl.appendChild(g6);
-                const curEase = Array.isArray(m.ease) ? EASES.find((e) => e.curve.every((v, i) => Math.abs(v - m.ease[i]) < 1e-6)) : null;
-                ctl.appendChild(select('Easing of the reveal', [{ id: '', label: 'The same as the animation' }].concat(EASES.map((e) => ({ id: e.id, label: e.label }))), curEase ? curEase.id : '', (v) => {
-                    const e = EASES.find((x) => x.id === v);
-                    m.ease = e ? e.curve.slice() : undefined;
-                    touched();
-                }));
-                const inv = button('Turn the other way', () => {
-                    m.invert = !m.invert;
-                    inv.setAttribute('aria-pressed', m.invert ? 'true' : 'false');
-                    touched();
-                });
-                inv.setAttribute('aria-pressed', m.invert ? 'true' : 'false');
-                inv.setAttribute('data-af-revealinvert', '');
-                const ir = el('<div class="af-row af-wrap"></div>');
-                ir.appendChild(inv);
-                ir.appendChild(hint('Hides through the shape instead of showing.'));
-                ctl.appendChild(ir);
-                trackBox.appendChild(ctl);
-            }
-        };
-        paintTrack();
-        advIn.appendChild(trackBox);
-        // Simple: a card for each effect, by look, and only the settings the
-        // chosen one has.
-        function paintSimple() {
-            if (!a)
-                return;
-            if (penNow)
-                penNow.stop();
-            simple.replaceChildren();
-            for (const which of ['in', 'out']) {
-                const tr = which === 'in' ? a.inT : a.outT;
-                const pr = presetOf(a, which);
-                const custom = !pr || !samePreset(a, which, pr);
-                const sec = el('<div class="af-col af-anim-side"></div>');
-                sec.setAttribute('data-af-animside', which);
-                const head = el('<button type="button" class="af-fold" aria-expanded="true"><span class="af-caret">▶</span><span></span></button>');
-                setText(head.lastElementChild, which === 'in' ? 'Coming in' : 'Going out');
-                const body = el('<div class="af-sub"><div class="af-foldbody af-col"></div></div>');
-                const inner = body.firstElementChild;
-                const open = animOpenSides[which] !== false;
-                head.setAttribute('aria-expanded', open ? 'true' : 'false');
-                body.hidden = !open;
-                head.addEventListener('click', () => {
-                    const now = head.getAttribute('aria-expanded') !== 'true';
-                    animOpenSides[which] = now;
-                    head.setAttribute('aria-expanded', now ? 'true' : 'false');
-                    reveal(body, now);
-                    if (now)
-                        animSide = which;
-                });
-                sec.appendChild(head);
-                sec.appendChild(body);
-                simple.appendChild(sec);
-                const cards = el('<div class="af-effect-cards" role="group"></div>');
-                cards.setAttribute('aria-label', which === 'in' ? 'How it comes in' : 'How it goes out');
-                for (const fx of SIMPLE_EFFECTS) {
-                    if (fx.textIn && (which === 'out' || a.kind === 'frame'))
-                        continue;
-                    const card = el('<button type="button" class="af-effect-card" aria-pressed="false"><canvas width="88" height="50" aria-hidden="true"></canvas><span></span></button>');
-                    card.setAttribute('data-af-effect', fx.id);
-                    card.setAttribute('aria-pressed', !custom && pr && pr.id === fx.id ? 'true' : 'false');
-                    setText(card.querySelector('span'), fx.label);
-                    effectExample(card.querySelector('canvas'), fx.id, which);
-                    card.addEventListener('click', () => {
-                        animSide = which;
-                        const next = Object.assign({}, EFFECT_DEFAULTS[fx.id] || {}, { id: fx.id });
-                        applyPreset(a, which, next);
-                        touched();
-                        paintSimple();
-                        if (animTimeline)
-                            paintTrack();
-                    });
-                    cards.appendChild(card);
-                }
-                inner.appendChild(cards);
-                if (custom) {
-                    inner.appendChild(hint(animTimeline ? 'Custom timing: change it on the timeline below, or pick an effect to replace it.' : 'Custom timing is kept. Turn the timeline on to change it.'));
-                    continue;
-                }
-                const set2 = (patch) => {
-                    applyPreset(a, which, Object.assign({}, pr, patch));
-                    touched();
-                    if (animTimeline)
-                        paintTrack();
-                };
-                const ctl = el('<div class="af-col" data-af-effectctl></div>');
-                if (pr.id === 'slide' || pr.id === 'wipe')
-                    ctl.appendChild(segmented('Direction', [
-                        { id: 'l', label: 'From the left' },
-                        { id: 'r', label: 'From the right' },
-                        { id: 't', label: 'From the top' },
-                        { id: 'b', label: 'From the bottom' },
-                    ], pr.dir || 'l', (v) => set2({ dir: v })));
-                if (pr.id === 'shape') {
-                    const kinds = [
-                        { id: 'iris', label: 'Circle' },
-                        { id: 'box', label: 'Box' },
-                        { id: 'diamond', label: 'Diamond' },
-                        { id: 'clock', label: 'Clock' },
-                        { id: 'shape', label: 'A shape' },
-                    ];
-                    const picks = el('<div class="af-shape-kinds" role="group" aria-label="The shape it shows through" data-af-effectshapes></div>');
-                    for (const k of kinds) {
-                        const bt = el('<button type="button" class="af-shape-kind" aria-pressed="false"><canvas width="56" height="56" aria-hidden="true"></canvas><span></span></button>');
-                        bt.setAttribute('data-af-reveal', k.id);
-                        bt.setAttribute('aria-pressed', (pr.through || 'iris') === k.id ? 'true' : 'false');
-                        setText(bt.querySelector('span'), k.label);
-                        revealIcon(bt.querySelector('canvas'), k.id);
-                        bt.addEventListener('click', () => {
-                            set2({ through: k.id });
-                            paintSimple();
-                        });
-                        picks.appendChild(bt);
-                    }
-                    for (const rv of revealsNow()) {
-                        const bt = el('<button type="button" class="af-shape-kind" aria-pressed="false"><canvas width="56" height="56" aria-hidden="true"></canvas><span></span></button>');
-                        bt.setAttribute('data-af-reveal-own', rv.id);
-                        bt.setAttribute('aria-pressed', pr.through === 'own' && pr.own === rv.id ? 'true' : 'false');
-                        setText(bt.querySelector('span'), rv.name);
-                        revealIcon(bt.querySelector('canvas'), 'own', rv.id);
-                        bt.addEventListener('click', () => {
-                            set2({ through: 'own', own: rv.id });
-                            paintSimple();
-                        });
-                        picks.appendChild(bt);
-                    }
-                    ctl.appendChild(labelRow('The shape it shows through', ''));
-                    ctl.appendChild(picks);
-                    // Your own: drawn, a picture, or text.
-                    const mk = el('<div class="af-row af-wrap" data-af-revealmake></div>');
-                    for (const [kind, label] of [['draw', 'Draw your own'], ['picture', 'Use a picture'], ['text', 'Use text']]) {
-                        const bt = button(label, () => {
-                            const rv = newReveal(kind);
-                            if (!rv)
-                                return;
-                            set2({ through: 'own', own: rv.id });
-                            paintSimple();
-                        });
-                        bt.setAttribute('data-af-revealnew', kind);
-                        bt.disabled = revealsNow().length >= REVEALS_MAX;
-                        if (!bt.disabled)
-                            mk.appendChild(bt);
-                    }
-                    if (mk.childNodes.length)
-                        ctl.appendChild(mk);
-                    if (pr.through === 'shape') {
-                        const sp = select('Shape', SHAPE_KINDS.filter((k) => k.id !== 'text' && k.id !== 'line' && k.id !== 'own').map((k) => ({ id: k.id, label: k.label })), pr.kind || 'heart', (v) => set2({ kind: v }), 'Any shape from the shape picker, such as a heart or a star.');
-                        sp.querySelector('select').setAttribute('data-af-revealshape', '');
-                        ctl.appendChild(sp);
-                    }
-                }
-                if (pr.id === 'iris' || pr.id === 'shape') {
-                    const g7 = el('<div class="af-shape-grid"></div>');
-                    const cxr = numberRow('Middle across, in percent', Math.round(keyOr(pr.cx, 0.5) * 100), 0, 100, 1, (v) => set2({ cx: v / 100 }), 'Or drag on the preview.');
-                    cxr.setAttribute('data-af-reveal-num', 'cx');
-                    const cyr = numberRow('Middle down, in percent', Math.round(keyOr(pr.cy, 0.5) * 100), 0, 100, 1, (v) => set2({ cy: v / 100 }), '50 is the middle.');
-                    cyr.setAttribute('data-af-reveal-num', 'cy');
-                    g7.appendChild(cxr);
-                    g7.appendChild(cyr);
-                    ctl.appendChild(g7);
-                }
-                if (pr.id === 'shape' && pr.through !== 'clock') {
-                    const sz = numberRow('Size, in percent', Math.round(keyOr(pr.size, 100)), 0, 400, 5, (v) => set2({ size: v }), '100 opens to cover the frame. Less stops part of the way.');
-                    sz.setAttribute('data-af-reveal-num', 'size');
-                    ctl.appendChild(sz);
-                }
-                if (pr.id === 'wipe' || pr.id === 'iris' || (pr.id === 'shape' && pr.through !== 'clock')) {
-                    const soft = slider('Soft edge', Math.round(keyOr(pr.soft, 25)), 0, 100, 1, (v) => (v ? v + '%' : 'Sharp'), (v) => set2({ soft: v }));
-                    soft.setAttribute('data-af-byeye', '');
-                    soft.setAttribute('data-af-reveal-soft', '');
-                    ctl.appendChild(soft);
-                }
-                if (pr.id === 'shape') {
-                    const inv = button('Turn the other way', () => {
-                        set2({ invert: !pr.invert });
-                        paintSimple();
-                    });
-                    inv.setAttribute('aria-pressed', pr.invert ? 'true' : 'false');
-                    inv.setAttribute('data-af-revealinvert', '');
-                    const ir = el('<div class="af-row af-wrap"></div>');
-                    ir.appendChild(inv);
-                    ir.appendChild(hint('Hides through the shape instead of showing.'));
-                    ctl.appendChild(ir);
-                }
-                if (ctl.childNodes.length)
-                    inner.appendChild(ctl);
-                if (pr.id === 'shape' && pr.through === 'own') {
-                    const rv = revealsNow().find((x) => x.id === pr.own);
-                    if (rv)
-                        inner.appendChild(revealEditorBox(rv, preview, () => touched(), () => paintSimple()));
-                }
-                void tr;
-            }
-        }
-        const acts = el('<div class="af-row af-wrap"></div>');
-        const dup = button('Duplicate', () => {
-            if (list.length >= 30)
-                return say('You have 30 animations, which is the most there can be.', true);
-            const c = copyAnim(a, (a.name.slice(0, 33) + ' (copy)').slice(0, 40));
-            list.splice(list.indexOf(a) + 1, 0, c);
-            animEditId = c.id;
-            saveOwnAnims(true);
-            redraw();
-        });
-        dup.setAttribute('data-af-animact', 'dup');
-        const exp = button('Share', () => {
-            const body = { app: 'Auto Foley', kind: 'animation', version: VERSION, animations: [Object.assign({}, a, { id: undefined })] };
-            if (!saveFile(new Blob([JSON.stringify(body, null, 2)], { type: 'application/json' }), 'auto-foley-animation-' + (a.name.replace(/[^a-z0-9]+/gi, '-').toLowerCase().replace(/^-|-$/g, '') || 'mine') + '.json'))
-                say('The file could not be made. Try again.', true);
-        });
-        exp.setAttribute('data-af-animact', 'share');
-        const del = button('Delete', async () => {
-            const uses = ANIM_PLACES.filter((p) => ((S.videoAnims || {})[p.id] || {}).id === a.id).map((p) => p.label);
-            if (!(await askSure('Delete ' + a.name, 'Delete the animation ' + a.name + '?' + (uses.length ? ' ' + uses.join(', ') + ' go back to Default.' : '') + ' There is no undo.', 'Delete', true)))
-                return;
-            await leaveAll([listBox.querySelector('[data-af-ownanim="' + a.id + '"]'), ed]);
-            const now = ownList();
-            const i = now.indexOf(a);
-            if (i >= 0)
-                now.splice(i, 1);
-            animEditId = '';
-            const places = Object.assign({}, S.videoAnims || {});
-            for (const p of Object.keys(places))
-                if (places[p] && places[p].id === a.id)
-                    delete places[p];
-            set({ videoAnimsOwn: now.slice(), videoAnims: places });
-            changed();
-            redraw();
-        });
-        del.setAttribute('data-af-animact', 'delete');
-        acts.appendChild(dup);
-        acts.appendChild(exp);
-        acts.appendChild(del);
-        top.appendChild(acts);
-        paintSimple();
-    }
     // The places an animation is used, each with a dropdown: its default,
     // the built-in animations, and the reader's own.
     function drawAnimPlaces(outer, changed) {
         outer.replaceChildren();
         const box = el('<div class="af-col" data-af-animplaces></div>');
-        const ownBox = el('<div class="af-col" data-af-animown></div>');
         outer.appendChild(box);
-        outer.appendChild(ownBox);
         paintAnimPlaces(box, changed);
-        drawOwnAnims(ownBox, changed, () => paintAnimPlaces(box, changed));
     }
     // Whether the video uses an effect that flashes, while they are shown.
     const flashUsed = () => !!S.videoFlashOn && ANIM_PLACES.some((p) => {
@@ -20190,9 +18481,6 @@ export function setup(ctx, overrides) {
                     for (const a of BUILT_IN_ANIMS)
                         if ((kind === 'text' || a.kind !== 'text') && a.flash)
                             opts.push({ id: a.id, label: '\u26a0 ' + a.name, group: 'Effects that flash' });
-                for (const a of ownAnims())
-                    if (kind === 'text' || a.kind !== 'text')
-                        opts.push({ id: a.id, label: a.name, group: 'Your animations' });
                 const cur = now()[pl.id];
                 const value = cur && opts.some((o) => o.id === cur.id) ? cur.id : '';
                 const under = el('<div class="af-sub"><div class="af-under"></div></div>');
@@ -20256,12 +18544,118 @@ export function setup(ctx, overrides) {
                 }, pl.help);
                 row.querySelector('select').setAttribute('data-af-animplace', pl.id);
                 box.appendChild(row);
+                // The same choices as small moving pictures, to choose by look.
+                const lookHead = el('<button type="button" class="af-fold" aria-expanded="false"><span class="af-caret">▶</span><span>Pick by look</span></button>');
+                lookHead.setAttribute('data-af-animlook', pl.id);
+                const lookBody = el('<div class="af-sub"><div class="af-foldbody"></div></div>');
+                const lookIn = lookBody.firstElementChild;
+                const fillLook = () => {
+                    lookIn.replaceChildren();
+                    const cards = el('<div class="af-effect-cards" role="group"></div>');
+                    cards.setAttribute('aria-label', pl.label + ', by look');
+                    for (const o of opts) {
+                        const card = el('<button type="button" class="af-effect-card" aria-pressed="false"><canvas width="88" height="50" aria-hidden="true"></canvas><span></span></button>');
+                        card.setAttribute('data-af-animcard', o.id || 'default');
+                        card.setAttribute('aria-pressed', o.id === value ? 'true' : 'false');
+                        setText(card.querySelector('span'), o.id ? o.label : 'Default');
+                        lookExample(card.querySelector('canvas'), o.id ? animById(o.id) : BUILT_IN_ANIMS.find((x) => x.id === 'fade') || null);
+                        card.addEventListener('click', () => {
+                            const sel = row.querySelector('select');
+                            sel.value = o.id;
+                            sel.dispatchEvent(new Event('change', { bubbles: true }));
+                        });
+                        cards.appendChild(card);
+                    }
+                    lookIn.appendChild(cards);
+                };
+                const lookOpen = animLookOpen.has(pl.id);
+                lookHead.setAttribute('aria-expanded', lookOpen ? 'true' : 'false');
+                lookBody.hidden = !lookOpen;
+                if (lookOpen)
+                    fillLook();
+                lookHead.addEventListener('click', () => {
+                    const open = lookHead.getAttribute('aria-expanded') !== 'true';
+                    if (open) {
+                        animLookOpen.add(pl.id);
+                        fillLook();
+                    }
+                    else
+                        animLookOpen.delete(pl.id);
+                    lookHead.setAttribute('aria-expanded', open ? 'true' : 'false');
+                    reveal(lookBody, open);
+                });
+                box.appendChild(lookHead);
+                box.appendChild(lookBody);
                 timing();
                 under.hidden = !value;
                 box.appendChild(under);
             }
         }
     }
+    // Which places show their choices by look, and the small moving pictures
+    // on those cards, drawn by one loop: in, a moment at rest, then out.
+    const animLookOpen = new Set();
+    const lookCards = new Set();
+    let lookFrame = 0;
+    const lookSample = (g, al, x, y) => {
+        g.save();
+        g.globalAlpha = al;
+        g.fillStyle = '#3d4a78';
+        g.fillRect(x, y, 88, 50);
+        g.fillStyle = '#ffffff';
+        g.font = '700 17px system-ui, sans-serif';
+        const words = 'Aa Bb';
+        const rev = textReveal;
+        const shown = rev ? (rev.kind === 'words' ? words.split(' ').slice(0, Math.floor(rev.frac * 2 + 1e-6)).join(' ') : words.slice(0, Math.round(rev.frac * words.length))) : words;
+        const full = g.measureText(words).width;
+        g.fillText(shown, 44 - full / 2 + x, 31 + y);
+        g.restore();
+    };
+    function drawLookCard(e, t) {
+        const g = e.c.getContext('2d');
+        if (!g)
+            return;
+        g.setTransform(1, 0, 0, 1, 0, 0);
+        g.globalAlpha = 1;
+        g.fillStyle = '#15182a';
+        g.fillRect(0, 0, 88, 50);
+        if (!e.def)
+            return lookSample(g, 1, 0, 0);
+        const use = { def: e.def, secs: 1, delay: 0, strength: 60, speed: 1 };
+        if (t < 1)
+            runAnim(g, e.st, use, 'in', t, lookSample, 0);
+        else if (t < 1.5)
+            lookSample(g, 1, 0, 0);
+        else if (t < 2.5)
+            runAnim(g, e.st, use, 'out', t - 1.5, lookSample, 0);
+    }
+    function lookExample(c, def) {
+        const e = { c, def, st: { w: 88, h: 50 } };
+        lookCards.add(e);
+        drawLookCard(e, 0.6);
+        if (calm() || lookFrame)
+            return;
+        const step = (now) => {
+            lookFrame = 0;
+            const t = (now / 1000) % 2.8;
+            for (const x of Array.from(lookCards)) {
+                if (!x.c.isConnected) {
+                    lookCards.delete(x);
+                    continue;
+                }
+                drawLookCard(x, t);
+            }
+            if (lookCards.size && !calm())
+                lookFrame = requestAnimationFrame(step);
+        };
+        lookFrame = requestAnimationFrame(step);
+    }
+    disposers.push(() => {
+        if (lookFrame)
+            cancelAnimationFrame(lookFrame);
+        lookFrame = 0;
+        lookCards.clear();
+    });
     // The groups the templates are listed in, each picked with a chip.
     const TEMPLATE_CATS = [
         { id: 'all', label: 'All' },
@@ -20350,7 +18744,7 @@ export function setup(ctx, overrides) {
                 videoNameShadowFar: 2,
                 videoPicShape: 'circle', videoPicSize: 140, videoPicRing: true, videoPicRingWidth: 2, videoPicMove: true, videoTwo: true,
                 videoMoodPics: true, videoQuiet: 'fade', videoQuietStrength: 45,
-                videoAnims: {},
+                videoAnims: { open: { id: 'iris', secs: 0.8, delay: 0 }, title: { id: 'focus', secs: 0.5, delay: 0 } },
                 videoEdges: 30, videoEdgeColor: '#6b4a24', videoMove: 'rise', videoMoveSecs: 0.6,
                 videoTitleOn: true, videoFadeOut: 2, videoBylineInk: '#9a4a1c', videoBylineFont: '', videoBylineFill: 'solid', videoBylineStops: ['#f2b880'],
                 videoBylineDir: 'right', videoBylineShadow: false, videoBylineShadowInk: '', videoBylineShadowDark: 65, videoBylineShadowSoft: 18,
@@ -20384,7 +18778,7 @@ export function setup(ctx, overrides) {
                 videoNameShadowFar: 2,
                 videoPicShape: 'rounded', videoPicSize: 120, videoPicRing: true, videoPicRingWidth: 2, videoPicMove: true, videoTwo: true,
                 videoMoodPics: true, videoQuiet: 'fade', videoQuietStrength: 45,
-                videoAnims: {},
+                videoAnims: { open: { id: 'iris', secs: 0.8, delay: 0 }, end: { id: 'iris', secs: 0.8, delay: 0 } },
                 videoEdges: 60, videoEdgeColor: '#000000', videoMove: 'dissolve', videoMoveSecs: 0.7,
                 videoTitleOn: true, videoFadeOut: 2, videoBylineInk: '#f0c36a', videoBylineFont: '', videoBylineFill: 'solid', videoBylineStops: ['#f2b880'],
                 videoBylineDir: 'right', videoBylineShadow: true, videoBylineShadowInk: '#000000', videoBylineShadowDark: 90, videoBylineShadowSoft: 6,
@@ -20414,7 +18808,7 @@ export function setup(ctx, overrides) {
                 videoNameShadowFar: 2,
                 videoPicShape: 'circle', videoPicSize: 150, videoPicRing: true, videoPicRingWidth: 3, videoPicMove: true, videoTwo: true,
                 videoMoodPics: true, videoQuiet: 'fade', videoQuietStrength: 45,
-                videoAnims: {},
+                videoAnims: { title: { id: 'split', secs: 0.6, delay: 0 }, lines: { id: 'split', secs: 0.6, delay: 0 } },
                 videoEdges: 30, videoEdgeColor: '#05010f', videoMove: 'zoom', videoMoveSecs: 0.5,
                 videoTitleOn: true, videoFadeOut: 1.5, videoBylineInk: '#ff7ad9', videoBylineFont: '', videoBylineFill: 'solid',
                 videoBylineStops: ['#f2b880'], videoBylineDir: 'right', videoBylineShadow: false, videoBylineShadowInk: '', videoBylineShadowDark: 65,
@@ -20452,7 +18846,7 @@ export function setup(ctx, overrides) {
                 videoNameShadowFar: 2,
                 videoPicShape: 'circle', videoPicSize: 150, videoPicRing: true, videoPicRingWidth: 3, videoPicMove: true, videoTwo: true,
                 videoMoodPics: true, videoQuiet: 'fade', videoQuietStrength: 45,
-                videoAnims: {},
+                videoAnims: { title: { id: 'grow', secs: 0.5, delay: 0 }, lines: { id: 'rise', secs: 0.5, delay: 0 } },
                 videoEdges: 0, videoEdgeColor: '', videoMove: 'dissolve', videoMoveSecs: 0.6,
                 videoTitleOn: true, videoFadeOut: 1.5, videoBylineInk: '#c25b7d', videoBylineFont: '', videoBylineFill: 'solid',
                 videoBylineStops: ['#f2b880'], videoBylineDir: 'right', videoBylineShadow: false, videoBylineShadowInk: '', videoBylineShadowDark: 65,
@@ -20482,7 +18876,7 @@ export function setup(ctx, overrides) {
                 videoNameShadowFar: 2,
                 videoPicShape: 'rounded', videoPicSize: 124, videoPicRing: true, videoPicRingWidth: 1, videoPicMove: true, videoTwo: true,
                 videoMoodPics: true, videoQuiet: 'fade', videoQuietStrength: 45,
-                videoAnims: {},
+                videoAnims: { open: { id: 'focus', secs: 0.5, delay: 0 }, title: { id: 'focus', secs: 0.5, delay: 0 } },
                 videoEdges: 85, videoEdgeColor: '#000000', videoMove: 'black', videoMoveSecs: 0.9,
                 videoTitleOn: true, videoFadeOut: 3, videoBylineInk: '#c0504d', videoBylineFont: '', videoBylineFill: 'solid', videoBylineStops: ['#f2b880'],
                 videoBylineDir: 'right', videoBylineShadow: true, videoBylineShadowInk: '#000000', videoBylineShadowDark: 90, videoBylineShadowSoft: 20,
@@ -20509,7 +18903,7 @@ export function setup(ctx, overrides) {
                 videoNameShadowFar: 2,
                 videoPicShape: 'rounded', videoPicSize: 170, videoPicRing: true, videoPicRingWidth: 6, videoPicMove: true, videoTwo: true,
                 videoMoodPics: true, videoQuiet: 'fade', videoQuietStrength: 45,
-                videoAnims: {},
+                videoAnims: { title: { id: 'drop', secs: 0.5, delay: 0 }, lines: { id: 'grow', secs: 0.5, delay: 0 } },
                 videoEdges: 0, videoEdgeColor: '', videoMove: 'slide', videoMoveSecs: 0.4,
                 videoTitleOn: true, videoFadeOut: 1, videoBylineInk: '#c2185b', videoBylineFont: '', videoBylineFill: 'solid', videoBylineStops: ['#f2b880'],
                 videoBylineDir: 'right', videoBylineShadow: false, videoBylineShadowInk: '', videoBylineShadowDark: 65, videoBylineShadowSoft: 18,
@@ -20539,7 +18933,7 @@ export function setup(ctx, overrides) {
                 videoNameShadowFar: 2,
                 videoPicShape: 'rounded', videoPicSize: 120, videoPicRing: false, videoPicRingWidth: 3, videoPicMove: false, videoTwo: true,
                 videoMoodPics: true, videoQuiet: 'fade', videoQuietStrength: 45,
-                videoAnims: {},
+                videoAnims: { title: { id: 'type', secs: 1.2, delay: 0 }, lines: { id: 'type', secs: 1.2, delay: 0 } },
                 videoEdges: 0, videoEdgeColor: '', videoMove: 'fade', videoMoveSecs: 0.5,
                 videoTitleOn: true, videoFadeOut: 1.5, videoBylineInk: '#b03a2e', videoBylineFont: 'type', videoBylineFill: 'solid',
                 videoBylineStops: ['#f2b880'], videoBylineDir: 'right', videoBylineShadow: false, videoBylineShadowInk: '', videoBylineShadowDark: 65,
@@ -20603,7 +18997,7 @@ export function setup(ctx, overrides) {
                 videoNameShadowFar: 2,
                 videoPicShape: 'circle', videoPicSize: 150, videoPicRing: true, videoPicRingWidth: 2, videoPicMove: true, videoTwo: true,
                 videoMoodPics: true, videoQuiet: 'fade', videoQuietStrength: 45,
-                videoAnims: {},
+                videoAnims: { open: { id: 'iris', secs: 0.8, delay: 0 }, lines: { id: 'focus', secs: 0.5, delay: 0 } },
                 videoEdges: 25, videoEdgeColor: '#050a1f', videoMove: 'focus', videoMoveSecs: 0.7,
                 videoTitleOn: true, videoFadeOut: 2, videoBylineInk: '#f6d98b', videoBylineFont: '', videoBylineFill: 'solid', videoBylineStops: ['#f2b880'],
                 videoBylineDir: 'right', videoBylineShadow: true, videoBylineShadowInk: '#0b1638', videoBylineShadowDark: 60, videoBylineShadowSoft: 16,
@@ -20650,7 +19044,7 @@ export function setup(ctx, overrides) {
                 videoNameShadowFar: 2,
                 videoPicShape: 'rounded', videoPicSize: 120, videoPicRing: true, videoPicRingWidth: 1, videoPicMove: false, videoTwo: true,
                 videoMoodPics: true, videoQuiet: 'fade', videoQuietStrength: 45,
-                videoAnims: {},
+                videoAnims: { open: { id: 'wobble', secs: 0.7, delay: 0 }, title: { id: 'type', secs: 1.2, delay: 0 }, lines: { id: 'type', secs: 1.2, delay: 0 } },
                 videoEdges: 20, videoEdgeColor: '#000000', videoMove: 'cut', videoMoveSecs: 0.3,
                 videoTitleOn: true, videoFadeOut: 1, videoBylineInk: '#b8ffcb', videoBylineFont: 'type', videoBylineFill: 'solid',
                 videoBylineStops: ['#f2b880'], videoBylineDir: 'right', videoBylineShadow: true, videoBylineShadowInk: '#00ff55', videoBylineShadowDark: 45,
@@ -20708,7 +19102,7 @@ export function setup(ctx, overrides) {
                 videoNameShadowFar: 2,
                 videoPicShape: 'rounded', videoPicSize: 200, videoPicRing: true, videoPicRingWidth: 2, videoPicMove: true, videoTwo: true,
                 videoMoodPics: true, videoQuiet: 'fade', videoQuietStrength: 45,
-                videoAnims: {},
+                videoAnims: { lines: { id: 'words', secs: 1.0, delay: 0 } },
                 videoEdges: 25, videoEdgeColor: '#05060c', videoMove: 'dissolve', videoMoveSecs: 0.25,
                 videoTitleOn: true, videoFadeOut: 1, videoBylineInk: '#c9bfff', videoBylineFont: '', videoBylineFill: 'solid', videoBylineStops: ['#f2b880'],
                 videoBylineDir: 'right', videoBylineShadow: false, videoBylineShadowInk: '', videoBylineShadowDark: 65, videoBylineShadowSoft: 18,
@@ -20735,7 +19129,7 @@ export function setup(ctx, overrides) {
                 videoNameShadowFar: 2,
                 videoPicShape: 'circle', videoPicSize: 140, videoPicRing: true, videoPicRingWidth: 2, videoPicMove: true, videoTwo: true,
                 videoMoodPics: true, videoQuiet: 'fade', videoQuietStrength: 45,
-                videoAnims: {},
+                videoAnims: { lines: { id: 'drop', secs: 0.5, delay: 0 } },
                 videoEdges: 40, videoEdgeColor: '#1a2128', videoMove: 'fade', videoMoveSecs: 0.6,
                 videoTitleOn: true, videoFadeOut: 2, videoBylineInk: '#bcd3e3', videoBylineFont: '', videoBylineFill: 'solid', videoBylineStops: ['#f2b880'],
                 videoBylineDir: 'right', videoBylineShadow: true, videoBylineShadowInk: '#1c252d', videoBylineShadowDark: 60, videoBylineShadowSoft: 14,
@@ -20789,7 +19183,7 @@ export function setup(ctx, overrides) {
                 videoNameShadowFar: 2,
                 videoPicShape: 'rounded', videoPicSize: 140, videoPicRing: false, videoPicRingWidth: 3, videoPicMove: true, videoTwo: true,
                 videoMoodPics: true, videoQuiet: 'fade', videoQuietStrength: 45,
-                videoAnims: {},
+                videoAnims: { open: { id: 'iris', secs: 0.8, delay: 0 }, end: { id: 'iris', secs: 0.8, delay: 0 } },
                 videoEdges: 45, videoEdgeColor: '#3a2814', videoMove: 'black', videoMoveSecs: 0.8,
                 videoTitleOn: true, videoFadeOut: 2, videoBylineInk: '#5a3a18', videoBylineFont: '', videoBylineFill: 'solid', videoBylineStops: ['#f2b880'],
                 videoBylineDir: 'right', videoBylineShadow: false, videoBylineShadowInk: '', videoBylineShadowDark: 65, videoBylineShadowSoft: 18,
@@ -20874,7 +19268,7 @@ export function setup(ctx, overrides) {
                 videoNameShadowFar: 2,
                 videoPicShape: 'circle', videoPicSize: 140, videoPicRing: true, videoPicRingWidth: 2, videoPicMove: true, videoTwo: true,
                 videoMoodPics: true, videoQuiet: 'fade', videoQuietStrength: 45,
-                videoAnims: {},
+                videoAnims: { lines: { id: 'focus', secs: 0.5, delay: 0 } },
                 videoEdges: 45, videoEdgeColor: '#0a0205', videoMove: 'dissolve', videoMoveSecs: 0.9,
                 videoTitleOn: true, videoFadeOut: 3, videoBylineInk: '#f4a6a0', videoBylineFont: '', videoBylineFill: 'solid', videoBylineStops: ['#f2b880'],
                 videoBylineDir: 'right', videoBylineShadow: true, videoBylineShadowInk: '#12030a', videoBylineShadowDark: 60, videoBylineShadowSoft: 16,
@@ -21129,7 +19523,7 @@ export function setup(ctx, overrides) {
                 videoNameShadowFar: 2,
                 videoPicShape: 'circle', videoPicSize: 150, videoPicRing: true, videoPicRingWidth: 4, videoPicMove: true, videoTwo: true,
                 videoMoodPics: true, videoQuiet: 'fade', videoQuietStrength: 45,
-                videoAnims: {},
+                videoAnims: { title: { id: 'grow', secs: 0.5, delay: 0 } },
                 videoEdges: 0, videoEdgeColor: '', videoMove: 'dissolve', videoMoveSecs: 0.5,
                 videoTitleOn: true, videoFadeOut: 1.5, videoBylineInk: '#b05a3a', videoBylineFont: '', videoBylineFill: 'solid',
                 videoBylineStops: ['#f2b880'], videoBylineDir: 'right', videoBylineShadow: false, videoBylineShadowInk: '', videoBylineShadowDark: 65,
@@ -21167,7 +19561,7 @@ export function setup(ctx, overrides) {
                 videoNameShadowFar: 2,
                 videoPicShape: 'circle', videoPicSize: 150, videoPicRing: true, videoPicRingWidth: 4, videoPicMove: true, videoTwo: true,
                 videoMoodPics: true, videoQuiet: 'fade', videoQuietStrength: 45,
-                videoAnims: {},
+                videoAnims: { title: { id: 'grow', secs: 0.5, delay: 0 } },
                 videoEdges: 0, videoEdgeColor: '', videoMove: 'dissolve', videoMoveSecs: 0.5,
                 videoTitleOn: true, videoFadeOut: 1.5, videoBylineInk: '#3d6a9e', videoBylineFont: '', videoBylineFill: 'solid',
                 videoBylineStops: ['#f2b880'], videoBylineDir: 'right', videoBylineShadow: false, videoBylineShadowInk: '', videoBylineShadowDark: 65,
@@ -21204,7 +19598,7 @@ export function setup(ctx, overrides) {
                 videoNameShadowFar: 2,
                 videoPicShape: 'circle', videoPicSize: 150, videoPicRing: true, videoPicRingWidth: 4, videoPicMove: true, videoTwo: true,
                 videoMoodPics: true, videoQuiet: 'fade', videoQuietStrength: 45,
-                videoAnims: {},
+                videoAnims: { title: { id: 'grow', secs: 0.5, delay: 0 } },
                 videoEdges: 0, videoEdgeColor: '', videoMove: 'dissolve', videoMoveSecs: 0.5,
                 videoTitleOn: true, videoFadeOut: 1.5, videoBylineInk: '#7a5aa8', videoBylineFont: '', videoBylineFill: 'solid',
                 videoBylineStops: ['#f2b880'], videoBylineDir: 'right', videoBylineShadow: false, videoBylineShadowInk: '', videoBylineShadowDark: 65,
@@ -21241,7 +19635,7 @@ export function setup(ctx, overrides) {
                 videoNameShadowFar: 2,
                 videoPicShape: 'circle', videoPicSize: 140, videoPicRing: true, videoPicRingWidth: 2, videoPicMove: true, videoTwo: true,
                 videoMoodPics: true, videoQuiet: 'fade', videoQuietStrength: 45,
-                videoAnims: {},
+                videoAnims: { lines: { id: 'focus', secs: 0.5, delay: 0 } },
                 videoEdges: 55, videoEdgeColor: '#000000', videoMove: 'black', videoMoveSecs: 0.8,
                 videoTitleOn: true, videoFadeOut: 2.5, videoBylineInk: '#c8c4d4', videoBylineFont: '', videoBylineFill: 'solid',
                 videoBylineStops: ['#f2b880'], videoBylineDir: 'right', videoBylineShadow: true, videoBylineShadowInk: '#000000', videoBylineShadowDark: 70,
@@ -21282,7 +19676,7 @@ export function setup(ctx, overrides) {
                 videoNameShadowFar: 2,
                 videoPicShape: 'rounded', videoPicSize: 140, videoPicRing: true, videoPicRingWidth: 3, videoPicMove: true, videoTwo: true,
                 videoMoodPics: true, videoQuiet: 'fade', videoQuietStrength: 45,
-                videoAnims: {},
+                videoAnims: { lines: { id: 'slice', secs: 0.6, delay: 0 } },
                 videoEdges: 30, videoEdgeColor: '#000000', videoMove: 'slide', videoMoveSecs: 0.35,
                 videoTitleOn: true, videoFadeOut: 1, videoBylineInk: '#ff2d8a', videoBylineFont: '', videoBylineFill: 'solid', videoBylineStops: ['#f2b880'],
                 videoBylineDir: 'right', videoBylineShadow: false, videoBylineShadowInk: '', videoBylineShadowDark: 65, videoBylineShadowSoft: 18,
@@ -21320,7 +19714,7 @@ export function setup(ctx, overrides) {
                 videoNameShadowFar: 2,
                 videoPicShape: 'circle', videoPicSize: 150, videoPicRing: true, videoPicRingWidth: 5, videoPicMove: true, videoTwo: true,
                 videoMoodPics: true, videoQuiet: 'fade', videoQuietStrength: 45,
-                videoAnims: {},
+                videoAnims: { title: { id: 'grow', secs: 0.5, delay: 0 }, lines: { id: 'rise', secs: 0.5, delay: 0 } },
                 videoEdges: 0, videoEdgeColor: '', videoMove: 'dissolve', videoMoveSecs: 0.5,
                 videoTitleOn: true, videoFadeOut: 1.5, videoBylineInk: '#d0609a', videoBylineFont: '', videoBylineFill: 'solid',
                 videoBylineStops: ['#f2b880'], videoBylineDir: 'right', videoBylineShadow: false, videoBylineShadowInk: '', videoBylineShadowDark: 65,
@@ -21778,7 +20172,7 @@ export function setup(ctx, overrides) {
                 videoNameShadowFar: 2,
                 videoPicShape: 'circle', videoPicSize: 150, videoPicRing: true, videoPicRingWidth: 4, videoPicMove: true, videoTwo: true,
                 videoMoodPics: true, videoQuiet: 'fade', videoQuietStrength: 45,
-                videoAnims: {},
+                videoAnims: { lines: { id: 'drop', secs: 0.5, delay: 0 } },
                 videoEdges: 30, videoEdgeColor: '#000000', videoMove: 'fade', videoMoveSecs: 0.6,
                 videoTitleOn: true, videoFadeOut: 1.5, videoBylineInk: '#e8c35a', videoBylineFont: '', videoBylineFill: 'solid',
                 videoBylineStops: ['#f2b880'], videoBylineDir: 'right', videoBylineShadow: true, videoBylineShadowInk: '#000000', videoBylineShadowDark: 55,
@@ -21816,7 +20210,7 @@ export function setup(ctx, overrides) {
                 videoNameShadowFar: 2,
                 videoPicShape: 'circle', videoPicSize: 150, videoPicRing: true, videoPicRingWidth: 4, videoPicMove: true, videoTwo: true,
                 videoMoodPics: true, videoQuiet: 'fade', videoQuietStrength: 45,
-                videoAnims: {},
+                videoAnims: { open: { id: 'iris', secs: 0.8, delay: 0 } },
                 videoEdges: 30, videoEdgeColor: '#000000', videoMove: 'black', videoMoveSecs: 0.7,
                 videoTitleOn: true, videoFadeOut: 1.5, videoBylineInk: '#ff8a1f', videoBylineFont: '', videoBylineFill: 'solid',
                 videoBylineStops: ['#f2b880'], videoBylineDir: 'right', videoBylineShadow: true, videoBylineShadowInk: '#000000', videoBylineShadowDark: 55,
@@ -21928,7 +20322,7 @@ export function setup(ctx, overrides) {
                 videoNameShadowFar: 2,
                 videoPicShape: 'circle', videoPicSize: 150, videoPicRing: true, videoPicRingWidth: 4, videoPicMove: true, videoTwo: true,
                 videoMoodPics: true, videoQuiet: 'fade', videoQuietStrength: 45,
-                videoAnims: {},
+                videoAnims: { title: { id: 'grow', secs: 0.5, delay: 0 } },
                 videoEdges: 30, videoEdgeColor: '#000000', videoMove: 'fade', videoMoveSecs: 0.6,
                 videoTitleOn: true, videoFadeOut: 1.5, videoBylineInk: '#f2c14e', videoBylineFont: '', videoBylineFill: 'solid',
                 videoBylineStops: ['#f2b880'], videoBylineDir: 'right', videoBylineShadow: true, videoBylineShadowInk: '#000000', videoBylineShadowDark: 55,
@@ -22174,7 +20568,7 @@ export function setup(ctx, overrides) {
     // the watermarks. The shape of the video is the reader's choice for where
     // it goes, so a template keeps it too. Each template gives a value for
     // every one of these, so nothing is left from the look before.
-    const TEMPLATE_KEYS = LOOK_KEYS.filter((k) => k !== 'videoByline' && k !== 'videoMarks' && k !== 'videoStickers' && k !== 'videoShape' && k !== 'videoAnimsOwn' && k !== 'videoReveals').concat(['studioMusic']);
+    const TEMPLATE_KEYS = LOOK_KEYS.filter((k) => k !== 'videoByline' && k !== 'videoMarks' && k !== 'videoStickers' && k !== 'videoShape').concat(['studioMusic']);
     const TEMPLATES_MARK = markText(JSON.stringify(TEMPLATES.map((t) => [t.id, t.look, t.back])));
     function templateLook(t) {
         const patch = {};
@@ -24755,7 +23149,6 @@ export function setup(ctx, overrides) {
             catch (_) { }
         });
         hookDesign(canvas);
-        hookDemo(canvas);
         // With a performance there, a choice between it and the example.
         if (keptShow()) {
             const pick = segmented('Show in the preview', [
@@ -24873,9 +23266,6 @@ export function setup(ctx, overrides) {
         vRow.setAttribute('data-af-focuskeep', '');
         topActs.insertBefore(make, topActs.firstChild);
         vc.appendChild(vRow);
-        // Where an animation being changed puts its Play, Half speed and
-        // position, under the preview's own controls.
-        vc.appendChild(el('<div class="af-col" data-af-demoslot></div>'));
         const flashNote = el('<p class="af-status" data-af-flashnote data-kind="bad">This video uses an effect that flashes.</p>');
         flashNote.hidden = !flashUsed();
         vc.appendChild(flashNote);
@@ -25156,10 +23546,7 @@ export function setup(ctx, overrides) {
                 look();
             }, '0.5 by default.'));
         }));
-        vc.appendChild(fold('Animations', (b) => drawAnimPlaces(b, look), (open) => {
-            if (!open)
-                stopDemo();
-        }));
+        vc.appendChild(fold('Animations', (b) => drawAnimPlaces(b, look)));
         vc.appendChild(fold('Title and ending', (b) => {
             const box = el('<input type="text" class="af-field" maxlength="120" spellcheck="true" autocomplete="off">');
             box.id = rid('vt');

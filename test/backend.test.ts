@@ -2408,30 +2408,12 @@ describe("animations", () => {
     const s = h.box.cleanSettings({ videoAnims: { lines: { id: "rise", secs: 40, delay: -2 }, bogus: { id: "fade" }, open: { id: "" } } });
     expect(s.videoAnims).toEqual({ lines: { id: "rise", secs: 10, delay: 0 } });
   });
-  test("the reader's own animations are cleaned and kept, up to 30", () => {
+  test("only built-in animations are kept, so one saved by an older build plays as the default", () => {
     const h = host();
-    const own = Array.from({ length: 33 }, (_, i) => ({ id: "u" + i, name: "Mine " + i, inT: { keys: [{ at: 0, o: 0, x: 9999 }, { at: 1, o: 1 }], mask: { type: "clock", feather: 400 } } }));
-    const s = h.box.cleanSettings({ videoAnimsOwn: own.concat([{ id: "rise", name: "Not mine" }]) });
-    expect(s.videoAnimsOwn.length).toBe(30);
-    expect(s.videoAnimsOwn[0].inT.keys[0]).toEqual({ at: 0, o: 0, x: 2000 });
-    expect(s.videoAnimsOwn[0].inT.mask).toEqual({ type: "clock", angle: 0, feather: 100 });
-  });
-});
-
-describe("your reveals", () => {
-  test("reveals are cleaned and kept, and a picture reveal keeps its picture", async () => {
-    const h = host();
-    const pic = "data:image/png;base64,AAAA";
-    await h.ask({ type: "sticker_put", id: "rpic1", picture: pic }, "u1");
-    await h.ask({ type: "sticker_put", id: "rgone", picture: pic }, "u1");
-    await h.ask({ type: "save", settings: { videoReveals: [{ id: "rtri", name: "Tri", kind: "draw", pts: [{ x: 0, y: -5 }, { x: 0.8, y: 0.7, bx: 0.5, by: 9 }, { x: -0.8, y: 0.7 }] }, { id: "rpic1", name: "Pic", kind: "picture", by: "bright" }, { id: "nope", kind: "text" }] } }, "u1");
-    const s = (await h.ask({ type: "load" }, "u1")).find((m: any) => m.type === "state").settings;
-    expect(s.videoReveals.map((r: any) => r.id)).toEqual(["rtri", "rpic1"]);
-    expect(s.videoReveals[0].pts[0]).toEqual({ x: 0, y: -1 });
-    expect(s.videoReveals[0].pts[1]).toEqual({ x: 0.8, y: 0.7, bx: 0.5, by: 2 });
-    expect(s.videoReveals[1].by).toBe("bright");
-    expect(h.files.has("u1/video-stickers/rpic1.json")).toBe(true);
-    expect(h.files.has("u1/video-stickers/rgone.json")).toBe(false);
+    const s = h.box.cleanSettings({ videoAnims: { lines: { id: "u1abc", secs: 1 }, open: { id: "thru-heart", secs: 1 } }, videoAnimsOwn: [{ id: "u1abc" }], videoReveals: [{ id: "r1" }] });
+    expect(s.videoAnims).toEqual({ open: { id: "thru-heart", secs: 1, delay: 0 } });
+    expect("videoAnimsOwn" in s).toBe(false);
+    expect("videoReveals" in s).toBe(false);
   });
 });
 

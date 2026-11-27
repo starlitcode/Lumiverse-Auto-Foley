@@ -469,7 +469,49 @@ The pictures move on their own during a transition. A person on screen in both l
 
 ### Animations
 
-**Animations** picks how each part of the video comes in and goes out: the opening, the ending, between lines, a scene change, its background, pictures, lines, words, the title, captions and watermarks. See [Animations](animations.md).
+**Animations** picks how each part of the video comes in and goes out. Each place has a dropdown, and **Pick by look** under it shows the same choices as small moving pictures. **Default** keeps what the place did before. A picked animation has a typed **Length, in seconds** and **Delay, in seconds**.
+
+| Place | Default |
+| --- | --- |
+| Opening, Ending | In from black, out to black. Ending takes as long as **Fade to black at the end**. |
+| Between lines | The transition under **Moving between lines**. Moves the pictures, names and words as one. |
+| Scene change | The same as between lines, where a new scene starts. |
+| Background on a scene change | A slow fade. |
+| Pictures | They move to their new place. Used for a speaker who comes in or goes. |
+| Lines | The same as between lines. Moves the words and names. |
+| Words | As set under **How the words show**. Moves each word in as it is said. |
+| Title and byline, Captions, Watermarks | Fade. |
+
+The built-in animations are calm. None of them flashes, and each is checked frame by frame for fast changes between light and dark.
+
+| Animation | What it does |
+| --- | --- |
+| Fade, Rise, Drop, Grow, Soft focus | Fades in and out, with a small rise, drop, growth or blur. |
+| Slide from the left, right, top or bottom | Comes in from that side and leaves to the other. |
+| Slide and fade at an angle | Comes in from the lower left, and leaves to the upper right. |
+| Blur and rise | Rises into focus, and rises out of it. |
+| Wipe from the left, right, top or bottom | A soft edge moves across and shows it. |
+| Soft wipe at an angle | A very soft edge moves across from the upper left. |
+| Iris, Through a circle | A circle opens from the middle, and closes on it. |
+| Through a heart, Through a star | It shows through a heart or a star that opens from the middle. |
+| Box opening, Diamond opening | A box or a diamond opens from the middle. |
+| Clock sweep | It shows through a sweep like a clock's hand, from the top. |
+| Typewriter, Word by word | The letters or the words show one at a time. Text only. |
+| Word by word, rising | The words show one at a time as the line rises. Text only. |
+| Letters falling in | The letters show one at a time as the line drops into place. Text only. |
+| Color split, Slice shift, Scanline wobble, Pixel shuffle, Signal lost | Calm glitches, which settle smoothly. Signal lost is for the whole frame. |
+| None | Shows and goes at once. |
+
+#### Effects that flash
+
+Some effects flash or flicker, so they are hidden until you turn them on.
+
+1. Turn on **Show effects that flash**, at the top of **Animations**. It is off by default.
+2. A question asks first: "These effects flash or flicker. They can be hard on the eyes, and they can trigger seizures in people with photosensitive epilepsy. Turn them on only if that is safe for you and for the people who will watch your video." **Turn them on** turns them on. **Keep them off** leaves the switch off.
+3. The dropdowns then also list **Effects that flash**, each marked with a warning sign: Film flicker, Candle flicker, Strobe, Lightning, Camera flash, Glitch, Blinking cursor, Flicker, Frame drops, Inversion and Shake. Each has **Strength, in percent** and **Speed**.
+4. While the video uses one, **Animations** and the space under the preview say "This video uses an effect that flashes."
+
+With the switch off, a place that uses one goes back to its default. **Reduce motion** stops them in the preview, and a saved video keeps them. The templates never use them.
 
 ### Title and ending
 
@@ -531,7 +573,7 @@ Every choice in the Studio is a setting, kept on your account. **Start again** i
 
 ### In short
 
-- **A design of your own** is a background made of shapes: rectangles, rounded rectangles, ellipses, triangles, lines, text boxes, hearts, stars, polygons, diamonds, arrows, speech bubbles, rings, crescent moons, clouds, sparkles, cat, dog and bunny faces, paw prints, bones, fish, carrots, bats, roses, checkerboard strips, broken hearts, stripes, snowflakes, ornaments, holly, pumpkins, ghosts, autumn leaves, fireworks, lanterns, diya lamps, menorahs, shamrocks, eggs, flowers, and **Your own shape**, an outline you drew under [Your reveals](animations.md#your-reveals).
+- **A design of your own** is a background made of shapes: rectangles, rounded rectangles, ellipses, triangles, lines, text boxes, hearts, stars, polygons, diamonds, arrows, speech bubbles, rings, crescent moons, clouds, sparkles, cat, dog and bunny faces, paw prints, bones, fish, carrots, bats, roses, checkerboard strips, broken hearts, stripes, snowflakes, ornaments, holly, pumpkins, ghosts, autumn leaves, fireworks, lanterns, diya lamps, menorahs, shamrocks, eggs and flowers.
 - The shapes stay where you put them for the whole video.
 - You place them on the preview with a finger or the mouse, or type exact numbers.
 - Each shape has its own color, an optional gradient, and how see-through it is.

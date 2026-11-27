@@ -50,7 +50,6 @@ Once a message has been performed, a small player sits under its text, with Back
 - [Sounds](docs/sounds.md): sounds in the voice, sound effects and your library
 - [Scene music](docs/music.md): music for the mood of the scene, from your library or Freesound
 - [The Studio](docs/studio.md): keep a performance as audio or a video, and hide words in it
-- [Animations](docs/animations.md): how each part of a video comes in and goes out
 
 **About it**
 
