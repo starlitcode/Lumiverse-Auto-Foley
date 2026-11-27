@@ -1684,7 +1684,8 @@ if (section("message player")) {
     await pressMessage(page);
     await page.waitForTimeout(400);
     const busy = await look();
-    check(!!busy && busy.text === "Writing the script" && busy.inside && !busy.sideways, where + ": while the script is written, with a large font, it fits inside the message (" + JSON.stringify(busy) + ")");
+    // The wait counts its seconds, so the words are the longest they get.
+    check(!!busy && /^Writing the script, \d+ s$/.test(busy.text) && busy.inside && !busy.sideways, where + ": while the script is written, with a large font, it fits inside the message (" + JSON.stringify(busy) + ")");
     await bigStyle.evaluate((n) => n.remove());
     await page.waitForTimeout(1800);
     const got = await look();
@@ -6972,15 +6973,22 @@ if (section("animations")) {
   const anims = (m) => `window.__settings.videoAnims = ${JSON.stringify(m)};`;
   {
     // Opening with Iris over 2 seconds: half way, the corners are still
-    // black and the middle shows. The default fade is done by then.
-    const o = await openWith(`window.__settings.videoTitleOn = false;` + anims({ open: { id: "iris", secs: 2, delay: 0 } }));
-    const f = await at(o.page, 1);
-    check(f.corner[0] < 10 && Math.abs(f.mid[0] - 128) < 30, "Opening with Iris: half way, the corners are black and the middle shows (" + JSON.stringify([f.corner, f.mid]) + ")");
-    await o.context.close();
+    // the color the video opens from and the middle shows. On this middle
+    // gray, which is not dark, that is the gray at 90%. The default fade
+    // is done by then.
     const d = await openWith(`window.__settings.videoTitleOn = false;`);
     const g = await at(d.page, 1);
     check(Math.abs(g.corner[0] - 128) < 30, "the default opening has faded in by then (" + JSON.stringify(g.corner) + ")");
     await d.context.close();
+    const o = await openWith(`window.__settings.videoTitleOn = false;` + anims({ open: { id: "iris", secs: 2, delay: 0 } }));
+    const f = await at(o.page, 1);
+    check(Math.abs(f.corner[0] - g.corner[0] * 0.9) <= 4 && Math.abs(f.mid[0] - 128) < 30, "Opening with Iris: half way, the corners are the gray at 90% and the middle shows (" + JSON.stringify([f.corner, f.mid, g.corner]) + ")");
+    await o.context.close();
+    // On a dark background, the corners are black.
+    const k = await openWith(`window.__settings.videoTitleOn = false; window.__settings.videoBacks[0].color = "#202020";` + anims({ open: { id: "iris", secs: 2, delay: 0 } }));
+    const fk = await at(k.page, 1);
+    check(fk.corner[0] < 6 && fk.mid[0] > 12 && fk.mid[0] < 50, "Opening with Iris on a dark background: half way, the corners are black and the middle shows (" + JSON.stringify([fk.corner, fk.mid]) + ")");
+    await k.context.close();
   }
   {
     // Ending with Iris: half way through the fade time, the middle still

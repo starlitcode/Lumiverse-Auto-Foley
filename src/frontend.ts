@@ -1692,7 +1692,7 @@ html[data-af-still] .af-ws-sec.af-ws-in, .af-ws[data-af-still] .af-ws-sec.af-ws-
 @media (hover: hover) { .af-effect-card:not([aria-pressed="true"]):hover { border-color: var(--af-line-hover); } }
 .af-ws-menu { width: auto; min-width: 200px; max-width: calc(100% - 24px); gap: 4px; padding: 6px; top: calc(52px + env(safe-area-inset-top, 0px)); right: 8px; }
 .af-ws-menu .af-ws-item { justify-content: flex-start; width: 100%; min-height: 40px; border-color: transparent; background: transparent; }
-.af-ws-menu .af-ws-item:hover:not(:disabled) { background: var(--af-fill-subtle); }
+@media (hover: hover) { .af-ws-menu .af-ws-item:hover:not(:disabled) { background: var(--af-fill-subtle); } }
 .af-ws-menu .af-ws-item[aria-pressed="true"] { color: var(--af-accent, inherit); }
 html[data-af-still] .af-ws-pop, .af-ws[data-af-still] .af-ws-pop { transition: none; transform: none; }
 @media (prefers-reduced-motion: reduce) { .af-ws-pop { transition: none; transform: none; } }
@@ -11133,12 +11133,13 @@ export function setup(ctx: Ctx, overrides?: any) {
     'color:var(--af-mp-ink,var(--lumiverse-text,rgba(255,255,255,.92)));font:inherit;font-size:.85em;line-height:1.3;box-shadow:var(--af-mp-shadow,var(--lumiverse-shadow-sm,0 2px 8px rgba(0,0,0,.25)))}' +
     '.af-mp .af-mp-box > *, .af-mp .af-mp-run > *{margin:0;min-width:0;box-sizing:border-box}' +
     // The line gives up its room before the words do, so the words are cut
-    // short only when the line is already at its smallest. Flex shares a
-    // shortfall by size, so the words take almost none of it while the line
-    // can shrink: even a hundredth of a pixel ends them in dots.
+    // short only when the line is already at its smallest. The words never
+    // shrink, since even a hundredth of a pixel ends them in dots. They are
+    // held instead to the room the line leaves at its smallest: its 24
+    // pixels and the gap.
     '.af-mp .af-mp-run{display:flex;align-items:center;gap:6px;min-width:0}' +
     '.af-mp .af-mp-run > .af-mp-seek{flex:0 1 auto;width:120px;min-width:24px}' +
-    '.af-mp .af-mp-run > .af-mp-text{flex:0 0.00001 auto}' +
+    '.af-mp .af-mp-run > .af-mp-text{flex:0 0 auto;max-width:calc(100% - 30px)}' +
     '.af-mp-play{flex:none;display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;padding:0;border-radius:50%;cursor:pointer;' +
     // The icon is in the text color, which reads on the pill in every theme.
     // The accent color is only the ring.
@@ -14200,7 +14201,10 @@ export function setup(ctx: Ctx, overrides?: any) {
           });
           box.appendChild(name);
           const aboutId = rid('sa');
-          box.appendChild(labelRow('What it is for', 'The Director reads this. Up to 200 characters.', aboutId));
+          // Each field is a row of its own, so its ? opens next to it.
+          const aboutRow = el('<div class="af-col"></div>');
+          aboutRow.setAttribute('data-af-row', aboutId);
+          aboutRow.appendChild(labelRow('What it is for', 'The Director reads this. Up to 200 characters.', aboutId));
           const about = el('<textarea class="af-field" rows="2" maxlength="200" spellcheck="true" id="' + aboutId + '" data-af-scenemoodabout></textarea>') as HTMLTextAreaElement;
           about.value = mood.about;
           about.addEventListener('change', () => {
@@ -14210,9 +14214,12 @@ export function setup(ctx: Ctx, overrides?: any) {
             if (m) m.about = v;
             keep();
           });
-          box.appendChild(about);
+          aboutRow.appendChild(about);
+          box.appendChild(aboutRow);
           const searchId = rid('ss');
-          box.appendChild(labelRow('Freesound search words', 'What scene music is searched for on Freesound. Empty uses the name and music.', searchId));
+          const searchRow = el('<div class="af-col"></div>');
+          searchRow.setAttribute('data-af-row', searchId);
+          searchRow.appendChild(labelRow('Freesound search words', 'What scene music is searched for on Freesound. Empty uses the name and music.', searchId));
           const search = el('<input type="text" class="af-field" maxlength="80" autocomplete="off" id="' + searchId + '" data-af-scenemoodsearch>') as HTMLInputElement;
           search.value = mood.search;
           search.addEventListener('change', () => {
@@ -14222,7 +14229,8 @@ export function setup(ctx: Ctx, overrides?: any) {
             if (m) m.search = v;
             keep();
           });
-          box.appendChild(search);
+          searchRow.appendChild(search);
+          box.appendChild(searchRow);
           const row = el('<div class="af-row af-wrap"></div>');
           const move = (by: number) => {
             const all = own();
