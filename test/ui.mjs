@@ -344,7 +344,7 @@ window.__ctx = {
       const handle = { root: r, dismiss() { if (!backdrop.isConnected) return; backdrop.remove(); window.__modals--; gone.forEach((f) => f()); }, setTitle() {}, onDismiss(f) { gone.add(f); return () => gone.delete(f); } };
       return handle;
     },
-    showConfirm: async (o) => { window.__asked = (window.__asked || 0) + 1; window.__askedTitle = o && o.title; window.__askedText = o && o.message; window.__askedLabels = [o && o.confirmLabel, o && o.cancelLabel]; return { confirmed: !window.__confirmNo }; },
+    showConfirm: async (o) => { window.__asked = (window.__asked || 0) + 1; window.__askedTitle = o && o.title; window.__askedText = o && o.message; window.__askedLabels = [o && o.confirmLabel, o && o.cancelLabel]; window.__askedVariant = o && o.variant; return { confirmed: !window.__confirmNo }; },
     showContextMenu: async (o) => { window.__menu = o; return { selectedKey: window.__menuPick || null }; },
     registerInputBarAction: (o) => {
       const fns = [];
@@ -7082,8 +7082,8 @@ if (section("effects that flash")) {
     await page.evaluate(() => { window.__confirmNo = true; window.__asked = 0; });
     await page.evaluate(() => document.querySelector("[data-af-flashswitch]").click());
     await page.waitForTimeout(400);
-    const no = await page.evaluate(() => ({ asked: window.__asked, text: window.__askedText, labels: window.__askedLabels, on: document.querySelector("[data-af-flashswitch]").checked, saved: !!window.__settings.videoFlashOn }));
-    check(no.asked === 1 && no.text === WARN && no.labels[0] === "Turn them on" && no.labels[1] === "Keep them off", size.name + ": turning it on asks first, with the warning and Turn them on and Keep them off");
+    const no = await page.evaluate(() => ({ asked: window.__asked, text: window.__askedText, labels: window.__askedLabels, variant: window.__askedVariant, on: document.querySelector("[data-af-flashswitch]").checked, saved: !!window.__settings.videoFlashOn }));
+    check(no.asked === 1 && no.text === WARN && no.labels[0] === "Turn them on" && no.labels[1] === "Keep them off" && no.variant === "warning", size.name + ": turning it on asks first, as a warning, with its words and Turn them on and Keep them off (" + no.variant + ")");
     check(!no.on && !no.saved, size.name + ": Keep them off leaves the switch off");
     await page.evaluate(() => { window.__confirmNo = false; });
     await page.evaluate(() => document.querySelector("[data-af-flashswitch]").click());

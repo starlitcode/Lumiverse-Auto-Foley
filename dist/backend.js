@@ -633,7 +633,7 @@ function cleanMember(m) {
 // The parts a file can carry, and the parts Start again can put back. A file
 // never carries the sound library or the key: the library is made of audio
 // files, and a key belongs in Lumiverse's secure storage, not in a file.
-const TRANSFER_PARTS = ['settings', 'prompt', 'cast', 'chats'];
+const TRANSFER_PARTS = ['settings', 'prompt', 'cast', 'chats', 'files'];
 // How much thinking the Director asks for. "inherit" sends nothing, so the
 // connection's own setting is used.
 const EFFORTS = ['auto', 'none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'];

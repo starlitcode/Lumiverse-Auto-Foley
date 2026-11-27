@@ -8997,7 +8997,7 @@ export function setup(ctx, overrides) {
             const acts = el('<div class="af-row af-wrap"></div>');
             const inChat = chatInfo.kind !== 'none' && chatInfo.id === String(e.chatId || '');
             const again = button('Make it again', async () => {
-                if (!(await askSure('Make it again', 'This directs the message again and speaks every line again, which costs a Director call and voice credits.', 'Make it again')))
+                if (!(await askSure('Make it again', 'This directs the message again and speaks every line again, which costs a Director call and voice credits.', 'Make it again', 'warning')))
                     return;
                 savedForget([e.key]);
                 perform(String(e.messageId || ''));
@@ -12808,7 +12808,7 @@ export function setup(ctx, overrides) {
     // A new take of one line, for someone who does not like how it came out.
     // The kept take is let go, and the line is spoken again on its own.
     async function lineAgain(script, line) {
-        if (!(await askSure('Make line ' + (line.i + 1) + ' again', 'A new take of this line is made and played. It costs voice credits, the same as the first take.', 'Make it again')))
+        if (!(await askSure('Make line ' + (line.i + 1) + ' again', 'A new take of this line is made and played. It costs voice credits, the same as the first take.', 'Make it again', 'warning')))
             return;
         const req = await voiceRequest(line);
         if (!req.body) {
@@ -12827,12 +12827,12 @@ export function setup(ctx, overrides) {
     // in the library, so every message that uses it gets the new take.
     async function soundAgain(description, id, found) {
         if (found) {
-            if (!(await askSure('Find another sound', 'The next sound Freesound finds for “' + description + '” replaces this one in your library. It costs nothing.', 'Find another')))
+            if (!(await askSure('Find another sound', 'The next sound Freesound finds for “' + description + '” replaces this one in your library. It costs nothing.', 'Find another', 'warning')))
                 return;
             log('Finding another sound: ' + description + '.', '', 'sound');
         }
         else {
-            if (!(await askSure('Make this sound again', 'A new take of “' + description + '” replaces the one in your library. It costs ElevenLabs credits.', 'Make it again')))
+            if (!(await askSure('Make this sound again', 'A new take of “' + description + '” replaces the one in your library. It costs ElevenLabs credits.', 'Make it again', 'warning')))
                 return;
             log('Making the sound again: ' + description + '.', '', 'sound');
         }
@@ -15416,7 +15416,7 @@ export function setup(ctx, overrides) {
             const back = button('Back to built-in', async () => {
                 if (sameText(f.querySelector('textarea').value, builtInNotes[n.id] || ''))
                     return alreadyLine(f, 'This is already the built-in note. Nothing changed.');
-                if (!(await askSure('Back to the built-in note', 'Your wording of “' + n.label + '” is replaced by the built-in note. There is no undo.', 'Use the built-in note')))
+                if (!(await askSure('Back to the built-in note', 'Your wording of “' + n.label + '” is replaced by the built-in note. There is no undo.', 'Use the built-in note', 'danger')))
                     return;
                 const next = Object.assign({}, S.askNotes || {});
                 delete next[n.id];
@@ -15478,7 +15478,7 @@ export function setup(ctx, overrides) {
                 f.appendChild(button('Back to built-in', async () => {
                     if (sameText(f.querySelector('textarea').value, builtInQuestions[q.id] || ''))
                         return alreadyLine(f, 'This is already the built-in question. Nothing changed.');
-                    if (!(await askSure('Back to the built-in question', 'Your wording of “' + q.label + '” is replaced by the built-in one. There is no undo.', 'Use the built-in question')))
+                    if (!(await askSure('Back to the built-in question', 'Your wording of “' + q.label + '” is replaced by the built-in one. There is no undo.', 'Use the built-in question', 'danger')))
                         return;
                     const next = Object.assign({}, S.decisionQuestions || {});
                     delete next[q.id];
@@ -15510,7 +15510,7 @@ export function setup(ctx, overrides) {
                 stateText.setAttribute('role', 'status');
                 return;
             }
-            if (!(await askSure('Back to the built-in prompt', 'Your own version of the Director’s prompt is replaced by the built-in one. There is no undo.', 'Use the built-in prompt')))
+            if (!(await askSure('Back to the built-in prompt', 'Your own version of the Director’s prompt is replaced by the built-in one. There is no undo.', 'Use the built-in prompt', 'danger')))
                 return;
             ta.value = builtInPrompt;
             set({ prompt: '' });
@@ -18446,7 +18446,7 @@ export function setup(ctx, overrides) {
         const flashRow = personSwitch('Show effects that flash', 'Off by default. Adds effects such as Strobe and Lightning, each marked with a warning sign.', !!S.videoFlashOn, async (on) => {
             const input = flashRow.querySelector('input');
             if (on) {
-                const ok = await askSure('Show effects that flash', 'These effects flash or flicker. They can be hard on the eyes, and they can trigger seizures in people with photosensitive epilepsy. Turn them on only if that is safe for you and for the people who will watch your video.', 'Turn them on', true, 'Keep them off');
+                const ok = await askSure('Show effects that flash', 'These effects flash or flicker. They can be hard on the eyes, and they can trigger seizures in people with photosensitive epilepsy. Turn them on only if that is safe for you and for the people who will watch your video.', 'Turn them on', 'warning', 'Keep them off');
                 if (!ok) {
                     input.checked = false;
                     return;
@@ -20717,7 +20717,7 @@ export function setup(ctx, overrides) {
         const plain = TEMPLATE_KEYS.every((k) => JSON.stringify(before[k]) === JSON.stringify(DEFAULTS[k]));
         // A look that is saved, or plain, is asked about here. One that is not
         // saved is asked about by Use this template, with a way to save it.
-        if ((saved || plain) && !(await askSure('Back to the built-in look', 'Put the whole look back to Auto Foley\u2019s built-in look? Your look is saved under Saved looks, so you can use it again.', 'Put it back')))
+        if ((saved || plain) && !(await askSure('Back to the built-in look', 'Put the whole look back to Auto Foley\u2019s built-in look? Your look is saved under Saved looks, so you can use it again.', 'Put it back', 'warning')))
             return;
         if (!trying)
             trying = { id: t.id, before };
@@ -24019,7 +24019,7 @@ export function setup(ctx, overrides) {
             const back = button('Use defaults', async () => {
                 if (sameText(f.querySelector('textarea').value, builtInSkips))
                     return alreadyLine(f, 'These are already the default patterns. Nothing changed.');
-                if (!(await askSure('Use the default patterns', 'Your own patterns are replaced by the built-in ones. There is no undo.', 'Use defaults')))
+                if (!(await askSure('Use the default patterns', 'Your own patterns are replaced by the built-in ones. There is no undo.', 'Use defaults', 'danger')))
                     return;
                 set({ skipPatterns: '' });
                 const ta = f.querySelector('textarea');
@@ -24528,7 +24528,7 @@ export function setup(ctx, overrides) {
             f.appendChild(button('Back to built-in', async () => {
                 if (sameText(f.querySelector('textarea').value, builtInEngineNotes[e.id] || ''))
                     return alreadyLine(f, 'This is already the built-in note. Nothing changed.');
-                if (!(await askSure('Back to the built-in note', 'Your wording of the note for ' + e.label + ' is replaced by the built-in one. There is no undo.', 'Use the built-in note')))
+                if (!(await askSure('Back to the built-in note', 'Your wording of the note for ' + e.label + ' is replaced by the built-in one. There is no undo.', 'Use the built-in note', 'danger')))
                     return;
                 const next = Object.assign({}, S.engineNotes || {});
                 delete next[e.id];
@@ -24743,10 +24743,14 @@ export function setup(ctx, overrides) {
     const sameText = (a, b) => String(a || '').trim() === String(b || '').trim();
     // Asks before something is put back or deleted. Lumiverse's own dialog is
     // used, and the browser's when that is missing.
-    async function askSure(title, message, confirmLabel, danger, cancelLabel) {
+    // A question asked first, in Lumiverse's own dialog. The variant says what
+    // it is: danger for deleting or losing something, warning for a caution,
+    // and info for a plain question. true is danger, for short calls.
+    async function askSure(title, message, confirmLabel, variant, cancelLabel) {
+        const kind = variant === true ? 'danger' : variant === 'warning' || variant === 'danger' ? variant : 'info';
         try {
             if (ctx.ui && typeof ctx.ui.showConfirm === 'function') {
-                const r = await ctx.ui.showConfirm(Object.assign({ title, message, variant: danger ? 'danger' : 'default', confirmLabel }, cancelLabel ? { cancelLabel } : {}));
+                const r = await ctx.ui.showConfirm(Object.assign({ title, message, variant: kind, confirmLabel }, cancelLabel ? { cancelLabel } : {}));
                 return !!(r && r.confirmed);
             }
         }
