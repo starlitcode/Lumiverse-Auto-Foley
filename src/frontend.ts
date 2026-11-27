@@ -1768,6 +1768,157 @@ const BUILT_IN_SCENE_MOODS: SceneMood[] = [
   { id: 'mysterious', name: 'Mysterious', about: 'Something hidden, strange or not yet known.', search: 'mysterious ambient music' },
 ];
 const SCENE_MOODS_MAX = 30;
+
+// ---------------------------------------------------------------------------
+// Animations: how a part of the video comes in and goes out. A built-in or
+// the reader's own animation is the same shape: two tracks, in and out, each
+// a list of keyframes from 0 (the start of the track) to 1 (its end), with an
+// easing curve and an optional mask. Built-ins are calm: nothing flashes.
+// ---------------------------------------------------------------------------
+
+// One moment of a track. x and y are in pixels of a 1080-pixel frame, s is
+// the size in percent, r the turn in degrees, b a blur in pixels, l the
+// brightness in percent and ta how much of the tint color, in percent.
+interface AnimKey { at: number; o?: number; x?: number; y?: number; s?: number; r?: number; b?: number; l?: number; tint?: string; ta?: number }
+interface AnimMask { type: 'none' | 'linear' | 'radial' | 'iris' | 'clock'; angle: number; feather: number }
+interface AnimTrack { keys: AnimKey[]; mask: AnimMask }
+interface AnimDef {
+  id: string;
+  name: string;
+  // What it can be used for: text, the whole frame, or both.
+  kind: 'text' | 'frame' | 'any';
+  secs: number;
+  delay: number;
+  ease: number[];
+  inT: AnimTrack;
+  outT: AnimTrack;
+  // The picture and name of a speaker, when it moves apart from the words.
+  pic?: { inT: AnimTrack; outT: AnimTrack } | null;
+  // How much the leaving and the arriving part overlap, 0 to 1. 1 is at
+  // the same time.
+  overlap: number;
+  // Each word or line starts a little after the one before, as a share of
+  // the length.
+  stagger: number;
+  anchor: 'center' | 'top' | 'bottom' | 'left' | 'right';
+  // Typewriter shows the letters one at a time, Word by word the words.
+  reveal?: 'chars' | 'words' | '';
+}
+interface AnimState { o: number; x: number; y: number; s: number; r: number; b: number; l: number; tint: string; ta: number; mask: AnimMask; p: number; hide: boolean }
+const EASES: { id: string; label: string; curve: number[] }[] = [
+  { id: 'gentle', label: 'Gentle', curve: [0.4, 0, 0.2, 1] },
+  { id: 'ease', label: 'Ease', curve: [0.25, 0.1, 0.25, 1] },
+  { id: 'in-out', label: 'Slow in and out', curve: [0.42, 0, 0.58, 1] },
+  { id: 'out', label: 'Slow at the end', curve: [0, 0, 0.58, 1] },
+  { id: 'in', label: 'Slow at the start', curve: [0.42, 0, 1, 1] },
+  { id: 'linear', label: 'Even', curve: [0, 0, 1, 1] },
+];
+// A cubic bezier easing, as in CSS: the curve from (0,0) to (1,1) through
+// two control points, solved for x and read as y.
+function bezier(c: number[], k: number): number {
+  const t0 = Math.min(1, Math.max(0, k));
+  const [x1, y1, x2, y2] = [Number(c[0]) || 0, Number(c[1]) || 0, Number(c[2]) || 0, Number(c[3]) || 0].map((v, i) => (i % 2 ? v : Math.min(1, Math.max(0, v))));
+  const bx = (t: number) => 3 * (1 - t) * (1 - t) * t * x1 + 3 * (1 - t) * t * t * x2 + t * t * t;
+  const by = (t: number) => 3 * (1 - t) * (1 - t) * t * y1 + 3 * (1 - t) * t * t * y2 + t * t * t;
+  let lo = 0;
+  let hi = 1;
+  let t = t0;
+  for (let n = 0; n < 30; n++) {
+    const x = bx(t);
+    if (Math.abs(x - t0) < 1e-5) break;
+    if (x < t0) lo = t;
+    else hi = t;
+    t = (lo + hi) / 2;
+  }
+  return by(t);
+}
+const NO_MASK: AnimMask = { type: 'none', angle: 0, feather: 0 };
+const keyOr = (v: any, d: number) => (Number.isFinite(Number(v)) && v !== '' && v != null ? Number(v) : d);
+// Where a track is at k, from 0 to 1, eased. Between two keyframes each
+// value moves in a straight line. A value no keyframe sets stays at rest.
+function animAt(def: AnimDef, which: 'in' | 'out', k: number): AnimState {
+  const tr = which === 'in' ? def.inT : def.outT;
+  const e = bezier(def.ease && def.ease.length === 4 ? def.ease : EASES[0].curve, k);
+  const keys = (tr && Array.isArray(tr.keys) ? tr.keys : []).slice().sort((a, b) => a.at - b.at);
+  const rest: Record<string, number> = { o: 1, x: 0, y: 0, s: 100, r: 0, b: 0, l: 100, ta: 0 };
+  const out: any = { tint: '#ffffff' };
+  for (const p of Object.keys(rest)) {
+    const has = keys.filter((x: any) => x[p] != null && Number.isFinite(Number(x[p])));
+    if (!has.length) {
+      out[p] = rest[p];
+      continue;
+    }
+    let v = keyOr((has[0] as any)[p], rest[p]);
+    if (e >= has[has.length - 1].at) v = keyOr((has[has.length - 1] as any)[p], rest[p]);
+    else
+      for (let i = 0; i + 1 < has.length; i++) {
+        const a = has[i];
+        const b = has[i + 1];
+        if (e >= a.at && e <= b.at) {
+          const f = b.at > a.at ? (e - a.at) / (b.at - a.at) : 1;
+          v = keyOr((a as any)[p], rest[p]) + (keyOr((b as any)[p], rest[p]) - keyOr((a as any)[p], rest[p])) * f;
+          break;
+        }
+      }
+    out[p] = v;
+  }
+  const tinted = keys.find((x) => /^#[0-9a-f]{6}$/i.test(String(x.tint || '')));
+  if (tinted) out.tint = tinted.tint;
+  const mask = tr && tr.mask && tr.mask.type !== 'none' ? tr.mask : NO_MASK;
+  // A mask shows more as an in track goes on. An out track wipes on in the
+  // same direction, so the part goes the way it came.
+  out.mask = mask;
+  out.p = e;
+  out.hide = which === 'out';
+  out.o = Math.min(1, Math.max(0, out.o));
+  return out as AnimState;
+}
+const isRest = (s: AnimState) => Math.abs(s.s - 100) < 0.01 && Math.abs(s.r) < 0.01 && s.b < 0.05 && Math.abs(s.l - 100) < 0.5 && s.ta < 0.5 && s.mask.type === 'none';
+// The built-in animations. Each has an in and an out. Slide, Wipe and the
+// others named for a side come from that side, and leave to the other.
+const ANIM_LEN = 0.5;
+function builtIn(id: string, name: string, kind: AnimDef['kind'], inKeys: AnimKey[], outKeys: AnimKey[], extra: Partial<AnimDef> = {}, mask?: AnimMask): AnimDef {
+  return Object.assign(
+    { id, name, kind, secs: ANIM_LEN, delay: 0, ease: EASES[0].curve.slice(), inT: { keys: inKeys, mask: mask || NO_MASK }, outT: { keys: outKeys, mask: mask || NO_MASK }, overlap: 1, stagger: 0, anchor: 'center', reveal: '' },
+    extra,
+  ) as AnimDef;
+}
+const FADE_IN: AnimKey[] = [{ at: 0, o: 0 }, { at: 1, o: 1 }];
+const FADE_OUT: AnimKey[] = [{ at: 0, o: 1 }, { at: 1, o: 0 }];
+const BUILT_IN_ANIMS: AnimDef[] = [
+  builtIn('fade', 'Fade', 'any', FADE_IN, FADE_OUT),
+  builtIn('rise', 'Rise', 'any', [{ at: 0, o: 0, y: 24 }, { at: 1, o: 1, y: 0 }], [{ at: 0, o: 1, y: 0 }, { at: 1, o: 0, y: -24 }]),
+  builtIn('drop', 'Drop', 'any', [{ at: 0, o: 0, y: -24 }, { at: 1, o: 1, y: 0 }], [{ at: 0, o: 1, y: 0 }, { at: 1, o: 0, y: 24 }]),
+  builtIn('slide-l', 'Slide from the left', 'any', [{ at: 0, o: 0, x: -140 }, { at: 1, o: 1, x: 0 }], [{ at: 0, o: 1, x: 0 }, { at: 1, o: 0, x: 140 }]),
+  builtIn('slide-r', 'Slide from the right', 'any', [{ at: 0, o: 0, x: 140 }, { at: 1, o: 1, x: 0 }], [{ at: 0, o: 1, x: 0 }, { at: 1, o: 0, x: -140 }]),
+  builtIn('slide-t', 'Slide from the top', 'any', [{ at: 0, o: 0, y: -100 }, { at: 1, o: 1, y: 0 }], [{ at: 0, o: 1, y: 0 }, { at: 1, o: 0, y: 100 }]),
+  builtIn('slide-b', 'Slide from the bottom', 'any', [{ at: 0, o: 0, y: 100 }, { at: 1, o: 1, y: 0 }], [{ at: 0, o: 1, y: 0 }, { at: 1, o: 0, y: -100 }]),
+  builtIn('focus', 'Soft focus', 'any', [{ at: 0, o: 0, b: 14 }, { at: 1, o: 1, b: 0 }], [{ at: 0, o: 1, b: 0 }, { at: 1, o: 0, b: 14 }]),
+  builtIn('wipe-l', 'Wipe from the left', 'any', [], [], { secs: 0.7 }, { type: 'linear', angle: 0, feather: 25 }),
+  builtIn('wipe-r', 'Wipe from the right', 'any', [], [], { secs: 0.7 }, { type: 'linear', angle: 180, feather: 25 }),
+  builtIn('wipe-t', 'Wipe from the top', 'any', [], [], { secs: 0.7 }, { type: 'linear', angle: 90, feather: 25 }),
+  builtIn('wipe-b', 'Wipe from the bottom', 'any', [], [], { secs: 0.7 }, { type: 'linear', angle: 270, feather: 25 }),
+  builtIn('grow', 'Grow', 'any', [{ at: 0, o: 0, s: 92 }, { at: 1, o: 1, s: 100 }], [{ at: 0, o: 1, s: 100 }, { at: 1, o: 0, s: 92 }]),
+  builtIn('iris', 'Iris', 'any', [], [], { secs: 0.8 }, { type: 'iris', angle: 0, feather: 6 }),
+  builtIn('type', 'Typewriter', 'text', [], FADE_OUT, { secs: 1.2, ease: EASES[5].curve.slice(), reveal: 'chars' }),
+  builtIn('words', 'Word by word', 'text', [], FADE_OUT, { secs: 1, ease: EASES[5].curve.slice(), reveal: 'words' }),
+  builtIn('none', 'None', 'any', [], [], { secs: 0 }),
+];
+// The places an animation is used, in the frame and in the text. Each has a
+// default, which is what it did before an animation was picked for it.
+const ANIM_PLACES: { id: string; label: string; kind: 'frame' | 'text'; dflt: string; help: string }[] = [
+  { id: 'open', label: 'Opening', kind: 'frame', dflt: 'In from black', help: 'How the video starts.' },
+  { id: 'end', label: 'Ending', kind: 'frame', dflt: 'Out to black', help: 'How the video ends, over Fade to black at the end.' },
+  { id: 'between', label: 'Between lines', kind: 'frame', dflt: 'The transition under Moving between lines', help: 'The words, pictures and names together, from one line to the next.' },
+  { id: 'scene', label: 'Scene change', kind: 'frame', dflt: 'The same as between lines', help: 'In place of Between lines, where a new scene starts.' },
+  { id: 'sceneBack', label: 'Background on a scene change', kind: 'frame', dflt: 'A slow fade', help: 'How a new scene’s background comes in.' },
+  { id: 'pics', label: 'Pictures and names', kind: 'frame', dflt: 'They move to their new place', help: 'A speaker’s picture and name, when the speaker changes.' },
+  { id: 'lines', label: 'Lines', kind: 'text', dflt: 'The same as between lines', help: 'The words of a line, coming in and going out.' },
+  { id: 'words', label: 'Words', kind: 'text', dflt: 'As set under How the words show', help: 'Each word, as it is said.' },
+  { id: 'title', label: 'Title and byline', kind: 'text', dflt: 'Fade', help: 'The title card at the start.' },
+  { id: 'captions', label: 'Captions', kind: 'text', dflt: 'The same as lines', help: 'Sound captions, such as [thunder].' },
+  { id: 'marks', label: 'Watermarks', kind: 'text', dflt: 'Fade', help: 'A watermark, at the start and end of its time.' },
+];
 // The mood of a line: the one whose words its tags and note name most, the
 // first in the list on a tie. With none, the first mood whose words hold
 // the scene's mood, such as scary or cozy. With neither, none.
@@ -2039,6 +2190,8 @@ const DEFAULTS: any = {
   videoInk: '',
   videoCaptionInk: '',
   videoWords: 'fade',
+  videoAnims: {},
+  videoAnimsOwn: [],
   videoPlace: 'middle',
   videoQuotes: true,
   videoNames: true,
@@ -5416,6 +5569,17 @@ export function setup(ctx: Ctx, overrides?: any) {
       g.fill();
       g.restore();
     }
+    // Typewriter and Word by word, while the line comes in with one, show
+    // the letters or the words so far. An animation picked for Words moves
+    // each word in as it is said.
+    const rev = textReveal;
+    const startChar: number[] = [];
+    let totalChars = 0;
+    for (const w of words) {
+      startChar.push(totalChars);
+      totalChars += w.length;
+    }
+    const wu = animFor('words');
     shown.forEach((row, r) => {
       const ws = row.map((k) => g.measureText(words[k]).width);
       const rowW = ws.reduce((a, b) => a + b, 0) + sp * (row.length - 1);
@@ -5424,7 +5588,45 @@ export function setup(ctx: Ctx, overrides?: any) {
       // The gradient spans the whole line, so every word reads the same way.
       const rowFill = textFill(g, 'Word', ink, x, base - size, x + rowW, base + size * 0.25);
       row.forEach((k, n) => {
+        let text = words[k];
+        if (rev) {
+          const shownNow = rev.kind === 'words' ? k < Math.floor(rev.frac * words.length + 1e-6) : startChar[k] < rev.frac * totalChars - 1e-6;
+          if (!shownNow) {
+            x += ws[n] + sp;
+            return;
+          }
+          if (rev.kind === 'chars') text = text.slice(0, Math.max(1, Math.round(rev.frac * totalChars - startChar[k])));
+        }
         const on = k <= said;
+        if (wu) {
+          const inW = on ? (wu.secs > 0 ? (local - (p.times[k] || 0) - wu.delay) / wu.secs : 1) : 0;
+          if (inW > 0) {
+            const ws2 = animAt(wu.def, 'in', Math.min(1, inW));
+            if (wu.def.reveal === 'chars') text = text.slice(0, Math.max(1, Math.round(text.length * ws2.p)));
+            const wa = alpha * ws2.o;
+            if (wa > 0) {
+              if (p.hidden[k]) coverWord(g, words[k], x, base, size, ink, wa);
+              else {
+                g.save();
+                const wcx = x + ws[n] / 2;
+                const wcy = base - size * 0.35;
+                g.translate(wcx + ws2.x * u, wcy + ws2.y * u);
+                g.rotate((ws2.r * Math.PI) / 180);
+                g.scale(ws2.s / 100, ws2.s / 100);
+                g.translate(-wcx, -wcy);
+                if (ws2.b >= 0.5) blurWord(g, text, x, base, rowFill, wa, ws2.b * u);
+                else {
+                  g.globalAlpha = wa;
+                  g.fillStyle = rowFill;
+                  g.fillText(text, x, base);
+                }
+                g.restore();
+              }
+            }
+          }
+          x += ws[n] + sp;
+          return;
+        }
         // How far a word is into its fade, from 0 when it is said to 1 a
         // moment later. Only Fade in and Blur in use it.
         const into = on ? Math.min(1, Math.max(0, (local - (p.times[k] || 0)) / WORD_IN_S)) : 0;
@@ -5432,11 +5634,11 @@ export function setup(ctx: Ctx, overrides?: any) {
         const a = alpha * (mode === 'all' ? 1 : soft ? ease(into) : on ? 1 : mode === 'appear' ? 0 : 0.45);
         if (a > 0) {
           if (p.hidden[k]) coverWord(g, words[k], x, base, size, ink, a);
-          else if (mode === 'blur' && into < 1) blurWord(g, words[k], x, base, rowFill, a, (1 - ease(into)) * WORD_BLUR * u);
+          else if (mode === 'blur' && into < 1) blurWord(g, text, x, base, rowFill, a, (1 - ease(into)) * WORD_BLUR * u);
           else {
             g.globalAlpha = a;
             g.fillStyle = rowFill;
-            g.fillText(words[k], x, base);
+            g.fillText(text, x, base);
           }
         }
         x += ws[n] + sp;
@@ -5618,15 +5820,32 @@ export function setup(ctx: Ctx, overrides?: any) {
     const sp = g.measureText(' ').width;
     const ws = words.map((wd) => g.measureText(wd).width);
     let x = W / 2 - (ws.reduce((p, q) => p + q, 0) + sp * (words.length - 1)) / 2;
+    // Typewriter and Word by word show the title a part at a time, and the
+    // line under it once the title is all shown.
+    const rev = textReveal;
+    const allChars = words.reduce((n, w) => n + w.length, 0);
+    let before = 0;
     words.forEach((wd, n) => {
+      let text = wd;
+      const from = before;
+      before += wd.length;
+      if (rev) {
+        const on = rev.kind === 'words' ? n < Math.floor(rev.frac * words.length + 1e-6) : from < rev.frac * allChars - 1e-6;
+        if (!on) {
+          x += ws[n] + sp;
+          return;
+        }
+        if (rev.kind === 'chars') text = wd.slice(0, Math.max(1, Math.round(rev.frac * allChars - from)));
+      }
       if (hide[n]) coverWord(g, wd, x, H / 2, size, ink, a);
       else {
         g.globalAlpha = a;
         g.fillStyle = ink;
-        g.fillText(wd, x, H / 2);
+        g.fillText(text, x, H / 2);
       }
       x += ws[n] + sp;
     });
+    if (rev) a *= Math.min(1, Math.max(0, (rev.frac - 0.85) / 0.15));
     g.shadowColor = 'transparent';
     g.globalAlpha = a * 0.55;
     g.fillStyle = ink;
@@ -5660,6 +5879,54 @@ export function setup(ctx: Ctx, overrides?: any) {
     g.globalAlpha = 1;
     st.from = -intro;
     st.to = total + fadeOut;
+    // An animation picked for the opening or the ending moves the whole
+    // frame, so the frame is drawn on a layer of its own first.
+    const ou = animFor('open');
+    const eu = animFor('end');
+    const kOpen = ou ? (ou.secs > 0 ? (t - ou.delay) / ou.secs : 1) : 1;
+    const kEnd = eu && fadeOut > 0 ? (t - (intro + total)) / fadeOut : 0;
+    const whole = (ou && kOpen < 1) || (eu && kEnd > 0);
+    const body = whole ? (animLayer(st, 7).getContext('2d') as CanvasRenderingContext2D) : g;
+    if (whole) {
+      body.setTransform(1, 0, 0, 1, 0, 0);
+      body.globalAlpha = 1;
+      body.globalCompositeOperation = 'source-over';
+      body.clearRect(0, 0, W, H);
+    }
+    frameBody(body, t, parts, total, st, title, intro, fadeOut);
+    if (whole) {
+      g.fillStyle = '#000';
+      g.fillRect(0, 0, W, H);
+      const layer = animLayer(st, 7);
+      const d: Drawer = (gg, al, x, y) => {
+        gg.save();
+        gg.globalAlpha = al;
+        gg.drawImage(layer, x, y);
+        gg.restore();
+      };
+      if (ou && kOpen < 1) runAnim(g, st, ou, 'in', kOpen, d, 8);
+      else if (eu) runAnim(g, st, eu, 'out', kEnd, d, 8);
+    }
+    // In from black at the start, and out to black at the end, unless an
+    // animation is picked for them.
+    const fadeIn = ou ? 0 : Math.max(0, 1 - t / 0.6);
+    const fadeEnd = !eu && fadeOut > 0 ? Math.max(0, Math.min(1, (t - (intro + total)) / fadeOut)) : 0;
+    const black = Math.max(fadeIn, fadeEnd);
+    if (black > 0) {
+      g.shadowColor = 'transparent';
+      g.globalAlpha = black;
+      g.fillStyle = '#000';
+      g.fillRect(0, 0, W, H);
+    }
+    // Stickers over everything but the watermarks, then the watermarks,
+    // which go over everything else, the fades included.
+    drawStickers(g, st, t, intro, total, fadeOut, 'top');
+    drawMarks(g, st, t, intro, total, fadeOut, false);
+    g.restore();
+  }
+  // Everything in a frame under the fades: the background, the stickers
+  // and watermark behind the words, the title or the line, and the notes.
+  function frameBody(g: CanvasRenderingContext2D, t: number, parts: VideoPart[], total: number, st: VideoStage, title: string, intro: number, fadeOut: number) {
     drawBackAt(g, st, t - intro);
     // Stickers behind the words, then a watermark in the middle, which is
     // drawn under the words, so it never covers them.
@@ -5669,7 +5936,9 @@ export function setup(ctx: Ctx, overrides?: any) {
     if (audioT < 0) {
       // The title fades in from the start and holds until the first line,
       // which takes over from it with the transition picked.
-      if (title) drawTitle(g, st, title, Math.max(0, Math.min(1, t / 0.6)), 0, 0);
+      const tu = animFor('title');
+      if (title && tu) runAnim(g, st, tu, 'in', tu.secs > 0 ? (t - tu.delay) / tu.secs : 1, (gg, al, x, y) => drawTitle(gg, st, title, al, x, y), 1);
+      else if (title) drawTitle(g, st, title, Math.max(0, Math.min(1, t / 0.6)), 0, 0);
     } else if (parts.length) {
       const now = Math.min(audioT, total);
       let i = 0;
@@ -5678,7 +5947,9 @@ export function setup(ctx: Ctx, overrides?: any) {
       const local = now - p.start;
       const D = Math.min(2, Math.max(0.1, Number(S.videoMoveSecs) || 0.4));
       const move = S.videoMove || 'rise';
-      if (i === 0 && local < D && move !== 'cut') {
+      if (animatedMove(g, st, i > 0 ? parts[i - 1] : null, i > 0 ? now - parts[i - 1].start : 0, p, local, title, move)) {
+        // Drawn with the animations picked.
+      } else if (i === 0 && local < D && move !== 'cut') {
         // The first line takes over from the title, or comes in from the
         // empty frame when there is none.
         const k = ease(local / D);
@@ -5702,21 +5973,6 @@ export function setup(ctx: Ctx, overrides?: any) {
       }
     }
     drawNotes(g, st, t, intro, total, fadeOut);
-    // In from black at the start, and out to black at the end.
-    const fadeIn = Math.max(0, 1 - t / 0.6);
-    const fadeEnd = fadeOut > 0 ? Math.max(0, Math.min(1, (t - (intro + total)) / fadeOut)) : 0;
-    const black = Math.max(fadeIn, fadeEnd);
-    if (black > 0) {
-      g.shadowColor = 'transparent';
-      g.globalAlpha = black;
-      g.fillStyle = '#000';
-      g.fillRect(0, 0, W, H);
-    }
-    // Stickers over everything but the watermarks, then the watermarks,
-    // which go over everything else, the fades included.
-    drawStickers(g, st, t, intro, total, fadeOut, 'top');
-    drawMarks(g, st, t, intro, total, fadeOut, false);
-    g.restore();
   }
 
   // ---- watermarks ----
@@ -5851,9 +6107,21 @@ export function setup(ctx: Ctx, overrides?: any) {
     // puts its own buttons.
     const padX = Math.round((W < H ? 0.06 * W : 40 * u));
     const padY = Math.round((W < H ? 0.08 * H : 36 * u));
+    const mu = animFor('marks');
     for (const m of marksNow()) {
       if ((m.place === 'mid') !== middle) continue;
-      const a = markStrength(m, st, t, intro, total, fadeOut);
+      // With an animation picked, it comes in and goes out with it at the
+      // ends of its time, in place of the short fade.
+      let a = markStrength(m, st, t, intro, total, fadeOut);
+      let phase: { which: 'in' | 'out'; k: number } | null = null;
+      if (mu && m.when !== 'backs') {
+        const [a0, b0] = noteSpan(m as any, intro, total, fadeOut);
+        if (t < a0 || t > b0) continue;
+        a = Math.min(100, Math.max(0, numOr(m.strength, 50))) / 100;
+        const len = Math.min(mu.secs, (b0 - a0) / 2);
+        if (t < a0 + mu.delay + len) phase = { which: 'in', k: len > 0 ? (t - a0 - mu.delay) / len : 1 };
+        else if (t > b0 - len) phase = { which: 'out', k: len > 0 ? (t - (b0 - len)) / len : 1 };
+      }
       if (a <= 0) continue;
       const size = Math.round(Math.min(400, Math.max(12, numOr(m.size, 64))) * u);
       const pic = m.pic ? markPics.get(m.id) || null : null;
@@ -5871,15 +6139,27 @@ export function setup(ctx: Ctx, overrides?: any) {
       const right = m.place === 'tr' || m.place === 'br';
       const top = m.place === 'tl' || m.place === 'tr' || m.place === 'tc';
       const x = left ? padX : right ? W - padX - w : (W - w) / 2;
-      const y = m.place === 'mid' ? (H - size) / 2 : top ? padY : H - padY - size;
-      setShadowOf(g, { on: m.shadow, ink: m.shadowInk, dark: numOr(m.shadowDark, 60), soft: numOr(m.shadowSoft, 10), far: numOr(m.shadowFar, 0) }, u);
-      if (pic) g.drawImage(pic, x, y, pw, size);
-      if (text) {
-        const tx = x + pw + gap;
-        g.fillStyle = fillOf(g, m.fill || 'solid', [hexOr(m.ink, '#ffffff')].concat(m.stops || []), m.dir || 'right', tx, y, tx + tw, y + size);
-        g.fillText(fitText(g, text, W * 0.4), tx, y + size / 2);
-      }
+      const y0 = m.place === 'mid' ? (H - size) / 2 : top ? padY : H - padY - size;
+      const fontNow = g.font;
       g.restore();
+      const one: Drawer = (gg, al, ox, oy) => {
+        gg.save();
+        gg.globalAlpha = al;
+        gg.font = fontNow;
+        gg.textBaseline = 'middle';
+        const x1 = x + ox;
+        const y = y0 + oy;
+        setShadowOf(gg, { on: m.shadow, ink: m.shadowInk, dark: numOr(m.shadowDark, 60), soft: numOr(m.shadowSoft, 10), far: numOr(m.shadowFar, 0) }, u);
+        if (pic) gg.drawImage(pic, x1, y, pw, size);
+        if (text) {
+          const tx = x1 + pw + gap;
+          gg.fillStyle = fillOf(gg, m.fill || 'solid', [hexOr(m.ink, '#ffffff')].concat(m.stops || []), m.dir || 'right', tx, y, tx + tw, y + size);
+          gg.fillText(fitText(gg, text, W * 0.4), tx, y + size / 2);
+        }
+        gg.restore();
+      };
+      if (phase && mu) runAnim(g, st, mu, phase.which, phase.k, (gg, al, ox, oy) => one(gg, al * a, ox, oy), 9);
+      else one(g, a, 0, 0);
     }
   }
 
@@ -5891,6 +6171,23 @@ export function setup(ctx: Ctx, overrides?: any) {
     let i = 0;
     while (i + 1 < sc.length && at >= sc[i + 1].t) i++;
     const since = at - sc[i].t;
+    // An animation picked for a scene change brings the new background in
+    // over the old one.
+    const bu = animFor('sceneBack');
+    if (bu && i > 0 && sc[i - 1].id !== sc[i].id && since < bu.delay + bu.secs) {
+      drawLayer(g, st, i - 1, at);
+      const k = bu.secs > 0 ? (since - bu.delay) / bu.secs : 1;
+      if (k > 0) {
+        runAnim(g, st, bu, 'in', k, (gg, al, x, y) => {
+          gg.save();
+          gg.translate(x, y);
+          gg.globalAlpha = al;
+          drawLayer(gg, st, i, at);
+          gg.restore();
+        }, 6);
+      }
+      return;
+    }
     const fading = i > 0 && sc[i - 1].id !== sc[i].id && since < SCENE_FADE_S;
     if (fading) {
       drawLayer(g, st, i - 1, at);
@@ -5985,6 +6282,252 @@ export function setup(ctx: Ctx, overrides?: any) {
   type Drawer = (g: CanvasRenderingContext2D, alpha: number, dx: number, dy: number) => void;
   // The last part giving way to the next, with no pictures: those are
   // moved by facesBetween. k runs from 0 to 1, eased.
+  // ---- animations on the stage ----
+  // The animation picked for a place, with its length and delay, or null
+  // while the place keeps its default. A text animation, such as
+  // Typewriter, is never used for the whole frame.
+  interface AnimUse { def: AnimDef; secs: number; delay: number }
+  const ownAnims = (): AnimDef[] => (Array.isArray(S.videoAnimsOwn) ? S.videoAnimsOwn : []);
+  const animById = (id: string): AnimDef | null => BUILT_IN_ANIMS.find((x) => x.id === id) || ownAnims().find((x) => x.id === id) || null;
+  function animFor(place: string): AnimUse | null {
+    const v = (S.videoAnims || {})[place];
+    if (!v || !v.id) return null;
+    const def = animById(String(v.id));
+    if (!def) return null;
+    const pl = ANIM_PLACES.find((p) => p.id === place);
+    if (pl && pl.kind === 'frame' && def.kind === 'text') return null;
+    return { def, secs: Math.min(10, Math.max(0, numOr(v.secs, def.secs))), delay: Math.min(10, Math.max(0, numOr(v.delay, def.delay))) };
+  }
+  // A canvas of the frame's size for each animation that is drawn on its
+  // own, kept with the stage.
+  function animLayer(st: VideoStage, n: number): any {
+    const list: any[] = ((st as any).animLayers = (st as any).animLayers || []);
+    let c = list[n];
+    if (!c || c.width !== st.w || c.height !== st.h) c = list[n] = canvasOf(st.w, st.h);
+    return c;
+  }
+  // Typewriter and Word by word: how much of the text drawn now is shown,
+  // from 0 to 1. Read by drawPart and drawTitle while it is set.
+  let textReveal: { kind: 'chars' | 'words'; frac: number } | null = null;
+  function maskOn(lg: CanvasRenderingContext2D, W: number, H: number, s: AnimState) {
+    const m = s.mask;
+    const f = Math.min(100, Math.max(0, Number(m.feather) || 0)) / 100;
+    lg.fillStyle = '#000';
+    if (m.type === 'linear') {
+      const a = ((Number(m.angle) || 0) * Math.PI) / 180;
+      const dx = Math.cos(a);
+      const dy = Math.sin(a);
+      const proj = [0, W * dx, H * dy, W * dx + H * dy];
+      const mn = Math.min(...proj);
+      const mx = Math.max(...proj);
+      const fw = Math.max(1, f * (mx - mn));
+      const run = mx - mn + fw;
+      // In: shown up to an edge that moves on. Out: hidden up to it.
+      const edge = s.hide ? mn - fw + run * s.p : mn + run * s.p;
+      const g0 = s.hide ? edge : edge - fw;
+      const g1 = s.hide ? edge + fw : edge;
+      const grad = lg.createLinearGradient(dx * g0, dy * g0, dx * g1, dy * g1);
+      grad.addColorStop(0, s.hide ? 'rgba(0,0,0,0)' : 'rgba(0,0,0,1)');
+      grad.addColorStop(1, s.hide ? 'rgba(0,0,0,1)' : 'rgba(0,0,0,0)');
+      lg.fillStyle = grad;
+      lg.fillRect(0, 0, W, H);
+    } else if (m.type === 'radial' || m.type === 'iris') {
+      // A circle from the middle: it opens as an in track goes on, and
+      // closes as an out track does.
+      const p = s.hide ? 1 - s.p : s.p;
+      const R = Math.hypot(W, H) / 2;
+      const fw = Math.max(1, f * R);
+      const r = (R + fw) * p;
+      const grad = lg.createRadialGradient(W / 2, H / 2, Math.max(0, r - fw), W / 2, H / 2, Math.max(0.01, r));
+      grad.addColorStop(0, 'rgba(0,0,0,1)');
+      grad.addColorStop(1, 'rgba(0,0,0,0)');
+      lg.fillStyle = grad;
+      lg.fillRect(0, 0, W, H);
+    } else if (m.type === 'clock') {
+      // A sweep like a clock's hand, from the top, clockwise.
+      const p = Math.min(1, Math.max(0, s.p));
+      const R = Math.hypot(W, H);
+      const top = -Math.PI / 2;
+      lg.beginPath();
+      lg.moveTo(W / 2, H / 2);
+      if (s.hide) lg.arc(W / 2, H / 2, R, top + p * Math.PI * 2, top + Math.PI * 2);
+      else lg.arc(W / 2, H / 2, R, top, top + p * Math.PI * 2);
+      lg.closePath();
+      lg.fill();
+    }
+  }
+  // Draws d as the state says. A state that only fades and moves draws
+  // straight onto the frame. Anything more is drawn on a layer of its own
+  // first, then sized, turned, blurred, tinted and masked onto the frame.
+  function drawAnimated(g: CanvasRenderingContext2D, st: VideoStage, s: AnimState, d: Drawer, slot: number, anchor: AnimDef['anchor'] = 'center') {
+    const W = st.w;
+    const H = st.h;
+    const u = Math.min(W, H) / 1080;
+    if (s.o <= 0.001) return;
+    if (isRest(s)) {
+      d(g, s.o, s.x * u, s.y * u);
+      return;
+    }
+    const c = animLayer(st, slot);
+    const lg = c.getContext('2d') as CanvasRenderingContext2D;
+    lg.setTransform(1, 0, 0, 1, 0, 0);
+    lg.globalAlpha = 1;
+    lg.globalCompositeOperation = 'source-over';
+    lg.clearRect(0, 0, W, H);
+    d(lg, 1, 0, 0);
+    // Darker, lighter and tinted, over what is drawn only.
+    lg.globalCompositeOperation = 'source-atop';
+    if (s.l < 99.5) {
+      lg.globalAlpha = Math.min(1, (100 - s.l) / 100);
+      lg.fillStyle = '#000';
+      lg.fillRect(0, 0, W, H);
+    } else if (s.l > 100.5) {
+      lg.globalAlpha = Math.min(1, (s.l - 100) / 100);
+      lg.fillStyle = '#fff';
+      lg.fillRect(0, 0, W, H);
+    }
+    if (s.ta > 0.5) {
+      lg.globalAlpha = Math.min(1, s.ta / 100);
+      lg.fillStyle = s.tint;
+      lg.fillRect(0, 0, W, H);
+    }
+    lg.globalAlpha = 1;
+    if (s.mask.type !== 'none') {
+      lg.globalCompositeOperation = 'destination-in';
+      maskOn(lg, W, H, s);
+    }
+    lg.globalCompositeOperation = 'source-over';
+    // A blur, drawn small and stretched back, which is fast in every
+    // browser.
+    let src: any = c;
+    let sw = W;
+    let sh = H;
+    const r = s.b * u;
+    if (r >= 0.5) {
+      const k = Math.min(1, 1.5 / r);
+      sw = Math.max(1, Math.round(W * k));
+      sh = Math.max(1, Math.round(H * k));
+      const bc = animLayer(st, 15);
+      const bg = bc.getContext('2d') as CanvasRenderingContext2D;
+      bg.setTransform(1, 0, 0, 1, 0, 0);
+      bg.globalAlpha = 1;
+      bg.clearRect(0, 0, W, H);
+      bg.imageSmoothingQuality = 'high';
+      bg.drawImage(c, 0, 0, sw, sh);
+      src = bc;
+    }
+    const ax = anchor === 'left' ? 0 : anchor === 'right' ? W : W / 2;
+    const ay = anchor === 'top' ? 0 : anchor === 'bottom' ? H : H / 2;
+    g.save();
+    g.globalAlpha = s.o;
+    g.translate(ax + s.x * u, ay + s.y * u);
+    g.rotate((s.r * Math.PI) / 180);
+    g.scale(s.s / 100, s.s / 100);
+    g.translate(-ax, -ay);
+    g.imageSmoothingQuality = 'high';
+    g.drawImage(src, 0, 0, sw, sh, 0, 0, W, H);
+    g.restore();
+  }
+  // One track of an animation at k, from 0 to 1, drawn. Typewriter and Word
+  // by word show the text a part at a time while they come in.
+  function runAnim(g: CanvasRenderingContext2D, st: VideoStage, use: AnimUse, which: 'in' | 'out', k: number, d: Drawer, slot: number) {
+    const kk = Math.min(1, Math.max(0, k));
+    const s = animAt(use.def, which, kk);
+    if (which === 'in' && use.def.reveal) {
+      const was = textReveal;
+      textReveal = { kind: use.def.reveal === 'words' ? 'words' : 'chars', frac: s.p };
+      try {
+        drawAnimated(g, st, s, d, slot, use.def.anchor);
+      } finally {
+        textReveal = was;
+      }
+      return;
+    }
+    drawAnimated(g, st, s, d, slot, use.def.anchor);
+  }
+  // Whether a new scene starts at this moment of the audio.
+  function sceneStartsAt(st: VideoStage, t: number): boolean {
+    const sc = st.scenes;
+    for (let i = 1; i < sc.length; i++) if (Math.abs(sc[i].t - t) < 0.06 && sc[i].id !== sc[i - 1].id) return true;
+    return false;
+  }
+  // From one part to the next with the animations picked for between
+  // lines, scene changes, lines, captions and pictures. a is the part going,
+  // or null for the first line, which comes in from the title or from the
+  // empty frame. Answers false while no animation is picked, so the
+  // transition under Moving between lines is used.
+  function animatedMove(g: CanvasRenderingContext2D, st: VideoStage, a: VideoPart | null, aT: number, p: VideoPart, local: number, title: string, move: string): boolean {
+    const scene = !!a && sceneStartsAt(st, p.start);
+    const fu = (scene ? animFor('scene') : null) || animFor('between');
+    const tu = (p.kind === 'sound' ? animFor('captions') : null) || animFor('lines');
+    const pu = animFor('pics');
+    if (!fu && !tu && !pu) return false;
+    const lead = (fu || tu || pu) as AnimUse;
+    const k = lead.secs > 0 ? (local - lead.delay) / lead.secs : 1;
+    if (k >= 1) {
+      drawPart(g, st, p, local, 1, 0, 0);
+      return true;
+    }
+    const ov = Math.min(1, Math.max(0, numOr(lead.def.overlap, 1)));
+    const span = 0.5 + ov / 2;
+    const kOut = Math.min(1, Math.max(0, k / span));
+    const kIn = Math.min(1, Math.max(0, (k - (1 - span)) / span));
+    const textA: Drawer | null = a ? (gg, al, x, y) => drawPart(gg, st, a, aT, al, x, y, 'text') : title ? (gg, al, x, y) => drawTitle(gg, st, title, al, x, y) : null;
+    const textB: Drawer = (gg, al, x, y) => drawPart(gg, st, p, local, al, x, y, 'text');
+    // The title goes with its own animation, when one is picked for it.
+    const tuA = !a && title ? animFor('title') || tu : tu;
+    const facesA = a ? drawPart(g, st, a, aT, 1, 0, 0, 'faces') : [];
+    const facesB = drawPart(g, st, p, local, 1, 0, 0, 'faces');
+    const facesOf = (list: FacePlace[]): Drawer => (gg, al, x, y) => {
+      for (const f of list) drawPicture(gg, st, f.face, f.x + x, f.top + y, f.a * al, f.q || 0);
+    };
+    const withText = (d: Drawer | null, use: AnimUse | null, which: 'in' | 'out', kk: number, slot: number): Drawer => (gg, al, x, y) => {
+      if (!d) return;
+      if (use) runAnim(gg, st, use, which, kk, (g2, a2, x2, y2) => d(g2, a2 * al, x2 + x, y2 + y), slot);
+      else d(gg, al, x, y);
+    };
+    if (fu) {
+      // The whole part moves as one: its pictures, names and words.
+      const allA: Drawer = (gg, al, x, y) => {
+        facesOf(facesA)(gg, al, x, y);
+        withText(textA, tuA, 'out', kOut, 2)(gg, al, x, y);
+      };
+      const allB: Drawer = (gg, al, x, y) => {
+        facesOf(facesB)(gg, al, x, y);
+        withText(textB, tu, 'in', kIn, 3)(gg, al, x, y);
+      };
+      if (a || title) runAnim(g, st, fu, 'out', kOut, allA, 0);
+      runAnim(g, st, fu, 'in', kIn, allB, 1);
+      return true;
+    }
+    if (tu || tuA) {
+      if (textA) withText(textA, tuA, 'out', kOut, 2)(g, 1, 0, 0);
+      withText(textB, tu, 'in', kIn, 3)(g, 1, 0, 0);
+    } else if (move === 'cut') textB(g, 1, 0, 0);
+    else videoMove(g, st, move, ease(Math.min(1, Math.max(0, k))), textA, textB);
+    if (pu) {
+      // A speaker who stays moves to their new place. One who goes and one
+      // who comes in use the animation.
+      const used = new Set<number>();
+      const stayA: FacePlace[] = [];
+      const stayB: FacePlace[] = [];
+      const newB: FacePlace[] = [];
+      for (const b of facesB) {
+        const at = facesA.findIndex((x, n) => !used.has(n) && x.face.name === b.face.name);
+        if (at < 0) newB.push(b);
+        else {
+          used.add(at);
+          stayA.push(facesA[at]);
+          stayB.push(b);
+        }
+      }
+      const goneA = facesA.filter((_, n) => !used.has(n));
+      facesBetween(g, st, stayA, stayB, ease(Math.min(1, Math.max(0, k))));
+      if (goneA.length) runAnim(g, st, pu, 'out', kOut, facesOf(goneA), 4);
+      if (newB.length) runAnim(g, st, pu, 'in', kIn, facesOf(newB), 5);
+    } else facesBetween(g, st, facesA, facesB, ease(Math.min(1, Math.max(0, k))));
+    return true;
+  }
   function videoMove(g: CanvasRenderingContext2D, st: VideoStage, move: string, k: number, A: Drawer | null, B: Drawer) {
     const drawA: Drawer = A || (() => {});
     const W = st.w;
@@ -16442,7 +16985,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     'videoWordShadow', 'videoWordShadowInk', 'videoWordShadowDark', 'videoWordShadowSoft', 'videoWordShadowFar',
     'videoBox', 'videoBoxColor', 'videoBoxClear', 'videoBoxRound', 'videoBoxWidth', 'videoOwnColors', 'videoKindColors', 'videoBackRules', 'videoQuiet', 'videoQuietStrength',
     'videoNameShadow', 'videoNameShadowInk', 'videoNameShadowDark', 'videoNameShadowSoft', 'videoNameShadowFar', 'videoEdges', 'videoEdgeColor', 'videoMove', 'videoMoveSecs',
-    'videoTitleOn', 'videoFadeOut', 'videoCaptions',
+    'videoAnims', 'videoAnimsOwn', 'videoTitleOn', 'videoFadeOut', 'videoCaptions',
   ];
   const LOOKS_MAX = 20;
   // A look holds one background: the one in use, with its design and
@@ -16805,6 +17348,67 @@ export function setup(ctx: Ctx, overrides?: any) {
     box.appendChild(r);
   }
 
+  // The places an animation is used, each with a dropdown: its default,
+  // the built-in animations, and the reader's own.
+  function drawAnimPlaces(box: HTMLElement, changed: () => void) {
+    box.replaceChildren();
+    box.appendChild(hint('How each part of the video comes in and goes out. Each one is Default until you pick another.'));
+    const now = (): Record<string, { id: string; secs: number; delay: number }> => Object.assign({}, S.videoAnims || {});
+    for (const kind of ['frame', 'text'] as const) {
+      const h = el('<h3 class="af-ws-h"></h3>');
+      h.textContent = kind === 'frame' ? 'The whole frame' : 'Text';
+      box.appendChild(h);
+      for (const pl of ANIM_PLACES.filter((x) => x.kind === kind)) {
+        const opts: { id: string; label: string; group?: string }[] = [{ id: '', label: 'Default: ' + pl.dflt }];
+        for (const a of BUILT_IN_ANIMS) if (kind === 'text' || a.kind !== 'text') opts.push({ id: a.id, label: a.name, group: 'Built in' });
+        for (const a of ownAnims()) if (kind === 'text' || a.kind !== 'text') opts.push({ id: a.id, label: a.name, group: 'Your animations' });
+        const cur = now()[pl.id];
+        const value = cur && opts.some((o) => o.id === cur.id) ? cur.id : '';
+        const under = el('<div class="af-sub"><div class="af-under"></div></div>');
+        const inner = under.firstElementChild as HTMLElement;
+        const timing = () => {
+          inner.replaceChildren();
+          const c = now()[pl.id];
+          const def = c ? animById(c.id) : null;
+          if (!c || !def) return;
+          const put = (key: 'secs' | 'delay', v: number) => {
+            const all = now();
+            if (!all[pl.id]) return;
+            all[pl.id] = Object.assign({}, all[pl.id], { [key]: v });
+            set({ videoAnims: all });
+            changed();
+          };
+          if (pl.id === 'end') inner.appendChild(hint('It takes as long as Fade to black at the end, under Title and ending.'));
+          else {
+            const len = numberRow('Length, in seconds', numOr(c.secs, def.secs), 0, 10, 0.1, (v) => put('secs', v), def.secs + ' by default for ' + def.name + '.');
+            len.setAttribute('data-af-animsecs', pl.id);
+            inner.appendChild(len);
+          }
+          if (pl.id !== 'end') {
+            const del = numberRow('Delay, in seconds', numOr(c.delay, def.delay), 0, 10, 0.1, (v) => put('delay', v), '0 by default. It waits this long before it starts.');
+            del.setAttribute('data-af-animdelay', pl.id);
+            inner.appendChild(del);
+          }
+        };
+        const row = select(pl.label, opts, value, (v) => {
+          const all = now();
+          const def = v ? animById(v) : null;
+          if (def) all[pl.id] = { id: v, secs: def.secs, delay: def.delay };
+          else delete all[pl.id];
+          set({ videoAnims: all });
+          timing();
+          showUnder(under, !!def);
+          changed();
+        }, pl.help);
+        row.querySelector('select')!.setAttribute('data-af-animplace', pl.id);
+        box.appendChild(row);
+        timing();
+        under.hidden = !value;
+        box.appendChild(under);
+      }
+    }
+  }
+
   // Each saved look: its name, which can be typed over, Use and Delete. Save
   // this look, under them, keeps the look now under a new name.
   // ---------- Templates ----------
@@ -16851,6 +17455,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         videoNameShadowFar: 2,
         videoPicShape: 'circle', videoPicSize: 150, videoPicRing: true, videoPicRingWidth: 3, videoPicMove: true, videoTwo: true,
         videoMoodPics: true, videoQuiet: 'fade', videoQuietStrength: 45,
+        videoAnims: {},
         videoEdges: 35, videoEdgeColor: '', videoMove: 'rise', videoMoveSecs: 0.5,
         videoTitleOn: true, videoFadeOut: 1.5, videoBylineInk: '', videoBylineFont: '', videoBylineFill: 'solid', videoBylineStops: ['#f2b880'],
         videoBylineDir: 'right', videoBylineShadow: true, videoBylineShadowInk: '', videoBylineShadowDark: 65, videoBylineShadowSoft: 18,
@@ -16877,6 +17482,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         videoNameShadowFar: 2,
         videoPicShape: 'rounded', videoPicSize: 132, videoPicRing: false, videoPicRingWidth: 3, videoPicMove: false, videoTwo: true,
         videoMoodPics: true, videoQuiet: 'fade', videoQuietStrength: 45,
+        videoAnims: {},
         videoEdges: 0, videoEdgeColor: '', videoMove: 'dissolve', videoMoveSecs: 0.3,
         videoTitleOn: true, videoFadeOut: 1, videoBylineInk: '#a9a49a', videoBylineFont: '', videoBylineFill: 'solid', videoBylineStops: ['#f2b880'],
         videoBylineDir: 'right', videoBylineShadow: false, videoBylineShadowInk: '', videoBylineShadowDark: 65, videoBylineShadowSoft: 18,
@@ -16903,6 +17509,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         videoNameShadowFar: 2,
         videoPicShape: 'circle', videoPicSize: 140, videoPicRing: true, videoPicRingWidth: 2, videoPicMove: true, videoTwo: true,
         videoMoodPics: true, videoQuiet: 'fade', videoQuietStrength: 45,
+        videoAnims: {},
         videoEdges: 30, videoEdgeColor: '#6b4a24', videoMove: 'rise', videoMoveSecs: 0.6,
         videoTitleOn: true, videoFadeOut: 2, videoBylineInk: '#9a4a1c', videoBylineFont: '', videoBylineFill: 'solid', videoBylineStops: ['#f2b880'],
         videoBylineDir: 'right', videoBylineShadow: false, videoBylineShadowInk: '', videoBylineShadowDark: 65, videoBylineShadowSoft: 18,
@@ -16936,6 +17543,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         videoNameShadowFar: 2,
         videoPicShape: 'rounded', videoPicSize: 120, videoPicRing: true, videoPicRingWidth: 2, videoPicMove: true, videoTwo: true,
         videoMoodPics: true, videoQuiet: 'fade', videoQuietStrength: 45,
+        videoAnims: {},
         videoEdges: 60, videoEdgeColor: '#000000', videoMove: 'dissolve', videoMoveSecs: 0.7,
         videoTitleOn: true, videoFadeOut: 2, videoBylineInk: '#f0c36a', videoBylineFont: '', videoBylineFill: 'solid', videoBylineStops: ['#f2b880'],
         videoBylineDir: 'right', videoBylineShadow: true, videoBylineShadowInk: '#000000', videoBylineShadowDark: 90, videoBylineShadowSoft: 6,
@@ -16965,6 +17573,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         videoNameShadowFar: 2,
         videoPicShape: 'circle', videoPicSize: 150, videoPicRing: true, videoPicRingWidth: 3, videoPicMove: true, videoTwo: true,
         videoMoodPics: true, videoQuiet: 'fade', videoQuietStrength: 45,
+        videoAnims: {},
         videoEdges: 30, videoEdgeColor: '#05010f', videoMove: 'zoom', videoMoveSecs: 0.5,
         videoTitleOn: true, videoFadeOut: 1.5, videoBylineInk: '#ff7ad9', videoBylineFont: '', videoBylineFill: 'solid',
         videoBylineStops: ['#f2b880'], videoBylineDir: 'right', videoBylineShadow: false, videoBylineShadowInk: '', videoBylineShadowDark: 65,
@@ -17002,6 +17611,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         videoNameShadowFar: 2,
         videoPicShape: 'circle', videoPicSize: 150, videoPicRing: true, videoPicRingWidth: 3, videoPicMove: true, videoTwo: true,
         videoMoodPics: true, videoQuiet: 'fade', videoQuietStrength: 45,
+        videoAnims: {},
         videoEdges: 0, videoEdgeColor: '', videoMove: 'dissolve', videoMoveSecs: 0.6,
         videoTitleOn: true, videoFadeOut: 1.5, videoBylineInk: '#c25b7d', videoBylineFont: '', videoBylineFill: 'solid',
         videoBylineStops: ['#f2b880'], videoBylineDir: 'right', videoBylineShadow: false, videoBylineShadowInk: '', videoBylineShadowDark: 65,
@@ -17031,6 +17641,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         videoNameShadowFar: 2,
         videoPicShape: 'rounded', videoPicSize: 124, videoPicRing: true, videoPicRingWidth: 1, videoPicMove: true, videoTwo: true,
         videoMoodPics: true, videoQuiet: 'fade', videoQuietStrength: 45,
+        videoAnims: {},
         videoEdges: 85, videoEdgeColor: '#000000', videoMove: 'black', videoMoveSecs: 0.9,
         videoTitleOn: true, videoFadeOut: 3, videoBylineInk: '#c0504d', videoBylineFont: '', videoBylineFill: 'solid', videoBylineStops: ['#f2b880'],
         videoBylineDir: 'right', videoBylineShadow: true, videoBylineShadowInk: '#000000', videoBylineShadowDark: 90, videoBylineShadowSoft: 20,
@@ -17057,6 +17668,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         videoNameShadowFar: 2,
         videoPicShape: 'rounded', videoPicSize: 170, videoPicRing: true, videoPicRingWidth: 6, videoPicMove: true, videoTwo: true,
         videoMoodPics: true, videoQuiet: 'fade', videoQuietStrength: 45,
+        videoAnims: {},
         videoEdges: 0, videoEdgeColor: '', videoMove: 'slide', videoMoveSecs: 0.4,
         videoTitleOn: true, videoFadeOut: 1, videoBylineInk: '#c2185b', videoBylineFont: '', videoBylineFill: 'solid', videoBylineStops: ['#f2b880'],
         videoBylineDir: 'right', videoBylineShadow: false, videoBylineShadowInk: '', videoBylineShadowDark: 65, videoBylineShadowSoft: 18,
@@ -17086,6 +17698,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         videoNameShadowFar: 2,
         videoPicShape: 'rounded', videoPicSize: 120, videoPicRing: false, videoPicRingWidth: 3, videoPicMove: false, videoTwo: true,
         videoMoodPics: true, videoQuiet: 'fade', videoQuietStrength: 45,
+        videoAnims: {},
         videoEdges: 0, videoEdgeColor: '', videoMove: 'fade', videoMoveSecs: 0.5,
         videoTitleOn: true, videoFadeOut: 1.5, videoBylineInk: '#b03a2e', videoBylineFont: 'type', videoBylineFill: 'solid',
         videoBylineStops: ['#f2b880'], videoBylineDir: 'right', videoBylineShadow: false, videoBylineShadowInk: '', videoBylineShadowDark: 65,
@@ -17122,6 +17735,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         videoNameShadowFar: 2,
         videoPicShape: 'circle', videoPicSize: 150, videoPicRing: true, videoPicRingWidth: 3, videoPicMove: true, videoTwo: true,
         videoMoodPics: true, videoQuiet: 'fade', videoQuietStrength: 45,
+        videoAnims: {},
         videoEdges: 55, videoEdgeColor: '#0d0602', videoMove: 'rise', videoMoveSecs: 0.5,
         videoTitleOn: true, videoFadeOut: 2, videoBylineInk: '#ff9f4a', videoBylineFont: '', videoBylineFill: 'solid', videoBylineStops: ['#f2b880'],
         videoBylineDir: 'right', videoBylineShadow: true, videoBylineShadowInk: '#1a0b02', videoBylineShadowDark: 70, videoBylineShadowSoft: 16,
@@ -17148,6 +17762,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         videoNameShadowFar: 2,
         videoPicShape: 'circle', videoPicSize: 150, videoPicRing: true, videoPicRingWidth: 2, videoPicMove: true, videoTwo: true,
         videoMoodPics: true, videoQuiet: 'fade', videoQuietStrength: 45,
+        videoAnims: {},
         videoEdges: 25, videoEdgeColor: '#050a1f', videoMove: 'focus', videoMoveSecs: 0.7,
         videoTitleOn: true, videoFadeOut: 2, videoBylineInk: '#f6d98b', videoBylineFont: '', videoBylineFill: 'solid', videoBylineStops: ['#f2b880'],
         videoBylineDir: 'right', videoBylineShadow: true, videoBylineShadowInk: '#0b1638', videoBylineShadowDark: 60, videoBylineShadowSoft: 16,
@@ -17194,6 +17809,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         videoNameShadowFar: 2,
         videoPicShape: 'rounded', videoPicSize: 120, videoPicRing: true, videoPicRingWidth: 1, videoPicMove: false, videoTwo: true,
         videoMoodPics: true, videoQuiet: 'fade', videoQuietStrength: 45,
+        videoAnims: {},
         videoEdges: 20, videoEdgeColor: '#000000', videoMove: 'cut', videoMoveSecs: 0.3,
         videoTitleOn: true, videoFadeOut: 1, videoBylineInk: '#b8ffcb', videoBylineFont: 'type', videoBylineFill: 'solid',
         videoBylineStops: ['#f2b880'], videoBylineDir: 'right', videoBylineShadow: true, videoBylineShadowInk: '#00ff55', videoBylineShadowDark: 45,
@@ -17251,6 +17867,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         videoNameShadowFar: 2,
         videoPicShape: 'rounded', videoPicSize: 200, videoPicRing: true, videoPicRingWidth: 2, videoPicMove: true, videoTwo: true,
         videoMoodPics: true, videoQuiet: 'fade', videoQuietStrength: 45,
+        videoAnims: {},
         videoEdges: 25, videoEdgeColor: '#05060c', videoMove: 'dissolve', videoMoveSecs: 0.25,
         videoTitleOn: true, videoFadeOut: 1, videoBylineInk: '#c9bfff', videoBylineFont: '', videoBylineFill: 'solid', videoBylineStops: ['#f2b880'],
         videoBylineDir: 'right', videoBylineShadow: false, videoBylineShadowInk: '', videoBylineShadowDark: 65, videoBylineShadowSoft: 18,
@@ -17277,6 +17894,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         videoNameShadowFar: 2,
         videoPicShape: 'circle', videoPicSize: 140, videoPicRing: true, videoPicRingWidth: 2, videoPicMove: true, videoTwo: true,
         videoMoodPics: true, videoQuiet: 'fade', videoQuietStrength: 45,
+        videoAnims: {},
         videoEdges: 40, videoEdgeColor: '#1a2128', videoMove: 'fade', videoMoveSecs: 0.6,
         videoTitleOn: true, videoFadeOut: 2, videoBylineInk: '#bcd3e3', videoBylineFont: '', videoBylineFill: 'solid', videoBylineStops: ['#f2b880'],
         videoBylineDir: 'right', videoBylineShadow: true, videoBylineShadowInk: '#1c252d', videoBylineShadowDark: 60, videoBylineShadowSoft: 14,
@@ -17330,6 +17948,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         videoNameShadowFar: 2,
         videoPicShape: 'rounded', videoPicSize: 140, videoPicRing: false, videoPicRingWidth: 3, videoPicMove: true, videoTwo: true,
         videoMoodPics: true, videoQuiet: 'fade', videoQuietStrength: 45,
+        videoAnims: {},
         videoEdges: 45, videoEdgeColor: '#3a2814', videoMove: 'black', videoMoveSecs: 0.8,
         videoTitleOn: true, videoFadeOut: 2, videoBylineInk: '#5a3a18', videoBylineFont: '', videoBylineFill: 'solid', videoBylineStops: ['#f2b880'],
         videoBylineDir: 'right', videoBylineShadow: false, videoBylineShadowInk: '', videoBylineShadowDark: 65, videoBylineShadowSoft: 18,
@@ -17370,6 +17989,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         videoNameShadowFar: 2,
         videoPicShape: 'circle', videoPicSize: 130, videoPicRing: true, videoPicRingWidth: 3, videoPicMove: true, videoTwo: true,
         videoMoodPics: true, videoQuiet: 'fade', videoQuietStrength: 45,
+        videoAnims: {},
         videoEdges: 30, videoEdgeColor: '#000000', videoMove: 'dissolve', videoMoveSecs: 0.4,
         videoTitleOn: true, videoFadeOut: 1.5, videoBylineInk: '#e0a030', videoBylineFont: '', videoBylineFill: 'solid',
         videoBylineStops: ['#f2b880'], videoBylineDir: 'right', videoBylineShadow: false, videoBylineShadowInk: '', videoBylineShadowDark: 65,
@@ -17413,6 +18033,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         videoNameShadowFar: 2,
         videoPicShape: 'circle', videoPicSize: 140, videoPicRing: true, videoPicRingWidth: 2, videoPicMove: true, videoTwo: true,
         videoMoodPics: true, videoQuiet: 'fade', videoQuietStrength: 45,
+        videoAnims: {},
         videoEdges: 45, videoEdgeColor: '#0a0205', videoMove: 'dissolve', videoMoveSecs: 0.9,
         videoTitleOn: true, videoFadeOut: 3, videoBylineInk: '#f4a6a0', videoBylineFont: '', videoBylineFill: 'solid', videoBylineStops: ['#f2b880'],
         videoBylineDir: 'right', videoBylineShadow: true, videoBylineShadowInk: '#12030a', videoBylineShadowDark: 60, videoBylineShadowSoft: 16,
@@ -17451,6 +18072,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         videoNameShadowFar: 2,
         videoPicShape: 'circle', videoPicSize: 150, videoPicRing: true, videoPicRingWidth: 3, videoPicMove: true, videoTwo: true,
         videoMoodPics: true, videoQuiet: 'fade', videoQuietStrength: 45,
+        videoAnims: {},
         videoEdges: 30, videoEdgeColor: '#000000', videoMove: 'fade', videoMoveSecs: 0.5,
         videoTitleOn: true, videoFadeOut: 1.5, videoBylineInk: '#ff6b6b', videoBylineFont: '', videoBylineFill: 'solid',
         videoBylineStops: ['#f2b880'], videoBylineDir: 'right', videoBylineShadow: true, videoBylineShadowInk: '', videoBylineShadowDark: 65,
@@ -17477,6 +18099,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         videoNameShadowFar: 2,
         videoPicShape: 'circle', videoPicSize: 150, videoPicRing: true, videoPicRingWidth: 3, videoPicMove: true, videoTwo: true,
         videoMoodPics: true, videoQuiet: 'fade', videoQuietStrength: 45,
+        videoAnims: {},
         videoEdges: 30, videoEdgeColor: '#000000', videoMove: 'fade', videoMoveSecs: 0.5,
         videoTitleOn: true, videoFadeOut: 1.5, videoBylineInk: '#ffa25c', videoBylineFont: '', videoBylineFill: 'solid',
         videoBylineStops: ['#f2b880'], videoBylineDir: 'right', videoBylineShadow: true, videoBylineShadowInk: '', videoBylineShadowDark: 65,
@@ -17503,6 +18126,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         videoNameShadowFar: 2,
         videoPicShape: 'circle', videoPicSize: 150, videoPicRing: true, videoPicRingWidth: 3, videoPicMove: true, videoTwo: true,
         videoMoodPics: true, videoQuiet: 'fade', videoQuietStrength: 45,
+        videoAnims: {},
         videoEdges: 30, videoEdgeColor: '#000000', videoMove: 'fade', videoMoveSecs: 0.5,
         videoTitleOn: true, videoFadeOut: 1.5, videoBylineInk: '#ffd84a', videoBylineFont: '', videoBylineFill: 'solid',
         videoBylineStops: ['#f2b880'], videoBylineDir: 'right', videoBylineShadow: true, videoBylineShadowInk: '', videoBylineShadowDark: 65,
@@ -17529,6 +18153,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         videoNameShadowFar: 2,
         videoPicShape: 'circle', videoPicSize: 150, videoPicRing: true, videoPicRingWidth: 3, videoPicMove: true, videoTwo: true,
         videoMoodPics: true, videoQuiet: 'fade', videoQuietStrength: 45,
+        videoAnims: {},
         videoEdges: 30, videoEdgeColor: '#000000', videoMove: 'fade', videoMoveSecs: 0.5,
         videoTitleOn: true, videoFadeOut: 1.5, videoBylineInk: '#5ee08a', videoBylineFont: '', videoBylineFill: 'solid',
         videoBylineStops: ['#f2b880'], videoBylineDir: 'right', videoBylineShadow: true, videoBylineShadowInk: '', videoBylineShadowDark: 65,
@@ -17555,6 +18180,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         videoNameShadowFar: 2,
         videoPicShape: 'circle', videoPicSize: 150, videoPicRing: true, videoPicRingWidth: 3, videoPicMove: true, videoTwo: true,
         videoMoodPics: true, videoQuiet: 'fade', videoQuietStrength: 45,
+        videoAnims: {},
         videoEdges: 30, videoEdgeColor: '#000000', videoMove: 'fade', videoMoveSecs: 0.5,
         videoTitleOn: true, videoFadeOut: 1.5, videoBylineInk: '#6aa8ff', videoBylineFont: '', videoBylineFill: 'solid',
         videoBylineStops: ['#f2b880'], videoBylineDir: 'right', videoBylineShadow: true, videoBylineShadowInk: '', videoBylineShadowDark: 65,
@@ -17581,6 +18207,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         videoNameShadowFar: 2,
         videoPicShape: 'circle', videoPicSize: 150, videoPicRing: true, videoPicRingWidth: 3, videoPicMove: true, videoTwo: true,
         videoMoodPics: true, videoQuiet: 'fade', videoQuietStrength: 45,
+        videoAnims: {},
         videoEdges: 30, videoEdgeColor: '#000000', videoMove: 'fade', videoMoveSecs: 0.5,
         videoTitleOn: true, videoFadeOut: 1.5, videoBylineInk: '#9a97ff', videoBylineFont: '', videoBylineFill: 'solid',
         videoBylineStops: ['#f2b880'], videoBylineDir: 'right', videoBylineShadow: true, videoBylineShadowInk: '', videoBylineShadowDark: 65,
@@ -17607,6 +18234,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         videoNameShadowFar: 2,
         videoPicShape: 'circle', videoPicSize: 150, videoPicRing: true, videoPicRingWidth: 3, videoPicMove: true, videoTwo: true,
         videoMoodPics: true, videoQuiet: 'fade', videoQuietStrength: 45,
+        videoAnims: {},
         videoEdges: 30, videoEdgeColor: '#000000', videoMove: 'fade', videoMoveSecs: 0.5,
         videoTitleOn: true, videoFadeOut: 1.5, videoBylineInk: '#c18bff', videoBylineFont: '', videoBylineFill: 'solid',
         videoBylineStops: ['#f2b880'], videoBylineDir: 'right', videoBylineShadow: true, videoBylineShadowInk: '', videoBylineShadowDark: 65,
@@ -17633,6 +18261,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         videoNameShadowFar: 2,
         videoPicShape: 'circle', videoPicSize: 150, videoPicRing: true, videoPicRingWidth: 3, videoPicMove: true, videoTwo: true,
         videoMoodPics: true, videoQuiet: 'fade', videoQuietStrength: 45,
+        videoAnims: {},
         videoEdges: 30, videoEdgeColor: '#000000', videoMove: 'fade', videoMoveSecs: 0.5,
         videoTitleOn: true, videoFadeOut: 1.5, videoBylineInk: '#ff8ccf', videoBylineFont: '', videoBylineFill: 'solid',
         videoBylineStops: ['#f2b880'], videoBylineDir: 'right', videoBylineShadow: true, videoBylineShadowInk: '', videoBylineShadowDark: 65,
@@ -17659,6 +18288,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         videoNameShadowFar: 2,
         videoPicShape: 'circle', videoPicSize: 150, videoPicRing: true, videoPicRingWidth: 4, videoPicMove: true, videoTwo: true,
         videoMoodPics: true, videoQuiet: 'fade', videoQuietStrength: 45,
+        videoAnims: {},
         videoEdges: 0, videoEdgeColor: '', videoMove: 'dissolve', videoMoveSecs: 0.5,
         videoTitleOn: true, videoFadeOut: 1.5, videoBylineInk: '#b05a3a', videoBylineFont: '', videoBylineFill: 'solid',
         videoBylineStops: ['#f2b880'], videoBylineDir: 'right', videoBylineShadow: false, videoBylineShadowInk: '', videoBylineShadowDark: 65,
@@ -17696,6 +18326,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         videoNameShadowFar: 2,
         videoPicShape: 'circle', videoPicSize: 150, videoPicRing: true, videoPicRingWidth: 4, videoPicMove: true, videoTwo: true,
         videoMoodPics: true, videoQuiet: 'fade', videoQuietStrength: 45,
+        videoAnims: {},
         videoEdges: 0, videoEdgeColor: '', videoMove: 'dissolve', videoMoveSecs: 0.5,
         videoTitleOn: true, videoFadeOut: 1.5, videoBylineInk: '#3d6a9e', videoBylineFont: '', videoBylineFill: 'solid',
         videoBylineStops: ['#f2b880'], videoBylineDir: 'right', videoBylineShadow: false, videoBylineShadowInk: '', videoBylineShadowDark: 65,
@@ -17732,6 +18363,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         videoNameShadowFar: 2,
         videoPicShape: 'circle', videoPicSize: 150, videoPicRing: true, videoPicRingWidth: 4, videoPicMove: true, videoTwo: true,
         videoMoodPics: true, videoQuiet: 'fade', videoQuietStrength: 45,
+        videoAnims: {},
         videoEdges: 0, videoEdgeColor: '', videoMove: 'dissolve', videoMoveSecs: 0.5,
         videoTitleOn: true, videoFadeOut: 1.5, videoBylineInk: '#7a5aa8', videoBylineFont: '', videoBylineFill: 'solid',
         videoBylineStops: ['#f2b880'], videoBylineDir: 'right', videoBylineShadow: false, videoBylineShadowInk: '', videoBylineShadowDark: 65,
@@ -17768,6 +18400,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         videoNameShadowFar: 2,
         videoPicShape: 'circle', videoPicSize: 140, videoPicRing: true, videoPicRingWidth: 2, videoPicMove: true, videoTwo: true,
         videoMoodPics: true, videoQuiet: 'fade', videoQuietStrength: 45,
+        videoAnims: {},
         videoEdges: 55, videoEdgeColor: '#000000', videoMove: 'black', videoMoveSecs: 0.8,
         videoTitleOn: true, videoFadeOut: 2.5, videoBylineInk: '#c8c4d4', videoBylineFont: '', videoBylineFill: 'solid',
         videoBylineStops: ['#f2b880'], videoBylineDir: 'right', videoBylineShadow: true, videoBylineShadowInk: '#000000', videoBylineShadowDark: 70,
@@ -17808,6 +18441,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         videoNameShadowFar: 2,
         videoPicShape: 'rounded', videoPicSize: 140, videoPicRing: true, videoPicRingWidth: 3, videoPicMove: true, videoTwo: true,
         videoMoodPics: true, videoQuiet: 'fade', videoQuietStrength: 45,
+        videoAnims: {},
         videoEdges: 30, videoEdgeColor: '#000000', videoMove: 'slide', videoMoveSecs: 0.35,
         videoTitleOn: true, videoFadeOut: 1, videoBylineInk: '#ff2d8a', videoBylineFont: '', videoBylineFill: 'solid', videoBylineStops: ['#f2b880'],
         videoBylineDir: 'right', videoBylineShadow: false, videoBylineShadowInk: '', videoBylineShadowDark: 65, videoBylineShadowSoft: 18,
@@ -17845,6 +18479,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         videoNameShadowFar: 2,
         videoPicShape: 'circle', videoPicSize: 150, videoPicRing: true, videoPicRingWidth: 5, videoPicMove: true, videoTwo: true,
         videoMoodPics: true, videoQuiet: 'fade', videoQuietStrength: 45,
+        videoAnims: {},
         videoEdges: 0, videoEdgeColor: '', videoMove: 'dissolve', videoMoveSecs: 0.5,
         videoTitleOn: true, videoFadeOut: 1.5, videoBylineInk: '#d0609a', videoBylineFont: '', videoBylineFill: 'solid',
         videoBylineStops: ['#f2b880'], videoBylineDir: 'right', videoBylineShadow: false, videoBylineShadowInk: '', videoBylineShadowDark: 65,
@@ -17885,6 +18520,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         videoNameShadowFar: 2,
         videoPicShape: 'circle', videoPicSize: 150, videoPicRing: true, videoPicRingWidth: 4, videoPicMove: true, videoTwo: true,
         videoMoodPics: true, videoQuiet: 'fade', videoQuietStrength: 45,
+        videoAnims: {},
         videoEdges: 25, videoEdgeColor: '#000000', videoMove: 'fade', videoMoveSecs: 0.5,
         videoTitleOn: true, videoFadeOut: 1.5, videoBylineInk: '#ff8c00', videoBylineFont: '', videoBylineFill: 'solid',
         videoBylineStops: ['#f2b880'], videoBylineDir: 'right', videoBylineShadow: true, videoBylineShadowInk: '', videoBylineShadowDark: 65,
@@ -17916,6 +18552,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         videoNameShadowFar: 2,
         videoPicShape: 'circle', videoPicSize: 150, videoPicRing: true, videoPicRingWidth: 4, videoPicMove: true, videoTwo: true,
         videoMoodPics: true, videoQuiet: 'fade', videoQuietStrength: 45,
+        videoAnims: {},
         videoEdges: 25, videoEdgeColor: '#000000', videoMove: 'fade', videoMoveSecs: 0.5,
         videoTitleOn: true, videoFadeOut: 1.5, videoBylineInk: '#ef7627', videoBylineFont: '', videoBylineFill: 'solid',
         videoBylineStops: ['#f2b880'], videoBylineDir: 'right', videoBylineShadow: true, videoBylineShadowInk: '', videoBylineShadowDark: 65,
@@ -17947,6 +18584,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         videoNameShadowFar: 2,
         videoPicShape: 'circle', videoPicSize: 150, videoPicRing: true, videoPicRingWidth: 4, videoPicMove: true, videoTwo: true,
         videoMoodPics: true, videoQuiet: 'fade', videoQuietStrength: 45,
+        videoAnims: {},
         videoEdges: 25, videoEdgeColor: '#000000', videoMove: 'fade', videoMoveSecs: 0.5,
         videoTitleOn: true, videoFadeOut: 1.5, videoBylineInk: '#26ceaa', videoBylineFont: '', videoBylineFill: 'solid',
         videoBylineStops: ['#f2b880'], videoBylineDir: 'right', videoBylineShadow: true, videoBylineShadowInk: '', videoBylineShadowDark: 65,
@@ -17978,6 +18616,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         videoNameShadowFar: 2,
         videoPicShape: 'circle', videoPicSize: 150, videoPicRing: true, videoPicRingWidth: 4, videoPicMove: true, videoTwo: true,
         videoMoodPics: true, videoQuiet: 'fade', videoQuietStrength: 45,
+        videoAnims: {},
         videoEdges: 25, videoEdgeColor: '#000000', videoMove: 'fade', videoMoveSecs: 0.5,
         videoTitleOn: true, videoFadeOut: 1.5, videoBylineInk: '#d60270', videoBylineFont: '', videoBylineFill: 'solid',
         videoBylineStops: ['#f2b880'], videoBylineDir: 'right', videoBylineShadow: true, videoBylineShadowInk: '', videoBylineShadowDark: 65,
@@ -18009,6 +18648,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         videoNameShadowFar: 2,
         videoPicShape: 'circle', videoPicSize: 150, videoPicRing: true, videoPicRingWidth: 4, videoPicMove: true, videoTwo: true,
         videoMoodPics: true, videoQuiet: 'fade', videoQuietStrength: 45,
+        videoAnims: {},
         videoEdges: 25, videoEdgeColor: '#000000', videoMove: 'fade', videoMoveSecs: 0.5,
         videoTitleOn: true, videoFadeOut: 1.5, videoBylineInk: '#f5a9b8', videoBylineFont: '', videoBylineFill: 'solid',
         videoBylineStops: ['#f2b880'], videoBylineDir: 'right', videoBylineShadow: true, videoBylineShadowInk: '', videoBylineShadowDark: 65,
@@ -18040,6 +18680,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         videoNameShadowFar: 2,
         videoPicShape: 'circle', videoPicSize: 150, videoPicRing: true, videoPicRingWidth: 4, videoPicMove: true, videoTwo: true,
         videoMoodPics: true, videoQuiet: 'fade', videoQuietStrength: 45,
+        videoAnims: {},
         videoEdges: 25, videoEdgeColor: '#000000', videoMove: 'fade', videoMoveSecs: 0.5,
         videoTitleOn: true, videoFadeOut: 1.5, videoBylineInk: '#00a2e8', videoBylineFont: '', videoBylineFill: 'solid',
         videoBylineStops: ['#f2b880'], videoBylineDir: 'right', videoBylineShadow: true, videoBylineShadowInk: '', videoBylineShadowDark: 65,
@@ -18071,6 +18712,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         videoNameShadowFar: 2,
         videoPicShape: 'circle', videoPicSize: 150, videoPicRing: true, videoPicRingWidth: 4, videoPicMove: true, videoTwo: true,
         videoMoodPics: true, videoQuiet: 'fade', videoQuietStrength: 45,
+        videoAnims: {},
         videoEdges: 25, videoEdgeColor: '#000000', videoMove: 'fade', videoMoveSecs: 0.5,
         videoTitleOn: true, videoFadeOut: 1.5, videoBylineInk: '#ffd800', videoBylineFont: '', videoBylineFill: 'solid',
         videoBylineStops: ['#f2b880'], videoBylineDir: 'right', videoBylineShadow: true, videoBylineShadowInk: '', videoBylineShadowDark: 65,
@@ -18103,6 +18745,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         videoNameShadowFar: 2,
         videoPicShape: 'circle', videoPicSize: 150, videoPicRing: true, videoPicRingWidth: 4, videoPicMove: true, videoTwo: true,
         videoMoodPics: true, videoQuiet: 'fade', videoQuietStrength: 45,
+        videoAnims: {},
         videoEdges: 25, videoEdgeColor: '#000000', videoMove: 'fade', videoMoveSecs: 0.5,
         videoTitleOn: true, videoFadeOut: 1.5, videoBylineInk: '#800080', videoBylineFont: '', videoBylineFill: 'solid',
         videoBylineStops: ['#f2b880'], videoBylineDir: 'right', videoBylineShadow: true, videoBylineShadowInk: '', videoBylineShadowDark: 65,
@@ -18134,6 +18777,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         videoNameShadowFar: 2,
         videoPicShape: 'circle', videoPicSize: 150, videoPicRing: true, videoPicRingWidth: 4, videoPicMove: true, videoTwo: true,
         videoMoodPics: true, videoQuiet: 'fade', videoQuietStrength: 45,
+        videoAnims: {},
         videoEdges: 25, videoEdgeColor: '#000000', videoMove: 'fade', videoMoveSecs: 0.5,
         videoTitleOn: true, videoFadeOut: 1.5, videoBylineInk: '#ffd800', videoBylineFont: '', videoBylineFill: 'solid',
         videoBylineStops: ['#f2b880'], videoBylineDir: 'right', videoBylineShadow: true, videoBylineShadowInk: '', videoBylineShadowDark: 65,
@@ -18165,6 +18809,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         videoNameShadowFar: 2,
         videoPicShape: 'circle', videoPicSize: 150, videoPicRing: true, videoPicRingWidth: 4, videoPicMove: true, videoTwo: true,
         videoMoodPics: true, videoQuiet: 'fade', videoQuietStrength: 45,
+        videoAnims: {},
         videoEdges: 25, videoEdgeColor: '#000000', videoMove: 'fade', videoMoveSecs: 0.5,
         videoTitleOn: true, videoFadeOut: 1.5, videoBylineInk: '#9c59d1', videoBylineFont: '', videoBylineFill: 'solid',
         videoBylineStops: ['#f2b880'], videoBylineDir: 'right', videoBylineShadow: true, videoBylineShadowInk: '', videoBylineShadowDark: 65,
@@ -18196,6 +18841,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         videoNameShadowFar: 2,
         videoPicShape: 'circle', videoPicSize: 150, videoPicRing: true, videoPicRingWidth: 4, videoPicMove: true, videoTwo: true,
         videoMoodPics: true, videoQuiet: 'fade', videoQuietStrength: 45,
+        videoAnims: {},
         videoEdges: 25, videoEdgeColor: '#000000', videoMove: 'fade', videoMoveSecs: 0.5,
         videoTitleOn: true, videoFadeOut: 1.5, videoBylineInk: '#a7d379', videoBylineFont: '', videoBylineFill: 'solid',
         videoBylineStops: ['#f2b880'], videoBylineDir: 'right', videoBylineShadow: true, videoBylineShadowInk: '', videoBylineShadowDark: 65,
@@ -18227,6 +18873,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         videoNameShadowFar: 2,
         videoPicShape: 'circle', videoPicSize: 150, videoPicRing: true, videoPicRingWidth: 4, videoPicMove: true, videoTwo: true,
         videoMoodPics: true, videoQuiet: 'fade', videoQuietStrength: 45,
+        videoAnims: {},
         videoEdges: 25, videoEdgeColor: '#000000', videoMove: 'fade', videoMoveSecs: 0.5,
         videoTitleOn: true, videoFadeOut: 1.5, videoBylineInk: '#c011d7', videoBylineFont: '', videoBylineFill: 'solid',
         videoBylineStops: ['#f2b880'], videoBylineDir: 'right', videoBylineShadow: true, videoBylineShadowInk: '', videoBylineShadowDark: 65,
@@ -18258,6 +18905,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         videoNameShadowFar: 2,
         videoPicShape: 'circle', videoPicSize: 150, videoPicRing: true, videoPicRingWidth: 4, videoPicMove: true, videoTwo: true,
         videoMoodPics: true, videoQuiet: 'fade', videoQuietStrength: 45,
+        videoAnims: {},
         videoEdges: 25, videoEdgeColor: '#000000', videoMove: 'fade', videoMoveSecs: 0.5,
         videoTitleOn: true, videoFadeOut: 1.5, videoBylineInk: '#b8f483', videoBylineFont: '', videoBylineFill: 'solid',
         videoBylineStops: ['#f2b880'], videoBylineDir: 'right', videoBylineShadow: true, videoBylineShadowInk: '', videoBylineShadowDark: 65,
@@ -18289,6 +18937,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         videoNameShadowFar: 2,
         videoPicShape: 'circle', videoPicSize: 150, videoPicRing: true, videoPicRingWidth: 4, videoPicMove: true, videoTwo: true,
         videoMoodPics: true, videoQuiet: 'fade', videoQuietStrength: 45,
+        videoAnims: {},
         videoEdges: 30, videoEdgeColor: '#000000', videoMove: 'fade', videoMoveSecs: 0.6,
         videoTitleOn: true, videoFadeOut: 1.5, videoBylineInk: '#e8c35a', videoBylineFont: '', videoBylineFill: 'solid',
         videoBylineStops: ['#f2b880'], videoBylineDir: 'right', videoBylineShadow: true, videoBylineShadowInk: '#000000', videoBylineShadowDark: 55,
@@ -18326,6 +18975,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         videoNameShadowFar: 2,
         videoPicShape: 'circle', videoPicSize: 150, videoPicRing: true, videoPicRingWidth: 4, videoPicMove: true, videoTwo: true,
         videoMoodPics: true, videoQuiet: 'fade', videoQuietStrength: 45,
+        videoAnims: {},
         videoEdges: 30, videoEdgeColor: '#000000', videoMove: 'black', videoMoveSecs: 0.7,
         videoTitleOn: true, videoFadeOut: 1.5, videoBylineInk: '#ff8a1f', videoBylineFont: '', videoBylineFill: 'solid',
         videoBylineStops: ['#f2b880'], videoBylineDir: 'right', videoBylineShadow: true, videoBylineShadowInk: '#000000', videoBylineShadowDark: 55,
@@ -18363,6 +19013,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         videoNameShadowFar: 2,
         videoPicShape: 'circle', videoPicSize: 150, videoPicRing: true, videoPicRingWidth: 4, videoPicMove: true, videoTwo: true,
         videoMoodPics: true, videoQuiet: 'fade', videoQuietStrength: 45,
+        videoAnims: {},
         videoEdges: 30, videoEdgeColor: '#000000', videoMove: 'dissolve', videoMoveSecs: 0.6,
         videoTitleOn: true, videoFadeOut: 1.5, videoBylineInk: '#f0b04a', videoBylineFont: '', videoBylineFill: 'solid',
         videoBylineStops: ['#f2b880'], videoBylineDir: 'right', videoBylineShadow: true, videoBylineShadowInk: '#000000', videoBylineShadowDark: 55,
@@ -18399,6 +19050,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         videoNameShadowFar: 2,
         videoPicShape: 'circle', videoPicSize: 150, videoPicRing: true, videoPicRingWidth: 4, videoPicMove: true, videoTwo: true,
         videoMoodPics: true, videoQuiet: 'fade', videoQuietStrength: 45,
+        videoAnims: {},
         videoEdges: 0, videoEdgeColor: '#000000', videoMove: 'dissolve', videoMoveSecs: 0.6,
         videoTitleOn: true, videoFadeOut: 1.5, videoBylineInk: '#c2185b', videoBylineFont: '', videoBylineFill: 'solid',
         videoBylineStops: ['#f2b880'], videoBylineDir: 'right', videoBylineShadow: false, videoBylineShadowInk: '', videoBylineShadowDark: 65,
@@ -18435,6 +19087,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         videoNameShadowFar: 2,
         videoPicShape: 'circle', videoPicSize: 150, videoPicRing: true, videoPicRingWidth: 4, videoPicMove: true, videoTwo: true,
         videoMoodPics: true, videoQuiet: 'fade', videoQuietStrength: 45,
+        videoAnims: {},
         videoEdges: 30, videoEdgeColor: '#000000', videoMove: 'fade', videoMoveSecs: 0.6,
         videoTitleOn: true, videoFadeOut: 1.5, videoBylineInk: '#f2c14e', videoBylineFont: '', videoBylineFill: 'solid',
         videoBylineStops: ['#f2b880'], videoBylineDir: 'right', videoBylineShadow: true, videoBylineShadowInk: '#000000', videoBylineShadowDark: 55,
@@ -18471,6 +19124,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         videoNameShadowFar: 2,
         videoPicShape: 'circle', videoPicSize: 150, videoPicRing: true, videoPicRingWidth: 4, videoPicMove: true, videoTwo: true,
         videoMoodPics: true, videoQuiet: 'fade', videoQuietStrength: 45,
+        videoAnims: {},
         videoEdges: 30, videoEdgeColor: '#000000', videoMove: 'fade', videoMoveSecs: 0.6,
         videoTitleOn: true, videoFadeOut: 1.5, videoBylineInk: '#9cc3ff', videoBylineFont: '', videoBylineFill: 'solid',
         videoBylineStops: ['#f2b880'], videoBylineDir: 'right', videoBylineShadow: true, videoBylineShadowInk: '#000000', videoBylineShadowDark: 55,
@@ -18506,6 +19160,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         videoNameShadowFar: 2,
         videoPicShape: 'circle', videoPicSize: 150, videoPicRing: true, videoPicRingWidth: 4, videoPicMove: true, videoTwo: true,
         videoMoodPics: true, videoQuiet: 'fade', videoQuietStrength: 45,
+        videoAnims: {},
         videoEdges: 30, videoEdgeColor: '#000000', videoMove: 'dissolve', videoMoveSecs: 0.6,
         videoTitleOn: true, videoFadeOut: 1.5, videoBylineInk: '#f2c14e', videoBylineFont: '', videoBylineFill: 'solid',
         videoBylineStops: ['#f2b880'], videoBylineDir: 'right', videoBylineShadow: true, videoBylineShadowInk: '#000000', videoBylineShadowDark: 55,
@@ -18542,6 +19197,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         videoNameShadowFar: 2,
         videoPicShape: 'circle', videoPicSize: 150, videoPicRing: true, videoPicRingWidth: 4, videoPicMove: true, videoTwo: true,
         videoMoodPics: true, videoQuiet: 'fade', videoQuietStrength: 45,
+        videoAnims: {},
         videoEdges: 30, videoEdgeColor: '#000000', videoMove: 'fade', videoMoveSecs: 0.6,
         videoTitleOn: true, videoFadeOut: 1.5, videoBylineInk: '#ffb627', videoBylineFont: '', videoBylineFill: 'solid',
         videoBylineStops: ['#f2b880'], videoBylineDir: 'right', videoBylineShadow: true, videoBylineShadowInk: '#000000', videoBylineShadowDark: 55,
@@ -18579,6 +19235,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         videoNameShadowFar: 2,
         videoPicShape: 'circle', videoPicSize: 150, videoPicRing: true, videoPicRingWidth: 4, videoPicMove: true, videoTwo: true,
         videoMoodPics: true, videoQuiet: 'fade', videoQuietStrength: 45,
+        videoAnims: {},
         videoEdges: 0, videoEdgeColor: '#000000', videoMove: 'dissolve', videoMoveSecs: 0.6,
         videoTitleOn: true, videoFadeOut: 1.5, videoBylineInk: '#2e7d32', videoBylineFont: '', videoBylineFill: 'solid',
         videoBylineStops: ['#f2b880'], videoBylineDir: 'right', videoBylineShadow: false, videoBylineShadowInk: '', videoBylineShadowDark: 65,
@@ -18613,6 +19270,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         videoNameShadowFar: 2,
         videoPicShape: 'circle', videoPicSize: 150, videoPicRing: true, videoPicRingWidth: 4, videoPicMove: true, videoTwo: true,
         videoMoodPics: true, videoQuiet: 'fade', videoQuietStrength: 45,
+        videoAnims: {},
         videoEdges: 0, videoEdgeColor: '#000000', videoMove: 'dissolve', videoMoveSecs: 0.6,
         videoTitleOn: true, videoFadeOut: 1.5, videoBylineInk: '#c86fa0', videoBylineFont: '', videoBylineFill: 'solid',
         videoBylineStops: ['#f2b880'], videoBylineDir: 'right', videoBylineShadow: false, videoBylineShadowInk: '', videoBylineShadowDark: 65,
@@ -18649,6 +19307,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         videoNameShadowFar: 2,
         videoPicShape: 'circle', videoPicSize: 150, videoPicRing: true, videoPicRingWidth: 4, videoPicMove: true, videoTwo: true,
         videoMoodPics: true, videoQuiet: 'fade', videoQuietStrength: 45,
+        videoAnims: {},
         videoEdges: 30, videoEdgeColor: '#000000', videoMove: 'fade', videoMoveSecs: 0.6,
         videoTitleOn: true, videoFadeOut: 1.5, videoBylineInk: '#ff5a66', videoBylineFont: '', videoBylineFill: 'solid',
         videoBylineStops: ['#f2b880'], videoBylineDir: 'right', videoBylineShadow: true, videoBylineShadowInk: '#000000', videoBylineShadowDark: 55,
@@ -18674,7 +19333,7 @@ export function setup(ctx: Ctx, overrides?: any) {
   // the watermarks. The shape of the video is the reader's choice for where
   // it goes, so a template keeps it too. Each template gives a value for
   // every one of these, so nothing is left from the look before.
-  const TEMPLATE_KEYS = LOOK_KEYS.filter((k) => k !== 'videoByline' && k !== 'videoMarks' && k !== 'videoStickers' && k !== 'videoShape').concat(['studioMusic']);
+  const TEMPLATE_KEYS = LOOK_KEYS.filter((k) => k !== 'videoByline' && k !== 'videoMarks' && k !== 'videoStickers' && k !== 'videoShape' && k !== 'videoAnimsOwn').concat(['studioMusic']);
   const TEMPLATES_MARK = markText(JSON.stringify(TEMPLATES.map((t) => [t.id, t.look, t.back])));
   function templateLook(t: Template): Record<string, any> {
     const patch: Record<string, any> = {};
@@ -19545,6 +20204,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     { id: 'speakers', title: 'Speakers' },
     { id: 'background', title: 'Background' },
     { id: 'moving', title: 'Moving between lines' },
+    { id: 'anims', title: 'Animations' },
     { id: 'title', title: 'Title and ending' },
     { id: 'sounds', title: 'Sounds' },
     { id: 'notes', title: 'Notes' },
@@ -21433,6 +22093,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         }, '0.5 by default.'));
       }),
     );
+    vc.appendChild(fold('Animations', (b) => drawAnimPlaces(b, look)));
     vc.appendChild(
       fold('Title and ending', (b) => {
         const box = el('<input type="text" class="af-field" maxlength="120" spellcheck="true" autocomplete="off">') as HTMLInputElement;
@@ -22991,7 +23652,7 @@ export function setup(ctx: Ctx, overrides?: any) {
   };
 }
 
-export const __testing = { feelingOf, BUILT_IN_MOODS, plainWord, hideList, hiddenWords, geminiStyle, sortCast, CAST_SORTS, keyCombo, PAUSE_KEY_DEFAULT, wavBlob, noConnectionWhy, perSentence, clipLevel, levelGain, voiceGender, describeWords, markText, movedFor, movedRowMark, MOVED_DEFAULTS, looksLikeDate, voicedFrames, wordWeight, partTimes, engineOf, noTagsWhy, openRouterVoices, colorCode, hexHsl, hslHex, computedHex, fitTag, tagSound, textFor, styleFor, stripTags, stabilityFor, ENGINES };
+export const __testing = { bezier, animAt, BUILT_IN_ANIMS, ANIM_PLACES, EASES, feelingOf, BUILT_IN_MOODS, plainWord, hideList, hiddenWords, geminiStyle, sortCast, CAST_SORTS, keyCombo, PAUSE_KEY_DEFAULT, wavBlob, noConnectionWhy, perSentence, clipLevel, levelGain, voiceGender, describeWords, markText, movedFor, movedRowMark, MOVED_DEFAULTS, looksLikeDate, voicedFrames, wordWeight, partTimes, engineOf, noTagsWhy, openRouterVoices, colorCode, hexHsl, hslHex, computedHex, fitTag, tagSound, textFor, styleFor, stripTags, stabilityFor, ENGINES };
 
 // The built-in cheer: "Cheering and clapping crowd 1" by freesound_community,
 // a free sound from Pixabay (pixabay.com/sound-effects/people-cheering-and-clapping-crowd-1-5995/),

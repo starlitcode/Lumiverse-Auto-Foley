@@ -6881,6 +6881,127 @@ if (section("leaving rows")) {
   }
 }
 
+if (section("animations")) {
+  console.log("Animations: the opening, the ending, the title, lines, words and watermarks move as the animation picked says, and the panel has one dropdown for each place");
+  const PLAIN = `window.__settings.videoBacks = [{ id: "main", name: "Main", kind: "color", color: "#808080", fill: "solid", stops: [], dir: "down", dim: 40, blur: 0, shapes: [], use: "match", moods: [], places: [] }]; window.__settings.videoBackPick = "main"; window.__settings.videoEdges = 0; window.__settings.videoPics = false; window.__settings.videoNames = false; window.__settings.videoCaptions = false; window.__settings.videoBox = false; window.__settings.videoInk = "#ffffff"; window.__settings.videoWordFill = "solid"; window.__settings.videoWords = "all"; window.__settings.videoWordShadow = false;`;
+  const laptop = SIZES.find((x) => !x.touch) || SIZES[0];
+  const at = (page, t) => page.evaluate(async (t) => {
+    const r = document.querySelector("[data-af-scrub] input");
+    r.step = "any";
+    r.value = String(t === "end" ? Number(r.max) : t < 0 ? Number(r.max) + t : t);
+    r.dispatchEvent(new Event("input", { bubbles: true }));
+    await new Promise((x) => setTimeout(x, 160));
+    await new Promise((x) => requestAnimationFrame(() => requestAnimationFrame(x)));
+    const c = document.querySelector("[data-af-videopreview]");
+    const d = c.getContext("2d").getImageData(0, 0, c.width, c.height).data;
+    let n = 0, sx = 0, top = c.height;
+    for (let y = 0; y < c.height; y += 2) for (let x = 0; x < c.width; x += 2) { const i = (y * c.width + x) * 4; if (d[i] > 165 && d[i + 1] > 165 && d[i + 2] > 165) { n++; sx += x; if (y < top) top = y; } }
+    const px = (fx, fy) => { const i = (Math.round(fy * (c.height - 1)) * c.width + Math.round(fx * (c.width - 1))) * 4; return [d[i], d[i + 1], d[i + 2]]; };
+    return { w: c.width, h: c.height, n, cx: n ? sx / n / c.width : 0.5, top: top / c.height, corner: px(0.02, 0.02), mid: px(0.5, 0.08), max: Number(r.max) };
+  }, t);
+  const openWith = async (extra) => {
+    const o = await open(THEMES[0], laptop, 1, PLAIN + extra);
+    await openWs(o.page);
+    await o.page.waitForTimeout(700);
+    return o;
+  };
+  const anims = (m) => `window.__settings.videoAnims = ${JSON.stringify(m)};`;
+  {
+    // Opening with Iris over 2 seconds: half way, the corners are still
+    // black and the middle shows. The default fade is done by then.
+    const o = await openWith(`window.__settings.videoTitleOn = false;` + anims({ open: { id: "iris", secs: 2, delay: 0 } }));
+    const f = await at(o.page, 1);
+    check(f.corner[0] < 10 && Math.abs(f.mid[0] - 128) < 30, "Opening with Iris: half way, the corners are black and the middle shows (" + JSON.stringify([f.corner, f.mid]) + ")");
+    await o.context.close();
+    const d = await openWith(`window.__settings.videoTitleOn = false;`);
+    const g = await at(d.page, 1);
+    check(Math.abs(g.corner[0] - 128) < 30, "the default opening has faded in by then (" + JSON.stringify(g.corner) + ")");
+    await d.context.close();
+  }
+  {
+    // Ending with Iris: half way through the fade time, the middle still
+    // shows at full and the corners are black. The default is half dark
+    // all over.
+    const o = await openWith(`window.__settings.videoTitleOn = false; window.__settings.videoFadeOut = 2;` + anims({ end: { id: "iris", secs: 0.8, delay: 0 } }));
+    const f = await at(o.page, -1.5);
+    check(f.corner[0] < 10 && Math.abs(f.mid[0] - 128) < 30, "Ending with Iris: a quarter of the way, the corners are black and the middle shows (" + JSON.stringify([f.corner, f.mid]) + ")");
+    await o.context.close();
+    const d = await openWith(`window.__settings.videoTitleOn = false; window.__settings.videoFadeOut = 2;`);
+    const g = await at(d.page, -1);
+    check(g.mid[0] > 40 && g.mid[0] < 90, "the default ending is half dark all over by then (" + JSON.stringify(g.mid) + ")");
+    await d.context.close();
+  }
+  {
+    // The title typed in over 2 seconds: half way, about half its ink.
+    const o = await openWith(`window.__settings.videoTitleOn = true; window.__settings.videoTitleText = "Harbor Lights At Dusk";` + anims({ title: { id: "type", secs: 1.6, delay: 0 } }));
+    const half = await at(o.page, 0.8);
+    const full = await at(o.page, 1.9);
+    const share = full.n ? half.n / full.n : 0;
+    check(full.n > 50 && share > 0.25 && share < 0.75, "the title with Typewriter shows about half its letters half way (" + share.toFixed(2) + ")");
+    await o.context.close();
+  }
+  {
+    // The first line, with no title, comes in from the empty frame. With
+    // Slide from the left it is left of the middle part of the way in.
+    const first = async (extra) => {
+      const o = await openWith(`window.__settings.videoTitleOn = false;` + extra);
+      const f = await at(o.page, 1.6);
+      await o.context.close();
+      return f;
+    };
+    const l = await first(anims({ lines: { id: "slide-l", secs: 3, delay: 0 } }));
+    const d = await first(`window.__settings.videoMove = "fade";`);
+    check(l.n > 30 && l.cx < 0.485 && Math.abs(d.cx - 0.5) < 0.012, "lines with Slide from the left come in from the left; the default stays in the middle (" + [l.cx.toFixed(3), d.cx.toFixed(3)].join(" and ") + ")");
+    const b = await first(anims({ between: { id: "slide-r", secs: 3, delay: 0 } }));
+    check(b.n > 30 && b.cx > 0.515, "between lines with Slide from the right moves the whole part in from the right (" + b.cx.toFixed(3) + ")");
+    // Words: each comes in on its own as it is said, so some frame differs
+    // from the default.
+    const scan = async (extra) => {
+      const o = await openWith(`window.__settings.videoTitleOn = false;` + extra);
+      const out = [];
+      for (let t = 0.7; t < 6; t += 0.3) out.push((await at(o.page, t)).n);
+      await o.context.close();
+      return out;
+    };
+    const w = await scan(anims({ words: { id: "drop", secs: 1.5, delay: 0 } }));
+    const w0 = await scan("");
+    const most = Math.max(...w.map((n, i) => Math.abs(n - w0[i]) / Math.max(1, w0[i])));
+    check(most > 0.15, "words with Drop come in on their own, unlike the default (" + most.toFixed(2) + ")");
+  }
+  {
+    // A watermark that slides from the top sits higher while it comes in.
+    const mark = `window.__settings.videoTitleOn = false; window.__settings.videoMarks = [{ id: "w1", text: "MARK", pic: false, place: "br", size: 120, strength: 100, when: "from", from: 2, secs: 4, backs: [], font: "", ink: "#ffffff", fill: "solid", stops: [], dir: "right", shadow: false }]; window.__settings.videoInk = "#000000";`;
+    const o = await openWith(mark + anims({ marks: { id: "slide-t", secs: 1.5, delay: 0 } }));
+    const mid = await at(o.page, 2.75);
+    const rest = await at(o.page, 4);
+    check(mid.n > 20 && rest.n > 20 && rest.top - mid.top > 0.02, "a watermark with Slide from the top is higher while it comes in (" + [mid.top.toFixed(3), rest.top.toFixed(3)].join(" then ") + ")");
+    await o.context.close();
+  }
+  // The panel: a dropdown for each place, and its length and delay once one
+  // is picked, on a phone and a laptop.
+  for (const size of SIZES) {
+    const { context, page, errors } = await open(THEMES[0], size, 1);
+    await openWs(page);
+    await wsSec(page, "Animations");
+    await page.waitForTimeout(400);
+    const places = await page.evaluate(() => [...document.querySelectorAll("[data-af-animplace]")].map((s) => s.getAttribute("data-af-animplace")));
+    check(places.length === 11, size.name + ": a dropdown for each of the 11 places (" + places.join(", ") + ")");
+    await page.selectOption('[data-af-animplace="lines"]', "rise");
+    await page.waitForTimeout(500);
+    const saved = await page.evaluate(() => ({ a: window.__settings.videoAnims, boxes: !!document.querySelector('[data-af-animsecs="lines"]') && !!document.querySelector('[data-af-animdelay="lines"]') }));
+    check(saved.a.lines && saved.a.lines.id === "rise" && saved.boxes, size.name + ": picking one saves it and shows its length and delay");
+    const textOnly = await page.evaluate(() => [...document.querySelectorAll('[data-af-animplace="between"] option')].some((o) => o.value === "type"));
+    check(!textOnly, size.name + ": Typewriter is not offered for the whole frame");
+    const m = await page.evaluate(MEASURE, size.touch);
+    check(!m.overflow.length && !m.small.length, size.name + ": the Animations part fits. " + m.overflow.concat(m.small).slice(0, 2).join("; "));
+    await page.selectOption('[data-af-animplace="lines"]', "");
+    await page.waitForTimeout(500);
+    check(await page.evaluate(() => !window.__settings.videoAnims.lines), size.name + ": Default takes it off");
+    check(!errors.length, size.name + ": no page errors. " + errors.slice(0, 2).join(" | "));
+    await context.close();
+  }
+}
+
 if (section("stickers")) {
   console.log("Stickers: drawn where they are put, flipped, mixed, filling the frame, behind the words, at their times, and edited on a phone and a laptop");
   // The pictures the checks use, drawn once in a page of their own.

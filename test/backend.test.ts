@@ -2402,6 +2402,22 @@ describe("watermarks and the line under the title", () => {
   });
 });
 
+describe("animations", () => {
+  test("the places keep a known id with a length and delay held to their range, and a place not known is dropped", () => {
+    const h = host();
+    const s = h.box.cleanSettings({ videoAnims: { lines: { id: "rise", secs: 40, delay: -2 }, bogus: { id: "fade" }, open: { id: "" } } });
+    expect(s.videoAnims).toEqual({ lines: { id: "rise", secs: 10, delay: 0 } });
+  });
+  test("the reader's own animations are cleaned and kept, up to 30", () => {
+    const h = host();
+    const own = Array.from({ length: 33 }, (_, i) => ({ id: "u" + i, name: "Mine " + i, inT: { keys: [{ at: 0, o: 0, x: 9999 }, { at: 1, o: 1 }], mask: { type: "clock", feather: 400 } } }));
+    const s = h.box.cleanSettings({ videoAnimsOwn: own.concat([{ id: "rise", name: "Not mine" }]) });
+    expect(s.videoAnimsOwn.length).toBe(30);
+    expect(s.videoAnimsOwn[0].inT.keys[0]).toEqual({ at: 0, o: 0, x: 2000 });
+    expect(s.videoAnimsOwn[0].inT.mask).toEqual({ type: "clock", angle: 0, feather: 100 });
+  });
+});
+
 describe("stickers", () => {
   test("a sticker's picture stays while the settings, a saved look or a project uses it, and goes on Start again", async () => {
     const h = host();

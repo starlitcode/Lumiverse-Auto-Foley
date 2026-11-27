@@ -467,6 +467,10 @@ The title gives way to the first line with the same transition.
 
 The pictures move on their own during a transition. A person on screen in both lines moves from their old place to their new one, such as from the middle to the left when a second person comes in. A person who arrives fades in, and one who leaves fades out. The words and names use the transition picked. With **Cut, with no movement**, the pictures change at once. With **Through black**, they go through black with the rest.
 
+### Animations
+
+**Animations** picks how each part of the video comes in and goes out: the opening, the ending, between lines, a scene change, its background, pictures, lines, words, the title, captions and watermarks. See [Animations](animations.md).
+
 ### Title and ending
 
 - **Title at the start**: on by default. The title shows for two seconds before the first line.

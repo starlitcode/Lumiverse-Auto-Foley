@@ -302,6 +302,11 @@ interface Settings {
   // The reader's own list of scene moods, for scene music and backgrounds.
   // Empty while it is the built-in one.
   sceneMoodList: SceneMood[];
+  // The animation picked for each place in the video, by its id, with a
+  // length and delay of its own. A place not listed keeps its default.
+  videoAnims: Record<string, { id: string; secs: number; delay: number }>;
+  // The reader's own animations, made in the advanced editor.
+  videoAnimsOwn: any[];
   // The line under the title, and its color. Empty color is the title's.
   videoByline: string;
   videoBylineInk: string;
@@ -606,6 +611,8 @@ const DEFAULT_SETTINGS: Settings = {
   videoMoodPics: true,
   moodList: [],
   sceneMoodList: [],
+  videoAnims: {},
+  videoAnimsOwn: [],
   videoByline: '',
   videoBylineInk: '',
   videoBylineFont: '',
@@ -972,6 +979,69 @@ function cleanSceneMoods(v: any): SceneMood[] {
   }
   return out;
 }
+// Animations: the places they are used, and the reader's own, each held
+// to the shape the panel draws. An id is a built-in's or one of the
+// reader's own.
+const ANIM_PLACE_IDS = ['open', 'end', 'between', 'scene', 'sceneBack', 'pics', 'lines', 'words', 'title', 'captions', 'marks'];
+const ANIMS_OWN_MAX = 30;
+const animId = (v: any) => str(v, 24).replace(/[^a-z0-9-]/gi, '');
+function cleanAnimPlaces(v: any): Settings['videoAnims'] {
+  const out: Settings['videoAnims'] = {};
+  if (!v || typeof v !== 'object') return out;
+  for (const place of ANIM_PLACE_IDS) {
+    const e = v[place];
+    const id = animId(e && e.id);
+    if (!id) continue;
+    out[place] = { id, secs: Math.round(num(e.secs, 0, 10, 0.5) * 100) / 100, delay: Math.round(num(e.delay, 0, 10, 0) * 100) / 100 };
+  }
+  return out;
+}
+function cleanAnimTrack(t: any): { keys: any[]; mask: { type: string; angle: number; feather: number } } {
+  const keys: any[] = [];
+  for (const k of Array.isArray(t && t.keys) ? t.keys.slice(0, 12) : []) {
+    if (!k || typeof k !== 'object') continue;
+    const o: any = { at: Math.round(num(k.at, 0, 1, 0) * 1000) / 1000 };
+    const one = (name: string, lo: number, hi: number) => {
+      if (k[name] != null && k[name] !== '' && Number.isFinite(Number(k[name]))) o[name] = Math.round(num(k[name], lo, hi, 0) * 100) / 100;
+    };
+    one('o', 0, 1);
+    one('x', -2000, 2000);
+    one('y', -2000, 2000);
+    one('s', 0, 400);
+    one('r', -720, 720);
+    one('b', 0, 60);
+    one('l', 0, 200);
+    one('ta', 0, 100);
+    if (k.tint && hexColor(k.tint)) o.tint = hexColor(k.tint);
+    keys.push(o);
+  }
+  const m = (t && t.mask) || {};
+  return { keys, mask: { type: pick(m.type, ['none', 'linear', 'radial', 'iris', 'clock'] as const, 'none'), angle: Math.round(num(m.angle, -360, 360, 0)), feather: Math.round(num(m.feather, 0, 100, 0)) } };
+}
+function cleanOwnAnims(v: any): any[] {
+  const out: any[] = [];
+  for (const a of Array.isArray(v) ? v.slice(0, ANIMS_OWN_MAX) : []) {
+    if (!a || typeof a !== 'object') continue;
+    const id = animId(a.id);
+    if (!id || !/^u/.test(id) || out.some((x) => x.id === id)) continue;
+    const ease = Array.isArray(a.ease) && a.ease.length === 4 ? a.ease.map((x: any, i: number) => Math.round(num(x, i % 2 ? -2 : 0, i % 2 ? 3 : 1, i < 2 ? 0.4 * (1 - i) : i === 2 ? 0.2 : 1) * 1000) / 1000) : [0.4, 0, 0.2, 1];
+    out.push({
+      id,
+      name: str(a.name, 40).replace(/[\u0000-\u001f]/g, ' ').trim() || 'My animation',
+      kind: pick(a.kind, ['text', 'frame', 'any'] as const, 'any'),
+      secs: Math.round(num(a.secs, 0, 10, 0.5) * 100) / 100,
+      delay: Math.round(num(a.delay, 0, 10, 0) * 100) / 100,
+      ease,
+      inT: cleanAnimTrack(a.inT),
+      outT: cleanAnimTrack(a.outT),
+      overlap: Math.round(num(a.overlap, 0, 1, 1) * 100) / 100,
+      stagger: Math.round(num(a.stagger, 0, 1, 0) * 100) / 100,
+      anchor: pick(a.anchor, ['center', 'top', 'bottom', 'left', 'right'] as const, 'center'),
+      reveal: pick(a.reveal, ['', 'chars', 'words'] as const, ''),
+    });
+  }
+  return out;
+}
 function cleanMoods(v: any): { id: string; name: string; words: string[] }[] {
   if (!Array.isArray(v)) return [];
   const out: { id: string; name: string; words: string[] }[] = [];
@@ -1248,7 +1318,7 @@ const LOOK_KEYS = [
   'videoWordShadow', 'videoWordShadowInk', 'videoWordShadowDark', 'videoWordShadowSoft', 'videoWordShadowFar',
   'videoBox', 'videoBoxColor', 'videoBoxClear', 'videoBoxRound', 'videoBoxWidth', 'videoOwnColors', 'videoKindColors', 'videoBackRules', 'videoQuiet', 'videoQuietStrength',
   'videoNameShadow', 'videoNameShadowInk', 'videoNameShadowDark', 'videoNameShadowSoft', 'videoNameShadowFar', 'videoEdges', 'videoEdgeColor', 'videoMove', 'videoMoveSecs',
-  'videoTitleOn', 'videoFadeOut', 'videoCaptions',
+  'videoTitleOn', 'videoFadeOut', 'videoCaptions', 'videoAnims', 'videoAnimsOwn',
 ];
 // At most 20 looks, each cleaned the same way the settings are.
 function cleanLooks(v: any): Settings['videoLooks'] {
@@ -1415,6 +1485,8 @@ function cleanSettings(raw: any): Settings {
     videoMoodPics: bool(r.videoMoodPics, d.videoMoodPics),
     moodList: cleanMoods(r.moodList),
     sceneMoodList: cleanSceneMoods(r.sceneMoodList),
+    videoAnims: cleanAnimPlaces(r.videoAnims),
+    videoAnimsOwn: cleanOwnAnims(r.videoAnimsOwn),
     videoByline: str(r.videoByline, 80).replace(/[\u0000-\u001f]/g, ' ').trim(),
     videoBylineInk: hexColor(r.videoBylineInk),
     videoBylineFont: r.videoBylineFont === '' ? '' : fontChoice(r.videoBylineFont, ''),

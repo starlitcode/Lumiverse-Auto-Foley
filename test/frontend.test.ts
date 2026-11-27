@@ -552,7 +552,7 @@ describe("templates", () => {
   test("every template gives a value for every look setting, so nothing is left from the look before", () => {
     const src = readFileSync(new URL("../src/frontend.ts", import.meta.url), "utf8");
     const look = (src.match(/const LOOK_KEYS = \[([\s\S]*?)\];/) as RegExpMatchArray)[1].match(/'(\w+)'/g)!.map((x) => x.slice(1, -1));
-    const want = look.filter((k) => k !== "videoByline" && k !== "videoMarks" && k !== "videoStickers" && k !== "videoShape").concat(["studioMusic"]).sort();
+    const want = look.filter((k) => k !== "videoByline" && k !== "videoMarks" && k !== "videoStickers" && k !== "videoAnimsOwn" && k !== "videoShape").concat(["studioMusic"]).sort();
     const found = [...src.matchAll(/\n      id: '([a-z]+)',\n[^\n]*\n[^\n]*\n      look: (\{[\s\S]*?\n      \}),\n/g)];
     expect(found.length).toBeGreaterThanOrEqual(8);
     for (const m of found) {
@@ -573,5 +573,39 @@ describe("scene moods", () => {
     const front = list("frontend.ts");
     expect(front.length).toBe(10);
     expect(JSON.stringify(front)).toBe(JSON.stringify(list("backend.ts")));
+  });
+});
+
+describe("animations", () => {
+  const { bezier, animAt, BUILT_IN_ANIMS, ANIM_PLACES, EASES } = __testing as any;
+  test("the easing curves start at 0, end at 1, and Even is a straight line", () => {
+    for (const e of EASES) {
+      expect(bezier(e.curve, 0)).toBeCloseTo(0, 3);
+      expect(bezier(e.curve, 1)).toBeCloseTo(1, 3);
+    }
+    expect(bezier([0, 0, 1, 1], 0.3)).toBeCloseTo(0.3, 3);
+  });
+  test("each built-in comes in to rest and leaves from rest, with unique ids and no change in brightness", () => {
+    const ids = BUILT_IN_ANIMS.map((a: any) => a.id);
+    expect(new Set(ids).size).toBe(ids.length);
+    for (const a of BUILT_IN_ANIMS) {
+      const end = animAt(a, "in", 1);
+      const start = animAt(a, "out", 0);
+      for (const s of [end, start]) {
+        expect(s.x).toBeCloseTo(0, 3);
+        expect(s.y).toBeCloseTo(0, 3);
+        expect(s.s).toBeCloseTo(100, 3);
+        expect(s.b).toBeCloseTo(0, 3);
+        expect(s.l).toBe(100);
+      }
+      expect(end.o).toBeCloseTo(1, 3);
+    }
+    const rise = BUILT_IN_ANIMS.find((a: any) => a.id === "rise");
+    expect(animAt(rise, "in", 0)).toMatchObject({ o: 0, y: 24 });
+    expect(animAt(rise, "out", 1)).toMatchObject({ o: 0, y: -24 });
+  });
+  test("there are eleven places, five of text and six of the frame", () => {
+    expect(ANIM_PLACES.length).toBe(11);
+    expect(ANIM_PLACES.filter((p: any) => p.kind === "text").length).toBe(5);
   });
 });
