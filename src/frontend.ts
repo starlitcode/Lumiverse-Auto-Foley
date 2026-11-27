@@ -1685,16 +1685,13 @@ html[data-af-still] .af-ws-sec.af-ws-in, .af-ws[data-af-still] .af-ws-sec.af-ws-
 .af-ws-pop { position: absolute; z-index: 6; top: 56px; right: 12px; display: flex; flex-direction: column; gap: 10px; width: min(440px, calc(100% - 24px)); max-height: calc(100% - 72px); overflow: auto; padding: 14px; border: 1px solid var(--af-line); border-radius: var(--af-r-md); background-color: var(--lumiverse-card-bg-solid, rgb(24,20,34)); background-image: linear-gradient(var(--lumiverse-bg-elevated, rgba(35,30,48,.98)), var(--lumiverse-bg-elevated, rgba(35,30,48,.98))); box-shadow: 0 10px 30px rgba(0,0,0,.35); opacity: 0; transform: translateY(4px); transition: opacity .18s ease-out, transform .18s ease-out; outline: none; }
 .af-ws-pop[data-af-open] { opacity: 1; transform: none; }
 .af-ws-morebtn { display: none; }
-.af-anim-canvas { display: block; width: 100%; max-width: 480px; height: auto; aspect-ratio: 16 / 9; border-radius: var(--af-r); border: 1px solid var(--af-line); }
 .af-ease-canvas { flex: none; width: 96px; height: 96px; }
-.af-pen-wrap { position: relative; grid-area: view; max-width: 240px; }
-.af-pen-wrap > canvas { display: block; width: 100%; }
-.af-pen { position: absolute; inset: 0; height: 100%; touch-action: none; cursor: crosshair; }
-.af-anim-sticky { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "view btns" "scrub scrub"; align-items: center; column-gap: 10px; row-gap: 4px; position: sticky; top: 0; z-index: 3; padding: 6px 0; background-color: var(--lumiverse-card-bg-solid, rgb(24,20,34)); background-image: linear-gradient(var(--lumiverse-bg-elevated, rgba(35,30,48,.98)), var(--lumiverse-bg-elevated, rgba(35,30,48,.98))); box-shadow: 0 6px 8px -8px rgba(0,0,0,.6); }
-.af-anim-sticky > canvas, .af-anim-sticky > .af-pen-wrap { grid-area: view; max-width: 240px; }
-.af-anim-sticky > .af-anim-btns { grid-area: btns; flex-direction: column; align-items: stretch; gap: 6px; }
-.af-anim-sticky > .af-anim-scrub { grid-area: scrub; gap: 2px; }
-@container afws (max-width: 639.98px) { .af-anim-sticky > canvas { max-width: 176px; } }
+.af-pen-wrap { position: absolute; z-index: 2; }
+.af-pen { display: block; width: 100%; height: 100%; touch-action: none; cursor: crosshair; }
+.af-demo { gap: 4px; }
+/* While an animation is being changed, the preview plays it, with its own
+   Play under it in place of the video's. */
+.af-ws[data-af-demoing] [data-af-studio="play"] { display: none; }
 .af-effect-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 8px; }
 .af-effect-card { display: flex; flex-direction: column; align-items: center; gap: 4px; min-height: 32px; padding: 6px; border-radius: var(--af-r); border: 1px solid var(--af-line); background: var(--af-fill-subtle); color: var(--af-text); font: 12px/1.3 var(--lumiverse-font-family, system-ui); cursor: pointer; }
 .af-effect-card canvas { display: block; width: 100%; max-width: 88px; height: auto; aspect-ratio: 88 / 50; border-radius: 6px; }
@@ -17184,7 +17181,8 @@ export function setup(ctx: Ctx, overrides?: any) {
       if (theater && theater.canvas === r.canvas) fitTheater();
     }
     const g = r.canvas.getContext('2d');
-    if (g) videoFrame(g, v.at, v.parts, v.total, v.st, v.title);
+    if (g && animDemo) drawDemo(g, v.st);
+    else if (g) videoFrame(g, v.at, v.parts, v.total, v.st, v.title);
     // The picked shape's outline and dots, on the preview only. Never in
     // full screen, and never in a saved video, which draws its own frames.
     if (g && designing && !previewRun && !(theater && theater.canvas === r.canvas)) {
@@ -17859,168 +17857,190 @@ export function setup(ctx: Ctx, overrides?: any) {
     if (!Array.isArray(S.videoAnimsOwn)) S.videoAnimsOwn = [];
     return S.videoAnimsOwn;
   }
-  // A small stage for the preview, with the sample words and a picture.
-  function animPreview(get: () => AnimDef | null, centerOf?: () => AnimMask | null, moved?: () => void): HTMLElement {
-    const box = el('<div class="af-col" data-af-animpreview></div>');
-    const c = canvasOf(320, 180) as HTMLCanvasElement;
-    c.className = 'af-anim-canvas';
-    c.setAttribute('role', 'img');
-    c.setAttribute('aria-label', 'A preview of the animation, coming in and going out');
-    box.appendChild(c);
-    const st: any = { w: 320, h: 180 };
-    const W = 320;
-    const H = 180;
-    let pos = 0;
-    let playing = !calm();
-    let half = false;
-    let last = 0;
-    let frame = 0;
-    const cycle = (a: AnimDef) => Math.max(0.2, a.delay + a.secs) * 2 + 1;
-    // The sample is the words alone, in the middle, so what moves is the
-    // layer the animation is for, and nothing else is drawn.
-    const sample: Drawer = (g, al, x, y) => {
-      g.save();
-      g.globalAlpha = al;
-      g.fillStyle = '#ffffff';
-      g.font = '600 26px system-ui, sans-serif';
-      g.textAlign = 'center';
-      const words = 'Your words here';
-      const rev = textReveal;
-      const shown = rev ? (rev.kind === 'words' ? words.split(' ').slice(0, Math.floor(rev.frac * 3 + 1e-6)).join(' ') : words.slice(0, Math.round(rev.frac * words.length))) : words;
-      g.textAlign = 'left';
-      const full = g.measureText(words).width;
-      g.fillText(shown, W / 2 - full / 2 + x, 99 + y);
-      g.restore();
-    };
-    const draw = () => {
-      const g = c.getContext('2d');
-      const a = get();
-      if (!g || !a) return;
-      g.setTransform(1, 0, 0, 1, 0, 0);
-      g.globalAlpha = 1;
-      g.fillStyle = '#20243a';
-      g.fillRect(0, 0, W, H);
-      const L = Math.max(0.01, a.secs);
-      const len = cycle(a);
-      const t = pos * len;
-      const use: AnimUse = { def: a, secs: L, delay: a.delay };
-      const inEnd = a.delay + L;
-      if (t < a.delay) return;
-      if (t < inEnd) runAnim(g, st, use, 'in', (t - a.delay) / L, sample, 0);
-      else if (t < inEnd + 1) sample(g, 1, 0, 0);
-      else if (t < inEnd + 1 + L) runAnim(g, st, use, 'out', (t - inEnd - 1) / L, sample, 0);
-    };
-    // The middle of a circle, box, diamond, clock or shape reveal is dragged
-    // on the preview, and snaps to the middle and the thirds.
-    if (centerOf) {
-      let dragging = false;
-      const put = (e: PointerEvent) => {
-        const m = centerOf();
-        if (!m) return false;
-        const rc = c.getBoundingClientRect();
-        const snap = (v: number) => {
-          for (const t of [0.5, 1 / 3, 2 / 3]) if (Math.abs(v - t) < 0.03) return Math.round(t * 1000) / 1000;
-          return Math.round(Math.min(1, Math.max(0, v)) * 1000) / 1000;
-        };
-        m.cx = snap((e.clientX - rc.left) / Math.max(1, rc.width));
-        m.cy = snap((e.clientY - rc.top) / Math.max(1, rc.height));
-        const pr: any = (get() as any) && centerOwner();
-        if (pr) {
-          pr.cx = m.cx;
-          pr.cy = m.cy;
-        }
-        draw();
-        return true;
-      };
-      const centerOwner = () => {
-        const a = get();
-        if (!a) return null;
-        const tr: any = animSide === 'out' ? a.outT : a.inT;
-        return tr && tr.preset && (tr.preset.id === 'iris' || tr.preset.id === 'shape') ? tr.preset : null;
-      };
-      c.addEventListener('pointerdown', (e) => {
-        if (!centerOf()) return;
-        dragging = true;
-        playing = false;
-        paintPlay();
-        e.preventDefault();
-        try {
-          c.setPointerCapture(e.pointerId);
-        } catch (_) {}
-        put(e);
-      });
-      c.addEventListener('pointermove', (e) => {
-        if (dragging) put(e);
-      });
-      const end = () => {
-        if (!dragging) return;
-        dragging = false;
-        if (moved) moved();
-      };
-      c.addEventListener('pointerup', end);
-      c.addEventListener('pointercancel', end);
-      c.style.touchAction = 'none';
+  // The animation being changed plays on the Studio's own preview, at the
+  // top, on the look's background, so there is one preview and nothing in
+  // the settings stays pinned. Its Play, Half speed and position are in a
+  // row under the preview's own controls.
+  let animDemo: null | { get: () => AnimDef | null; pos: number; playing: boolean; half: boolean; row: HTMLElement; frame: number; centerOf?: () => AnimMask | null; moved?: () => void } = null;
+  const demoCycle = (a: AnimDef) => Math.max(0.2, a.delay + a.secs) * 2 + 1;
+  // The words the demo moves, in the middle of the frame.
+  const demoWords: Drawer = (g, al, x, y) => {
+    const st = studioView.st;
+    if (!st) return;
+    const u = Math.min(st.w, st.h) / 1080;
+    g.save();
+    g.globalAlpha = al;
+    g.fillStyle = hexOr(S.videoInk, STORY_INK);
+    g.font = '600 ' + Math.round(84 * u) + 'px ' + st.font;
+    const words = 'Your words here';
+    const rev = textReveal;
+    const shown = rev ? (rev.kind === 'words' ? words.split(' ').slice(0, Math.floor(rev.frac * 3 + 1e-6)).join(' ') : words.slice(0, Math.round(rev.frac * words.length))) : words;
+    const full = g.measureText(words).width;
+    g.textBaseline = 'middle';
+    g.fillText(shown, st.w / 2 - full / 2 + x, st.h / 2 + y);
+    g.restore();
+  };
+  function drawDemo(g: CanvasRenderingContext2D, st: VideoStage) {
+    const d = animDemo;
+    const a = d && d.get();
+    if (!d || !a) return;
+    g.save();
+    g.globalAlpha = 1;
+    g.globalCompositeOperation = 'source-over';
+    st.from = 0;
+    st.to = 1;
+    drawBackAt(g, st, 0);
+    const L = Math.max(0.01, a.secs);
+    const t = d.pos * demoCycle(a);
+    const use: AnimUse = { def: a, secs: L, delay: a.delay };
+    const inEnd = a.delay + L;
+    if (t >= a.delay) {
+      if (t < inEnd) runAnim(g, st, use, 'in', (t - a.delay) / L, demoWords, 0);
+      else if (t < inEnd + 1) demoWords(g, 1, 0, 0);
+      else if (t < inEnd + 1 + L) runAnim(g, st, use, 'out', (t - inEnd - 1) / L, demoWords, 0);
     }
+    g.restore();
+  }
+  function stopDemo() {
+    const d = animDemo;
+    if (!d) return;
+    animDemo = null;
+    if (d.frame) cancelAnimationFrame(d.frame);
+    if (penNow) penNow.stop();
+    d.row.remove();
+    if (ws) ws.box.removeAttribute('data-af-demoing');
+    paintPreview();
+  }
+  disposers.push(() => stopDemo());
+  function animDemoStart(get: () => AnimDef | null, centerOf?: () => AnimMask | null, moved?: () => void): HTMLElement {
+    const note = el('<p class="af-note" data-af-animpreview></p>');
+    note.textContent = 'The preview at the top plays this animation, coming in and going out.';
+    const slot = ws ? (ws.box.querySelector('[data-af-demoslot]') as HTMLElement | null) : null;
+    if (animDemo) {
+      animDemo.get = get;
+      animDemo.centerOf = centerOf;
+      animDemo.moved = moved;
+      paintPreview();
+      return note;
+    }
+    if (!slot) return note;
+    stopPreview();
+    const row = el('<div class="af-col af-demo" data-af-demo data-af-focuskeep></div>');
     const scrubId = rid('as');
-    const scrubRow = el('<div class="af-col"></div>');
-    scrubRow.classList.add('af-anim-scrub');
-    scrubRow.appendChild(labelRow('Where in the preview', '', scrubId));
+    const scrubRow = el('<div class="af-col af-anim-scrub"></div>');
+    scrubRow.appendChild(labelRow('Where in the animation', '', scrubId));
     const scrub = el('<input type="range" min="0" max="1000" step="1" id="' + scrubId + '" data-af-animscrub>') as HTMLInputElement;
     scrub.value = '0';
     // Filled to the knob by the same code as every other slider.
     fillTo(scrub, 0);
-    scrub.addEventListener('input', () => {
-      pos = Number(scrub.value) / 1000;
-      fillTo(scrub, pos);
-      playing = false;
-      paintPlay();
-      draw();
-    });
     scrubRow.appendChild(scrub);
-    box.appendChild(scrubRow);
-    const row = el('<div class="af-row af-wrap af-anim-btns"></div>');
+    const btns = el('<div class="af-row af-wrap"></div>');
     const play = button('Pause', () => {
-      playing = !playing;
+      const d = animDemo;
+      if (!d) return;
+      d.playing = !d.playing;
       paintPlay();
-      if (playing) loop();
+      if (d.playing) loop();
     });
     play.setAttribute('data-af-animplay', '');
-    const paintPlay = () => setText(play.querySelector('span') as HTMLElement, playing ? 'Pause' : 'Play');
     const slow = button('Half speed', () => {
-      half = !half;
-      slow.setAttribute('aria-pressed', half ? 'true' : 'false');
+      const d = animDemo;
+      if (!d) return;
+      d.half = !d.half;
+      slow.setAttribute('aria-pressed', d.half ? 'true' : 'false');
     });
     slow.setAttribute('aria-pressed', 'false');
     slow.setAttribute('data-af-animhalf', '');
-    row.appendChild(play);
-    row.appendChild(slow);
-    box.appendChild(row);
-    paintPlay();
-    const loop = () => {
-      if (frame) cancelAnimationFrame(frame);
-      last = performance.now();
-      const step = (now: number) => {
-        frame = 0;
-        if (!c.isConnected || !playing) return;
-        const a = get();
-        if (!a) return;
-        pos = (pos + ((now - last) / 1000 / cycle(a)) * (half ? 0.5 : 1)) % 1;
-        last = now;
-        scrub.value = String(Math.round(pos * 1000));
-        fillTo(scrub, pos);
-        draw();
-        frame = requestAnimationFrame(step);
-      };
-      frame = requestAnimationFrame(step);
-    };
-    disposers.push(() => {
-      if (frame) cancelAnimationFrame(frame);
-      frame = 0;
+    btns.appendChild(play);
+    btns.appendChild(slow);
+    row.appendChild(btns);
+    row.appendChild(scrubRow);
+    slot.appendChild(row);
+    if (ws) ws.box.setAttribute('data-af-demoing', '');
+    animDemo = { get, pos: 0, playing: !calm(), half: false, row, frame: 0, centerOf, moved };
+    const paintPlay = () => setText(play.querySelector('span') as HTMLElement, animDemo && animDemo.playing ? 'Pause' : 'Play');
+    scrub.addEventListener('input', () => {
+      const d = animDemo;
+      if (!d) return;
+      d.pos = Number(scrub.value) / 1000;
+      fillTo(scrub, d.pos);
+      d.playing = false;
+      paintPlay();
+      paintPreview();
     });
-    (box as any)._redraw = draw;
-    draw();
-    if (playing) loop();
-    return box;
+    const loop = () => {
+      const d = animDemo;
+      if (!d) return;
+      if (d.frame) cancelAnimationFrame(d.frame);
+      let last = performance.now();
+      const step = (now: number) => {
+        const e = animDemo;
+        if (!e) return;
+        e.frame = 0;
+        const a = e.get();
+        if (!e.playing || !a || !e.row.isConnected) return;
+        e.pos = (e.pos + ((now - last) / 1000 / demoCycle(a)) * (e.half ? 0.5 : 1)) % 1;
+        last = now;
+        scrub.value = String(Math.round(e.pos * 1000));
+        fillTo(scrub, e.pos);
+        paintPreview();
+        e.frame = requestAnimationFrame(step);
+      };
+      d.frame = requestAnimationFrame(step);
+    };
+    paintPlay();
+    paintPreview();
+    if (animDemo.playing) loop();
+    return note;
+  }
+  // The middle of a circle, box, diamond, clock or shape reveal is dragged
+  // on the Studio's preview while an animation is being changed, and snaps
+  // to the middle and the thirds.
+  function hookDemo(canvas: HTMLCanvasElement) {
+    let dragging = false;
+    const put = (e: PointerEvent) => {
+      const d = animDemo;
+      const m = d && d.centerOf ? d.centerOf() : null;
+      if (!d || !m) return;
+      const rc = canvas.getBoundingClientRect();
+      const snap = (v: number) => {
+        for (const t of [0.5, 1 / 3, 2 / 3]) if (Math.abs(v - t) < 0.03) return Math.round(t * 1000) / 1000;
+        return Math.round(Math.min(1, Math.max(0, v)) * 1000) / 1000;
+      };
+      m.cx = snap((e.clientX - rc.left) / Math.max(1, rc.width));
+      m.cy = snap((e.clientY - rc.top) / Math.max(1, rc.height));
+      const a = d.get();
+      const tr: any = a ? (animSide === 'out' ? a.outT : a.inT) : null;
+      if (tr && tr.preset && (tr.preset.id === 'iris' || tr.preset.id === 'shape')) {
+        tr.preset.cx = m.cx;
+        tr.preset.cy = m.cy;
+      }
+      paintPreview();
+    };
+    canvas.addEventListener('pointerdown', (e) => {
+      const d = animDemo;
+      if (!d || !d.centerOf || !d.centerOf() || penNow) return;
+      dragging = true;
+      d.playing = false;
+      const pb = d.row.querySelector('[data-af-animplay] span');
+      if (pb) setText(pb as HTMLElement, 'Play');
+      e.preventDefault();
+      e.stopPropagation();
+      try {
+        canvas.setPointerCapture(e.pointerId);
+      } catch (_) {}
+      put(e);
+    });
+    canvas.addEventListener('pointermove', (e) => {
+      if (dragging) put(e);
+    });
+    const end = () => {
+      if (!dragging) return;
+      dragging = false;
+      if (animDemo && animDemo.moved) animDemo.moved();
+    };
+    canvas.addEventListener('pointerup', end);
+    canvas.addEventListener('pointercancel', end);
   }
   // The small drawing of an easing curve.
   function easeDrawing(curve: number[]): HTMLCanvasElement {
@@ -18114,13 +18134,24 @@ export function setup(ctx: Ctx, overrides?: any) {
   // the first point closes the shape. Points snap to a grid and to each
   // other's lines.
   let penNow: { stop: () => void } | null = null;
-  function penOver(preview: HTMLElement, rv: OwnReveal, changed: () => void): { undo: () => void; clear: () => void; stop: () => void } {
+  function penOver(view: HTMLCanvasElement, rv: OwnReveal, changed: () => void): { undo: () => void; clear: () => void; stop: () => void } {
     if (penNow) penNow.stop();
-    const view = preview.querySelector('canvas') as HTMLCanvasElement;
+    // A layer of its own, laid exactly over the preview, so the preview is
+    // not moved or drawn on.
+    const host = view.parentElement as HTMLElement;
+    if (getComputedStyle(host).position === 'static') host.style.position = 'relative';
     const wrap = el('<div class="af-pen-wrap"></div>');
-    view.parentElement!.insertBefore(wrap, view);
-    wrap.appendChild(view);
-    const pen = canvasOf(view.width, view.height) as HTMLCanvasElement;
+    const place = () => {
+      wrap.style.left = view.offsetLeft + 'px';
+      wrap.style.top = view.offsetTop + 'px';
+      wrap.style.width = view.offsetWidth + 'px';
+      wrap.style.height = view.offsetHeight + 'px';
+    };
+    host.appendChild(wrap);
+    place();
+    const ro = typeof ResizeObserver === 'function' ? new ResizeObserver(place) : null;
+    if (ro) ro.observe(view);
+    const pen = canvasOf(Math.max(320, Math.round(view.width / 3)), Math.max(180, Math.round(view.height / 3))) as HTMLCanvasElement;
     pen.className = 'af-pen';
     pen.setAttribute('data-af-pen', '');
     pen.setAttribute('role', 'img');
@@ -18274,8 +18305,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         paint();
       },
       stop: () => {
-        if (!wrap.isConnected && !view.isConnected) return;
-        if (wrap.parentElement) wrap.parentElement.insertBefore(view, wrap);
+        if (ro) ro.disconnect();
         wrap.remove();
         if (penNow === api) penNow = null;
       },
@@ -18318,8 +18348,9 @@ export function setup(ctx: Ctx, overrides?: any) {
           drawBtn.setAttribute('aria-pressed', 'false');
           return;
         }
-        if (!preview) return;
-        pen = penOver(preview, rv, touched);
+        const view = studioRefs ? studioRefs.canvas : null;
+        if (!view) return;
+        pen = penOver(view, rv, touched);
         drawBtn.setAttribute('aria-pressed', 'true');
       });
       drawBtn.setAttribute('aria-pressed', 'false');
@@ -18344,8 +18375,8 @@ export function setup(ctx: Ctx, overrides?: any) {
       tools.appendChild(clear);
       box.appendChild(tools);
       // Drawing starts at once for a new shape.
-      if (!rv.pts.length && preview) {
-        pen = penOver(preview, rv, touched);
+      if (!rv.pts.length && studioRefs) {
+        pen = penOver(studioRefs.canvas, rv, touched);
         drawBtn.setAttribute('aria-pressed', 'true');
       }
       disposers.push(() => {
@@ -18577,14 +18608,17 @@ export function setup(ctx: Ctx, overrides?: any) {
     box.appendChild(tools);
     box.appendChild(said);
     const a = list.find((x) => x.id === animEditId);
-    if (!a) return;
+    if (!a) {
+      stopDemo();
+      return;
+    }
     const ed = el('<div class="af-col af-anim-edit" data-af-animedit></div>');
     box.appendChild(ed);
     let preview: HTMLElement | null = null;
     const touched = () => {
       saveOwnAnims();
       changed();
-      if (preview && (preview as any)._redraw) (preview as any)._redraw();
+      paintPreview();
     };
     // The name and what can be done with it, in one short row at the top.
     const top = el('<div class="af-col" data-af-animtop></div>');
@@ -18605,7 +18639,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     });
     top.appendChild(name);
     // The preview stays in view while the settings under it scroll.
-    preview = animPreview(() => ownList().find((x) => x.id === a.id) || null, () => {
+    preview = animDemoStart(() => ownList().find((x) => x.id === a.id) || null, () => {
       const tr = animSide === 'out' ? a.outT : a.inT;
       return tr && tr.mask && tr.mask.type !== 'none' && tr.mask.type !== 'linear' ? tr.mask : null;
     }, () => {
@@ -18613,7 +18647,6 @@ export function setup(ctx: Ctx, overrides?: any) {
       paintSimple();
       if (animTimeline) paintTrack();
     });
-    preview.classList.add('af-anim-sticky');
     ed.appendChild(preview);
     ed.appendChild(segmented('What does it move?', [
       { id: 'any', label: 'Both' },
@@ -23465,6 +23498,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       } catch (_) {}
     });
     hookDesign(canvas);
+    hookDemo(canvas);
     // With a performance there, a choice between it and the example.
     if (keptShow()) {
       const pick = segmented('Show in the preview', [
@@ -23576,6 +23610,9 @@ export function setup(ctx: Ctx, overrides?: any) {
     vRow.setAttribute('data-af-focuskeep', '');
     topActs.insertBefore(make, topActs.firstChild);
     vc.appendChild(vRow);
+    // Where an animation being changed puts its Play, Half speed and
+    // position, under the preview's own controls.
+    vc.appendChild(el('<div class="af-col" data-af-demoslot></div>'));
     const said = el('<p class="af-note" data-af-studio="said" role="status"></p>');
     vc.appendChild(said);
     const look = () => studioBuild(false);
@@ -23864,7 +23901,9 @@ export function setup(ctx: Ctx, overrides?: any) {
         }, '0.5 by default.'));
       }),
     );
-    vc.appendChild(fold('Animations', (b) => drawAnimPlaces(b, look)));
+    vc.appendChild(fold('Animations', (b) => drawAnimPlaces(b, look), (open) => {
+      if (!open) stopDemo();
+    }));
     vc.appendChild(
       fold('Title and ending', (b) => {
         const box = el('<input type="text" class="af-field" maxlength="120" spellcheck="true" autocomplete="off">') as HTMLInputElement;

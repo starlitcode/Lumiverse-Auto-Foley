@@ -96,7 +96,7 @@ Under the places, **Your animations** makes animations of your own. Up to 30.
 1. Pick a built-in in **Start from**, and press **Make an animation**. A copy of it is made, named such as "My rise".
 2. Press its name in the list to change it.
 3. At the top are its **Name**, **Duplicate**, **Share** and **Delete**.
-4. Under them is the preview. It stays at the top while the settings scroll. It plays the animation in and then out, over and over. **Play** or **Pause**, **Half speed**, and **Where in the preview** to look at one moment. With Reduce motion on, it starts paused.
+4. The Studio's own preview, at the top, plays the animation, coming in and going out, over and over, on your background. Under it are **Play** or **Pause**, **Half speed**, and **Where in the animation** to look at one moment. With Reduce motion on, it starts paused. Nothing in the settings stays pinned.
 5. **What does it move?**: **Both** text and the frame, **Text** only, or **The frame** only.
 6. **Length** and **Delay**, in seconds, for coming in and going out.
 7. **Coming in** and **Going out** each have a row of cards. Each card plays a small example of its effect. Press one to use it.
@@ -119,7 +119,7 @@ A reveal shows the layer bit by bit, through a shape: a wipe across, or a circle
 
 - **The shape it shows through**: **Circle**, **Box** (a rectangle that opens from its middle), **Diamond**, **Clock** (a sweep around its middle), **A shape** from the shape picker, such as a heart or a star, or one of [Your reveals](#your-reveals).
 - **Direction**, for a wipe: from the left, the right, the top or the bottom. On the timeline, any angle in degrees.
-- **Middle across** and **Middle down**, in percent of the frame. Or press and drag on the preview. It snaps to the middle and the thirds.
+- **Middle across** and **Middle down**, in percent of the frame. Or press and drag on the Studio's preview. It snaps to the middle and the thirds.
 - **Size**, in percent: 100 opens to cover the frame. Less stops part of the way. More opens past the edge.
 - **Soft edge**: from sharp to very soft, set by eye on the preview.
 - **Turn the other way**: hides through the shape, in place of showing.
@@ -138,7 +138,7 @@ Each is saved as you change it, under its **Name**, and is then one of the shape
 
 Ada Quill wants a word to come in through a triangle.
 
-1. She makes an animation, and under **Coming in** presses **Through a shape**, then **Draw your own**. The pen is over the preview.
+1. She makes an animation, and under **Coming in** presses **Through a shape**, then **Draw your own**. The pen is over the Studio's preview.
 2. She taps the top middle of the preview, then the bottom right, then the bottom left. A dashed line joins the points.
 3. She taps the first point, which is larger and yellow. The shape closes, and the line is solid.
 4. She drags the small square in the middle of the bottom line down a little. That line bends into a curve.

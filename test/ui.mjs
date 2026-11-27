@@ -7052,7 +7052,7 @@ if (section("animation editor")) {
     check(made && /^u/.test(made.id) && made.name === "My rise" && made.inT.keys.length === 2, size.name + ": Make an animation copies Rise as your own (" + JSON.stringify(made && made.name) + ")");
     const drawn = await page.evaluate(async () => {
       await new Promise((x) => setTimeout(x, 400));
-      const c = document.querySelector("[data-af-animpreview] canvas");
+      const c = document.querySelector("[data-af-videopreview]");
       const d = c.getContext("2d").getImageData(0, 0, c.width, c.height).data;
       let n = 0;
       for (let i = 0; i < d.length; i += 4) if (d[i] > 200 && d[i + 1] > 200 && d[i + 2] > 200) n++;
@@ -7080,9 +7080,7 @@ if (section("animation editor")) {
     const disabled = await page.evaluate(() => [...document.querySelectorAll("[data-af-animedit] button, [data-af-animedit] input, [data-af-animedit] select")].filter((x) => x.disabled && x.offsetParent).map((x) => x.textContent || x.name || x.type));
     check(!disabled.length, size.name + ": no control in the editor is shown that cannot be changed (" + disabled.join(", ") + ")");
     // The middle of a shape reveal is dragged on the preview.
-    await page.evaluate(() => document.querySelector("[data-af-animpreview]").scrollIntoView({ block: "center" }));
-    await page.waitForTimeout(100);
-    const box = await page.locator("[data-af-animpreview] canvas").boundingBox();
+    const box = await page.locator("[data-af-videopreview]").boundingBox();
     if (size.touch) await page.touchscreen.tap(box.x + box.width * 0.2, box.y + box.height * 0.32);
     else await page.mouse.click(box.x + box.width * 0.2, box.y + box.height * 0.32);
     await page.waitForTimeout(500);
@@ -7095,7 +7093,7 @@ if (section("animation editor")) {
       r.value = "300";
       r.dispatchEvent(new Event("input", { bubbles: true }));
       await new Promise((x) => setTimeout(x, 100));
-      const c = document.querySelector("[data-af-animpreview] canvas");
+      const c = document.querySelector("[data-af-videopreview]");
       return Array.from(c.getContext("2d").getImageData(0, 0, c.width, c.height).data).join(",");
     });
     const off = await frame();
@@ -7166,6 +7164,49 @@ if (section("animation editor")) {
     await page.waitForTimeout(600);
     const back = await page.evaluate(() => window.__settings.videoAnimsOwn.map((x) => x.name));
     check(back.length === 2 && back[0] === "My rise" && back[1] === "My rise (copy)", size.name + ": Add from a file adds it back, and a second one with the same name is a copy (" + back.join(", ") + ")");
+    check(!errors.length, size.name + ": no page errors. " + errors.slice(0, 2).join(" | "));
+    await context.close();
+  }
+  // On a phone, nothing in the editor is pinned over the settings: at
+  // every scroll position no control overlaps another, and nothing covers
+  // a control.
+  for (const width of [360, 390]) {
+    const size = { name: "phone " + width, width, height: 800, touch: true };
+    const { context, page, errors } = await open(THEMES[0], size, 1, PLAIN);
+    await openWs(page);
+    await wsSec(page, "Animations");
+    await page.waitForTimeout(300);
+    await page.evaluate(() => document.querySelector("[data-af-animmake]").click());
+    await page.waitForTimeout(600);
+    const bad = await page.evaluate(async () => {
+      const panel = document.querySelector("[data-af-ws-panel]");
+      const out = [];
+      const pr = panel.getBoundingClientRect();
+      for (let top = 0; top <= panel.scrollHeight; top += 120) {
+        panel.scrollTop = top;
+        await new Promise((x) => requestAnimationFrame(() => requestAnimationFrame(x)));
+        const els = [...panel.querySelectorAll("button, input, select, textarea, .af-label, canvas")].filter((e) => { const r = e.getBoundingClientRect(); return e.offsetParent && r.width > 2 && r.height > 2 && r.top >= pr.top + 16 && r.bottom <= pr.bottom - 2; });
+        for (const e of els) {
+          const r = e.getBoundingClientRect();
+          const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+          if (hit && hit !== e && !e.contains(hit) && !hit.contains(e) && !(e.tagName === "INPUT" && hit.closest("label") && hit.closest("label").contains(e))) out.push("covered at " + top + ": " + (e.textContent || e.tagName).trim().slice(0, 30) + " by " + (hit.className || hit.tagName));
+        }
+        for (let i = 0; i < els.length; i++) for (let j = i + 1; j < els.length; j++) {
+          const A = els[i], B = els[j];
+          if (A.contains(B) || B.contains(A)) continue;
+          const ra = A.getBoundingClientRect(), rb = B.getBoundingClientRect();
+          const ox = Math.min(ra.right, rb.right) - Math.max(ra.left, rb.left);
+          const oy = Math.min(ra.bottom, rb.bottom) - Math.max(ra.top, rb.top);
+          if (ox > 2 && oy > 2) out.push("overlap at " + top + ": " + (A.textContent || A.tagName).trim().slice(0, 20) + " / " + (B.textContent || B.tagName).trim().slice(0, 20));
+        }
+        if (out.length > 5) break;
+      }
+      return out;
+    });
+    check(!bad.length, size.name + ": scrolling the editor, nothing overlaps or covers a control. " + bad.slice(0, 3).join("; "));
+    const pinned = await page.evaluate(() => [...document.querySelectorAll("[data-af-ws-panel] *")].filter((e) => /sticky|fixed/.test(getComputedStyle(e).position)).length);
+    check(pinned === 0, size.name + ": nothing in the settings is pinned (" + pinned + ")");
+    check(await page.evaluate(() => !!document.querySelector("[data-af-ws-stage] [data-af-demo] [data-af-animplay]")), size.name + ": Play, Half speed and the position are under the Studio's preview");
     check(!errors.length, size.name + ": no page errors. " + errors.slice(0, 2).join(" | "));
     await context.close();
   }
@@ -7268,41 +7309,45 @@ if (section("reveal")) {
   check(inv.left < 20 && inv.right > 100, "Turn the other way swaps what is shown and hidden (" + JSON.stringify([inv.left, inv.right]) + ")");
   const heart = await shot({ type: "shape", shape: "heart", cx: 0.5, cy: 0.5 });
   check(heart.left < 20 && heart.right < 20, "a heart reveal keeps the sides hidden while it is part open");
-  // The picture for the docs: a wipe and an iris at four moments, drawn by
-  // the editor's own preview.
+  // The picture for the docs: a wipe and an iris at four moments, as the
+  // video's opening, so the reveal shows across the whole frame.
   if (process.env.UI_REVEAL_PIC) {
+    const shots = [];
+    for (const fx of ["wipe-l", "iris"]) {
+      const { context, page } = await open(THEMES[0], size, 1, 'window.__settings.videoTitleOn = true; window.__settings.videoTitleText = "Harbor Lights"; window.__settings.videoAnims = { open: { id: "' + fx + '", secs: 2, delay: 0 } };');
+      await openWs(page);
+      await page.waitForTimeout(600);
+      shots.push(await page.evaluate(async () => {
+        const r = document.querySelector("[data-af-scrub] input");
+        r.step = "any";
+        const out = [];
+        for (const t of [0.5, 0.8, 1.15, 2.2]) {
+          r.value = String(t); r.dispatchEvent(new Event("input", { bubbles: true }));
+          await new Promise((x) => setTimeout(x, 160));
+          await new Promise((x) => requestAnimationFrame(() => requestAnimationFrame(x)));
+          const c = document.querySelector("[data-af-videopreview]");
+          const s2 = document.createElement("canvas"); s2.width = 320; s2.height = 180;
+          s2.getContext("2d").drawImage(c, 0, 0, 320, 180);
+          out.push(s2.toDataURL("image/png"));
+        }
+        return out;
+      }));
+      await context.close();
+    }
     const { context, page } = await open(THEMES[0], size, 1);
-    await openWs(page);
-    await wsSec(page, "Animations");
-    await page.waitForTimeout(300);
-    const png = await page.evaluate(async () => {
-      document.querySelector("[data-af-animmake]").click();
-      await new Promise((x) => setTimeout(x, 400));
+    const png = await page.evaluate(async (shots) => {
       const out = document.createElement("canvas");
       out.width = 4 * 330 + 10; out.height = 2 * 220 + 10;
       const og = out.getContext("2d");
       og.fillStyle = "#15121c"; og.fillRect(0, 0, out.width, out.height);
-      const scrub = document.querySelector("[data-af-animscrub]");
-      let row = 0;
-      for (const fx of ["wipe", "iris"]) {
-        document.querySelector('[data-af-animside="in"] [data-af-effect="' + fx + '"]').click();
-        await new Promise((x) => setTimeout(x, 200));
-        const play = document.querySelector("[data-af-animplay]");
-        if (/Pause/.test(play.textContent)) play.click();
-        let col = 0;
-        for (const v of [60, 110, 160, 230]) {
-          scrub.value = String(v); scrub.dispatchEvent(new Event("input", { bubbles: true }));
-          await new Promise((x) => setTimeout(x, 60));
-          const c = document.querySelector("[data-af-animpreview] canvas");
-          og.drawImage(c, 10 + col * 330, 10 + row * 220, 320, 180);
-          og.fillStyle = "#d8d4e4"; og.font = "16px system-ui, sans-serif";
-          og.fillText((fx === "wipe" ? "Wipe" : "Iris") + ", " + ["a little", "a third", "two thirds", "all"][col] + " of the way", 10 + col * 330, 10 + row * 220 + 202);
-          col++;
-        }
-        row++;
+      for (let row = 0; row < 2; row++) for (let col = 0; col < 4; col++) {
+        const im = new Image(); im.src = shots[row][col]; await im.decode();
+        og.drawImage(im, 10 + col * 330, 10 + row * 220, 320, 180);
+        og.fillStyle = "#d8d4e4"; og.font = "16px system-ui, sans-serif";
+        og.fillText((row ? "Iris" : "Wipe from the left") + ", " + ["a little", "a third", "two thirds", "all"][col] + " of the way", 10 + col * 330, 10 + row * 220 + 202);
       }
       return out.toDataURL("image/png").split(",")[1];
-    });
+    }, shots);
     (await import("node:fs")).writeFileSync(process.env.UI_REVEAL_PIC, Buffer.from(png, "base64"));
     await context.close();
   }
@@ -7317,17 +7362,17 @@ if (section("reveal")) {
     await page.evaluate(() => document.querySelector("[data-af-animmake]").click());
     await page.waitForTimeout(500);
     const outside = await page.evaluate(async () => {
-      const c = document.querySelector("[data-af-animpreview] canvas");
+      const c = document.querySelector("[data-af-videopreview]");
       const g = c.getContext("2d");
-      const bg = [32, 36, 58];
       const scrub = document.querySelector("[data-af-animscrub]");
       const read = () => g.getImageData(0, 0, c.width, c.height).data;
-      // The box of the words at rest.
-      scrub.value = "450"; scrub.dispatchEvent(new Event("input", { bubbles: true }));
-      await new Promise((x) => setTimeout(x, 60));
-      let d = read();
+      const at = async (v) => { scrub.value = String(v); scrub.dispatchEvent(new Event("input", { bubbles: true })); await new Promise((x) => setTimeout(x, 60)); return read(); };
+      // The frame with nothing coming in yet, and the box of the words at rest.
+      const empty = await at(0);
+      const differs = (d, i) => Math.abs(d[i] - empty[i]) + Math.abs(d[i + 1] - empty[i + 1]) + Math.abs(d[i + 2] - empty[i + 2]) > 30;
+      let d = await at(450);
       let x0 = c.width, x1 = 0, y0 = c.height, y1 = 0;
-      for (let y = 0; y < c.height; y++) for (let x = 0; x < c.width; x++) { const i = (y * c.width + x) * 4; if (Math.abs(d[i] - bg[0]) + Math.abs(d[i + 1] - bg[1]) + Math.abs(d[i + 2] - bg[2]) > 30) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y); } }
+      for (let y = 0; y < c.height; y += 2) for (let x = 0; x < c.width; x += 2) { const i = (y * c.width + x) * 4; if (differs(d, i)) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y); } }
       let worst = 0;
       for (const kind of ["iris", "box", "diamond", "clock", "shape"]) {
         const card = document.querySelector('[data-af-animside="in"] [data-af-effect="shape"]');
@@ -7337,13 +7382,10 @@ if (section("reveal")) {
         if (b) b.click();
         await new Promise((x) => setTimeout(x, 60));
         for (const v of [60, 120, 200, 300]) {
-          scrub.value = String(v); scrub.dispatchEvent(new Event("input", { bubbles: true }));
-          await new Promise((x) => setTimeout(x, 40));
-          d = read();
-          for (let y = 0; y < c.height; y++) for (let x = 0; x < c.width; x++) {
-            if (x >= x0 - 1 && x <= x1 + 1 && y >= y0 - 1 && y <= y1 + 1) continue;
-            const i = (y * c.width + x) * 4;
-            if (Math.abs(d[i] - bg[0]) + Math.abs(d[i + 1] - bg[1]) + Math.abs(d[i + 2] - bg[2]) > 30) worst++;
+          d = await at(v);
+          for (let y = 0; y < c.height; y += 2) for (let x = 0; x < c.width; x += 2) {
+            if (x >= x0 - 2 && x <= x1 + 2 && y >= y0 - 2 && y <= y1 + 2) continue;
+            if (differs(d, (y * c.width + x) * 4)) worst++;
           }
         }
       }
@@ -7456,7 +7498,15 @@ if (section("your reveals")) {
     await drag(0.72, 0.8, 0.8, 0.7);
     const moved = await page.evaluate(() => JSON.stringify(window.__settings.videoReveals[0].pts[1]));
     check(moved !== was, size.name + ": dragging a point moves it");
-    await drag(0.5, 0.8, 0.5, 0.95);
+    // The square in the middle of the line from the second point to the third.
+    const mid = await page.evaluate(() => {
+      const c = document.querySelector("[data-af-pen]");
+      const p = window.__settings.videoReveals[0].pts;
+      const half = Math.min(c.width, c.height) * 0.45;
+      const mx = (p[1].x + p[2].x) / 2, my = (p[1].y + p[2].y) / 2;
+      return { fx: 0.5 + (mx * half) / c.width, fy: 0.5 + (my * half) / c.height };
+    });
+    await drag(mid.fx, mid.fy, mid.fx, Math.min(0.98, mid.fy + 0.12));
     const bent = await page.evaluate(() => window.__settings.videoReveals[0].pts.some((q) => q.bx != null));
     check(bent, size.name + ": dragging the square in a line bends it into a curve");
     await press("[data-af-penundo]");
