@@ -327,7 +327,7 @@ function cleanStops(v, dflt, max = 5) {
 // At most 12 backgrounds, and 40 shapes in each.
 const BACKS_MAX = 12;
 const SHAPES_MAX = 40;
-const SHAPE_KINDS = ['rect', 'round', 'ellipse', 'tri', 'line', 'text', 'heart', 'star', 'poly', 'diamond', 'arrow', 'bubble', 'ring', 'moon', 'cloud', 'sparkle', 'cat', 'dog', 'bunny', 'paw', 'bone', 'fish', 'carrot', 'bat', 'rose', 'checker', 'broken', 'stripes'];
+const SHAPE_KINDS = ['rect', 'round', 'ellipse', 'tri', 'line', 'text', 'heart', 'star', 'poly', 'diamond', 'arrow', 'bubble', 'ring', 'moon', 'cloud', 'sparkle', 'cat', 'dog', 'bunny', 'paw', 'bone', 'fish', 'carrot', 'bat', 'rose', 'checker', 'broken', 'stripes', 'snowflake', 'ornament', 'holly', 'pumpkin', 'ghost', 'leaf', 'firework', 'lantern', 'diya', 'menorah', 'shamrock', 'egg', 'flower'];
 function cleanShape(v) {
     if (!v || typeof v !== 'object')
         return null;

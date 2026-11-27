@@ -4462,6 +4462,22 @@ export function setup(ctx, overrides) {
         }
         g.closePath();
     };
+    // A straight bar from one point to another, of a thickness.
+    const bar = (x1, y1, x2, y2, t) => {
+        const len = Math.hypot(x2 - x1, y2 - y1) || 1;
+        const nx = (-(y2 - y1) / len) * (t / 2), ny = ((x2 - x1) / len) * (t / 2);
+        return pts([[x1 + nx, y1 + ny], [x2 + nx, y2 + ny], [x2 - nx, y2 - ny], [x1 - nx, y1 - ny]]);
+    };
+    // A pointed leaf around x, y, long l and wide r, turned by a.
+    const leafPiece = (x, y, l, r, a) => (g) => {
+        const c = Math.cos(a), s2 = Math.sin(a);
+        const at = (px, py) => [x + px * c - py * s2, y + px * s2 + py * c];
+        const p0 = at(-l, 0), p1 = at(l, 0), q1 = at(0, -r * 1.6), q2 = at(0, r * 1.6);
+        g.moveTo(p0[0], p0[1]);
+        g.quadraticCurveTo(q1[0], q1[1], p1[0], p1[1]);
+        g.quadraticCurveTo(q2[0], q2[1], p0[0], p0[1]);
+        g.closePath();
+    };
     const BAT = [[0, -0.12], [0.05, -0.24], [0.08, -0.1], [0.2, -0.16], [0.5, -0.26], [0.44, -0.02], [0.34, -0.06], [0.3, 0.1], [0.2, 0.0], [0.12, 0.14], [0, 0.24]];
     const SHAPE_PARTS = {
         cat: (w, h) => [catHead(w, h)],
@@ -4485,6 +4501,70 @@ export function setup(ctx, overrides) {
             return out;
         },
         broken: (w, h) => [heartPiece(w, h)],
+        snowflake: (w, h) => {
+            const out = [];
+            for (let i = 0; i < 6; i++) {
+                const a = (i * Math.PI) / 3;
+                out.push(bar(0, 0, Math.cos(a) * 0.5 * w, Math.sin(a) * 0.5 * h, 0.035 * Math.min(w, h)));
+                for (const side of [-1, 1]) {
+                    const bx = Math.cos(a) * 0.3 * w, by = Math.sin(a) * 0.3 * h;
+                    const b2 = a + side * 0.7;
+                    out.push(bar(bx, by, bx + Math.cos(b2) * 0.14 * w, by + Math.sin(b2) * 0.14 * h, 0.03 * Math.min(w, h)));
+                }
+            }
+            return out;
+        },
+        ornament: (w, h) => [oval(0, 0.08 * h, 0.42 * w, 0.42 * h), pts([[-0.1 * w, -0.4 * h], [0.1 * w, -0.4 * h], [0.1 * w, -0.3 * h], [-0.1 * w, -0.3 * h]])],
+        holly: (w, h) => [leafPiece(-0.2 * w, 0.05 * h, 0.32 * w, 0.16 * h, -0.5), leafPiece(0.2 * w, 0.05 * h, 0.32 * w, 0.16 * h, 0.5 + Math.PI)],
+        pumpkin: (w, h) => [oval(-0.22 * w, 0.08 * h, 0.24 * w, 0.36 * h), oval(0.22 * w, 0.08 * h, 0.24 * w, 0.36 * h), oval(0, 0.08 * h, 0.26 * w, 0.4 * h), pts([[-0.04 * w, -0.3 * h], [0.04 * w, -0.3 * h], [0.08 * w, -0.48 * h], [0, -0.48 * h]])],
+        ghost: (w, h) => [(g) => {
+                g.moveTo(-0.38 * w, 0.4 * h);
+                g.lineTo(-0.38 * w, -0.05 * h);
+                g.bezierCurveTo(-0.38 * w, -0.62 * h, 0.38 * w, -0.62 * h, 0.38 * w, -0.05 * h);
+                g.lineTo(0.38 * w, 0.4 * h);
+                for (let i = 0; i < 4; i++) {
+                    const x0 = 0.38 * w - (i * 0.76 * w) / 4;
+                    g.quadraticCurveTo(x0 - 0.095 * w, 0.5 * h, x0 - 0.19 * w, 0.4 * h);
+                }
+                g.closePath();
+            }],
+        leaf: (w, h) => [leafPiece(0, 0, 0.48 * w, 0.3 * h, -Math.PI / 2)],
+        firework: (w, h) => {
+            const out = [];
+            for (let i = 0; i < 12; i++) {
+                const a = (i * Math.PI * 2) / 12;
+                out.push(bar(Math.cos(a) * 0.12 * w, Math.sin(a) * 0.12 * h, Math.cos(a) * 0.42 * w, Math.sin(a) * 0.42 * h, 0.03 * Math.min(w, h)));
+                out.push(oval(Math.cos(a) * 0.48 * w, Math.sin(a) * 0.48 * h, 0.03 * w, 0.03 * h));
+            }
+            return out;
+        },
+        lantern: (w, h) => [oval(0, 0, 0.42 * w, 0.32 * h), pts([[-0.22 * w, -0.4 * h], [0.22 * w, -0.4 * h], [0.22 * w, -0.28 * h], [-0.22 * w, -0.28 * h]]), pts([[-0.22 * w, 0.28 * h], [0.22 * w, 0.28 * h], [0.22 * w, 0.4 * h], [-0.22 * w, 0.4 * h]]), bar(0, 0.4 * h, 0, 0.5 * h, 0.03 * w)],
+        diya: (w, h) => [(g) => {
+                g.moveTo(-0.48 * w, 0.05 * h);
+                g.quadraticCurveTo(-0.3 * w, 0.48 * h, 0, 0.45 * h);
+                g.quadraticCurveTo(0.3 * w, 0.48 * h, 0.48 * w, 0.05 * h);
+                g.quadraticCurveTo(0.2 * w, 0.18 * h, -0.48 * w, 0.05 * h);
+                g.closePath();
+            }],
+        menorah: (w, h) => {
+            const out = [pts([[-0.2 * w, 0.42 * h], [0.2 * w, 0.42 * h], [0.2 * w, 0.48 * h], [-0.2 * w, 0.48 * h]]), bar(0, 0.42 * h, 0, -0.05 * h, 0.03 * w), bar(-0.44 * w, 0.05 * h, 0.44 * w, 0.05 * h, 0.03 * h)];
+            for (let i = 0; i < 9; i++) {
+                const x = -0.44 * w + (i * 0.88 * w) / 8;
+                const top = i === 4 ? -0.3 * h : -0.18 * h;
+                out.push(pts([[x - 0.02 * w, top], [x + 0.02 * w, top], [x + 0.02 * w, 0.05 * h], [x - 0.02 * w, 0.05 * h]]));
+            }
+            return out;
+        },
+        shamrock: (w, h) => [oval(0, -0.22 * h, 0.17 * w, 0.17 * h), oval(-0.19 * w, 0.0, 0.17 * w, 0.17 * h), oval(0.19 * w, 0.0, 0.17 * w, 0.17 * h), oval(-0.06 * w, -0.12 * h, 0.1 * w, 0.1 * h), oval(0.06 * w, -0.12 * h, 0.1 * w, 0.1 * h), oval(0, 0.02 * h, 0.1 * w, 0.1 * h), bar(0, 0.05 * h, 0.12 * w, 0.48 * h, 0.035 * w)],
+        egg: (w, h) => [(g) => {
+                g.moveTo(0, -0.5 * h);
+                g.bezierCurveTo(0.3 * w, -0.5 * h, 0.5 * w, 0.05 * h, 0.5 * w, 0.18 * h);
+                g.bezierCurveTo(0.5 * w, 0.42 * h, 0.25 * w, 0.5 * h, 0, 0.5 * h);
+                g.bezierCurveTo(-0.25 * w, 0.5 * h, -0.5 * w, 0.42 * h, -0.5 * w, 0.18 * h);
+                g.bezierCurveTo(-0.5 * w, 0.05 * h, -0.3 * w, -0.5 * h, 0, -0.5 * h);
+                g.closePath();
+            }],
+        flower: (w, h) => [0, 1, 2, 3, 4].map((i) => oval(Math.cos((i * Math.PI * 2) / 5 - Math.PI / 2) * 0.26 * w, Math.sin((i * Math.PI * 2) / 5 - Math.PI / 2) * 0.26 * h, 0.2 * w, 0.2 * h)),
     };
     // The parts drawn over a shape's fill: a face's eyes, nose and cheeks, a
     // rose's curl, a fish's eye, a carrot's leaves in green, and the crack of
@@ -4538,6 +4618,65 @@ export function setup(ctx, overrides) {
             g.moveTo(0.08 * w, cy + 0.12 * h);
             g.arc(0.04 * w, cy + 0.12 * h, 0.04 * w, 0.2, Math.PI - 0.2);
             g.stroke();
+        }
+        else if (k === 'holly') {
+            g.fillStyle = '#c62828';
+            g.beginPath();
+            oval(-0.05 * w, -0.08 * h, 0.07 * m, 0.07 * m)(g);
+            oval(0.06 * w, -0.1 * h, 0.07 * m, 0.07 * m)(g);
+            oval(0, 0.02 * h, 0.07 * m, 0.07 * m)(g);
+            g.fill();
+        }
+        else if (k === 'pumpkin') {
+            g.fillStyle = '#4f6b2a';
+            g.beginPath();
+            pts([[-0.04 * w, -0.3 * h], [0.04 * w, -0.3 * h], [0.08 * w, -0.48 * h], [0, -0.48 * h]])(g);
+            g.fill();
+        }
+        else if (k === 'ghost') {
+            g.fillStyle = ink;
+            g.beginPath();
+            oval(-0.12 * w, -0.1 * h, 0.05 * m, 0.07 * m)(g);
+            oval(0.12 * w, -0.1 * h, 0.05 * m, 0.07 * m)(g);
+            g.fill();
+        }
+        else if (k === 'ornament' || k === 'egg') {
+            // A soft shine.
+            g.fillStyle = 'rgba(255,255,255,0.35)';
+            g.beginPath();
+            oval(-0.15 * w, -0.05 * h, 0.08 * w, 0.14 * h, -0.5)(g);
+            g.fill();
+        }
+        else if (k === 'leaf') {
+            g.strokeStyle = 'rgba(0,0,0,0.25)';
+            g.lineWidth = Math.max(1, 0.02 * m);
+            g.beginPath();
+            g.moveTo(0, -0.46 * h);
+            g.lineTo(0, 0.46 * h);
+            g.stroke();
+        }
+        else if (k === 'diya' || k === 'menorah') {
+            // A small still flame: on the lamp, or on each candle.
+            const flame = (x, y, r) => {
+                g.moveTo(x, y - r * 2.2);
+                g.quadraticCurveTo(x + r * 1.4, y - r * 0.2, x, y + r);
+                g.quadraticCurveTo(x - r * 1.4, y - r * 0.2, x, y - r * 2.2);
+                g.closePath();
+            };
+            g.fillStyle = '#ffb627';
+            g.beginPath();
+            if (k === 'diya')
+                flame(0, -0.02 * h, 0.08 * m);
+            else
+                for (let i = 0; i < 9; i++)
+                    flame(-0.44 * w + (i * 0.88 * w) / 8, (i === 4 ? -0.3 * h : -0.18 * h) - 0.04 * m, 0.035 * m);
+            g.fill();
+        }
+        else if (k === 'flower') {
+            g.fillStyle = '#ffd54a';
+            g.beginPath();
+            oval(0, 0, 0.16 * w, 0.16 * h)(g);
+            g.fill();
         }
         else if (k === 'fish') {
             g.fillStyle = ink;
@@ -15199,6 +15338,19 @@ export function setup(ctx, overrides) {
         { id: 'checker', label: 'Checkerboard strip' },
         { id: 'broken', label: 'Broken heart' },
         { id: 'stripes', label: 'Stripes' },
+        { id: 'snowflake', label: 'Snowflake' },
+        { id: 'ornament', label: 'Ornament' },
+        { id: 'holly', label: 'Holly' },
+        { id: 'pumpkin', label: 'Pumpkin' },
+        { id: 'ghost', label: 'Ghost' },
+        { id: 'leaf', label: 'Autumn leaf' },
+        { id: 'firework', label: 'Firework' },
+        { id: 'lantern', label: 'Lantern' },
+        { id: 'diya', label: 'Diya lamp' },
+        { id: 'menorah', label: 'Menorah' },
+        { id: 'shamrock', label: 'Shamrock' },
+        { id: 'egg', label: 'Egg' },
+        { id: 'flower', label: 'Flower' },
     ];
     const SHAPES_MAX = 40;
     // Whether the Background is set to a design while the Studio is drawn, so
@@ -15268,7 +15420,7 @@ export function setup(ctx, overrides) {
     });
     function newShape(kind) {
         const n = shapesNow().length;
-        const size = { rect: [520, 300], round: [520, 300], ellipse: [360, 360], tri: [420, 360], line: [640, 14], text: [760, 120], heart: [340, 320], star: [360, 360], poly: [360, 360], diamond: [300, 380], arrow: [480, 220], bubble: [520, 340], ring: [360, 360], moon: [300, 300], cloud: [520, 300], sparkle: [260, 260], cat: [300, 300], dog: [320, 300], bunny: [280, 340], paw: [240, 240], bone: [300, 120], fish: [300, 180], carrot: [160, 320], bat: [420, 220], rose: [260, 260], checker: [900, 80], broken: [320, 300], stripes: [900, 120] };
+        const size = { rect: [520, 300], round: [520, 300], ellipse: [360, 360], tri: [420, 360], line: [640, 14], text: [760, 120], heart: [340, 320], star: [360, 360], poly: [360, 360], diamond: [300, 380], arrow: [480, 220], bubble: [520, 340], ring: [360, 360], moon: [300, 300], cloud: [520, 300], sparkle: [260, 260], cat: [300, 300], dog: [320, 300], bunny: [280, 340], paw: [240, 240], bone: [300, 120], fish: [300, 180], carrot: [160, 320], bat: [420, 220], rose: [260, 260], checker: [900, 80], broken: [320, 300], stripes: [900, 120], snowflake: [260, 260], ornament: [220, 260], holly: [300, 200], pumpkin: [300, 260], ghost: [240, 300], leaf: [220, 280], firework: [320, 320], lantern: [220, 300], diya: [300, 200], menorah: [420, 300], shamrock: [240, 280], egg: [200, 260], flower: [260, 260] };
         const [w, h] = size[kind] || [400, 240];
         return {
             id: rid('sh').replace(/[^a-z0-9]/gi, '').slice(0, 24),
@@ -15460,7 +15612,7 @@ export function setup(ctx, overrides) {
                 sh.tail = v;
                 changed();
             }));
-        if (['cat', 'dog', 'bunny', 'fish', 'rose'].indexOf(sh.kind) >= 0)
+        if (['cat', 'dog', 'bunny', 'fish', 'rose', 'ghost'].indexOf(sh.kind) >= 0)
             r.editor.appendChild(colorRow('shapeInk', sh.kind === 'rose' ? 'Color of the curl' : 'Color of the eyes', 'A dark brown by default.', '--af-none', '#3b2b2b', 'Use dark brown', changed, {
                 get: () => sh.ink || '',
                 put: (hex) => {
@@ -16545,6 +16697,7 @@ export function setup(ctx, overrides) {
         { id: 'pets', label: 'Pets' },
         { id: 'aesthetics', label: 'Aesthetics' },
         { id: 'pride', label: 'Pride' },
+        { id: 'holidays', label: 'Holidays' },
     ];
     let tplCat = 'all';
     const shape = (kind, x, y, w, h, fill, more = {}) => Object.assign({ id: 'tp' + kind + Math.round(x * 100) + Math.round(y * 100) + w, kind, x, y, w, h, rot: 0, fill, grad: 'none', stops: [], dir: 'down', clear: 0, text: '' }, more);
@@ -17988,6 +18141,402 @@ export function setup(ctx, overrides) {
                 ],
             }),
             cat: 'pride',
+        },
+        {
+            id: 'xmas',
+            name: 'Christmas',
+            suits: 'Deep green with snowflakes, ornaments and holly.',
+            look: {
+                videoFont: 'round', videoSize: 104, videoInk: '#fff8ec', videoWords: 'fade', videoPlace: 'middle', videoQuotes: true, videoWordFill: 'solid',
+                videoWordStops: ['#f2b880'], videoWordDir: 'down', videoWordShadow: true, videoWordShadowInk: '#000000', videoWordShadowDark: 55,
+                videoWordShadowSoft: 12, videoWordShadowFar: 0,
+                videoBox: false, videoBoxColor: '#000000', videoBoxClear: 40, videoBoxRound: 16, videoBoxWidth: 'fit',
+                videoOwnColors: true, videoKindColors: { narrator: '#e8c35a', character: '#e8c35a', persona: '#e8c35a', npc: '#e8c35a' },
+                videoBackRules: false,
+                videoCaptions: true, videoCaptionInk: '#e8c35a', videoCapFill: 'solid', videoCapStops: ['#f2b880'], videoCapDir: 'right',
+                videoNameFont: 'round', videoNameSize: 104, videoNameColor: 'words', videoNameFill: 'solid', videoNameStops: ['#f2b880'],
+                videoNameDir: 'right', videoNameShadow: false, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18,
+                videoNameShadowFar: 2,
+                videoPicShape: 'circle', videoPicSize: 150, videoPicRing: true, videoPicRingWidth: 4, videoPicMove: true, videoTwo: true,
+                videoMoodPics: true, videoQuiet: 'fade', videoQuietStrength: 45,
+                videoEdges: 30, videoEdgeColor: '#000000', videoMove: 'fade', videoMoveSecs: 0.6,
+                videoTitleOn: true, videoFadeOut: 1.5, videoBylineInk: '#e8c35a', videoBylineFont: '', videoBylineFill: 'solid',
+                videoBylineStops: ['#f2b880'], videoBylineDir: 'right', videoBylineShadow: true, videoBylineShadowInk: '#000000', videoBylineShadowDark: 55,
+                videoBylineShadowSoft: 12, videoBylineShadowFar: 0,
+                studioMusic: true,
+            },
+            back: backOf('Christmas', {
+                kind: 'design', color: '#14503a', fill: 'linear', stops: ['#082418'], dir: 'down',
+                shapes: [
+                    shape('snowflake', 0.08, 0.12, 110, 110, '#ffffff', { clear: 30 }),
+                    shape('snowflake', 0.3, 0.06, 70, 70, '#ffffff', { clear: 45 }),
+                    shape('snowflake', 0.72, 0.08, 80, 80, '#ffffff', { clear: 40 }),
+                    shape('ornament', 0.88, 0.16, 110, 130, '#c62828'),
+                    shape('ornament', 0.95, 0.3, 70, 84, '#d4a72c'),
+                    shape('holly', 0.1, 0.86, 200, 130, '#2e7d32'),
+                    shape('holly', 0.9, 0.88, 170, 110, '#2e7d32', { flipX: true }),
+                ],
+            }),
+            cat: 'holidays',
+        },
+        {
+            id: 'halloween',
+            name: 'Halloween',
+            suits: 'Dark purple with pumpkins, ghosts and bats.',
+            look: {
+                videoFont: 'round', videoSize: 104, videoInk: '#fff2e0', videoWords: 'fade', videoPlace: 'middle', videoQuotes: true, videoWordFill: 'solid',
+                videoWordStops: ['#f2b880'], videoWordDir: 'down', videoWordShadow: true, videoWordShadowInk: '#000000', videoWordShadowDark: 55,
+                videoWordShadowSoft: 12, videoWordShadowFar: 0,
+                videoBox: false, videoBoxColor: '#000000', videoBoxClear: 40, videoBoxRound: 16, videoBoxWidth: 'fit',
+                videoOwnColors: true, videoKindColors: { narrator: '#ff8a1f', character: '#ff8a1f', persona: '#ff8a1f', npc: '#ff8a1f' },
+                videoBackRules: false,
+                videoCaptions: true, videoCaptionInk: '#ff8a1f', videoCapFill: 'solid', videoCapStops: ['#f2b880'], videoCapDir: 'right',
+                videoNameFont: 'round', videoNameSize: 104, videoNameColor: 'words', videoNameFill: 'solid', videoNameStops: ['#f2b880'],
+                videoNameDir: 'right', videoNameShadow: false, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18,
+                videoNameShadowFar: 2,
+                videoPicShape: 'circle', videoPicSize: 150, videoPicRing: true, videoPicRingWidth: 4, videoPicMove: true, videoTwo: true,
+                videoMoodPics: true, videoQuiet: 'fade', videoQuietStrength: 45,
+                videoEdges: 30, videoEdgeColor: '#000000', videoMove: 'black', videoMoveSecs: 0.7,
+                videoTitleOn: true, videoFadeOut: 1.5, videoBylineInk: '#ff8a1f', videoBylineFont: '', videoBylineFill: 'solid',
+                videoBylineStops: ['#f2b880'], videoBylineDir: 'right', videoBylineShadow: true, videoBylineShadowInk: '#000000', videoBylineShadowDark: 55,
+                videoBylineShadowSoft: 12, videoBylineShadowFar: 0,
+                studioMusic: true,
+            },
+            back: backOf('Halloween', {
+                kind: 'design', color: '#2a1638', fill: 'linear', stops: ['#0b0710'], dir: 'down',
+                shapes: [
+                    shape('pumpkin', 0.1, 0.86, 190, 160, '#ff7a1a'),
+                    shape('pumpkin', 0.9, 0.88, 150, 130, '#ff8f2a'),
+                    shape('ghost', 0.9, 0.16, 120, 150, '#f4f0e8', { clear: 10 }),
+                    shape('ghost', 0.08, 0.16, 90, 110, '#f4f0e8', { clear: 25, flipX: true }),
+                    shape('bat', 0.26, 0.08, 120, 64, '#6a4a8a'),
+                    shape('bat', 0.74, 0.1, 90, 48, '#6a4a8a', { clear: 20 }),
+                    shape('moon', 0.5, 0.06, 80, 80, '#f2e6c2', { clear: 20 }),
+                ],
+            }),
+            cat: 'holidays',
+        },
+        {
+            id: 'thanks',
+            name: 'Thanksgiving',
+            suits: 'Warm browns and gold, with autumn leaves.',
+            look: {
+                videoFont: 'book', videoSize: 104, videoInk: '#fff1dc', videoWords: 'fade', videoPlace: 'middle', videoQuotes: true, videoWordFill: 'solid',
+                videoWordStops: ['#f2b880'], videoWordDir: 'down', videoWordShadow: true, videoWordShadowInk: '#000000', videoWordShadowDark: 55,
+                videoWordShadowSoft: 12, videoWordShadowFar: 0,
+                videoBox: false, videoBoxColor: '#000000', videoBoxClear: 40, videoBoxRound: 16, videoBoxWidth: 'fit',
+                videoOwnColors: true, videoKindColors: { narrator: '#f0b04a', character: '#f0b04a', persona: '#f0b04a', npc: '#f0b04a' },
+                videoBackRules: false,
+                videoCaptions: true, videoCaptionInk: '#f0b04a', videoCapFill: 'solid', videoCapStops: ['#f2b880'], videoCapDir: 'right',
+                videoNameFont: 'book', videoNameSize: 104, videoNameColor: 'words', videoNameFill: 'solid', videoNameStops: ['#f2b880'],
+                videoNameDir: 'right', videoNameShadow: false, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18,
+                videoNameShadowFar: 2,
+                videoPicShape: 'circle', videoPicSize: 150, videoPicRing: true, videoPicRingWidth: 4, videoPicMove: true, videoTwo: true,
+                videoMoodPics: true, videoQuiet: 'fade', videoQuietStrength: 45,
+                videoEdges: 30, videoEdgeColor: '#000000', videoMove: 'dissolve', videoMoveSecs: 0.6,
+                videoTitleOn: true, videoFadeOut: 1.5, videoBylineInk: '#f0b04a', videoBylineFont: '', videoBylineFill: 'solid',
+                videoBylineStops: ['#f2b880'], videoBylineDir: 'right', videoBylineShadow: true, videoBylineShadowInk: '#000000', videoBylineShadowDark: 55,
+                videoBylineShadowSoft: 12, videoBylineShadowFar: 0,
+                studioMusic: true,
+            },
+            back: backOf('Thanksgiving', {
+                kind: 'design', color: '#6a3816', fill: 'radial', stops: ['#2a1508'], dir: 'down',
+                shapes: [
+                    shape('leaf', 0.08, 0.15, 90, 120, '#e8742a', { rot: -30 }),
+                    shape('leaf', 0.18, 0.08, 70, 96, '#b8432a', { rot: 20 }),
+                    shape('leaf', 0.9, 0.12, 90, 120, '#d9a23a', { rot: 40 }),
+                    shape('leaf', 0.92, 0.86, 100, 130, '#e8742a', { rot: -50 }),
+                    shape('leaf', 0.82, 0.93, 70, 96, '#b8432a', { rot: 10 }),
+                    shape('pumpkin', 0.1, 0.88, 140, 120, '#e07a2a'),
+                ],
+            }),
+            cat: 'holidays',
+        },
+        {
+            id: 'valentine',
+            name: 'Valentine’s Day',
+            suits: 'Soft pink and red hearts, for love stories.',
+            look: {
+                videoFont: 'round', videoSize: 104, videoInk: '#5a1630', videoWords: 'fade', videoPlace: 'middle', videoQuotes: true, videoWordFill: 'solid',
+                videoWordStops: ['#f2b880'], videoWordDir: 'down', videoWordShadow: false, videoWordShadowInk: '', videoWordShadowDark: 55,
+                videoWordShadowSoft: 14, videoWordShadowFar: 2,
+                videoBox: false, videoBoxColor: '#000000', videoBoxClear: 40, videoBoxRound: 16, videoBoxWidth: 'fit',
+                videoOwnColors: true, videoKindColors: { narrator: '#c2185b', character: '#c2185b', persona: '#c2185b', npc: '#c2185b' },
+                videoBackRules: false,
+                videoCaptions: true, videoCaptionInk: '#c2185b', videoCapFill: 'solid', videoCapStops: ['#f2b880'], videoCapDir: 'right',
+                videoNameFont: 'round', videoNameSize: 104, videoNameColor: 'words', videoNameFill: 'solid', videoNameStops: ['#f2b880'],
+                videoNameDir: 'right', videoNameShadow: false, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18,
+                videoNameShadowFar: 2,
+                videoPicShape: 'circle', videoPicSize: 150, videoPicRing: true, videoPicRingWidth: 4, videoPicMove: true, videoTwo: true,
+                videoMoodPics: true, videoQuiet: 'fade', videoQuietStrength: 45,
+                videoEdges: 0, videoEdgeColor: '#000000', videoMove: 'dissolve', videoMoveSecs: 0.6,
+                videoTitleOn: true, videoFadeOut: 1.5, videoBylineInk: '#c2185b', videoBylineFont: '', videoBylineFill: 'solid',
+                videoBylineStops: ['#f2b880'], videoBylineDir: 'right', videoBylineShadow: false, videoBylineShadowInk: '', videoBylineShadowDark: 65,
+                videoBylineShadowSoft: 18, videoBylineShadowFar: 0,
+                studioMusic: true,
+            },
+            back: backOf('Valentine’s Day', {
+                kind: 'design', color: '#fde4ea', fill: 'linear', stops: ['#f7c6d3'], dir: 'down',
+                shapes: [
+                    shape('heart', 0.1, 0.15, 110, 100, '#e53958', { rot: -12 }),
+                    shape('heart', 0.2, 0.07, 60, 56, '#ff8fab', { rot: 10 }),
+                    shape('heart', 0.9, 0.85, 120, 110, '#e53958', { rot: 12 }),
+                    shape('heart', 0.8, 0.93, 60, 56, '#ff8fab'),
+                    shape('heart', 0.92, 0.14, 70, 64, '#ff8fab', { clear: 20 }),
+                    shape('heart', 0.07, 0.86, 70, 64, '#ff8fab', { clear: 20 }),
+                ],
+            }),
+            cat: 'holidays',
+        },
+        {
+            id: 'newyear',
+            name: 'New Year’s Eve',
+            suits: 'Midnight blue with gold and silver fireworks.',
+            look: {
+                videoFont: 'round', videoSize: 104, videoInk: '#fff8e1', videoWords: 'fade', videoPlace: 'middle', videoQuotes: true, videoWordFill: 'solid',
+                videoWordStops: ['#f2b880'], videoWordDir: 'down', videoWordShadow: true, videoWordShadowInk: '#000000', videoWordShadowDark: 55,
+                videoWordShadowSoft: 12, videoWordShadowFar: 0,
+                videoBox: false, videoBoxColor: '#000000', videoBoxClear: 40, videoBoxRound: 16, videoBoxWidth: 'fit',
+                videoOwnColors: true, videoKindColors: { narrator: '#f2c14e', character: '#f2c14e', persona: '#f2c14e', npc: '#f2c14e' },
+                videoBackRules: false,
+                videoCaptions: true, videoCaptionInk: '#f2c14e', videoCapFill: 'solid', videoCapStops: ['#f2b880'], videoCapDir: 'right',
+                videoNameFont: 'round', videoNameSize: 104, videoNameColor: 'words', videoNameFill: 'solid', videoNameStops: ['#f2b880'],
+                videoNameDir: 'right', videoNameShadow: false, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18,
+                videoNameShadowFar: 2,
+                videoPicShape: 'circle', videoPicSize: 150, videoPicRing: true, videoPicRingWidth: 4, videoPicMove: true, videoTwo: true,
+                videoMoodPics: true, videoQuiet: 'fade', videoQuietStrength: 45,
+                videoEdges: 30, videoEdgeColor: '#000000', videoMove: 'fade', videoMoveSecs: 0.6,
+                videoTitleOn: true, videoFadeOut: 1.5, videoBylineInk: '#f2c14e', videoBylineFont: '', videoBylineFill: 'solid',
+                videoBylineStops: ['#f2b880'], videoBylineDir: 'right', videoBylineShadow: true, videoBylineShadowInk: '#000000', videoBylineShadowDark: 55,
+                videoBylineShadowSoft: 12, videoBylineShadowFar: 0,
+                studioMusic: true,
+            },
+            back: backOf('New Year’s Eve', {
+                kind: 'design', color: '#162058', fill: 'radial', stops: ['#050716'], dir: 'down',
+                shapes: [
+                    shape('firework', 0.12, 0.18, 220, 220, '#f2c14e'),
+                    shape('firework', 0.88, 0.14, 170, 170, '#dfe6f0'),
+                    shape('firework', 0.86, 0.82, 200, 200, '#ff7aa8', { clear: 10 }),
+                    shape('firework', 0.1, 0.85, 140, 140, '#dfe6f0', { clear: 15 }),
+                    shape('sparkle', 0.3, 0.08, 40, 40, '#ffffff'),
+                    shape('sparkle', 0.7, 0.92, 36, 36, '#ffffff'),
+                ],
+            }),
+            cat: 'holidays',
+        },
+        {
+            id: 'hanukkah',
+            name: 'Hanukkah',
+            suits: 'Blue and white, with a lit menorah.',
+            look: {
+                videoFont: 'round', videoSize: 104, videoInk: '#f4f8ff', videoWords: 'fade', videoPlace: 'middle', videoQuotes: true, videoWordFill: 'solid',
+                videoWordStops: ['#f2b880'], videoWordDir: 'down', videoWordShadow: true, videoWordShadowInk: '#000000', videoWordShadowDark: 55,
+                videoWordShadowSoft: 12, videoWordShadowFar: 0,
+                videoBox: false, videoBoxColor: '#000000', videoBoxClear: 40, videoBoxRound: 16, videoBoxWidth: 'fit',
+                videoOwnColors: true, videoKindColors: { narrator: '#9cc3ff', character: '#9cc3ff', persona: '#9cc3ff', npc: '#9cc3ff' },
+                videoBackRules: false,
+                videoCaptions: true, videoCaptionInk: '#9cc3ff', videoCapFill: 'solid', videoCapStops: ['#f2b880'], videoCapDir: 'right',
+                videoNameFont: 'round', videoNameSize: 104, videoNameColor: 'words', videoNameFill: 'solid', videoNameStops: ['#f2b880'],
+                videoNameDir: 'right', videoNameShadow: false, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18,
+                videoNameShadowFar: 2,
+                videoPicShape: 'circle', videoPicSize: 150, videoPicRing: true, videoPicRingWidth: 4, videoPicMove: true, videoTwo: true,
+                videoMoodPics: true, videoQuiet: 'fade', videoQuietStrength: 45,
+                videoEdges: 30, videoEdgeColor: '#000000', videoMove: 'fade', videoMoveSecs: 0.6,
+                videoTitleOn: true, videoFadeOut: 1.5, videoBylineInk: '#9cc3ff', videoBylineFont: '', videoBylineFill: 'solid',
+                videoBylineStops: ['#f2b880'], videoBylineDir: 'right', videoBylineShadow: true, videoBylineShadowInk: '#000000', videoBylineShadowDark: 55,
+                videoBylineShadowSoft: 12, videoBylineShadowFar: 0,
+                studioMusic: true,
+            },
+            back: backOf('Hanukkah', {
+                kind: 'design', color: '#164a96', fill: 'radial', stops: ['#071633'], dir: 'down',
+                shapes: [
+                    shape('menorah', 0.5, 0.88, 300, 160, '#d8dde6'),
+                    shape('ellipse', 0.12, 0.14, 14, 14, '#ffffff', { clear: 40 }),
+                    shape('ellipse', 0.86, 0.1, 12, 12, '#ffffff', { clear: 40 }),
+                    shape('ellipse', 0.92, 0.3, 10, 10, '#ffffff', { clear: 50 }),
+                    shape('ellipse', 0.06, 0.36, 10, 10, '#ffffff', { clear: 50 }),
+                ],
+            }),
+            cat: 'holidays',
+        },
+        {
+            id: 'lunar',
+            name: 'Lunar New Year',
+            suits: 'Red and gold, with lanterns and plum blossoms.',
+            look: {
+                videoFont: 'round', videoSize: 104, videoInk: '#fff4d6', videoWords: 'fade', videoPlace: 'middle', videoQuotes: true, videoWordFill: 'solid',
+                videoWordStops: ['#f2b880'], videoWordDir: 'down', videoWordShadow: true, videoWordShadowInk: '#000000', videoWordShadowDark: 55,
+                videoWordShadowSoft: 12, videoWordShadowFar: 0,
+                videoBox: false, videoBoxColor: '#000000', videoBoxClear: 40, videoBoxRound: 16, videoBoxWidth: 'fit',
+                videoOwnColors: true, videoKindColors: { narrator: '#f2c14e', character: '#f2c14e', persona: '#f2c14e', npc: '#f2c14e' },
+                videoBackRules: false,
+                videoCaptions: true, videoCaptionInk: '#f2c14e', videoCapFill: 'solid', videoCapStops: ['#f2b880'], videoCapDir: 'right',
+                videoNameFont: 'round', videoNameSize: 104, videoNameColor: 'words', videoNameFill: 'solid', videoNameStops: ['#f2b880'],
+                videoNameDir: 'right', videoNameShadow: false, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18,
+                videoNameShadowFar: 2,
+                videoPicShape: 'circle', videoPicSize: 150, videoPicRing: true, videoPicRingWidth: 4, videoPicMove: true, videoTwo: true,
+                videoMoodPics: true, videoQuiet: 'fade', videoQuietStrength: 45,
+                videoEdges: 30, videoEdgeColor: '#000000', videoMove: 'dissolve', videoMoveSecs: 0.6,
+                videoTitleOn: true, videoFadeOut: 1.5, videoBylineInk: '#f2c14e', videoBylineFont: '', videoBylineFill: 'solid',
+                videoBylineStops: ['#f2b880'], videoBylineDir: 'right', videoBylineShadow: true, videoBylineShadowInk: '#000000', videoBylineShadowDark: 55,
+                videoBylineShadowSoft: 12, videoBylineShadowFar: 0,
+                studioMusic: true,
+            },
+            back: backOf('Lunar New Year', {
+                kind: 'design', color: '#a3141b', fill: 'radial', stops: ['#4a0508'], dir: 'down',
+                shapes: [
+                    shape('lantern', 0.1, 0.18, 110, 150, '#e8b23a'),
+                    shape('lantern', 0.22, 0.1, 80, 110, '#e8b23a', { clear: 10 }),
+                    shape('lantern', 0.9, 0.18, 110, 150, '#e8b23a'),
+                    shape('flower', 0.1, 0.86, 90, 90, '#ffb3c6'),
+                    shape('flower', 0.2, 0.92, 60, 60, '#ffd1dc'),
+                    shape('flower', 0.9, 0.88, 80, 80, '#ffb3c6'),
+                ],
+            }),
+            cat: 'holidays',
+        },
+        {
+            id: 'diwali',
+            name: 'Diwali',
+            suits: 'Deep purple and gold, with lit diya lamps and marigolds.',
+            look: {
+                videoFont: 'round', videoSize: 104, videoInk: '#fff3d6', videoWords: 'fade', videoPlace: 'middle', videoQuotes: true, videoWordFill: 'solid',
+                videoWordStops: ['#f2b880'], videoWordDir: 'down', videoWordShadow: true, videoWordShadowInk: '#000000', videoWordShadowDark: 55,
+                videoWordShadowSoft: 12, videoWordShadowFar: 0,
+                videoBox: false, videoBoxColor: '#000000', videoBoxClear: 40, videoBoxRound: 16, videoBoxWidth: 'fit',
+                videoOwnColors: true, videoKindColors: { narrator: '#ffb627', character: '#ffb627', persona: '#ffb627', npc: '#ffb627' },
+                videoBackRules: false,
+                videoCaptions: true, videoCaptionInk: '#ffb627', videoCapFill: 'solid', videoCapStops: ['#f2b880'], videoCapDir: 'right',
+                videoNameFont: 'round', videoNameSize: 104, videoNameColor: 'words', videoNameFill: 'solid', videoNameStops: ['#f2b880'],
+                videoNameDir: 'right', videoNameShadow: false, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18,
+                videoNameShadowFar: 2,
+                videoPicShape: 'circle', videoPicSize: 150, videoPicRing: true, videoPicRingWidth: 4, videoPicMove: true, videoTwo: true,
+                videoMoodPics: true, videoQuiet: 'fade', videoQuietStrength: 45,
+                videoEdges: 30, videoEdgeColor: '#000000', videoMove: 'fade', videoMoveSecs: 0.6,
+                videoTitleOn: true, videoFadeOut: 1.5, videoBylineInk: '#ffb627', videoBylineFont: '', videoBylineFill: 'solid',
+                videoBylineStops: ['#f2b880'], videoBylineDir: 'right', videoBylineShadow: true, videoBylineShadowInk: '#000000', videoBylineShadowDark: 55,
+                videoBylineShadowSoft: 12, videoBylineShadowFar: 0,
+                studioMusic: true,
+            },
+            back: backOf('Diwali', {
+                kind: 'design', color: '#4a1260', fill: 'radial', stops: ['#1a0524'], dir: 'down',
+                shapes: [
+                    shape('diya', 0.3, 0.9, 140, 90, '#c4572a'),
+                    shape('diya', 0.5, 0.92, 140, 90, '#c4572a'),
+                    shape('diya', 0.7, 0.9, 140, 90, '#c4572a'),
+                    shape('flower', 0.08, 0.15, 100, 100, '#ff9f1c'),
+                    shape('flower', 0.92, 0.15, 100, 100, '#ff9f1c'),
+                    shape('sparkle', 0.2, 0.08, 40, 40, '#ffd56a'),
+                    shape('sparkle', 0.8, 0.08, 40, 40, '#ffd56a'),
+                ],
+            }),
+            cat: 'holidays',
+        },
+        {
+            id: 'patrick',
+            name: 'St. Patrick’s Day',
+            suits: 'Fresh greens, with shamrocks.',
+            look: {
+                videoFont: 'round', videoSize: 104, videoInk: '#173d22', videoWords: 'fade', videoPlace: 'middle', videoQuotes: true, videoWordFill: 'solid',
+                videoWordStops: ['#f2b880'], videoWordDir: 'down', videoWordShadow: false, videoWordShadowInk: '', videoWordShadowDark: 55,
+                videoWordShadowSoft: 14, videoWordShadowFar: 2,
+                videoBox: false, videoBoxColor: '#000000', videoBoxClear: 40, videoBoxRound: 16, videoBoxWidth: 'fit',
+                videoOwnColors: true, videoKindColors: { narrator: '#2e7d32', character: '#2e7d32', persona: '#2e7d32', npc: '#2e7d32' },
+                videoBackRules: false,
+                videoCaptions: true, videoCaptionInk: '#2e7d32', videoCapFill: 'solid', videoCapStops: ['#f2b880'], videoCapDir: 'right',
+                videoNameFont: 'round', videoNameSize: 104, videoNameColor: 'words', videoNameFill: 'solid', videoNameStops: ['#f2b880'],
+                videoNameDir: 'right', videoNameShadow: false, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18,
+                videoNameShadowFar: 2,
+                videoPicShape: 'circle', videoPicSize: 150, videoPicRing: true, videoPicRingWidth: 4, videoPicMove: true, videoTwo: true,
+                videoMoodPics: true, videoQuiet: 'fade', videoQuietStrength: 45,
+                videoEdges: 0, videoEdgeColor: '#000000', videoMove: 'dissolve', videoMoveSecs: 0.6,
+                videoTitleOn: true, videoFadeOut: 1.5, videoBylineInk: '#2e7d32', videoBylineFont: '', videoBylineFill: 'solid',
+                videoBylineStops: ['#f2b880'], videoBylineDir: 'right', videoBylineShadow: false, videoBylineShadowInk: '', videoBylineShadowDark: 65,
+                videoBylineShadowSoft: 18, videoBylineShadowFar: 0,
+                studioMusic: true,
+            },
+            back: backOf('St. Patrick’s Day', {
+                kind: 'design', color: '#eaf7ec', fill: 'linear', stops: ['#cfead4'], dir: 'down',
+                shapes: [
+                    shape('shamrock', 0.08, 0.15, 110, 130, '#2e9d4a', { rot: -15 }),
+                    shape('shamrock', 0.92, 0.85, 120, 140, '#2e9d4a', { rot: 15 }),
+                    shape('shamrock', 0.9, 0.14, 70, 84, '#5cbf6a'),
+                    shape('shamrock', 0.1, 0.88, 70, 84, '#5cbf6a'),
+                ],
+            }),
+            cat: 'holidays',
+        },
+        {
+            id: 'easter',
+            name: 'Easter',
+            suits: 'Pastel eggs and spring flowers.',
+            look: {
+                videoFont: 'round', videoSize: 104, videoInk: '#4a3a55', videoWords: 'fade', videoPlace: 'middle', videoQuotes: true, videoWordFill: 'solid',
+                videoWordStops: ['#f2b880'], videoWordDir: 'down', videoWordShadow: false, videoWordShadowInk: '', videoWordShadowDark: 55,
+                videoWordShadowSoft: 14, videoWordShadowFar: 2,
+                videoBox: false, videoBoxColor: '#000000', videoBoxClear: 40, videoBoxRound: 16, videoBoxWidth: 'fit',
+                videoOwnColors: true, videoKindColors: { narrator: '#c86fa0', character: '#c86fa0', persona: '#c86fa0', npc: '#c86fa0' },
+                videoBackRules: false,
+                videoCaptions: true, videoCaptionInk: '#c86fa0', videoCapFill: 'solid', videoCapStops: ['#f2b880'], videoCapDir: 'right',
+                videoNameFont: 'round', videoNameSize: 104, videoNameColor: 'words', videoNameFill: 'solid', videoNameStops: ['#f2b880'],
+                videoNameDir: 'right', videoNameShadow: false, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18,
+                videoNameShadowFar: 2,
+                videoPicShape: 'circle', videoPicSize: 150, videoPicRing: true, videoPicRingWidth: 4, videoPicMove: true, videoTwo: true,
+                videoMoodPics: true, videoQuiet: 'fade', videoQuietStrength: 45,
+                videoEdges: 0, videoEdgeColor: '#000000', videoMove: 'dissolve', videoMoveSecs: 0.6,
+                videoTitleOn: true, videoFadeOut: 1.5, videoBylineInk: '#c86fa0', videoBylineFont: '', videoBylineFill: 'solid',
+                videoBylineStops: ['#f2b880'], videoBylineDir: 'right', videoBylineShadow: false, videoBylineShadowInk: '', videoBylineShadowDark: 65,
+                videoBylineShadowSoft: 18, videoBylineShadowFar: 0,
+                studioMusic: true,
+            },
+            back: backOf('Easter', {
+                kind: 'design', color: '#fff7e6', fill: 'linear', stops: ['#e6f4ff'], dir: 'down',
+                shapes: [
+                    shape('egg', 0.08, 0.85, 90, 120, '#ffc1d9'),
+                    shape('egg', 0.17, 0.9, 80, 104, '#c8f0dc', { rot: 10 }),
+                    shape('egg', 0.9, 0.86, 90, 120, '#dcc8f5', { rot: -8 }),
+                    shape('flower', 0.1, 0.13, 90, 90, '#ffe08a'),
+                    shape('flower', 0.9, 0.12, 80, 80, '#ffc1d9'),
+                    shape('flower', 0.82, 0.06, 50, 50, '#c8f0dc'),
+                ],
+            }),
+            cat: 'holidays',
+        },
+        {
+            id: 'july4',
+            name: 'Fourth of July',
+            suits: 'Navy, red and white, with stars and fireworks.',
+            look: {
+                videoFont: 'round', videoSize: 104, videoInk: '#ffffff', videoWords: 'fade', videoPlace: 'middle', videoQuotes: true, videoWordFill: 'solid',
+                videoWordStops: ['#f2b880'], videoWordDir: 'down', videoWordShadow: true, videoWordShadowInk: '#000000', videoWordShadowDark: 55,
+                videoWordShadowSoft: 12, videoWordShadowFar: 0,
+                videoBox: false, videoBoxColor: '#000000', videoBoxClear: 40, videoBoxRound: 16, videoBoxWidth: 'fit',
+                videoOwnColors: true, videoKindColors: { narrator: '#ff5a66', character: '#ff5a66', persona: '#ff5a66', npc: '#ff5a66' },
+                videoBackRules: false,
+                videoCaptions: true, videoCaptionInk: '#ff5a66', videoCapFill: 'solid', videoCapStops: ['#f2b880'], videoCapDir: 'right',
+                videoNameFont: 'round', videoNameSize: 104, videoNameColor: 'words', videoNameFill: 'solid', videoNameStops: ['#f2b880'],
+                videoNameDir: 'right', videoNameShadow: false, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18,
+                videoNameShadowFar: 2,
+                videoPicShape: 'circle', videoPicSize: 150, videoPicRing: true, videoPicRingWidth: 4, videoPicMove: true, videoTwo: true,
+                videoMoodPics: true, videoQuiet: 'fade', videoQuietStrength: 45,
+                videoEdges: 30, videoEdgeColor: '#000000', videoMove: 'fade', videoMoveSecs: 0.6,
+                videoTitleOn: true, videoFadeOut: 1.5, videoBylineInk: '#ff5a66', videoBylineFont: '', videoBylineFill: 'solid',
+                videoBylineStops: ['#f2b880'], videoBylineDir: 'right', videoBylineShadow: true, videoBylineShadowInk: '#000000', videoBylineShadowDark: 55,
+                videoBylineShadowSoft: 12, videoBylineShadowFar: 0,
+                studioMusic: true,
+            },
+            back: backOf('Fourth of July', {
+                kind: 'design', color: '#14275a', fill: 'radial', stops: ['#060d20'], dir: 'down',
+                shapes: [
+                    shape('stripes', 0.5, 0.92, 4000, 90, '#e63946', { grad: 'linear', stops: ['#ffffff', '#e63946', '#ffffff', '#e63946'] }),
+                    shape('star', 0.1, 0.15, 80, 80, '#ffffff'),
+                    shape('star', 0.2, 0.08, 50, 50, '#ffffff'),
+                    shape('star', 0.9, 0.15, 80, 80, '#ffffff'),
+                    shape('firework', 0.85, 0.4, 150, 150, '#e63946', { clear: 15 }),
+                    shape('firework', 0.12, 0.42, 130, 130, '#a8c5ff', { clear: 20 }),
+                ],
+            }),
+            cat: 'holidays',
         },
     ];
     // Every setting that changes the drawn frame, and music on or off. The

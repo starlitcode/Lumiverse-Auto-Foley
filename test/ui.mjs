@@ -5654,7 +5654,7 @@ if (section("templates")) {
     await wsSec(page, "Templates");
     await page.waitForFunction(() => [...document.querySelectorAll("[data-af-tpl] img")].every((i) => i.getAttribute("src")), null, { timeout: 30000 }).catch(() => {});
     const thumbs = await page.evaluate(() => [...document.querySelectorAll("[data-af-tpl] img")].map((i) => i.getAttribute("src") || ""));
-    check(thumbs.length >= 8 && thumbs.length <= 50 && thumbs.every(Boolean), size.name + ": there are 8 to 50 templates, each with a picture drawn (" + thumbs.length + ")");
+    check(thumbs.length >= 8 && thumbs.length <= 60 && thumbs.every(Boolean), size.name + ": there are 8 to 60 templates, each with a picture drawn (" + thumbs.length + ")");
     check(new Set(thumbs).size === thumbs.length, size.name + ": no two pictures are the same");
     // Each one tried on the preview, at the same moment: readable words.
     const ids = await page.evaluate(() => [...document.querySelectorAll("[data-af-tpl]")].map((b) => b.getAttribute("data-af-tpl")));
@@ -6498,7 +6498,7 @@ if (section("template groups")) {
     await wsSec(page, "Templates");
     await page.waitForTimeout(400);
     const chips = await page.evaluate(() => [...document.querySelectorAll("[data-af-tplcat]")].map((b) => ({ id: b.getAttribute("data-af-tplcat"), text: b.textContent, h: b.getBoundingClientRect().height, cut: b.scrollWidth > b.clientWidth + 1 })));
-    check(chips.length === 8 && chips[0].id === "all" && chips.every((c) => c.h >= 32 && !c.cut), size.name + ": eight chips, All first, each 32 pixels tall or more and not cut (" + chips.map((c) => c.text + " " + Math.round(c.h)).join(", ") + ")");
+    check(chips.length === 9 && chips[0].id === "all" && chips.every((c) => c.h >= 32 && !c.cut), size.name + ": nine chips, All first, each 32 pixels tall or more and not cut (" + chips.map((c) => c.text + " " + Math.round(c.h)).join(", ") + ")");
     const shown = () => page.evaluate(() => [...document.querySelectorAll("[data-af-tpl]")].filter((b) => !b.hidden).map((b) => b.getAttribute("data-af-tpl")));
     const all = await shown();
     const tap = async (id) => { const b = page.locator('[data-af-tplcat="' + id + '"]'); const box = await b.boundingBox(); if (size.touch) await page.touchscreen.tap(box.x + box.width / 2, box.y + box.height / 2); else await b.click(); await page.waitForTimeout(250); };
@@ -6592,7 +6592,7 @@ if (section("new shapes")) {
     await wsSec(page, "Background");
     await page.waitForTimeout(400);
     const kinds = await page.evaluate(() => [...document.querySelectorAll("[data-af-shapekind]")].map((b) => ({ id: b.getAttribute("data-af-shapekind"), h: b.getBoundingClientRect().height, cut: b.scrollWidth > b.clientWidth + 1 })));
-    check(kinds.length === 28 && kinds.every((k) => k.h >= 32 && !k.cut), sz2.name + ": the shape picker shows all 28 shapes with their names, each 32 pixels tall or more");
+    check(kinds.length === 41 && kinds.every((k) => k.h >= 32 && !k.cut), sz2.name + ": the shape picker shows all 41 shapes with their names, each 32 pixels tall or more");
     await page.click('[data-af-shapekind="star"]');
     await page.click("[data-af-shape-add]");
     await page.waitForTimeout(600);
@@ -6665,7 +6665,7 @@ if (section("template use matches")) {
 // UI_SHEET_OUT=file.png draws every newer shape large and small, to look at
 // by eye.
 if (process.env.UI_SHEET_OUT && section("shapes sheet")) {
-  const kinds = ["cat", "dog", "bunny", "paw", "bone", "fish", "carrot", "bat", "rose", "checker", "broken", "heart", "star", "sparkle", "cloud", "moon"];
+  const kinds = (process.env.UI_SHEET_KINDS || "cat,dog,bunny,paw,bone,fish,carrot,bat,rose,checker,broken,heart,star,sparkle,cloud,moon").split(",");
   const fills = ["#f4b183", "#9ec5e8", "#d8c2f0", "#e8a0a0", "#f2ead8", "#7fb3d5", "#f08a3c", "#3a2a4a", "#c0304a", "#111111", "#e0407a", "#ff8fb1", "#ffd75e", "#ffffff", "#e8eef7", "#f4ecd0"];
   const shapes = [];
   kinds.forEach((k, i) => {

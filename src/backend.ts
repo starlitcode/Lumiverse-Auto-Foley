@@ -814,7 +814,7 @@ function cleanStops(v: any, dflt: string, max = 5): string[] {
 // At most 12 backgrounds, and 40 shapes in each.
 const BACKS_MAX = 12;
 const SHAPES_MAX = 40;
-const SHAPE_KINDS = ['rect', 'round', 'ellipse', 'tri', 'line', 'text', 'heart', 'star', 'poly', 'diamond', 'arrow', 'bubble', 'ring', 'moon', 'cloud', 'sparkle', 'cat', 'dog', 'bunny', 'paw', 'bone', 'fish', 'carrot', 'bat', 'rose', 'checker', 'broken', 'stripes'] as const;
+const SHAPE_KINDS = ['rect', 'round', 'ellipse', 'tri', 'line', 'text', 'heart', 'star', 'poly', 'diamond', 'arrow', 'bubble', 'ring', 'moon', 'cloud', 'sparkle', 'cat', 'dog', 'bunny', 'paw', 'bone', 'fish', 'carrot', 'bat', 'rose', 'checker', 'broken', 'stripes', 'snowflake', 'ornament', 'holly', 'pumpkin', 'ghost', 'leaf', 'firework', 'lantern', 'diya', 'menorah', 'shamrock', 'egg', 'flower'] as const;
 function cleanShape(v: any): VideoShapeDef | null {
   if (!v || typeof v !== 'object') return null;
   const kind = pick(v.kind, SHAPE_KINDS, 'rect');

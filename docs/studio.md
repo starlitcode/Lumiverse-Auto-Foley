@@ -282,7 +282,7 @@ With no performance in the Studio, the preview shows an example clip, about 25 s
 
 Leaving **Templates** while you try one puts your look back.
 
-The chips above the templates show one group at a time: **All**, **Moods**, **Scenes**, **Styles**, **Colors**, **Pets**, **Aesthetics** and **Pride**.
+The chips above the templates show one group at a time: **All**, **Moods**, **Scenes**, **Styles**, **Colors**, **Pets**, **Aesthetics**, **Pride** and **Holidays**.
 
 **Moods**
 
@@ -351,6 +351,22 @@ Each shows its flag's colors as a band of stripes near the bottom, on a dark bac
 | **Aromantic** | #3da542, #a7d379, #ffffff, #a9a9a9, #000000 |
 | **Genderfluid** | #ff76a4, #ffffff, #c011d7, #000000, #2f3cbe |
 | **Agender** | #000000, #b9b9b9, #ffffff, #b8f483, #ffffff, #b9b9b9, #000000 |
+
+**Holidays**
+
+| Template | What it suits | Transition |
+| --- | --- | --- |
+| **Christmas** | Deep green with snowflakes, ornaments and holly. | Fade out, then in, 0.6 seconds |
+| **Halloween** | Dark purple with pumpkins, ghosts and bats. | Through black, 0.7 seconds |
+| **Thanksgiving** | Warm browns and gold, with autumn leaves. | Dissolve, 0.6 seconds |
+| **Valentine's Day** | Soft pink and red hearts, for love stories. | Dissolve, 0.6 seconds |
+| **New Year's Eve** | Midnight blue with gold and silver fireworks. | Fade out, then in, 0.6 seconds |
+| **Hanukkah** | Blue and white, with a lit menorah. | Fade out, then in, 0.6 seconds |
+| **Lunar New Year** | Red and gold, with lanterns and plum blossoms. | Dissolve, 0.6 seconds |
+| **Diwali** | Deep purple and gold, with lit diya lamps and marigolds. | Fade out, then in, 0.6 seconds |
+| **St. Patrick's Day** | Fresh greens, with shamrocks. | Dissolve, 0.6 seconds |
+| **Easter** | Pastel eggs and spring flowers. | Dissolve, 0.6 seconds |
+| **Fourth of July** | Navy, red and white, with stars and fireworks. | Fade out, then in, 0.6 seconds |
 
 **Colors**
 
@@ -510,7 +526,7 @@ Every choice in the Studio is a setting, kept on your account. **Start again** i
 
 ### In short
 
-- **A design of your own** is a background made of shapes: rectangles, rounded rectangles, ellipses, triangles, lines, text boxes, hearts, stars, polygons, diamonds, arrows, speech bubbles, rings, crescent moons, clouds, sparkles, cat, dog and bunny faces, paw prints, bones, fish, carrots, bats, roses, checkerboard strips, broken hearts and stripes.
+- **A design of your own** is a background made of shapes: rectangles, rounded rectangles, ellipses, triangles, lines, text boxes, hearts, stars, polygons, diamonds, arrows, speech bubbles, rings, crescent moons, clouds, sparkles, cat, dog and bunny faces, paw prints, bones, fish, carrots, bats, roses, checkerboard strips, broken hearts, stripes, snowflakes, ornaments, holly, pumpkins, ghosts, autumn leaves, fireworks, lanterns, diya lamps, menorahs, shamrocks, eggs and flowers.
 - The shapes stay where you put them for the whole video.
 - You place them on the preview with a finger or the mouse, or type exact numbers.
 - Each shape has its own color, an optional gradient, and how see-through it is.
