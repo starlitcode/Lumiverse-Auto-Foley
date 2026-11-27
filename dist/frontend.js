@@ -4274,8 +4274,12 @@ export function setup(ctx, overrides) {
         if (!src)
             return null;
         const had = imageCache.get(src);
-        if (had)
+        if (had) {
+            // Kept as the newest, so a picture in use is the last to go.
+            imageCache.delete(src);
+            imageCache.set(src, had);
             return had;
+        }
         const im = await loadImage(src);
         if (im) {
             imageCache.set(src, im);
@@ -5016,8 +5020,8 @@ export function setup(ctx, overrides) {
     // size in a frame is drawn in proportion to the frame, so a smaller stage
     // draws the same frame with fewer pixels.
     async function videoStage(parts, sh = null, only = '', fixed = null, scale = 1) {
-        await stageAssets(parts, sh, only, fixed);
-        return stageNow(parts, sh, only, fixed, scale);
+        const held = await stageAssets(parts, sh, only, fixed);
+        return stageNow(parts, sh, only, fixed, scale, held);
     }
     // The preview's size: as many pixels as the screen shows it with, at the
     // screen's pixel ratio, so it is sharp, and no more, so it plays smoothly
@@ -5100,7 +5104,12 @@ export function setup(ctx, overrides) {
     function stageFonts() {
         return [String(S.videoFont), nameFontChoice(), String(S.videoBylineFont || S.videoFont || 'book')].concat(marksNow().map((m) => String(m.font || '')).filter(Boolean));
     }
+    // Reads every picture a stage needs, and gives them back. The stage is
+    // built from these, not from the shared cache, since many builds at once,
+    // such as templates pressed one after another, can push a picture out of
+    // the cache before the newest build uses it.
     async function stageAssets(parts, sh, only, fixed) {
+        const held = new Map();
         await fontsReady(stageFonts());
         const { backs } = stageScenes(parts, sh, only, fixed);
         // A picture that cannot be read is said, and the plain color is used.
@@ -5113,6 +5122,8 @@ export function setup(ctx, overrides) {
                 });
                 const src = videoBgs.get(bk.id) || '';
                 const im = await cachedImage(src);
+                if (im)
+                    held.set(src, im);
                 if (!im && (src || !asked))
                     wallMiss = bk.name;
             }
@@ -5132,15 +5143,20 @@ export function setup(ctx, overrides) {
                 }
             }
         for (const p of parts)
-            if (p.picture)
-                await cachedImage(p.picture);
+            if (p.picture) {
+                const im = await cachedImage(p.picture);
+                if (im)
+                    held.set(p.picture, im);
+            }
         for (const m of marksNow())
             if (m.pic)
                 await loadMarkPic(m.id).catch(() => { });
         for (const k of stickersNow())
             await loadStickerPic(k.id).catch(() => { });
+        return held;
     }
-    function stageNow(parts, sh, only, fixed, scale = 1) {
+    function stageNow(parts, sh, only, fixed, scale = 1, held) {
+        const pic = (src) => (held && held.get(src)) || imageCache.get(src);
         const full = videoSize();
         const W = Math.round(full.w * scale);
         const H = Math.round(full.h * scale);
@@ -5148,7 +5164,7 @@ export function setup(ctx, overrides) {
         const walls = new Map();
         for (const bk of backs)
             if (bk.kind === 'picture') {
-                const im = imageCache.get(videoBgs.get(bk.id) || '');
+                const im = pic(videoBgs.get(bk.id) || '');
                 if (im)
                     walls.set(bk.id, im);
             }
@@ -5168,7 +5184,7 @@ export function setup(ctx, overrides) {
         if (S.videoPics !== false)
             for (const p of parts)
                 if (p.picture && !st.pics.has(p.picture)) {
-                    const im = imageCache.get(p.picture);
+                    const im = pic(p.picture);
                     if (im)
                         st.pics.set(p.picture, im);
                 }
@@ -6593,28 +6609,36 @@ export function setup(ctx, overrides) {
             const d = Math.sin(away * Math.PI * 0.5) * 14 * u;
             if (d < 0.3)
                 return plain();
+            // Each color part is made at half size and drawn back at full size.
+            // The parts drift apart by a few pixels, so the softer edge is not
+            // seen, and it is a quarter of the work, which keeps play smooth.
+            const hw = Math.max(1, Math.round(W / 2));
+            const hh = Math.max(1, Math.round(H / 2));
             const tinted = (n, color) => {
-                const c = animLayer(st, n);
+                const list = (st.halfLayers = st.halfLayers || []);
+                let c = list[n];
+                if (!c || c.width !== hw || c.height !== hh)
+                    c = list[n] = canvasOf(hw, hh);
                 const cg = c.getContext('2d');
                 cg.setTransform(1, 0, 0, 1, 0, 0);
                 cg.globalAlpha = 1;
                 cg.globalCompositeOperation = 'source-over';
-                cg.clearRect(0, 0, W, H);
-                cg.drawImage(src, 0, 0, sw, sh, 0, 0, W, H);
+                cg.clearRect(0, 0, hw, hh);
+                cg.drawImage(src, 0, 0, sw, sh, 0, 0, hw, hh);
                 cg.globalCompositeOperation = 'multiply';
                 cg.fillStyle = color;
-                cg.fillRect(0, 0, W, H);
+                cg.fillRect(0, 0, hw, hh);
                 cg.globalCompositeOperation = 'destination-in';
-                cg.drawImage(src, 0, 0, sw, sh, 0, 0, W, H);
+                cg.drawImage(src, 0, 0, sw, sh, 0, 0, hw, hh);
                 cg.globalCompositeOperation = 'source-over';
                 return c;
             };
             const red = tinted(12, '#ff0000');
             const rest = tinted(13, '#00ffff');
-            g.drawImage(red, -d, 0);
+            g.drawImage(red, -d, 0, W, H);
             const was = g.globalCompositeOperation;
             g.globalCompositeOperation = 'lighter';
-            g.drawImage(rest, d, 0);
+            g.drawImage(rest, d, 0, W, H);
             g.globalCompositeOperation = was;
             return;
         }
@@ -20797,14 +20821,14 @@ export function setup(ctx, overrides) {
         const look = templateLook(t);
         const ex = exampleClip();
         await fontsReady([look.videoFont, look.videoNameFont, look.videoBylineFont || look.videoFont]);
-        await stageAssets(ex.parts, null, '', ex.scenes);
+        const held = await stageAssets(ex.parts, null, '', ex.scenes);
         const real = S;
         realS = real;
         S = Object.assign({}, real, look, { videoShape: 'wide' });
         try {
             // The scenes' backgrounds, worked out with the template in place.
             const scenes = exampleClip().scenes;
-            const st = stageNow(ex.parts, null, '', scenes, 0.25);
+            const st = stageNow(ex.parts, null, '', scenes, 0.25, held);
             const c = canvasOf(st.w, st.h);
             const g = c.getContext('2d');
             // Late in a line, when all its words show.
