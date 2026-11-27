@@ -206,6 +206,11 @@ The built-in prompt follows the same approach as Auto Refine's:
 - **Worn-out tags.** It names the habits that make tagged speech sound fake, such as `[sighs]` on every line or `[chuckles]` after every joke, so the Director avoids them.
 - **A clean run.** A line that sounds right with no tags goes back with none.
 
+
+### Sharing the prompt
+
+- **Share the prompt and notes**, under the prompt on the Director tab, saves a file, `auto-foley-director.json`. It holds the prompt, the notes for asking again and for each voice engine, the Decision questions, the patterns to leave out, and where each is sent. It never holds the cast, keys or anything from a chat.
+- **Add from a file** asks first, then uses the prompt, notes, questions and patterns in the file in place of yours. Share yours first if you want a way back.
 ## The one thing it does not direct
 
 The built-in prompt tells the Director that the tone of the story is yours. Then it says who a sex scene is between. This is the paragraph, word for word:

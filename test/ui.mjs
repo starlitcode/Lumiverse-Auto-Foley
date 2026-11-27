@@ -7363,6 +7363,49 @@ if (section("animation audit")) {
   }
 }
 
+if (section("sharing files")) {
+  console.log("Sharing: a look and the Director's prompt go into a file with no private words, and come back from one; a name in use becomes a copy");
+  for (const size of SIZES) {
+    const { context, page, errors } = await open(THEMES[0], size, 1, `window.__settings.videoByline = "by Pell Orrin"; window.__settings.videoLooks = [{ id: "l1", name: "Harbor", look: { videoFont: "type", videoByline: "by Pell Orrin", videoMarks: [{ id: "w1", text: "PELL" }], videoStickers: [{ id: "k9" }] } }];`);
+    await openWs(page);
+    await wsSec(page, "Saved looks");
+    await page.waitForTimeout(300);
+    const fileOf = async (sel) => {
+      const [dl] = await Promise.all([page.waitForEvent("download", { timeout: 8000 }).catch(() => null), page.evaluate((sel) => document.querySelector(sel).click(), sel)]);
+      if (!dl) return null;
+      const fs = await import("node:fs");
+      return fs.readFileSync(await dl.path(), "utf8");
+    };
+    const plain = await fileOf("[data-af-lookshare]");
+    const pb = plain ? JSON.parse(plain) : {};
+    check(pb.kind === "look" && pb.version && pb.look.videoFont === "type" && !/Pell/.test(plain) && !pb.files, size.name + ": a shared look holds the look and its version, and not the line under the title or watermarks");
+    await page.evaluate(() => document.querySelector("[data-af-lookfiles]").click());
+    await page.waitForTimeout(200);
+    const withFiles = JSON.parse((await fileOf("[data-af-lookshare]")) || "{}");
+    check(withFiles.files && withFiles.files.stickers && withFiles.files.stickers.k9, size.name + ": with Include my pictures and fonts, the look's sticker picture is in the file");
+    await page.evaluate((j) => (window.__pickJson = j), plain);
+    await page.evaluate(() => document.querySelector("[data-af-lookadd]").click());
+    await page.waitForTimeout(500);
+    await page.evaluate(() => document.querySelector("[data-af-lookadd]").click());
+    await page.waitForTimeout(500);
+    const names = await page.evaluate(() => window.__settings.videoLooks.map((l) => l.name));
+    check(names.join("|") === "Harbor|Harbor (copy)|Harbor (copy 2)", size.name + ": Add a look from a file adds it, as a copy when the name is in use (" + names.join(", ") + ")");
+    await page.click('[data-af-ws="close"]').catch(() => {});
+    await page.waitForTimeout(300);
+    await page.click('.af-tab[data-tab="director"]');
+    await page.waitForTimeout(400);
+    const dir = JSON.parse((await fileOf("[data-af-promptshare]")) || "{}");
+    check(dir.kind === "director" && "askNotes" in dir && "skipPatterns" in dir && !("cast" in dir), size.name + ": the shared prompt holds the prompt, notes and patterns, and not the cast");
+    await page.evaluate(() => { window.__pickJson = JSON.stringify({ app: "Auto Foley", kind: "director", version: "1", prompt: "<the_director>Shared.</the_director>", askNotes: {}, engineNotes: {}, decisionQuestions: {}, skipPatterns: "" }); window.__asked = 0; });
+    await page.evaluate(() => document.querySelector("[data-af-promptadd]").click());
+    await page.waitForTimeout(600);
+    const took = await page.evaluate(() => ({ asked: window.__asked, variant: window.__askedVariant, prompt: window.__settings.prompt }));
+    check(took.asked === 1 && took.variant === "danger" && /Shared/.test(took.prompt), size.name + ": Add from a file asks first, then uses the shared prompt");
+    check(!errors.length, size.name + ": no page errors. " + errors.slice(0, 2).join(" | "));
+    await context.close();
+  }
+}
+
 if (section("stickers")) {
   console.log("Stickers: drawn where they are put, flipped, mixed, filling the frame, behind the words, at their times, and edited on a phone and a laptop");
   // The pictures the checks use, drawn once in a page of their own.

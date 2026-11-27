@@ -15537,6 +15537,50 @@ export function setup(ctx, overrides) {
             paintPromptState();
         });
         paintPromptState();
+        // Sharing: the prompt with its notes, questions and patterns, in a
+        // file. It never holds keys, the cast or anything from a chat.
+        const shareRow = el('<div class="af-row af-wrap"></div>');
+        const shareSaid = el('<p class="af-note" role="status" data-af-promptsharesaid></p>');
+        const share = button('Share the prompt and notes', () => {
+            const body = { app: 'Auto Foley', kind: 'director', version: VERSION, prompt: S.prompt || '', promptRole: S.promptRole || 'system', askNotes: S.askNotes || {}, askNoteRole: S.askNoteRole || 'user', engineNotes: S.engineNotes || {}, engineNoteRole: S.engineNoteRole || 'rules', decisionQuestions: S.decisionQuestions || {}, skipPatterns: S.skipPatterns || '' };
+            if (!saveFile(new Blob([JSON.stringify(body, null, 2)], { type: 'application/json' }), 'auto-foley-director.json'))
+                setText(shareSaid, 'The browser would not save the file. Some private windows block downloads.');
+        });
+        share.setAttribute('data-af-promptshare', '');
+        const take = button('Add from a file', async () => {
+            let files = [];
+            try {
+                files = await ctx.uploads.pickFile({ accept: ['application/json', '.json'], multiple: false, maxSizeBytes: 2 * 1024 * 1024 });
+            }
+            catch (e) {
+                setText(shareSaid, 'The file picker could not open: ' + String((e && e.message) || e).slice(0, 200));
+                return;
+            }
+            const f = files && files[0];
+            if (!f)
+                return;
+            let body = null;
+            try {
+                body = JSON.parse(new TextDecoder().decode(f.bytes));
+            }
+            catch (_) { }
+            if (!body || body.app !== 'Auto Foley' || body.kind !== 'director') {
+                setText(shareSaid, 'That file is not a shared Director prompt. Nothing was changed.');
+                return;
+            }
+            if (!(await askSure('Use the shared prompt', 'The Director\u2019s prompt, notes, questions and patterns are replaced by the ones in the file. Share yours first if you want a way back.', 'Use them', 'danger')))
+                return;
+            const str2 = (v) => (typeof v === 'string' ? v : '');
+            const obj = (v) => (v && typeof v === 'object' && !Array.isArray(v) ? v : {});
+            set({ prompt: str2(body.prompt), askNotes: obj(body.askNotes), engineNotes: obj(body.engineNotes), decisionQuestions: obj(body.decisionQuestions), skipPatterns: str2(body.skipPatterns), promptRole: str2(body.promptRole) || 'system', askNoteRole: str2(body.askNoteRole) || 'user', engineNoteRole: str2(body.engineNoteRole) || 'rules' });
+            log('The Director\u2019s prompt, notes, questions and patterns were taken from a shared file.', '', 'setting');
+            renderTab();
+        });
+        take.setAttribute('data-af-promptadd', '');
+        shareRow.appendChild(share);
+        shareRow.appendChild(take);
+        pr.appendChild(shareRow);
+        pr.appendChild(shareSaid);
         page.appendChild(pr);
     }
     // ---------- Sounds ----------
@@ -20874,6 +20918,46 @@ export function setup(ctx, overrides) {
             }
         })();
     }
+    // Shared looks. A shared file never holds the line under the title or
+    // the watermarks, which carry your name, nor keys or account ids.
+    let lookShareFiles = false;
+    function sharedLookOnly(look) {
+        const out = {};
+        for (const k of LOOK_KEYS)
+            if (k in look && k !== 'videoByline' && k !== 'videoMarks')
+                out[k] = JSON.parse(JSON.stringify(look[k]));
+        if (look.videoBack1)
+            out.videoBack1 = JSON.parse(JSON.stringify(look.videoBack1));
+        return out;
+    }
+    async function shareLook(l, said) {
+        const body = { app: 'Auto Foley', kind: 'look', version: VERSION, name: l.name, look: sharedLookOnly(l.look) };
+        if (lookShareFiles) {
+            let r = null;
+            try {
+                r = await rpc({ type: 'backup_files' }, 120000);
+            }
+            catch (_) { }
+            if (!r || !r.ok) {
+                setText(said, (r && r.error) || 'The pictures and fonts could not be read: the backend did not answer. Nothing was saved.');
+                return;
+            }
+            // Only what this look uses.
+            const back = body.look.videoBack1;
+            const stickers = (Array.isArray(body.look.videoStickers) ? body.look.videoStickers : []).map((k) => k.id);
+            const fonts = Object.values(body.look).filter((v) => typeof v === 'string' && /^own:/.test(v)).map((v) => String(v).slice(4));
+            body.files = {
+                backgrounds: back && r.files.backgrounds[back.id] ? { [back.id]: r.files.backgrounds[back.id] } : {},
+                stickers: Object.fromEntries(Object.entries(r.files.stickers || {}).filter(([id]) => stickers.indexOf(id) >= 0)),
+                fonts: (r.files.fonts || []).filter((f) => fonts.indexOf(f.id) >= 0),
+            };
+        }
+        const file = 'auto-foley-look-' + (l.name.replace(/[^a-z0-9]+/gi, '-').toLowerCase().replace(/^-|-$/g, '') || 'look') + '.json';
+        if (!saveFile(new Blob([JSON.stringify(body, null, 2)], { type: 'application/json' }), file))
+            setText(said, 'The browser would not save the file. Some private windows block downloads.');
+        else
+            log('A look was shared as a file: ' + l.name + (body.files ? ', with its pictures and fonts.' : '.'), '', 'setting');
+    }
     function drawLooks(box) {
         box.replaceChildren();
         const looks = Array.isArray(S.videoLooks) ? S.videoLooks : [];
@@ -20915,13 +20999,83 @@ export function setup(ctx, overrides) {
                 set({ videoLooks: looks.filter((x) => x.id !== l.id) });
                 drawLooks(box);
             }, 'af-danger');
+            const share = button('Share', () => void shareLook(l, said));
+            share.setAttribute('data-af-lookshare', '');
             row.appendChild(name);
             row.appendChild(use);
+            row.appendChild(share);
             row.appendChild(del);
             box.appendChild(row);
         }
         if (!looks.length)
             box.appendChild(el('<p class="af-note">No looks are saved yet.</p>'));
+        // Sharing: a look in a file, with or without your pictures and fonts.
+        const inc = personSwitch('Include my pictures and fonts', 'Off by default. On, a shared look carries its background picture, stickers and fonts.', lookShareFiles, (on) => {
+            lookShareFiles = on;
+        });
+        inc.setAttribute('data-af-row', 'lookShareFiles');
+        inc.querySelector('input').setAttribute('data-af-lookfiles', '');
+        box.appendChild(inc);
+        const addFile = button('Add a look from a file', async () => {
+            let files = [];
+            try {
+                files = await ctx.uploads.pickFile({ accept: ['application/json', '.json'], multiple: false, maxSizeBytes: 40 * 1024 * 1024 });
+            }
+            catch (e) {
+                setText(said, 'The file picker could not open: ' + String((e && e.message) || e).slice(0, 200));
+                return;
+            }
+            const f = files && files[0];
+            if (!f)
+                return;
+            let body = null;
+            try {
+                body = JSON.parse(new TextDecoder().decode(f.bytes));
+            }
+            catch (_) { }
+            if (!body || body.app !== 'Auto Foley' || body.kind !== 'look' || !body.look || typeof body.look !== 'object') {
+                setText(said, 'That file is not a shared Auto Foley look. Nothing was added.');
+                return;
+            }
+            const now = Array.isArray(S.videoLooks) ? S.videoLooks : [];
+            if (now.length >= LOOKS_MAX) {
+                setText(said, 'Twenty looks is the most that can be saved. Delete one first.');
+                return;
+            }
+            let n = String(body.name || 'A shared look').trim().slice(0, 60) || 'A shared look';
+            // A name already used gets a copy of its own, so nothing is replaced.
+            if (now.some((x) => x.name === n)) {
+                const base = n.slice(0, 48);
+                n = base + ' (copy)';
+                for (let k = 2; now.some((x) => x.name === n); k++)
+                    n = base + ' (copy ' + k + ')';
+            }
+            const look = sharedLookOnly(body.look);
+            set({ videoLooks: now.concat([{ id: rid('lk'), name: n, look }]) });
+            let more = '';
+            if (body.files && typeof body.files === 'object') {
+                let r = null;
+                try {
+                    r = await rpc({ type: 'restore_files', files: body.files }, 180000);
+                }
+                catch (_) { }
+                const done = countWords((r && r.done) || {});
+                const skip = countWords((r && r.skip) || {});
+                if (done.length)
+                    more += ' Put back ' + done.join(', ') + '.';
+                if (skip.length)
+                    more += ' Skipped ' + skip.join(', ') + ', already on your account. Nothing was replaced.';
+                if (!r || !r.ok)
+                    more += ' Its pictures and fonts could not be put back: ' + ((r && r.error) || 'the backend did not answer.');
+            }
+            log('A shared look was added: ' + n + '.', '', 'setting');
+            drawLooks(box);
+            setText(box.querySelector('[data-af-lookssaid]'), 'Added the look ' + n + '.' + more);
+        });
+        addFile.setAttribute('data-af-lookadd', '');
+        const fileRow = el('<div class="af-row af-wrap"></div>');
+        fileRow.appendChild(addFile);
+        box.appendChild(fileRow);
         const newId = rid('lk');
         const newName = el('<input type="text" class="af-field af-look-name" maxlength="60" autocomplete="off" placeholder="A name for this look">');
         newName.id = newId;

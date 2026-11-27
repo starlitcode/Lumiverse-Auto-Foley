@@ -548,6 +548,13 @@ A note is a few words for whoever watches, in a dark box at the top or the botto
 - A look with **A picture of your own** uses the picture that background has now. A look keeps the background's settings, not its picture.
 - Up to 20 looks, saved to your account.
 
+#### Sharing a look
+
+- **Share**, beside a saved look, saves it in a file, `auto-foley-look-` and its name. The file holds the look and the version of Auto Foley.
+- It never holds the line under the title or the watermarks, which carry your name, and never keys, chat text or account ids.
+- With **Include my pictures and fonts** on, the file also holds the look's background picture, its stickers and its fonts. It is off by default.
+- **Add a look from a file** adds a shared look to **Saved looks**. A name already used gets " (copy)" after it, so nothing is replaced. Pictures and fonts in the file are put back only where you have none with the same id, and the line under the button says what was put back and what was skipped.
+
 ### Back to the built-in look
 
 **Back to the built-in look**, at the top of **Templates** and under **Saved looks**, puts back every setting of the look, exactly as the **The built-in look** template sets it. It asks first. If your look now is not saved under **Saved looks**, it offers to save it first, as **Use this template** does. Your shape of video, watermarks, the words of the line under the title, notes, pictures, fonts and projects stay. **Undo** takes it back in one step. If nothing would change, it says so and asks nothing.
