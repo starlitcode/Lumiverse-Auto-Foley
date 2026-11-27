@@ -322,7 +322,7 @@ function cleanStops(v, dflt) {
 // At most 12 backgrounds, and 40 shapes in each.
 const BACKS_MAX = 12;
 const SHAPES_MAX = 40;
-const SHAPE_KINDS = ['rect', 'round', 'ellipse', 'tri', 'line', 'text'];
+const SHAPE_KINDS = ['rect', 'round', 'ellipse', 'tri', 'line', 'text', 'heart', 'star', 'poly', 'diamond', 'arrow', 'bubble', 'ring', 'moon', 'cloud', 'sparkle'];
 function cleanShape(v) {
     if (!v || typeof v !== 'object')
         return null;
@@ -346,6 +346,15 @@ function cleanShape(v) {
         dir: pick(v.dir, GRAD_DIRS, 'down'),
         clear: Math.round(num(v.clear, 0, 95, 0)),
         text: kind === 'text' ? str(v.text, 120) : '',
+        points: Math.round(num(v.points, 4, 12, 5)),
+        depth: Math.round(num(v.depth, 10, 90, 50)),
+        sides: Math.round(num(v.sides, 3, 12, 6)),
+        tail: pick(v.tail, ['down', 'up', 'left', 'right'], 'down'),
+        thick: Math.round(num(v.thick, 5, 50, 18)),
+        line: hexColor(v.line),
+        lineW: Math.round(num(v.lineW, 0, 40, 0)),
+        flipX: v.flipX === true,
+        flipY: v.flipY === true,
     };
 }
 // The backgrounds and the one picked. Settings saved before there was a

@@ -1644,6 +1644,11 @@ html[data-af-still] .af-ws-sec.af-ws-in, .af-ws[data-af-still] .af-ws-sec.af-ws-
 .af-ws-h { margin: 0; font-size: 15px; font-weight: 650; color: var(--af-text); }
 .af-tpl-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
 .af-tpl-cats { gap: 6px; }
+.af-shape-kinds { display: grid; grid-template-columns: repeat(auto-fill, minmax(76px, 1fr)); gap: 6px; }
+.af-shape-kind { display: flex; flex-direction: column; align-items: center; gap: 2px; min-height: 32px; padding: 6px 4px; border: 1px solid var(--af-line); border-radius: 10px; background: transparent; color: var(--af-text); font: inherit; font-size: 12px; line-height: 1.2; text-align: center; cursor: pointer; }
+.af-shape-kind canvas { width: 28px; height: 28px; }
+.af-shape-kind[aria-pressed="true"] { border-color: var(--af-accent); background: var(--af-accent-soft); font-weight: 600; }
+@media (hover: hover) { .af-shape-kind:hover { border-color: var(--af-line-hover); } }
 .af-tpl-cat { min-height: 32px; padding: 4px 12px; border-radius: 999px; border: 1px solid var(--af-line); background: transparent; color: var(--af-text); font: inherit; font-size: 13px; cursor: pointer; white-space: normal; }
 .af-tpl-cat[aria-pressed="true"] { background: var(--af-accent-soft, rgba(147,112,219,.18)); border-color: var(--af-accent, #9370db); font-weight: 600; }
 @media (hover: hover) { .af-tpl-cat:hover { border-color: var(--af-line-hover); } }
@@ -4273,18 +4278,130 @@ export function setup(ctx, overrides) {
         }
     }
     // The outline of one shape, around its middle, before it is turned.
+    // The outline of a shape, centered on 0, 0, w wide and h high. Every
+    // shape is one closed path, so its fill and outline match.
     function shapePath(g, sh, w, h) {
         g.beginPath();
-        if (sh.kind === 'ellipse')
+        const k = sh.kind;
+        const poly = (pts) => {
+            pts.forEach(([x, y], i) => (i ? g.lineTo(x, y) : g.moveTo(x, y)));
+            g.closePath();
+        };
+        if (k === 'ellipse')
             g.ellipse(0, 0, w / 2, h / 2, 0, 0, Math.PI * 2);
-        else if (sh.kind === 'tri') {
+        else if (k === 'tri')
+            poly([[0, -h / 2], [w / 2, h / 2], [-w / 2, h / 2]]);
+        else if (k === 'diamond')
+            poly([[0, -h / 2], [w / 2, 0], [0, h / 2], [-w / 2, 0]]);
+        else if (k === 'star' || k === 'poly') {
+            const n = k === 'star' ? Math.round(Math.min(12, Math.max(4, numOr(sh.points, 5)))) : Math.round(Math.min(12, Math.max(3, numOr(sh.sides, 6))));
+            const inner = k === 'star' ? 1 - Math.min(90, Math.max(10, numOr(sh.depth, 50))) / 100 : 1;
+            const pts = [];
+            const steps = k === 'star' ? n * 2 : n;
+            for (let i = 0; i < steps; i++) {
+                const a = -Math.PI / 2 + (i * Math.PI * 2) / steps;
+                const r = k === 'star' && i % 2 ? inner : 1;
+                pts.push([(Math.cos(a) * r * w) / 2, (Math.sin(a) * r * h) / 2]);
+            }
+            poly(pts);
+        }
+        else if (k === 'heart') {
+            // The usual heart curve, fitted to the box.
+            const pts = [];
+            for (let i = 0; i < 96; i++) {
+                const t = (i / 96) * Math.PI * 2;
+                const x = 16 * Math.pow(Math.sin(t), 3);
+                const y = -(13 * Math.cos(t) - 5 * Math.cos(2 * t) - 2 * Math.cos(3 * t) - Math.cos(4 * t));
+                pts.push([(x / 32) * w, ((y + 2.5) / 29) * h]);
+            }
+            poly(pts);
+        }
+        else if (k === 'arrow') {
+            const shaft = h * 0.2;
+            const head = Math.min(w * 0.45, h * 0.9);
+            poly([[-w / 2, -shaft], [w / 2 - head, -shaft], [w / 2 - head, -h / 2], [w / 2, 0], [w / 2 - head, h / 2], [w / 2 - head, shaft], [-w / 2, shaft]]);
+        }
+        else if (k === 'sparkle') {
             g.moveTo(0, -h / 2);
-            g.lineTo(w / 2, h / 2);
-            g.lineTo(-w / 2, h / 2);
+            g.quadraticCurveTo(0, 0, w / 2, 0);
+            g.quadraticCurveTo(0, 0, 0, h / 2);
+            g.quadraticCurveTo(0, 0, -w / 2, 0);
+            g.quadraticCurveTo(0, 0, 0, -h / 2);
             g.closePath();
         }
-        else if ((sh.kind === 'round' || sh.kind === 'line') && g.roundRect) {
-            g.roundRect(-w / 2, -h / 2, w, h, sh.kind === 'line' ? h / 2 : Math.min(w, h) * 0.18);
+        else if (k === 'cloud') {
+            g.moveTo(-0.45 * w, 0.3 * h);
+            g.quadraticCurveTo(-0.58 * w, -0.05 * h, -0.28 * w, -0.08 * h);
+            g.quadraticCurveTo(-0.22 * w, -0.55 * h, 0.05 * w, -0.32 * h);
+            g.quadraticCurveTo(0.3 * w, -0.55 * h, 0.33 * w, -0.12 * h);
+            g.quadraticCurveTo(0.58 * w, -0.1 * h, 0.45 * w, 0.3 * h);
+            g.closePath();
+        }
+        else if (k === 'ring') {
+            // A band: the outer edge one way and the inner edge the other way,
+            // so the middle stays empty.
+            const t = Math.min(50, Math.max(5, numOr(sh.thick, 18))) / 100;
+            g.ellipse(0, 0, w / 2, h / 2, 0, 0, Math.PI * 2, false);
+            g.moveTo(w / 2 - w * t, 0);
+            g.ellipse(0, 0, w / 2 - w * t, h / 2 - h * t, 0, 0, Math.PI * 2, true);
+        }
+        else if (k === 'moon') {
+            // The part of a circle left when a second circle, moved toward the
+            // top right, is taken away.
+            const R = 1, r = 0.82, dx = 0.42, dy = -0.18;
+            const d = Math.hypot(dx, dy);
+            const a = (R * R - r * r + d * d) / (2 * d);
+            const hh = Math.sqrt(Math.max(0, R * R - a * a));
+            const mx = (a * dx) / d, my = (a * dy) / d;
+            const p1 = [mx + (hh * dy) / d, my - (hh * dx) / d];
+            const p2 = [mx - (hh * dy) / d, my + (hh * dx) / d];
+            const sx = w / 2, sy = h / 2;
+            g.save();
+            g.scale(sx, sy);
+            const a1 = Math.atan2(p1[1], p1[0]), a2 = Math.atan2(p2[1], p2[0]);
+            g.arc(0, 0, R, a1, a2, true);
+            g.arc(dx, dy, r, Math.atan2(p2[1] - dy, p2[0] - dx), Math.atan2(p1[1] - dy, p1[0] - dx), false);
+            g.closePath();
+            g.restore();
+        }
+        else if (k === 'bubble') {
+            const side = sh.tail === 'up' || sh.tail === 'left' || sh.tail === 'right' ? sh.tail : 'down';
+            const vert = side === 'down' || side === 'up';
+            const bw = vert ? w : w * 0.82, bh = vert ? h * 0.78 : h;
+            const ox = side === 'left' ? w * 0.09 : side === 'right' ? -w * 0.09 : 0;
+            const oy = side === 'up' ? h * 0.11 : side === 'down' ? -h * 0.11 : 0;
+            const rr = Math.min(bw, bh) * 0.22;
+            const x0 = ox - bw / 2, y0 = oy - bh / 2, x1 = ox + bw / 2, y1 = oy + bh / 2;
+            const tl = Math.min(bw, bh) * 0.14;
+            g.moveTo(x0 + rr, y0);
+            if (side === 'up') {
+                g.lineTo(ox - tl, y0);
+                g.lineTo(ox - tl * 1.6, -h / 2);
+                g.lineTo(ox + tl, y0);
+            }
+            g.arcTo(x1, y0, x1, y1, rr);
+            if (side === 'right') {
+                g.lineTo(x1, oy - tl);
+                g.lineTo(w / 2, oy + tl * 1.6);
+                g.lineTo(x1, oy + tl);
+            }
+            g.arcTo(x1, y1, x0, y1, rr);
+            if (side === 'down') {
+                g.lineTo(ox + tl, y1);
+                g.lineTo(ox - tl * 1.6, h / 2);
+                g.lineTo(ox - tl, y1);
+            }
+            g.arcTo(x0, y1, x0, y0, rr);
+            if (side === 'left') {
+                g.lineTo(x0, oy + tl);
+                g.lineTo(-w / 2, oy - tl * 1.6);
+                g.lineTo(x0, oy - tl);
+            }
+            g.arcTo(x0, y0, x1, y0, rr);
+            g.closePath();
+        }
+        else if ((k === 'round' || k === 'line') && g.roundRect) {
+            g.roundRect(-w / 2, -h / 2, w, h, k === 'line' ? h / 2 : Math.min(w, h) * 0.18);
         }
         else
             g.rect(-w / 2, -h / 2, w, h);
@@ -4303,6 +4420,8 @@ export function setup(ctx, overrides) {
             g.save();
             g.translate(sh.x * W, sh.y * H);
             g.rotate(((Number(sh.rot) || 0) * Math.PI) / 180);
+            if (sh.flipX || sh.flipY)
+                g.scale(sh.flipX ? -1 : 1, sh.flipY ? -1 : 1);
             g.globalAlpha = 1 - Math.min(95, Math.max(0, Number(sh.clear) || 0)) / 100;
             const fill = hexOr(sh.fill, shapeInk(sh.kind));
             g.fillStyle = fillOf(g, sh.grad || 'none', [fill].concat(sh.stops || []), sh.dir || 'down', -w / 2, -h / 2, w / 2, h / 2);
@@ -4324,6 +4443,14 @@ export function setup(ctx, overrides) {
             else {
                 shapePath(g, sh, w, h);
                 g.fill();
+                // An outline of its own, drawn over the fill.
+                const lw = Math.min(40, Math.max(0, numOr(sh.lineW, 0)));
+                if (lw > 0) {
+                    g.lineWidth = lw * u;
+                    g.lineJoin = 'round';
+                    g.strokeStyle = hexOr(sh.line, '#ffffff');
+                    g.stroke();
+                }
             }
             g.restore();
         }
@@ -14809,6 +14936,16 @@ export function setup(ctx, overrides) {
         { id: 'tri', label: 'Triangle' },
         { id: 'line', label: 'Line' },
         { id: 'text', label: 'Text box' },
+        { id: 'heart', label: 'Heart' },
+        { id: 'star', label: 'Star' },
+        { id: 'poly', label: 'Polygon' },
+        { id: 'diamond', label: 'Diamond' },
+        { id: 'arrow', label: 'Arrow' },
+        { id: 'bubble', label: 'Speech bubble' },
+        { id: 'ring', label: 'Ring' },
+        { id: 'moon', label: 'Crescent moon' },
+        { id: 'cloud', label: 'Cloud' },
+        { id: 'sparkle', label: 'Sparkle' },
     ];
     const SHAPES_MAX = 40;
     // Whether the Background is set to a design while the Studio is drawn, so
@@ -14878,7 +15015,7 @@ export function setup(ctx, overrides) {
     });
     function newShape(kind) {
         const n = shapesNow().length;
-        const size = { rect: [520, 300], round: [520, 300], ellipse: [360, 360], tri: [420, 360], line: [640, 14], text: [760, 120] };
+        const size = { rect: [520, 300], round: [520, 300], ellipse: [360, 360], tri: [420, 360], line: [640, 14], text: [760, 120], heart: [340, 320], star: [360, 360], poly: [360, 360], diamond: [300, 380], arrow: [480, 220], bubble: [520, 340], ring: [360, 360], moon: [300, 300], cloud: [520, 300], sparkle: [260, 260] };
         const [w, h] = size[kind] || [400, 240];
         return {
             id: rid('sh').replace(/[^a-z0-9]/gi, '').slice(0, 24),
@@ -14899,9 +15036,49 @@ export function setup(ctx, overrides) {
     function buildDesigner(box) {
         box.appendChild(el('<p class="af-note">Add shapes, then drag them on the preview. The dot at a corner changes the size. The dot above turns it.</p>'));
         let addKind = 'rect';
-        box.appendChild(select('Shape to add', SHAPE_KINDS, addKind, (v) => {
-            addKind = v;
-        }));
+        // The shapes as a grid of small pictures with their names. A press
+        // picks the one Add the shape adds.
+        const pickRow = el('<div class="af-col" data-af-row="shapeKind"></div>');
+        pickRow.appendChild(labelRow('Shape to add', 'Press one, then Add the shape.'));
+        const kinds = el('<div class="af-shape-kinds" role="group" aria-label="Shape to add"></div>');
+        const paintKinds = () => {
+            for (const b of Array.from(kinds.querySelectorAll('[data-af-shapekind]')))
+                b.setAttribute('aria-pressed', b.getAttribute('data-af-shapekind') === addKind ? 'true' : 'false');
+        };
+        for (const k of SHAPE_KINDS) {
+            const b = el('<button type="button" class="af-shape-kind" aria-pressed="false"><canvas width="56" height="56" aria-hidden="true"></canvas><span></span></button>');
+            b.setAttribute('data-af-shapekind', k.id);
+            setText(b.querySelector('span'), k.label);
+            const c = b.querySelector('canvas');
+            const g = c.getContext('2d');
+            if (g) {
+                g.translate(28, 28);
+                g.fillStyle = 'currentColor';
+                try {
+                    g.fillStyle = getComputedStyle(root).color || '#cccccc';
+                }
+                catch (_) { }
+                const ex = Object.assign({ id: 'x', kind: k.id, x: 0, y: 0, w: 40, h: 40, rot: 0, fill: '', grad: 'none', stops: [], dir: 'down', clear: 0, text: '' }, k.id === 'line' ? { h: 6 } : k.id === 'text' ? { h: 20 } : k.id === 'arrow' || k.id === 'cloud' || k.id === 'bubble' ? { h: 28 } : {});
+                if (k.id === 'text') {
+                    g.font = '600 18px system-ui, sans-serif';
+                    g.textAlign = 'center';
+                    g.textBaseline = 'middle';
+                    g.fillText('Aa', 0, 1);
+                }
+                else {
+                    shapePath(g, ex, ex.w, ex.h);
+                    g.fill();
+                }
+            }
+            b.addEventListener('click', () => {
+                addKind = k.id;
+                paintKinds();
+            });
+            kinds.appendChild(b);
+        }
+        paintKinds();
+        pickRow.appendChild(kinds);
+        box.appendChild(pickRow);
         const add = button('Add the shape', () => {
             const list = shapesNow();
             if (list.length >= SHAPES_MAX)
@@ -15003,6 +15180,59 @@ export function setup(ctx, overrides) {
         clear.setAttribute('data-af-byeye', '');
         clear.setAttribute('data-af-shape-clear', '');
         r.editor.appendChild(clear);
+        // What only some shapes have.
+        const own = (label, key, dflt, min, max, help) => {
+            const row = numberRow(label, numOr(sh[key], dflt), min, max, 1, (v) => {
+                sh[key] = v;
+                changed();
+            }, help);
+            row.setAttribute('data-af-shape-num', key);
+            r.editor.appendChild(row);
+        };
+        if (sh.kind === 'star') {
+            own('Points', 'points', 5, 4, 12, '5 by default, from 4 to 12.');
+            own('How deep the points are, in percent', 'depth', 50, 10, 90, '50 by default. More makes thinner points.');
+        }
+        if (sh.kind === 'poly')
+            own('Sides', 'sides', 6, 3, 12, '6 by default, from 3 to 12.');
+        if (sh.kind === 'ring')
+            own('How thick, in percent', 'thick', 18, 5, 50, '18 by default.');
+        if (sh.kind === 'bubble')
+            r.editor.appendChild(segmented('Where the tail points', [
+                { id: 'down', label: 'Down' },
+                { id: 'up', label: 'Up' },
+                { id: 'left', label: 'Left' },
+                { id: 'right', label: 'Right' },
+            ], sh.tail === 'up' || sh.tail === 'left' || sh.tail === 'right' ? sh.tail : 'down', (v) => {
+                sh.tail = v;
+                changed();
+            }));
+        if (sh.kind !== 'text') {
+            r.editor.appendChild(colorRow('shapeLine', 'Color of the outline', 'White by default.', '--af-none', '#ffffff', 'Use white', changed, {
+                get: () => sh.line || '',
+                put: (hex) => {
+                    sh.line = hex;
+                },
+            }));
+            const lw = numberRow('Outline, in pixels', numOr(sh.lineW, 0), 0, 40, 1, (v) => {
+                sh.lineW = v;
+                changed();
+            }, '0 by default, which is none.');
+            lw.setAttribute('data-af-shape-num', 'lineW');
+            r.editor.appendChild(lw);
+        }
+        const flips = el('<div class="af-row af-wrap"></div>');
+        for (const [key, label] of [['flipX', 'Flip across'], ['flipY', 'Flip up and down']]) {
+            const fb = button(label, () => {
+                sh[key] = !sh[key];
+                fb.setAttribute('aria-pressed', sh[key] ? 'true' : 'false');
+                changed();
+            });
+            fb.setAttribute('aria-pressed', sh[key] ? 'true' : 'false');
+            fb.setAttribute('data-af-shape-act', key);
+            flips.appendChild(fb);
+        }
+        r.editor.appendChild(flips);
         const grid = el('<div class="af-shape-grid"></div>');
         const box = (key, label, value, min, max, help, take) => {
             const row = numberRow(label, value, min, max, 1, (v) => {

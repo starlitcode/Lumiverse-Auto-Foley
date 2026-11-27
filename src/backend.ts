@@ -77,7 +77,7 @@ interface CastMember {
 // see-through it is, in percent. text is the words of a text box.
 interface VideoShapeDef {
   id: string;
-  kind: 'rect' | 'round' | 'ellipse' | 'tri' | 'line' | 'text';
+  kind: 'rect' | 'round' | 'ellipse' | 'tri' | 'line' | 'text' | 'heart' | 'star' | 'poly' | 'diamond' | 'arrow' | 'bubble' | 'ring' | 'moon' | 'cloud' | 'sparkle';
   x: number;
   y: number;
   w: number;
@@ -91,6 +91,18 @@ interface VideoShapeDef {
   dir: string;
   clear: number;
   text: string;
+  // A star's points and how deep they are, a polygon's sides, the side a
+  // speech bubble's tail points to, and a ring's thickness in percent.
+  points: number;
+  depth: number;
+  sides: number;
+  tail: 'down' | 'up' | 'left' | 'right';
+  thick: number;
+  // An outline's color and thickness, and mirroring.
+  line: string;
+  lineW: number;
+  flipX: boolean;
+  flipY: boolean;
 }
 interface VideoMark {
   id: string;
@@ -787,7 +799,7 @@ function cleanStops(v: any, dflt: string): string[] {
 // At most 12 backgrounds, and 40 shapes in each.
 const BACKS_MAX = 12;
 const SHAPES_MAX = 40;
-const SHAPE_KINDS = ['rect', 'round', 'ellipse', 'tri', 'line', 'text'] as const;
+const SHAPE_KINDS = ['rect', 'round', 'ellipse', 'tri', 'line', 'text', 'heart', 'star', 'poly', 'diamond', 'arrow', 'bubble', 'ring', 'moon', 'cloud', 'sparkle'] as const;
 function cleanShape(v: any): VideoShapeDef | null {
   if (!v || typeof v !== 'object') return null;
   const kind = pick(v.kind, SHAPE_KINDS, 'rect');
@@ -809,6 +821,15 @@ function cleanShape(v: any): VideoShapeDef | null {
     dir: pick(v.dir, GRAD_DIRS, 'down'),
     clear: Math.round(num(v.clear, 0, 95, 0)),
     text: kind === 'text' ? str(v.text, 120) : '',
+    points: Math.round(num(v.points, 4, 12, 5)),
+    depth: Math.round(num(v.depth, 10, 90, 50)),
+    sides: Math.round(num(v.sides, 3, 12, 6)),
+    tail: pick(v.tail, ['down', 'up', 'left', 'right'] as const, 'down'),
+    thick: Math.round(num(v.thick, 5, 50, 18)),
+    line: hexColor(v.line),
+    lineW: Math.round(num(v.lineW, 0, 40, 0)),
+    flipX: v.flipX === true,
+    flipY: v.flipY === true,
   };
 }
 // The backgrounds and the one picked. Settings saved before there was a

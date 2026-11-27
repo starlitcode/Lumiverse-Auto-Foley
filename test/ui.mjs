@@ -6540,6 +6540,63 @@ if (section("templates notice")) {
   }
 }
 
+if (section("new shapes")) {
+  console.log("Each new shape draws where its outline says, and a star's points change its outline");
+  const IN_OUT = {
+    heart: [[0, 0.1], [-0.47, -0.47]], star: [[0, 0], [0.45, 0.45]], poly: [[0, 0], [0.47, 0.47]], diamond: [[0, 0], [0.4, 0.4]],
+    arrow: [[0, 0], [0.45, -0.45]], bubble: [[0, -0.1], [0.49, -0.49]], ring: [[0.41, 0], [0, 0]], moon: [[-0.8 / 2, 0.1], [0, 0]],
+    cloud: [[0, 0], [0.48, -0.45]], sparkle: [[0, 0], [0.33, -0.33]],
+  };
+  const size = SIZES.find((x) => !x.touch) || SIZES[0];
+  const frameOf = async (shape) => {
+    const pre = `window.__settings.videoBacks = [{ id: "main", name: "Main", kind: "design", color: "#000000", fill: "solid", stops: [], dir: "down", dim: 40, blur: 0, shapes: [${JSON.stringify(shape)}], use: "match", moods: [], places: [] }]; window.__settings.videoBackPick = "main"; window.__settings.videoEdges = 0; window.__settings.videoTitleOn = false; window.__settings.videoPics = false; window.__settings.videoNames = false; window.__settings.videoCaptions = false;`;
+    const o = await open(THEMES[0], size, 1, pre);
+    await openWs(o.page);
+    await o.page.waitForTimeout(600);
+    const px = await o.page.evaluate(() => {
+      const c = document.querySelector("[data-af-videopreview]");
+      const d = c.getContext("2d").getImageData(0, 0, c.width, c.height).data;
+      return { w: c.width, h: c.height, raw: Array.from(d.filter((_, i) => i % 4 === 0)), green: d.filter((_, i) => i % 4 === 1).reduce((n, v, i) => n + (v > 150 && d[i * 4] < 80 ? 1 : 0), 0) };
+    });
+    await o.context.close();
+    return px;
+  };
+  const red = (f, nx, ny, sz) => { const x = Math.round(f.w / 2 + nx * sz), y = Math.round(f.h / 2 + ny * sz); return f.raw[y * f.w + x] > 150; };
+  const bad = [];
+  for (const [kind, [inside, outside]] of Object.entries(IN_OUT)) {
+    const f = await frameOf({ id: "s1", kind, x: 0.5, y: 0.5, w: 800, h: 800, rot: 0, fill: "#ff0000", grad: "none", stops: [], dir: "down", clear: 0, text: "" });
+    const sz = (800 * Math.min(f.w, f.h)) / 1080;
+    if (!red(f, inside[0], inside[1], sz) || red(f, outside[0], outside[1], sz)) bad.push(kind);
+  }
+  check(!bad.length, size.name + ": every new shape fills inside its outline and not outside it. Wrong: " + bad.join(", "));
+  const count = (f) => f.raw.filter((v) => v > 150).length;
+  const five = await frameOf({ id: "s1", kind: "star", points: 5, x: 0.5, y: 0.5, w: 800, h: 800, rot: 0, fill: "#ff0000", grad: "none", stops: [], dir: "down", clear: 0, text: "" });
+  const eight = await frameOf({ id: "s1", kind: "star", points: 8, x: 0.5, y: 0.5, w: 800, h: 800, rot: 0, fill: "#ff0000", grad: "none", stops: [], dir: "down", clear: 0, text: "" });
+  // The pixels inside one star and not the other.
+  const xor = five.raw.reduce((n, v, i) => n + ((v > 150) !== (eight.raw[i] > 150) ? 1 : 0), 0);
+  check(xor > count(five) * 0.1, size.name + ": a star with 8 points draws a different outline from one with 5 (" + xor + " pixels differ of " + count(five) + ")");
+  const ring = await frameOf({ id: "s1", kind: "ellipse", lineW: 20, line: "#00ff00", x: 0.5, y: 0.5, w: 800, h: 800, rot: 0, fill: "#000000", grad: "none", stops: [], dir: "down", clear: 0, text: "" });
+  check(ring.green > 1000, size.name + ": an outline draws in its own color (" + ring.green + " green pixels)");
+  // The picker: a grid of pictures with names, fitting a phone.
+  for (const sz2 of SIZES) {
+    const { context, page, errors } = await open(THEMES[0], sz2, 1, `window.__settings.videoBacks = [{ id: "main", name: "Main", kind: "design", color: "#000000", fill: "solid", stops: [], dir: "down", dim: 40, blur: 0, shapes: [], use: "match", moods: [], places: [] }]; window.__settings.videoBackPick = "main";`);
+    await openWs(page);
+    await wsSec(page, "Background");
+    await page.waitForTimeout(400);
+    const kinds = await page.evaluate(() => [...document.querySelectorAll("[data-af-shapekind]")].map((b) => ({ id: b.getAttribute("data-af-shapekind"), h: b.getBoundingClientRect().height, cut: b.scrollWidth > b.clientWidth + 1 })));
+    check(kinds.length === 16 && kinds.every((k) => k.h >= 32 && !k.cut), sz2.name + ": the shape picker shows all 16 shapes with their names, each 32 pixels tall or more");
+    await page.click('[data-af-shapekind="star"]');
+    await page.click("[data-af-shape-add]");
+    await page.waitForTimeout(600);
+    const st = await page.evaluate(() => ({ kind: window.__settings.videoBacks[0].shapes.slice(-1)[0].kind, rows: !!document.querySelector('[data-af-shape-num="points"]') && !!document.querySelector('[data-af-shape-num="lineW"]') && !!document.querySelector('[data-af-shape-act="flipX"]') }));
+    check(st.kind === "star" && st.rows, sz2.name + ": Add the shape adds a star, with its points, outline and flips to set");
+    const m = await page.evaluate(MEASURE, sz2.touch);
+    check(!m.overflow.length && !m.small.length, sz2.name + ": the design editor fits. " + m.overflow.concat(m.small).slice(0, 2).join("; "));
+    check(!errors.length, sz2.name + ": no page errors. " + errors.slice(0, 2).join(" | "));
+    await context.close();
+  }
+}
+
 if (section("snapping")) {
   console.log("A shape snaps to the middle with a guide, moves freely with the switch off or Alt held, and turns onto 90 degrees");
   for (const size of SIZES) for (const zoom of [1, 1.25, 0.85]) {
@@ -7379,7 +7436,7 @@ if (section("studio design")) {
     await page.waitForTimeout(400);
     await page.selectOption('[data-af-row="videoBack"] select', "design");
     await page.waitForTimeout(500);
-    await page.selectOption('[data-af-row="videoDesign"] select', "ellipse");
+    await page.click('[data-af-shapekind="ellipse"]');
     await page.click("[data-af-shape-add]");
     await settle();
     const added = await page.evaluate(() => {

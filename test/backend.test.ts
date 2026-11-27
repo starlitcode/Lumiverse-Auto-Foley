@@ -2097,8 +2097,21 @@ describe("video backgrounds, fonts and names", () => {
     expect(out.length).toBe(40);
     // A shape with the one second color it had before stops keeps it, as a
     // linear gradient.
-    expect(out[0]).toEqual({ id: "s0", kind: "rect", x: 1.5, y: -0.5, w: 4000, h: 2, rot: 180, fill: "", grad: "linear", stops: ["#00ff00"], dir: "down", clear: 95, text: "" });
+    expect(out[0]).toEqual({ id: "s0", kind: "rect", x: 1.5, y: -0.5, w: 4000, h: 2, rot: 180, fill: "", grad: "linear", stops: ["#00ff00"], dir: "down", clear: 95, text: "", points: 5, depth: 50, sides: 6, tail: "down", thick: 18, line: "", lineW: 0, flipX: false, flipY: false });
     expect(s.videoBackPick).toBe("d1");
+  });
+
+  test("a star, a polygon, a bubble and a ring keep their own settings, held to their limits", () => {
+    const h = host();
+    const shapes = [
+      { id: "a", kind: "star", points: 40, depth: 1, lineW: 99, line: "#FF0000", flipX: true },
+      { id: "b", kind: "poly", sides: 2 },
+      { id: "c", kind: "bubble", tail: "sideways" },
+      { id: "d", kind: "ring", thick: 80 },
+    ];
+    const out = h.box.cleanSettings({ videoBacks: [{ id: "d1", name: "Night", kind: "design", color: "#000000", shapes }], videoBackPick: "d1" }).videoBacks[0].shapes;
+    expect([out[0].points, out[0].depth, out[0].lineW, out[0].line, out[0].flipX]).toEqual([12, 10, 40, "#ff0000", true]);
+    expect([out[1].sides, out[2].tail, out[3].thick]).toEqual([3, "down", 50]);
   });
 
   test("a picked background that is gone falls back to the first one", () => {
