@@ -132,6 +132,7 @@ const DEFAULT_SETTINGS = {
     videoBylineShadowSoft: 18,
     videoBylineShadowFar: 0,
     videoMarks: [],
+    videoStickers: [],
     videoWordFill: 'solid',
     videoWordStops: ['#f2b880'],
     videoWordDir: 'down',
@@ -285,6 +286,38 @@ function fontChoice(v, dflt) {
     return FONT_IDS.indexOf(t) >= 0 || /^own:[a-z0-9]{1,40}$/.test(t) ? t : dflt;
 }
 const MARKS_MAX = 5;
+const BLENDS = ['normal', 'multiply', 'screen', 'overlay', 'soft-light', 'lighten', 'darken', 'color-dodge', 'color-burn', 'difference'];
+const STICKERS_MAX = 20;
+function cleanStickers(v) {
+    const out = [];
+    for (const k of Array.isArray(v) ? v.slice(0, STICKERS_MAX) : []) {
+        if (!k || typeof k !== 'object')
+            continue;
+        const id = backId(k.id);
+        if (!id || out.some((x) => x.id === id))
+            continue;
+        out.push({
+            id,
+            x: Math.round(num(k.x, -0.5, 1.5, 0.5) * 1000) / 1000,
+            y: Math.round(num(k.y, -0.5, 1.5, 0.5) * 1000) / 1000,
+            w: Math.round(num(k.w, 4, 4000, 300)),
+            h: Math.round(num(k.h, 4, 4000, 300)),
+            rot: Math.round(num(k.rot, -180, 180, 0)),
+            clear: Math.round(num(k.clear, 0, 95, 0)),
+            flipX: k.flipX === true,
+            flipY: k.flipY === true,
+            blend: pick(k.blend, BLENDS, 'normal'),
+            cover: k.cover === true,
+            layer: pick(k.layer, ['back', 'top'], 'top'),
+            when: pick(k.when, ['all', 'start', 'end', 'from', 'backs'], 'all'),
+            from: Math.round(num(k.from, 0, 36000, 0) * 10) / 10,
+            secs: Math.round(num(k.secs, 0.5, 600, 4) * 10) / 10,
+            backs: Array.isArray(k.backs) ? k.backs.map((x) => backId(x)).filter(Boolean).slice(0, 12) : [],
+            lock: k.lock === true,
+        });
+    }
+    return out;
+}
 function cleanMarks(v) {
     if (!Array.isArray(v))
         return [];
@@ -698,7 +731,7 @@ const LOOK_KEYS = [
     'videoShape', 'videoFont', 'videoSize', 'videoInk', 'videoCaptionInk', 'videoWords', 'videoPlace', 'videoQuotes', 'videoPicShape', 'videoPicSize',
     'videoNameColor', 'videoNameFont', 'videoNameSize', 'videoPicRing', 'videoPicRingWidth', 'videoPicMove', 'videoTwo', 'videoMoodPics',
     'videoByline', 'videoBylineInk', 'videoBylineFont', 'videoBylineFill', 'videoBylineStops', 'videoBylineDir',
-    'videoBylineShadow', 'videoBylineShadowInk', 'videoBylineShadowDark', 'videoBylineShadowSoft', 'videoBylineShadowFar', 'videoMarks',
+    'videoBylineShadow', 'videoBylineShadowInk', 'videoBylineShadowDark', 'videoBylineShadowSoft', 'videoBylineShadowFar', 'videoMarks', 'videoStickers',
     'videoWordFill', 'videoWordStops', 'videoWordDir', 'videoNameFill', 'videoNameStops', 'videoNameDir', 'videoCapFill', 'videoCapStops', 'videoCapDir',
     'videoWordShadow', 'videoWordShadowInk', 'videoWordShadowDark', 'videoWordShadowSoft', 'videoWordShadowFar',
     'videoBox', 'videoBoxColor', 'videoBoxClear', 'videoBoxRound', 'videoBoxWidth', 'videoOwnColors', 'videoKindColors', 'videoBackRules', 'videoQuiet', 'videoQuietStrength',
@@ -890,6 +923,7 @@ function cleanSettings(raw) {
         videoBylineShadowSoft: Math.round(num(r.videoBylineShadowSoft, 0, 40, d.videoBylineShadowSoft)),
         videoBylineShadowFar: Math.round(num(r.videoBylineShadowFar, 0, 20, d.videoBylineShadowFar)),
         videoMarks: cleanMarks(r.videoMarks),
+        videoStickers: cleanStickers(r.videoStickers),
         videoWordFill: pick(r.videoWordFill, ['solid', 'linear', 'radial'], 'solid'),
         videoWordStops: cleanStops(r.videoWordStops, '#f2b880'),
         videoWordDir: pick(r.videoWordDir, GRAD_DIRS, 'down'),
@@ -3844,6 +3878,33 @@ async function dropMarkPic(id, userId) {
         ok = (await writeJson(MARK_INDEX_FILE, index.filter((x) => x !== id), userId)) && ok;
     return ok;
 }
+// Each sticker's picture, in a file named by its id, with an index of them.
+const stickerFile = (id) => 'video-stickers/' + id + '.json';
+const STICKER_INDEX_FILE = 'video-stickers/index.json';
+async function stickerIndex(userId) {
+    const v = await readJsonStrict(STICKER_INDEX_FILE, userId, 'The list of your stickers could not be read from your account. Nothing was changed.');
+    return Array.isArray(v) ? v.map((x) => backId(x)).filter((x, i, all) => !!x && all.indexOf(x) === i) : [];
+}
+async function dropSticker(id, userId) {
+    let ok = true;
+    try {
+        await spindle.userStorage.delete(stickerFile(id), userId);
+    }
+    catch (_) {
+        ok = false;
+    }
+    const index = await stickerIndex(userId);
+    if (index.indexOf(id) >= 0)
+        ok = (await writeJson(STICKER_INDEX_FILE, index.filter((x) => x !== id), userId)) && ok;
+    return ok;
+}
+async function dropStickers(s, userId) {
+    let ok = true;
+    const ids = (await stickerIndex(userId)).concat(s.videoStickers.map((k) => k.id));
+    for (const id of ids.filter((x, i) => ids.indexOf(x) === i))
+        ok = (await dropSticker(id, userId)) && ok;
+    return ok;
+}
 async function dropMarkPics(s, userId) {
     let ok = true;
     const ids = (await markIndex(userId)).concat(s.videoMarks.map((m) => m.id));
@@ -3854,7 +3915,7 @@ async function dropMarkPics(s, userId) {
 // After the list is saved: the pictures of backgrounds no longer in it.
 async function dropLeftBgs(s, userId) {
     // A picture a project still uses stays, though it left the list in use.
-    let uses = { backs: [], marks: [] };
+    let uses = { backs: [], marks: [], stickers: [] };
     try {
         uses = projectUses(await projectIndex(userId));
     }
@@ -3871,6 +3932,23 @@ async function dropLeftBgs(s, userId) {
     for (const id of await markIndex(userId))
         if (marks.indexOf(id) < 0)
             await dropMarkPic(id, userId);
+    // A sticker's picture stays while the settings, a project or a saved
+    // look uses it.
+    const stickers = s.videoStickers.map((k) => k.id).concat(uses.stickers);
+    for (const l of s.videoLooks)
+        for (const k of (l.look && l.look.videoStickers) || [])
+            if (k && k.id)
+                stickers.push(String(k.id));
+    let have = [];
+    try {
+        have = await stickerIndex(userId);
+    }
+    catch (_) {
+        return;
+    }
+    for (const id of have)
+        if (stickers.indexOf(id) < 0)
+            await dropSticker(id, userId);
 }
 // Projects in the Studio: the recipe of a video, never the video. Each is
 // a file of its own, with an index of their names, folders and times, and
@@ -3905,6 +3983,7 @@ async function projectIndex(userId) {
             keptKey: str(e.keptKey, 80),
             backs: Array.isArray(e.backs) ? e.backs.map((x) => backId(x)).slice(0, 12) : [],
             marks: Array.isArray(e.marks) ? e.marks.map((x) => backId(x)).slice(0, 5) : [],
+            stickers: Array.isArray(e.stickers) ? e.stickers.map((x) => backId(x)).slice(0, STICKERS_MAX) : [],
         });
     }
     return out;
@@ -3912,11 +3991,13 @@ async function projectIndex(userId) {
 function projectUses(list) {
     const backs = [];
     const marks = [];
+    const stickers = [];
     for (const e of list) {
         backs.push(...e.backs);
         marks.push(...e.marks);
+        stickers.push(...(e.stickers || []));
     }
-    return { backs, marks };
+    return { backs, marks, stickers };
 }
 // What a project holds, cleaned: the look as settings, cleaned the same way
 // as the settings themselves, the saved performance it uses, its trim and
@@ -5100,6 +5181,30 @@ async function onPanel(p, userId) {
                     ok = await dropMarkPic(id, userId);
                 return answer({ type: 'mark_pic', id, ok, error: ok ? '' : 'The picture could not be saved to your account.' });
             }
+            case 'sticker_get': {
+                const id = backId(p.id);
+                const v = await readJson(stickerFile(id), userId);
+                return answer({ type: 'sticker', id, picture: cleanVideoBg(v && v.picture) });
+            }
+            case 'sticker_put': {
+                // A sticker's picture, or empty to delete it.
+                const id = backId(p.id);
+                const picture = cleanVideoBg(p.picture);
+                if (p.picture && !picture)
+                    return answer({ type: 'sticker', id, ok: false, error: 'That picture is too large to keep. Pick a smaller one.' });
+                let ok = true;
+                if (picture) {
+                    const index = await stickerIndex(userId);
+                    if (index.indexOf(id) < 0 && index.length >= STICKERS_MAX * 4)
+                        return answer({ type: 'sticker', id, ok: false, error: 'There are too many sticker pictures kept. Delete some stickers first.' });
+                    ok = await writeJson(stickerFile(id), { picture }, userId);
+                    if (ok && index.indexOf(id) < 0)
+                        ok = await writeJson(STICKER_INDEX_FILE, index.concat([id]), userId);
+                }
+                else
+                    ok = await dropSticker(id, userId);
+                return answer({ type: 'sticker', id, ok, error: ok ? '' : 'The sticker could not be saved to your account.' });
+            }
             case 'project_list': {
                 const s = await loadSettings(userId);
                 return answer({ type: 'projects', ok: true, list: await projectIndex(userId), folders: s.projectFolders });
@@ -5132,6 +5237,7 @@ async function onPanel(p, userId) {
                 const entry = {
                     id, name: was ? was.name : name, folder: typeof p.folder === 'string' ? str(p.folder, 40).replace(/[^a-z0-9_-]/gi, '') : was ? was.folder : '', at: Date.now(), keptKey: body.keptKey,
                     backs: (body.look.videoBacks || []).map((b) => b.id), marks: (body.look.videoMarks || []).map((m) => m.id),
+                    stickers: (body.look.videoStickers || []).map((k) => k.id),
                 };
                 const next = list.filter((x) => x.id !== id).concat([entry]);
                 if (!(await writeJson(PROJECT_INDEX, next, userId)))
@@ -5497,7 +5603,7 @@ async function onPanel(p, userId) {
                 for (const part of parts) {
                     let same = false;
                     if (part === 'settings') {
-                        same = strip(s) === strip(fresh) && !(await anyVideoBg(s, userId)) && !(await loadFonts(userId)).length && !(await markIndex(userId)).length && !(await projectIndex(userId)).length && !s.projectFolders.length;
+                        same = strip(s) === strip(fresh) && !(await anyVideoBg(s, userId)) && !(await loadFonts(userId)).length && !(await markIndex(userId)).length && !(await stickerIndex(userId)).length && !(await projectIndex(userId)).length && !s.projectFolders.length;
                     }
                     else if (part === 'prompt')
                         same = !s.prompt && empty(s.askNotes) && empty(s.engineNotes) && empty(s.decisionQuestions) &&
@@ -5543,7 +5649,7 @@ async function onPanel(p, userId) {
                     catch (_) {
                         bgsOk = false;
                     }
-                    bgsOk = (await dropVideoBgs(s, userId)) && (await dropMarkPics(s, userId)) && bgsOk;
+                    bgsOk = (await dropVideoBgs(s, userId)) && (await dropMarkPics(s, userId)) && (await dropStickers(s, userId)) && bgsOk;
                 }
                 if (parts.indexOf('settings') >= 0) {
                     const keep = { cast: s.cast, groups: s.groups, moodList: s.moodList, prompt: s.prompt, promptRole: s.promptRole, engineNoteRole: s.engineNoteRole, askNoteRole: s.askNoteRole, askNotes: s.askNotes, engineNotes: s.engineNotes, decisionQuestions: s.decisionQuestions, exportParts: s.exportParts, importParts: s.importParts, resetParts: s.resetParts, builtInSeen: s.builtInSeen, movedSeen: s.movedSeen, chatsOff: s.chatsOff };

@@ -65,6 +65,7 @@ The file is saved as an MP4 or a WebM, named with the chat's name and the day.
 - On a phone, the preview is at the top, and the settings are under it. **Part of the Studio** picks which settings show. The settings scroll, and the preview stays in view.
 - Under the preview, the parts of the performance are shown as blocks along the video. A press on one goes to it.
 - Every change is saved as you make it, so closing the Studio loses nothing.
+- On a phone, the top bar keeps **Make a video**, **Download audio**, **Undo** and **Close**. **More**, the three dots, holds **Redo**, **Lock all** and **Focus**. On a laptop, they are all in the bar.
 
 ### Steps
 
@@ -87,7 +88,7 @@ Under the preview, the parts of the performance are blocks along the video.
 - A handle at the start and the end of the sound: drag the start one to cut the beginning, the end one to cut the end. The preview shows the frame at the handle while it moves. **Clear the trim** keeps it all again, and **Trim**, under **The performance and scenes**, has the same in seconds.
 - Cuts and the trim change only the video and the downloads, never the saved audio. Cuts are kept with the performance in **Saved audio**.
 
-**Undo** and **Redo**, at the top, take back a change to the Studio's settings and make it again. Deleting a background with a picture, or a watermark with a picture, deletes the picture too, so Undo goes back no further than that.
+**Undo** and **Redo**, at the top, take back a change to the Studio's settings and make it again. Deleting a background with a picture, a watermark with a picture, or a sticker, deletes the picture too, so Undo goes back no further than that.
 
 ### What it sends
 
@@ -592,10 +593,10 @@ The moon is a circle in every shape of video, since sizes are in pixels of a 108
 ### Locks and focus
 
 - **Lock**, in a shape's settings, keeps it where it is: it cannot be dragged, sized, turned, moved with the arrow keys or deleted. A press on it in the preview still picks it, so it can be unlocked. The list of shapes says **locked** after its name.
-- **Lock all**, at the top of the Studio, locks every shape at once, and reads **Locked** while it is on.
+- **Lock all**, at the top of the Studio, locks every shape and sticker at once. While it is on, it reads **Locked** and its padlock is closed. On a phone, it is in **More**.
 - **Lock the timeline**, beside **Cut it out**, takes the trim handles away and turns **Cut it out** and putting a part back off, so nothing is cut by accident.
 - Locks are saved with the shapes, in looks and in projects. **Undo** takes back a lock.
-- **Focus**, at the top, hides the list of parts, the settings and the timeline, and the preview takes the space. Play, the bar for where you are and **Exit focus** stay. On a laptop they fade after three seconds without the mouse moving and come back when it moves. On a phone, a tap on the preview where there is no shape hides or shows them. Shapes can still be picked and moved. **\\** turns focus on and off, and Escape leaves it. The settings are where you left them.
+- **Focus**, at the top (in **More** on a phone), hides the list of parts, the settings and the timeline, and the preview takes the space. Play, the bar for where you are and **Exit focus** stay. On a laptop they fade after three seconds without the mouse moving and come back when it moves. On a phone, a tap on the preview where there is no shape hides or shows them. Shapes can still be picked and moved. **\\** turns focus on and off, and Escape leaves it. The settings are where you left them.
 
 ### Snapping
 
@@ -765,6 +766,73 @@ In the video, her logo and name sit in the bottom right corner the whole time, h
 - A watermark in the middle is drawn under the words, so it never covers them. Every other one is drawn over everything, the fades included.
 - A picture is kept as a PNG, at most 512 pixels on its long side, so a logo keeps its see-through parts.
 - Both are part of a saved look. **Start again** with **Settings** ticked takes the watermarks and their pictures out.
+
+## Stickers
+
+### In short
+
+- A sticker is a picture of your own on the video, such as a drawing, a frame or a texture.
+- Up to 20 stickers, each placed, sized and turned on the preview with the same dots as a shape.
+- Each has an **Overlay type**, which changes how it mixes with what is under it, such as **Screen**, which makes black vanish.
+- **Fill the frame** stretches one over the whole frame. **Layer** puts it over everything or behind the words.
+- **When** shows it for the whole video, at the start, at the end, from a time, or during scenes on some backgrounds, with a short fade in and out.
+- They are drawn in the preview, the example clip, full screen and every saved video. The downloaded audio has none.
+
+### Steps
+
+1. Open **Stickers** in the Studio and press **Add a sticker**.
+2. Pick a PNG, JPEG, WebP or GIF picture. It shows in the middle of the preview, with its long side 400 pixels of a 1080-pixel frame.
+3. Drag it on the preview. The dot at a corner changes the size. The dot above turns it. The boxes under **Across**, **Down**, **Width**, **Height** and **Turn** set exact values.
+4. Pick an **Overlay type**. The line under it says what that type does.
+5. Pick **See-through**, **Layer** and **When**.
+6. Look at the preview. Each change shows at once.
+
+**Delete** takes a sticker out, and asks first.
+
+### What it sends
+
+Nothing. Stickers are drawn on your device. Each sticker's picture is kept on your account in a file of its own. See [Privacy](privacy.md).
+
+### An example
+
+Pell Orrin makes a video of a ghost story and wants it to look like an old photograph.
+
+1. **Add a sticker** with a picture of dust and scratches, white on black.
+2. **Fill the frame**, so it covers the whole video.
+3. **Overlay type**: **Screen**. The black part vanishes, and only the white scratches show over the scene.
+4. **See-through**: 60%, so the scratches are faint.
+5. A second sticker, a small drawing of a candle with see-through parts. Dragged to the bottom left, with **Layer**: **Behind the words**, so the words are never covered.
+6. **When**: **From a time, for a number of seconds**, from 12 for 8 seconds, for the part of the story where the candle is lit.
+
+In the video, faint scratches run over every frame. The candle fades in at 12 seconds behind the words and fades out at 20.
+
+### Details
+
+- **Overlay type** is one of these. Each is the same as the blend mode of that name in a drawing program.
+
+  | Overlay type | What it does |
+  | --- | --- |
+  | Normal | Drawn as it is. |
+  | Multiply | Darkens: white parts vanish, dark parts stay. |
+  | Screen | Lightens: black parts vanish, light parts stay. |
+  | Overlay | Adds contrast: lights get lighter and darks darker. |
+  | Soft light | A gentler Overlay. |
+  | Lighten | Keeps whichever is lighter, the sticker or what is under it. |
+  | Darken | Keeps whichever is darker, the sticker or what is under it. |
+  | Color dodge | Brightens what is under it, strongly. |
+  | Color burn | Darkens what is under it, strongly. |
+  | Difference | Shows the difference in color, which can look inverted. |
+
+- **Layer**: **Over everything** is drawn over the words, the pictures and the fades, and under the watermarks. **Behind the words** is drawn on the background, over its shapes.
+- **Fill the frame** covers the whole frame, cut from the middle of the picture, so it keeps its shape. It cannot be dragged or sized while it is on. **Flip across** and **Flip up and down** still work.
+- **See-through** is solid by default and goes to 95%.
+- **When** has the same choices as a watermark. **At the start** and **At the end** are the first and last 4 seconds. A sticker fades in and out over less than half a second at the ends of its time.
+- **Bring forward** and **Send back** change which sticker is on top. **Duplicate** makes a copy with a copy of its picture. **Lock** keeps it where it is, and **Lock all** at the top locks every sticker and shape.
+- Stickers snap while they move, the same as shapes. See [Snapping](#snapping).
+- A picture is kept at most 1600 pixels on its long side, as WebP where the browser can write it and PNG where it cannot, so its see-through parts stay.
+- A GIF does not move in the video. Its first frame is used, and the panel says so when it is added.
+- Stickers are part of a saved look and of a project. A deleted sticker's picture stays on your account while a saved look or a project still uses it, and is taken out once nothing does. **Start again** with **Settings** ticked takes every sticker and its picture out.
+- Deleting a sticker cannot be undone, so **Undo** goes back no further than that.
 
 ## Hide and bleep words
 

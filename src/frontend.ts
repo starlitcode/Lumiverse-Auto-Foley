@@ -1006,6 +1006,9 @@ const ICON_UNDO = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" st
 const ICON_STEP_AGAIN = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 14 5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/></svg>';
 const ICON_LIST = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M5 7h14M5 12h14M5 17h14"/></svg>';
 const ICON_KEYS = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.5" y="6" width="19" height="12" rx="2"/><path d="M6.5 10h1M10.5 10h1M14.5 10h1M8 14h8"/></svg>';
+const ICON_LOCK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>';
+const ICON_UNLOCK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 7.8-1.3"/></svg>';
+const ICON_FOCUS = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9V5a1 1 0 0 1 1-1h4"/><path d="M15 4h4a1 1 0 0 1 1 1v4"/><path d="M20 15v4a1 1 0 0 1-1 1h-4"/><path d="M9 20H5a1 1 0 0 1-1-1v-4"/></svg>';
 const ICON_CLOSE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12"/><path d="M18 6L6 18"/></svg>';
 const ICON_PLAY = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5.5v13a1 1 0 0 0 1.5.86l10.5-6.5a1 1 0 0 0 0-1.72L9.5 4.64A1 1 0 0 0 8 5.5Z"/></svg>';
 const ICON_PAUSE = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6.5" y="5" width="4" height="14" rx="1"/><rect x="13.5" y="5" width="4" height="14" rx="1"/></svg>';
@@ -1681,6 +1684,11 @@ html[data-af-still] .af-ws-sec.af-ws-in, .af-ws[data-af-still] .af-ws-sec.af-ws-
 /* The list of keys, over the workspace. */
 .af-ws-pop { position: absolute; z-index: 6; top: 56px; right: 12px; display: flex; flex-direction: column; gap: 10px; width: min(440px, calc(100% - 24px)); max-height: calc(100% - 72px); overflow: auto; padding: 14px; border: 1px solid var(--af-line); border-radius: var(--af-r-md); background-color: var(--lumiverse-card-bg-solid, rgb(24,20,34)); background-image: linear-gradient(var(--lumiverse-bg-elevated, rgba(35,30,48,.98)), var(--lumiverse-bg-elevated, rgba(35,30,48,.98))); box-shadow: 0 10px 30px rgba(0,0,0,.35); opacity: 0; transform: translateY(4px); transition: opacity .18s ease-out, transform .18s ease-out; outline: none; }
 .af-ws-pop[data-af-open] { opacity: 1; transform: none; }
+.af-ws-morebtn { display: none; }
+.af-ws-menu { width: auto; min-width: 200px; max-width: calc(100% - 24px); gap: 4px; padding: 6px; top: calc(52px + env(safe-area-inset-top, 0px)); right: 8px; }
+.af-ws-menu .af-ws-item { justify-content: flex-start; width: 100%; min-height: 40px; border-color: transparent; background: transparent; }
+.af-ws-menu .af-ws-item:hover:not(:disabled) { background: var(--af-fill-subtle); }
+.af-ws-menu .af-ws-item[aria-pressed="true"] { color: var(--af-accent, inherit); }
 html[data-af-still] .af-ws-pop, .af-ws[data-af-still] .af-ws-pop { transition: none; transform: none; }
 @media (prefers-reduced-motion: reduce) { .af-ws-pop { transition: none; transform: none; } }
 .af-keys { display: grid; grid-template-columns: minmax(0, max-content) minmax(0, 1fr); gap: 5px 14px; margin: 0; }
@@ -1693,7 +1701,10 @@ html[data-af-still] .af-ws-pop, .af-ws[data-af-still] .af-ws-pop { transition: n
   .af-ws-acts .af-btn > span:last-child { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 }
 @container afws (max-width: 639.98px) {
-  .af-ws-keysbtn { display: none; }
+  .af-ws-acts [data-af-wsextra] { display: none; }
+  .af-ws-acts .af-ws-morebtn { display: inline-flex; }
+  .af-ws-name span { white-space: normal; overflow: visible; line-height: 1.25; }
+  .af-ws[data-af-focus] .af-ws-acts > [data-af-ws="focus"] { display: inline-flex; }
   .af-ws-top { gap: 6px; padding-left: 8px; padding-right: 8px; }
   .af-ws-acts { gap: 4px; }
 }
@@ -2037,6 +2048,7 @@ const DEFAULTS: any = {
   videoBylineShadowSoft: 18,
   videoBylineShadowFar: 0,
   videoMarks: [],
+  videoStickers: [],
   videoWordFill: 'solid',
   videoWordStops: ['#f2b880'],
   videoWordDir: 'down',
@@ -4955,6 +4967,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       }
     for (const p of parts) if (p.picture) await cachedImage(p.picture);
     for (const m of marksNow()) if (m.pic) await loadMarkPic(m.id).catch(() => {});
+    for (const k of stickersNow()) await loadStickerPic(k.id).catch(() => {});
   }
   function stageNow(parts: VideoPart[], sh: Show | null, only: string, fixed: { t: number; id: string }[] | null, scale = 1): VideoStage {
     const full = videoSize();
@@ -5622,8 +5635,9 @@ export function setup(ctx: Ctx, overrides?: any) {
     st.from = -intro;
     st.to = total + fadeOut;
     drawBackAt(g, st, t - intro);
-    // A watermark in the middle is drawn under the words, so it never
-    // covers them.
+    // Stickers behind the words, then a watermark in the middle, which is
+    // drawn under the words, so it never covers them.
+    drawStickers(g, st, t, intro, total, fadeOut, 'back');
     drawMarks(g, st, t, intro, total, fadeOut, true);
     const audioT = t - intro;
     if (audioT < 0) {
@@ -5672,7 +5686,9 @@ export function setup(ctx: Ctx, overrides?: any) {
       g.fillStyle = '#000';
       g.fillRect(0, 0, W, H);
     }
-    // Watermarks go over everything else, the fades included.
+    // Stickers over everything but the watermarks, then the watermarks,
+    // which go over everything else, the fades included.
+    drawStickers(g, st, t, intro, total, fadeOut, 'top');
     drawMarks(g, st, t, intro, total, fadeOut, false);
     g.restore();
   }
@@ -5727,6 +5743,79 @@ export function setup(ctx: Ctx, overrides?: any) {
     const [a, b] = noteSpan(m as any, intro, total, fadeOut);
     const edge = Math.min(1, (t - a) / 0.4, (b - t) / 0.4);
     return edge <= 0 ? 0 : strength * Math.min(1, edge);
+  }
+  // ---- stickers ----
+  // A picture of the reader's own, placed, sized and turned on the video,
+  // with an overlay type, behind the words or over everything but the
+  // watermarks, and shown when the reader picks, as a watermark is.
+  interface VideoSticker { id: string; x: number; y: number; w: number; h: number; rot: number; clear: number; flipX?: boolean; flipY?: boolean; blend: string; cover?: boolean; layer: 'back' | 'top'; when: VideoMark['when']; from: number; secs: number; backs: string[]; lock?: boolean }
+  const STICKERS_MAX = 20;
+  const BLENDS: { id: string; label: string; help: string }[] = [
+    { id: 'normal', label: 'Normal', help: 'Drawn as it is.' },
+    { id: 'multiply', label: 'Multiply', help: 'Darkens: white parts vanish, dark parts stay.' },
+    { id: 'screen', label: 'Screen', help: 'Lightens: black parts vanish, light parts stay.' },
+    { id: 'overlay', label: 'Overlay', help: 'Adds contrast: lights get lighter and darks darker.' },
+    { id: 'soft-light', label: 'Soft light', help: 'A gentler Overlay.' },
+    { id: 'lighten', label: 'Lighten', help: 'Keeps whichever is lighter, the sticker or what is under it.' },
+    { id: 'darken', label: 'Darken', help: 'Keeps whichever is darker, the sticker or what is under it.' },
+    { id: 'color-dodge', label: 'Color dodge', help: 'Brightens what is under it, strongly.' },
+    { id: 'color-burn', label: 'Color burn', help: 'Darkens what is under it, strongly.' },
+    { id: 'difference', label: 'Difference', help: 'Shows the difference in color, which can look inverted.' },
+  ];
+  const BLEND_OP: Record<string, string> = { normal: 'source-over', multiply: 'multiply', screen: 'screen', overlay: 'overlay', 'soft-light': 'soft-light', lighten: 'lighten', darken: 'darken', 'color-dodge': 'color-dodge', 'color-burn': 'color-burn', difference: 'difference' };
+  function stickersNow(): VideoSticker[] {
+    if (!Array.isArray(S.videoStickers)) S.videoStickers = [];
+    return S.videoStickers;
+  }
+  const stickerPics = new Map<string, HTMLImageElement | null>();
+  const stickerAsked = new Map<string, Promise<void>>();
+  function loadStickerPic(id: string): Promise<void> {
+    let ask = stickerAsked.get(id);
+    if (!ask) {
+      ask = rpc({ type: 'sticker_get', id }, 15000).then(
+        async (r: any) => {
+          stickerPics.set(id, r && r.picture ? await loadImage(r.picture) : null);
+        },
+        () => {
+          stickerAsked.delete(id);
+          log('A sticker\u2019s picture could not be read: the backend did not answer.', 'bad');
+        },
+      );
+      stickerAsked.set(id, ask);
+    }
+    return ask;
+  }
+  function drawStickers(g: CanvasRenderingContext2D, st: VideoStage, t: number, intro: number, total: number, fadeOut: number, layer: 'back' | 'top') {
+    const W = st.w;
+    const H = st.h;
+    const u = Math.min(W, H) / 1080;
+    for (const k of stickersNow()) {
+      if ((k.layer === 'back' ? 'back' : 'top') !== layer) continue;
+      const pic = stickerPics.get(k.id);
+      if (!pic || !pic.width) continue;
+      // The same timing as a watermark, with a short fade in and out.
+      const a = markStrength({ strength: 100 - Math.min(95, Math.max(0, numOr(k.clear, 0))), when: k.when, from: k.from, secs: k.secs, backs: k.backs } as any, st, t, intro, total, fadeOut);
+      if (a <= 0) continue;
+      g.save();
+      g.globalAlpha = a;
+      g.globalCompositeOperation = (BLEND_OP[k.blend] || 'source-over') as GlobalCompositeOperation;
+      g.shadowColor = 'transparent';
+      if (k.cover) {
+        // Fill the frame: as large as covers it, cut from the middle.
+        const sc = Math.max(W / pic.width, H / pic.height);
+        g.translate(W / 2, H / 2);
+        g.scale(k.flipX ? -1 : 1, k.flipY ? -1 : 1);
+        g.drawImage(pic, (-pic.width * sc) / 2, (-pic.height * sc) / 2, pic.width * sc, pic.height * sc);
+      } else {
+        const w = Math.max(1, k.w * u);
+        const h = Math.max(1, k.h * u);
+        g.translate(k.x * W, k.y * H);
+        g.rotate(((Number(k.rot) || 0) * Math.PI) / 180);
+        g.scale(k.flipX ? -1 : 1, k.flipY ? -1 : 1);
+        g.drawImage(pic, -w / 2, -h / 2, w, h);
+      }
+      g.restore();
+    }
   }
   function drawMarks(g: CanvasRenderingContext2D, st: VideoStage, t: number, intro: number, total: number, fadeOut: number, middle: boolean) {
     const W = st.w;
@@ -14802,7 +14891,12 @@ export function setup(ctx: Ctx, overrides?: any) {
   let designing = false;
   let designSel = '';
   let designRefs: { list: HTMLElement; editor: HTMLElement; said: HTMLElement; add: HTMLButtonElement } | null = null;
+  // What the preview's handles move: the shapes of a design, or the
+  // stickers while Stickers is open. Both have the same place, size and
+  // turn, so one editor moves both.
+  let editKind: 'shapes' | 'stickers' = 'shapes';
   function shapesNow(): VideoShapeDef[] {
+    if (editKind === 'stickers') return stickersNow() as any;
     const bk = backNow();
     if (!Array.isArray(bk.shapes)) bk.shapes = [];
     return bk.shapes;
@@ -14822,8 +14916,10 @@ export function setup(ctx: Ctx, overrides?: any) {
       designFrame = 0;
       const st = studioView.st;
       const bk = backNow();
-      if (st && st.layers.has(bk.id)) paintBack(st, bk);
-      else if (st && bk.id === backDefault().id) paintBack(st, bk, st.back);
+      if (editKind !== 'stickers') {
+        if (st && st.layers.has(bk.id)) paintBack(st, bk);
+        else if (st && bk.id === backDefault().id) paintBack(st, bk, st.back);
+      }
       paintPreview();
     });
   }
@@ -14839,7 +14935,8 @@ export function setup(ctx: Ctx, overrides?: any) {
     designSave = null;
     const go = () => {
       designSave = null;
-      set({ videoBacks: backList().slice() });
+      if (editKind === 'stickers') set({ videoStickers: stickersNow().slice() });
+      else set({ videoBacks: backList().slice() });
     };
     if (now) go();
     else designSave = setTimeout(go, 400);
@@ -14849,7 +14946,8 @@ export function setup(ctx: Ctx, overrides?: any) {
       clearTimeout(designSave);
       designSave = null;
       try {
-        set({ videoBacks: backList().slice() });
+        if (editKind === 'stickers') set({ videoStickers: stickersNow().slice() });
+        else set({ videoBacks: backList().slice() });
       } catch (_) {}
     }
   });
@@ -14941,6 +15039,7 @@ export function setup(ctx: Ctx, overrides?: any) {
   }
   // The list of shapes, and the boxes for the one picked.
   function drawDesign() {
+    if (editKind === 'stickers') return drawStickerEditor();
     const r = designRefs;
     if (!r) return;
     const list = shapesNow();
@@ -15171,6 +15270,10 @@ export function setup(ctx: Ctx, overrides?: any) {
     }
     const all = shapesNow();
     const at = all.indexOf(sh);
+    if (editKind === 'stickers' && (what === 'dup' || what === 'delete')) {
+      void stickerAct(sh as any, what);
+      return true;
+    }
     if (what === 'dup') {
       if (all.length >= SHAPES_MAX) return false;
       const copy = { ...sh, stops: (sh.stops || []).slice(), id: rid('sh').replace(/[^a-z0-9]/gi, '').slice(0, 24), x: Math.min(1.5, sh.x + 0.03), y: Math.min(1.5, sh.y + 0.03) };
@@ -15199,6 +15302,382 @@ export function setup(ctx: Ctx, overrides?: any) {
     redrawDesign();
     return true;
   }
+  // ---- the stickers' editor ----
+  // The same handles as the shapes move a sticker on the preview. These are
+  // the list and the boxes for the one picked.
+  let stickerRefs: { list: HTMLElement; editor: HTMLElement; said: HTMLElement; add: HTMLButtonElement; status: HTMLElement } | null = null;
+  const stickerName = (k: VideoSticker, n: number) => n + 1 + '. Sticker' + (k.cover ? ', fills the frame' : '') + (k.layer === 'back' ? ', behind the words' : '') + (k.lock ? ', locked' : '');
+  const newStickerId = () => {
+    let id = '';
+    do id = 'k' + Math.random().toString(36).replace(/[^a-z0-9]/g, '').slice(0, 10);
+    while (stickersNow().some((x) => x.id === id));
+    return id;
+  };
+  // A picture kept for a sticker: its see-through parts stay, at most 1600
+  // pixels on its long side. A GIF is drawn once, so its first frame is kept.
+  async function stickerPicture(im: HTMLImageElement): Promise<string> {
+    let side = 1600;
+    for (let n = 0; n < 4; n++) {
+      const sc = Math.min(1, side / Math.max(im.width, im.height));
+      const cv = canvasOf(Math.max(1, Math.round(im.width * sc)), Math.max(1, Math.round(im.height * sc)));
+      const g = cv.getContext('2d');
+      if (!g) return '';
+      g.imageSmoothingQuality = 'high';
+      g.drawImage(im, 0, 0, cv.width, cv.height);
+      let data = cv.toDataURL('image/webp', 0.92);
+      // A browser that cannot write WebP gives a PNG, which keeps the
+      // see-through parts too.
+      if (!/^data:image\/webp/.test(data)) data = cv.toDataURL('image/png');
+      if (data.length <= 2900000) return data;
+      side = Math.round(side * 0.7);
+    }
+    return '';
+  }
+  async function addSticker() {
+    const r = stickerRefs;
+    if (!r || stickersNow().length >= STICKERS_MAX) return;
+    const say = (t: string, bad?: boolean) => {
+      r.status.textContent = t;
+      if (bad) r.status.dataset.kind = 'bad';
+      else delete r.status.dataset.kind;
+    };
+    let files: any[] = [];
+    try {
+      files = await ctx.uploads.pickFile({ accept: ['image/png', 'image/jpeg', 'image/webp', 'image/gif', '.png', '.jpg', '.jpeg', '.webp', '.gif'], multiple: false, maxSizeBytes: 20 * 1024 * 1024 });
+    } catch (e: any) {
+      say('The file picker could not open: ' + String((e && e.message) || e).slice(0, 200), true);
+      return;
+    }
+    const f = files && files[0];
+    if (!f) return;
+    const url = URL.createObjectURL(new Blob([f.bytes as any], { type: f.mimeType || 'image/png' }));
+    const im = await loadImage(url);
+    URL.revokeObjectURL(url);
+    if (!im || !im.width) {
+      say('That file is not a picture Auto Foley can read. Use PNG, JPEG, WebP or GIF.', true);
+      return;
+    }
+    const picture = await stickerPicture(im);
+    if (!picture) {
+      say('That picture is too large to keep. Pick a smaller one.', true);
+      return;
+    }
+    const id = newStickerId();
+    say('Saving the sticker…');
+    let res: any = null;
+    try {
+      res = await rpc({ type: 'sticker_put', id, picture }, 60000);
+    } catch (_) {}
+    if (!res || !res.ok) {
+      say((res && res.error) || 'The sticker could not be saved to your account. Try again.', true);
+      return;
+    }
+    stickerPics.set(id, await loadImage(picture));
+    stickerAsked.set(id, Promise.resolve());
+    const gif = /gif/i.test(String(f.mimeType || '')) || /\.gif$/i.test(String(f.name || ''));
+    say(gif ? 'Added. A GIF does not move in the video: its first frame is used.' : 'Added. Drag it on the preview.');
+    // Its long side is 400 pixels of a 1080-pixel frame, in the shape of the
+    // picture.
+    const long = 400;
+    const wide = im.width >= im.height;
+    const list = stickersNow();
+    const n = list.length;
+    const k: VideoSticker = {
+      id,
+      x: Math.min(0.8, 0.5 + (n % 5) * 0.04),
+      y: Math.min(0.8, 0.5 + (n % 5) * 0.04),
+      w: wide ? long : Math.max(4, Math.round((long * im.width) / im.height)),
+      h: wide ? Math.max(4, Math.round((long * im.height) / im.width)) : long,
+      rot: 0,
+      clear: 0,
+      blend: 'normal',
+      layer: 'top',
+      when: 'all',
+      from: 0,
+      secs: 4,
+      backs: [],
+    };
+    list.push(k);
+    designSel = id;
+    saveDesignSoon(true);
+    drawDesign();
+    redrawDesign();
+  }
+  async function stickerAct(k: VideoSticker, what: 'dup' | 'delete') {
+    const r = stickerRefs;
+    const say = (t: string, bad?: boolean) => {
+      if (!r) return;
+      r.status.textContent = t;
+      if (bad) r.status.dataset.kind = 'bad';
+      else delete r.status.dataset.kind;
+    };
+    if (what === 'delete') {
+      if (shapeLocked(k as any)) {
+        keepSaid('This sticker is locked. Unlock it to delete it.');
+        return;
+      }
+      if (!(await askSure('Delete this sticker', 'Delete ' + stickerName(k, stickersNow().indexOf(k)) + '? Its picture is taken out of your account, unless a saved look or a project still uses it.', 'Delete', true))) return;
+      const now = stickersNow();
+      const i = now.indexOf(k);
+      if (i >= 0) now.splice(i, 1);
+      if (designSel === k.id) designSel = '';
+      // The backend takes the picture out once the list is saved, if
+      // nothing else uses it.
+      saveDesignSoon(true);
+      drawDesign();
+      redrawDesign();
+      return;
+    }
+    if (stickersNow().length >= STICKERS_MAX) return;
+    await loadStickerPic(k.id);
+    let picture = '';
+    try {
+      const got: any = await rpc({ type: 'sticker_get', id: k.id }, 15000);
+      picture = String((got && got.picture) || '');
+    } catch (_) {}
+    if (!picture) {
+      say('The sticker could not be copied: its picture could not be read from your account.', true);
+      return;
+    }
+    const id = newStickerId();
+    let res: any = null;
+    try {
+      res = await rpc({ type: 'sticker_put', id, picture }, 60000);
+    } catch (_) {}
+    if (!res || !res.ok) {
+      say((res && res.error) || 'The copy could not be saved to your account. Try again.', true);
+      return;
+    }
+    stickerPics.set(id, stickerPics.get(k.id) || (await loadImage(picture)));
+    stickerAsked.set(id, Promise.resolve());
+    const now = stickersNow();
+    const copy: VideoSticker = { ...k, backs: (k.backs || []).slice(), id, lock: false, x: Math.min(1.5, k.x + 0.03), y: Math.min(1.5, k.y + 0.03) };
+    now.splice(now.indexOf(k) + 1, 0, copy);
+    designSel = id;
+    say('');
+    saveDesignSoon(true);
+    drawDesign();
+    redrawDesign();
+  }
+  function buildStickers(box: HTMLElement) {
+    box.appendChild(el('<p class="af-note">A picture of your own on the video. Drag it on the preview. The dot at a corner changes the size. The dot above turns it.</p>'));
+    const add = button('Add a sticker', () => void addSticker());
+    add.setAttribute('data-af-sticker-add', '');
+    const addRow = el('<div class="af-row"></div>');
+    addRow.appendChild(add);
+    box.appendChild(addRow);
+    box.appendChild(hint('PNG, JPEG, WebP or GIF. See-through parts stay. A GIF shows its first frame.'));
+    const status = el('<p class="af-status" role="status" data-af-sticker-status></p>');
+    box.appendChild(status);
+    const said = el('<p class="af-note" role="status" data-af-stickers-said></p>');
+    box.appendChild(said);
+    const list = el('<div class="af-col af-shapes" data-af-stickers role="group" aria-label="The stickers, from the back to the front"></div>');
+    box.appendChild(list);
+    const editor = el('<div class="af-col" data-af-sticker-edit></div>');
+    box.appendChild(editor);
+    stickerRefs = { list, editor, said, add, status };
+    drawStickerEditor();
+  }
+  function drawStickerEditor() {
+    const r = stickerRefs;
+    if (!r) return;
+    const list = stickersNow();
+    if (designSel && !list.some((x) => x.id === designSel)) designSel = '';
+    r.add.disabled = list.length >= STICKERS_MAX;
+    r.said.textContent = !list.length
+      ? 'No stickers yet.'
+      : list.length >= STICKERS_MAX
+        ? 'This look has ' + STICKERS_MAX + ' stickers, which is the most there can be.'
+        : 'From the back to the front. Pick one to change it.';
+    r.list.replaceChildren();
+    list.forEach((k, n) => {
+      const b = button(stickerName(k, n), () => {
+        designSel = designSel === k.id ? '' : k.id;
+        drawStickerEditor();
+        redrawDesign();
+      });
+      b.classList.add('af-shape-pick');
+      b.setAttribute('data-af-sticker', k.id);
+      b.setAttribute('aria-pressed', k.id === designSel ? 'true' : 'false');
+      r.list.appendChild(b);
+    });
+    r.editor.replaceChildren();
+    const k = list.find((x) => x.id === designSel);
+    if (!k) return;
+    const changed = () => {
+      saveDesignSoon();
+      redrawDesign();
+      const pick = r.list.querySelector('[data-af-sticker="' + k.id + '"]');
+      if (pick) pick.textContent = stickerName(k, stickersNow().indexOf(k));
+    };
+    const again = () => {
+      saveDesignSoon(true);
+      drawStickerEditor();
+      redrawDesign();
+    };
+    const blendHelp = hint((BLENDS.find((b) => b.id === k.blend) || BLENDS[0]).help);
+    const blend = select('Overlay type', BLENDS.map((b) => ({ id: b.id, label: b.label })), BLENDS.some((b) => b.id === k.blend) ? k.blend : 'normal', (v) => {
+      k.blend = v;
+      blendHelp.textContent = (BLENDS.find((b) => b.id === v) || BLENDS[0]).help;
+      changed();
+    }, 'Normal by default. It changes how the sticker mixes with what is under it.');
+    blend.querySelector('select')!.setAttribute('data-af-sticker-blend', '');
+    r.editor.appendChild(blend);
+    r.editor.appendChild(blendHelp);
+    const clear = slider('See-through', numOr(k.clear, 0), 0, 95, 5, (v) => (v ? v + '%' : 'Solid'), (v) => {
+      k.clear = v;
+      changed();
+    }, 'Solid by default.');
+    clear.setAttribute('data-af-byeye', '');
+    clear.setAttribute('data-af-sticker-clear', '');
+    r.editor.appendChild(clear);
+    r.editor.appendChild(segmented('Layer', [
+      { id: 'top', label: 'Over everything' },
+      { id: 'back', label: 'Behind the words' },
+    ], k.layer === 'back' ? 'back' : 'top', (v) => {
+      k.layer = v === 'back' ? 'back' : 'top';
+      changed();
+    }, 'Over everything by default, under the watermarks. Behind the words puts it on the background.'));
+    const flips = el('<div class="af-row af-wrap"></div>');
+    const coverBtn = button('Fill the frame', () => {
+      k.cover = !k.cover;
+      again();
+    });
+    coverBtn.setAttribute('aria-pressed', k.cover ? 'true' : 'false');
+    coverBtn.setAttribute('data-af-sticker-act', 'cover');
+    flips.appendChild(coverBtn);
+    for (const [key, label] of [['flipX', 'Flip across'], ['flipY', 'Flip up and down']] as const) {
+      const fb = button(label, () => {
+        k[key] = !k[key];
+        fb.setAttribute('aria-pressed', k[key] ? 'true' : 'false');
+        changed();
+      });
+      fb.setAttribute('aria-pressed', k[key] ? 'true' : 'false');
+      fb.setAttribute('data-af-sticker-act', key);
+      flips.appendChild(fb);
+    }
+    r.editor.appendChild(flips);
+    if (k.cover) r.editor.appendChild(hint('It covers the whole frame, cut from its middle, so it cannot be moved or sized.'));
+    else {
+      const grid = el('<div class="af-shape-grid"></div>');
+      const box = (key: string, label: string, value: number, min: number, max: number, help: string, take: (v: number) => void) => {
+        const row = numberRow(label, value, min, max, 1, (v) => {
+          take(v);
+          changed();
+        }, help);
+        row.setAttribute('data-af-sticker-num', key);
+        grid.appendChild(row);
+      };
+      box('x', 'Across, in percent', Math.round(k.x * 100), -50, 150, 'Where its middle is. 50 is the middle.', (v) => (k.x = v / 100));
+      box('y', 'Down, in percent', Math.round(k.y * 100), -50, 150, 'Where its middle is. 50 is the middle.', (v) => (k.y = v / 100));
+      box('w', 'Width', k.w, 4, 4000, 'In pixels of a 1080-pixel frame.', (v) => (k.w = v));
+      box('h', 'Height', k.h, 4, 4000, 'In pixels of a 1080-pixel frame.', (v) => (k.h = v));
+      box('rot', 'Turn, in degrees', k.rot, -180, 180, '0 is level.', (v) => (k.rot = v));
+      r.editor.appendChild(grid);
+      const locked = shapeLocked(k as any);
+      for (const b of Array.from(grid.querySelectorAll('input'))) (b as HTMLInputElement).disabled = locked;
+      const centers = el('<div class="af-row af-wrap"></div>');
+      const cx = button('Center across', () => {
+        k.x = 0.5;
+        again();
+      });
+      cx.setAttribute('data-af-sticker-act', 'centerx');
+      const cy = button('Center up and down', () => {
+        k.y = 0.5;
+        again();
+      });
+      cy.setAttribute('data-af-sticker-act', 'centery');
+      cx.disabled = cy.disabled = locked;
+      centers.appendChild(cx);
+      centers.appendChild(cy);
+      r.editor.appendChild(centers);
+    }
+    // When it shows: the same choices as a watermark.
+    const whenOpts = [
+      { id: 'all', label: 'The whole video' },
+      { id: 'start', label: 'At the start' },
+      { id: 'end', label: 'At the end' },
+      { id: 'from', label: 'From a time, for a number of seconds' },
+    ];
+    if (backList().length > 1) whenOpts.push({ id: 'backs', label: 'Only during scenes on these backgrounds' });
+    const fromBox = el('<div class="af-sub"><div class="af-under"></div></div>');
+    const fromIn = fromBox.firstElementChild as HTMLElement;
+    const fromRow = numberRow('From, in seconds', numOr(k.from, 0), 0, 3600, 0.5, (v) => {
+      k.from = v;
+      changed();
+    }, 'From the start of the video, title included.');
+    fromRow.setAttribute('data-af-sticker-num', 'from');
+    fromIn.appendChild(fromRow);
+    const secsRow = numberRow('For, in seconds', numOr(k.secs, 4), 0.5, 600, 0.5, (v) => {
+      k.secs = v;
+      changed();
+    });
+    secsRow.setAttribute('data-af-sticker-num', 'secs');
+    fromIn.appendChild(secsRow);
+    const backsBox = el('<div class="af-sub"><div class="af-under af-row af-moods"></div></div>');
+    const backsIn = backsBox.firstElementChild as HTMLElement;
+    for (const b of backList()) {
+      const on = (k.backs || []).indexOf(b.id) >= 0;
+      const chip = el('<button type="button" class="af-segbtn" aria-pressed="' + (on ? 'true' : 'false') + '"></button>') as HTMLButtonElement;
+      chip.textContent = b.name;
+      chip.addEventListener('click', () => {
+        const has = (k.backs || []).indexOf(b.id) >= 0;
+        k.backs = has ? (k.backs || []).filter((x) => x !== b.id) : (k.backs || []).concat([b.id]);
+        chip.setAttribute('aria-pressed', has ? 'false' : 'true');
+        changed();
+      });
+      backsIn.appendChild(chip);
+    }
+    const when = select('When', whenOpts, whenOpts.some((o) => o.id === k.when) ? k.when : 'all', (v) => {
+      k.when = v as VideoSticker['when'];
+      showUnder(fromBox, v === 'from');
+      showUnder(backsBox, v === 'backs');
+      changed();
+    }, 'The whole video by default. It fades in and out. At the start or the end is the first or last 4 seconds.');
+    when.querySelector('select')!.setAttribute('data-af-sticker-when', '');
+    r.editor.appendChild(when);
+    fromBox.hidden = k.when !== 'from';
+    backsBox.hidden = k.when !== 'backs';
+    r.editor.appendChild(fromBox);
+    r.editor.appendChild(backsBox);
+    const lockRow = el('<div class="af-row af-wrap"></div>');
+    const lockBtn = button(k.lock ? 'Unlock' : 'Lock', () => {
+      k.lock = !k.lock;
+      again();
+    });
+    lockBtn.setAttribute('aria-pressed', k.lock ? 'true' : 'false');
+    lockBtn.setAttribute('data-af-sticker-act', 'lock');
+    lockRow.appendChild(lockBtn);
+    if (S.studioLockAll) lockRow.appendChild(hint('Lock all is on, at the top, so every sticker stays where it is.'));
+    else if (k.lock) lockRow.appendChild(hint('Locked: it cannot be moved, sized, turned or deleted.'));
+    r.editor.appendChild(lockRow);
+    const row = el('<div class="af-row af-wrap"></div>');
+    const keyed = (b: HTMLButtonElement, keys: string) => {
+      if (S.studioKeys === false) return;
+      if (fromMouse()) b.title = b.textContent + ' (' + keys + ')';
+    };
+    const dup = button('Duplicate', () => shapeAct('dup'));
+    dup.disabled = list.length >= STICKERS_MAX;
+    dup.setAttribute('data-af-sticker-act', 'dup');
+    keyed(dup, MOD + '+D');
+    const fwd = button('Bring forward', () => shapeAct('forward'));
+    fwd.setAttribute('data-af-sticker-act', 'forward');
+    fwd.disabled = list.indexOf(k) === list.length - 1;
+    keyed(fwd, MOD + '+]');
+    const bwd = button('Send back', () => shapeAct('back'));
+    bwd.setAttribute('data-af-sticker-act', 'back');
+    bwd.disabled = list.indexOf(k) === 0;
+    keyed(bwd, MOD + '+[');
+    const del = button('Delete', () => shapeAct('delete'));
+    del.setAttribute('data-af-sticker-act', 'delete');
+    keyed(del, 'Delete');
+    row.appendChild(dup);
+    row.appendChild(fwd);
+    row.appendChild(bwd);
+    row.appendChild(del);
+    r.editor.appendChild(row);
+    r.editor.appendChild(toggle('Snap while moving', 'On by default. A sticker snaps to the middle, the edges, the thirds and the other stickers, with a thin line. Hold Alt, or Option on a Mac, to move it freely.', 'studioSnap'));
+  }
   // The preview takes presses for shapes only while a design is shown, and
   // only then stops a finger on it from scrolling the page.
   function paintDesignMode() {
@@ -15213,7 +15692,7 @@ export function setup(ctx: Ctx, overrides?: any) {
   let snapGuides: { x?: number; y?: number; size?: string; turn?: number }[] = [];
   function drawHandles(g: CanvasRenderingContext2D, st: VideoStage, k: number) {
     const sh = shapeNow();
-    if (!sh) return;
+    if (!sh || (sh as any).cover) return;
     if (snapGuides.length) {
       g.save();
       g.strokeStyle = 'rgba(255,92,180,0.95)';
@@ -15295,6 +15774,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         // The front one first, since it is the one on top.
         for (let i = all.length - 1; i >= 0; i--) {
           const sh = all[i];
+          if ((sh as any).cover) continue;
           const { lx, ly } = local(sh, p.x, p.y, st);
           const pad = 8 * p.k;
           if (Math.abs(lx) <= (sh.w * u) / 2 + pad && Math.abs(ly) <= (sh.h * u) / 2 + pad) {
@@ -15660,7 +16140,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     'videoShape', 'videoFont', 'videoSize', 'videoInk', 'videoCaptionInk', 'videoWords', 'videoPlace', 'videoQuotes', 'videoPicShape', 'videoPicSize',
     'videoNameColor', 'videoNameFont', 'videoNameSize', 'videoPicRing', 'videoPicRingWidth', 'videoPicMove', 'videoTwo', 'videoMoodPics',
     'videoByline', 'videoBylineInk', 'videoBylineFont', 'videoBylineFill', 'videoBylineStops', 'videoBylineDir',
-    'videoBylineShadow', 'videoBylineShadowInk', 'videoBylineShadowDark', 'videoBylineShadowSoft', 'videoBylineShadowFar', 'videoMarks',
+    'videoBylineShadow', 'videoBylineShadowInk', 'videoBylineShadowDark', 'videoBylineShadowSoft', 'videoBylineShadowFar', 'videoMarks', 'videoStickers',
     'videoWordFill', 'videoWordStops', 'videoWordDir', 'videoNameFill', 'videoNameStops', 'videoNameDir', 'videoCapFill', 'videoCapStops', 'videoCapDir',
     'videoWordShadow', 'videoWordShadowInk', 'videoWordShadowDark', 'videoWordShadowSoft', 'videoWordShadowFar',
     'videoBox', 'videoBoxColor', 'videoBoxClear', 'videoBoxRound', 'videoBoxWidth', 'videoOwnColors', 'videoKindColors', 'videoBackRules', 'videoQuiet', 'videoQuietStrength',
@@ -17895,7 +18375,7 @@ export function setup(ctx: Ctx, overrides?: any) {
   // the watermarks. The shape of the video is the reader's choice for where
   // it goes, so a template keeps it too. Each template gives a value for
   // every one of these, so nothing is left from the look before.
-  const TEMPLATE_KEYS = LOOK_KEYS.filter((k) => k !== 'videoByline' && k !== 'videoMarks' && k !== 'videoShape').concat(['studioMusic']);
+  const TEMPLATE_KEYS = LOOK_KEYS.filter((k) => k !== 'videoByline' && k !== 'videoMarks' && k !== 'videoStickers' && k !== 'videoShape').concat(['studioMusic']);
   const TEMPLATES_MARK = markText(JSON.stringify(TEMPLATES.map((t) => [t.id, t.look, t.back])));
   function templateLook(t: Template): Record<string, any> {
     const patch: Record<string, any> = {};
@@ -18767,6 +19247,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     { id: 'sounds', title: 'Sounds' },
     { id: 'notes', title: 'Notes' },
     { id: 'marks', title: 'Watermarks' },
+    { id: 'stickers', title: 'Stickers' },
     { id: 'looks', title: 'Saved looks' },
     { id: 'sound', title: 'Sound effects and music' },
     { id: 'audio', title: 'Audio' },
@@ -18975,9 +19456,12 @@ export function setup(ctx: Ctx, overrides?: any) {
     stopPreview();
     hideHint();
     hideKeyList();
+    hideMore(false);
     studioRefs = null;
     designing = false;
     designRefs = null;
+    stickerRefs = null;
+    editKind = 'shapes';
     previewBack = '';
     try {
       if (w.how === 'app') w.handle.destroy();
@@ -19075,6 +19559,8 @@ export function setup(ctx: Ctx, overrides?: any) {
       else w.box.removeAttribute('data-af-focus');
       const btn = w.box.querySelector('[data-af-ws="focus"] span:last-child') as HTMLElement | null;
       if (btn) setText(btn, on ? 'Exit focus' : 'Focus');
+      const fb = w.box.querySelector('[data-af-ws="focus"]');
+      if (fb) fb.setAttribute('aria-label', on ? 'Exit focus' : 'Focus');
       if (panel && !on) panel.scrollTop = focusScroll;
       focusAwake();
       paintPreview();
@@ -19118,7 +19604,10 @@ export function setup(ctx: Ctx, overrides?: any) {
     studioRefs = null;
     designing = false;
     designRefs = null;
+    stickerRefs = null;
+    editKind = 'shapes';
     previewBack = '';
+    morePop = null;
     w.box.replaceChildren();
     const sh = keptShow();
     const top = el(
@@ -19153,28 +19642,55 @@ export function setup(ctx: Ctx, overrides?: any) {
     undoBtn.setAttribute('data-af-ws', 'undo');
     const redoBtn = button('Redo', () => undoStep(false), 'af-ws-undo', ICON_STEP_AGAIN);
     redoBtn.setAttribute('data-af-ws', 'redo');
+    redoBtn.setAttribute('data-af-wsextra', '');
+    undoBtn.setAttribute('aria-label', 'Undo');
+    redoBtn.setAttribute('aria-label', 'Redo');
     acts.appendChild(undoBtn);
     acts.appendChild(redoBtn);
-    const lockAll = button(S.studioLockAll ? 'Locked' : 'Lock all', () => {
+    // Lock all shows a closed padlock while it is on and an open one while
+    // it is off.
+    const paintLockAll = () => {
+      const on = !!S.studioLockAll;
+      const icon = lockAll.querySelector('svg');
+      if (icon) icon.outerHTML = on ? ICON_LOCK : ICON_UNLOCK;
+      setText(lockAll.querySelector('span:last-child') as HTMLElement, on ? 'Locked' : 'Lock all');
+      lockAll.setAttribute('aria-pressed', on ? 'true' : 'false');
+      lockAll.setAttribute('aria-label', on ? 'Locked: every shape and sticker stays where it is' : 'Lock all');
+      lockAll.title = on ? 'Locked: press to let shapes and stickers move again' : 'Lock every shape and sticker where it is, so nothing moves by accident';
+    };
+    const lockAll = button('Lock all', () => {
       set({ studioLockAll: !S.studioLockAll });
-      setText(lockAll.querySelector('span:last-child') as HTMLElement, S.studioLockAll ? 'Locked' : 'Lock all');
-      lockAll.setAttribute('aria-pressed', S.studioLockAll ? 'true' : 'false');
+      paintLockAll();
       drawDesign();
-    }, 'af-ws-undo');
-    lockAll.setAttribute('aria-pressed', S.studioLockAll ? 'true' : 'false');
+    }, 'af-ws-undo', ICON_UNLOCK);
     lockAll.setAttribute('data-af-ws', 'lockall');
-    lockAll.title = 'Lock every shape where it is, so nothing moves by accident';
+    lockAll.setAttribute('data-af-wsextra', '');
+    paintLockAll();
     acts.appendChild(lockAll);
-    const focusBtn = button('Focus', () => setFocus(!wsFocus), 'af-ws-undo');
+    const focusBtn = button(wsFocus ? 'Exit focus' : 'Focus', () => setFocus(!wsFocus), 'af-ws-undo', ICON_FOCUS);
     focusBtn.setAttribute('data-af-ws', 'focus');
-    focusBtn.title = 'Show only the preview (\\)';
+    focusBtn.setAttribute('data-af-wsextra', '');
+    focusBtn.setAttribute('aria-label', wsFocus ? 'Exit focus' : 'Focus');
+    focusBtn.title = fromMouse() && S.studioKeys !== false ? 'Show only the preview (\\)' : 'Show only the preview';
     acts.appendChild(focusBtn);
     const keysBtn = button('Keyboard shortcuts', () => showKeyList(keysBtn), 'af-ws-keysbtn', ICON_KEYS);
     keysBtn.setAttribute('data-af-ws', 'keys');
+    keysBtn.setAttribute('data-af-wsextra', '');
+    keysBtn.setAttribute('aria-label', 'Keyboard shortcuts');
     keysBtn.title = 'Keyboard shortcuts (?)';
     acts.appendChild(keysBtn);
+    // On a phone, the bar keeps Make a video, Download audio, Undo and
+    // Close. The rest are in this menu, so the name has room.
+    const moreBtn = button('More', () => (morePop ? hideMore() : showMore(moreBtn)), 'af-ws-morebtn', ICON_MORE);
+    moreBtn.setAttribute('data-af-ws', 'more');
+    moreBtn.setAttribute('aria-label', 'More');
+    moreBtn.setAttribute('aria-haspopup', 'menu');
+    moreBtn.setAttribute('aria-expanded', 'false');
+    moreBtn.title = 'More';
+    acts.appendChild(moreBtn);
     const close = button('Close', () => closeStudio(), '', ICON_CLOSE);
     close.setAttribute('data-af-ws', 'close');
+    close.setAttribute('aria-label', 'Close');
     close.title = 'Close the Studio (Escape)';
     acts.appendChild(close);
     // The list of sections, on a laptop, with a button to fold it away.
@@ -19209,6 +19725,11 @@ export function setup(ctx: Ctx, overrides?: any) {
       w.box.setAttribute('data-af-focuswatch', '');
       w.box.addEventListener('pointermove', (e: PointerEvent) => {
         if (wsFocus && e.pointerType === 'mouse') focusAwake();
+      });
+      // A press outside the More menu closes it.
+      w.box.addEventListener('pointerdown', (e: PointerEvent) => {
+        const t = e.target as HTMLElement | null;
+        if (morePop && t && !morePop.contains(t) && !t.closest('[data-af-ws="more"]')) hideMore(false);
       });
     }
     paintPermissionNotes();
@@ -19255,6 +19776,8 @@ export function setup(ctx: Ctx, overrides?: any) {
     if (designing) {
       designing = false;
       designRefs = null;
+      stickerRefs = null;
+      editKind = 'shapes';
       paintDesignMode();
       redrawDesign();
     }
@@ -19513,16 +20036,16 @@ export function setup(ctx: Ctx, overrides?: any) {
       for (const k of keys) undoBase[k] = JSON.stringify(patch[k]);
     };
     if (undoing) return keep();
-    // A background or watermark with a picture, deleted: its picture is
-    // deleted with it, so nothing before it can be undone.
-    for (const k of ['videoBacks', 'videoMarks']) {
+    // A background, watermark or sticker with a picture, deleted: its
+    // picture is deleted with it, so nothing before it can be undone.
+    for (const k of ['videoBacks', 'videoMarks', 'videoStickers']) {
       if (keys.indexOf(k) < 0) continue;
       const now = (Array.isArray(patch[k]) ? patch[k] : []).map((x: any) => x && x.id);
       let was: any[] = [];
       try {
         was = JSON.parse(base(k)) || [];
       } catch (_) {}
-      const gone = (Array.isArray(was) ? was : []).filter((x: any) => x && now.indexOf(x.id) < 0 && (k === 'videoBacks' ? x.kind === 'picture' : !!x.pic));
+      const gone = (Array.isArray(was) ? was : []).filter((x: any) => x && now.indexOf(x.id) < 0 && (k === 'videoBacks' ? x.kind === 'picture' : k === 'videoStickers' ? true : !!x.pic));
       if (gone.length) {
         undoStack = [];
         redoStack = [];
@@ -19627,6 +20150,62 @@ export function setup(ctx: Ctx, overrides?: any) {
     return t;
   }
   let keyPop: HTMLElement | null = null;
+  // The More menu of the top bar, on a phone: the buttons the bar has no
+  // room for. Each item presses the button it stands for.
+  let morePop: HTMLElement | null = null;
+  function showMore(from: HTMLElement) {
+    const w = ws;
+    if (!w || morePop) return;
+    if (keyPop) hideKeyList();
+    const pop = el('<div class="af-ws-pop af-ws-menu" role="menu" aria-label="More" tabindex="-1" data-af-moremenu></div>');
+    const item = (id: string, label: string, icon: string, pressed?: boolean) => {
+      const src = w.box.querySelector('[data-af-ws="' + id + '"]') as HTMLButtonElement | null;
+      if (!src) return;
+      const b = el('<button type="button" class="af-btn af-ws-item" role="menuitem">' + icon + '<span>' + esc(label) + '</span></button>') as HTMLButtonElement;
+      b.setAttribute('data-af-moreitem', id);
+      b.disabled = src.disabled;
+      if (pressed !== undefined) b.setAttribute('aria-pressed', pressed ? 'true' : 'false');
+      b.addEventListener('click', () => {
+        hideMore(false);
+        src.click();
+      });
+      pop.appendChild(b);
+    };
+    item('redo', 'Redo', ICON_STEP_AGAIN);
+    item('lockall', S.studioLockAll ? 'Locked' : 'Lock all', S.studioLockAll ? ICON_LOCK : ICON_UNLOCK, !!S.studioLockAll);
+    item('focus', wsFocus ? 'Exit focus' : 'Focus', ICON_FOCUS);
+    // A phone has no keyboard, so its list of keys is left out there.
+    if (fromMouse()) item('keys', 'Keyboard shortcuts', ICON_KEYS);
+    w.box.appendChild(pop);
+    morePop = pop;
+    from.setAttribute('aria-expanded', 'true');
+    void pop.offsetWidth;
+    pop.setAttribute('data-af-open', '');
+    try {
+      (pop.querySelector('button:not(:disabled)') as HTMLButtonElement | null)?.focus({ preventScroll: true });
+    } catch (_) {}
+  }
+  function hideMore(back = true) {
+    const pop = morePop;
+    const w = ws;
+    if (!pop) return;
+    morePop = null;
+    pop.removeAttribute('data-af-open');
+    const t = setTimeout(() => {
+      timers.delete(t);
+      pop.remove();
+    }, calm() ? 0 : 180);
+    timers.add(t);
+    const btn = w ? (w.box.querySelector('[data-af-ws="more"]') as HTMLElement | null) : null;
+    if (btn) {
+      btn.setAttribute('aria-expanded', 'false');
+      if (back) {
+        try {
+          btn.focus({ preventScroll: true });
+        } catch (_) {}
+      }
+    }
+  }
   function showKeyList(from?: HTMLElement) {
     const w = ws;
     if (!w) return;
@@ -19688,6 +20267,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       // shortcuts off, since it is how the Studio is closed.
       if (key === 'Escape') {
         if (hintPop) hideHint();
+        else if (morePop) hideMore();
         else if (keyPop) hideKeyList();
         else if (wsFocus) setFocus(false);
         else closeStudio();
@@ -20528,6 +21108,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         };
         draw();
       }, (open) => {
+        editKind = 'shapes';
         designing = open && backNow().kind === 'design';
         const was = previewBack;
         previewBack = open ? backNow().id : '';
@@ -20597,6 +21178,14 @@ export function setup(ctx: Ctx, overrides?: any) {
     );
     vc.appendChild(fold('Notes', (b) => drawNoteEditors(b, look)));
     vc.appendChild(fold('Watermarks', (b) => drawMarkEditors(b, look)));
+    vc.appendChild(fold('Stickers', (b) => buildStickers(b), (open) => {
+      editKind = open ? 'stickers' : 'shapes';
+      designing = open;
+      designSel = '';
+      if (!open) stickerRefs = null;
+      paintDesignMode();
+      redrawDesign();
+    }));
     foldSink = null;
     sec('looks', 'Saved looks', (b) => {
       drawLooks(b);

@@ -2360,6 +2360,34 @@ describe("watermarks and the line under the title", () => {
   });
 });
 
+describe("stickers", () => {
+  test("a sticker's picture stays while the settings, a saved look or a project uses it, and goes on Start again", async () => {
+    const h = host();
+    const pic = "data:image/png;base64,AAAA";
+    const k = (id: string) => ({ id, x: 0.5, y: 0.5, w: 300, h: 200, blend: "screen", layer: "back" });
+    for (const id of ["k1", "k2", "k3", "k4"]) expect((await h.ask({ type: "sticker_put", id, picture: pic }, "u1")).find((m: any) => m.type === "sticker").ok).toBe(true);
+    expect((await h.ask({ type: "sticker_get", id: "k1" }, "u1")).find((m: any) => m.type === "sticker").picture).toBe(pic);
+    await h.ask({ type: "project_put", name: "Harbor", project: { look: { videoStickers: [k("k3")] }, keptKey: "", trim: { from: 0, to: 0 }, hand: {} } }, "u1");
+    await h.ask({ type: "save", settings: { videoStickers: [k("k1")], videoLooks: [{ id: "lk1", name: "Dusty", look: { videoStickers: [k("k2")] } }] } }, "u1");
+    for (const id of ["k1", "k2", "k3"]) expect(h.files.has("u1/video-stickers/" + id + ".json")).toBe(true);
+    expect(h.files.has("u1/video-stickers/k4.json")).toBe(false);
+    const s = (await h.ask({ type: "load" }, "u1")).find((m: any) => m.type === "state").settings;
+    expect(s.videoStickers[0]).toMatchObject({ id: "k1", blend: "screen", layer: "back", cover: false, clear: 0, when: "all" });
+    expect(s.videoLooks[0].look.videoStickers[0].id).toBe("k2");
+    await h.ask({ type: "reset", parts: ["settings"] }, "u1");
+    for (const id of ["k1", "k2", "k3"]) expect(h.files.has("u1/video-stickers/" + id + ".json")).toBe(false);
+  });
+  test("stickers are cleaned: at most 20, a known overlay type, and sizes held to their range", async () => {
+    const h = host();
+    const many = Array.from({ length: 25 }, (_, i) => ({ id: "s" + i, blend: i ? "multiply" : "plasma", w: 99999, clear: 300, layer: "middle" }));
+    await h.ask({ type: "save", settings: { videoStickers: many } }, "u1");
+    const s = (await h.ask({ type: "load" }, "u1")).find((m: any) => m.type === "state").settings;
+    expect(s.videoStickers.length).toBe(20);
+    expect(s.videoStickers[0]).toMatchObject({ blend: "normal", w: 4000, clear: 95, layer: "top" });
+    expect(s.videoStickers[1].blend).toBe("multiply");
+  });
+});
+
 describe("projects", () => {
   const look = { videoFont: "round", videoSize: 40, videoBackPick: "b2", videoBacks: [{ id: "main", name: "Main", kind: "dark" }, { id: "b2", name: "Harbor", kind: "picture" }], videoNotes: [], cast: "left out" };
   test("a project keeps its recipe, and Rename, Move, Duplicate and Delete work", async () => {

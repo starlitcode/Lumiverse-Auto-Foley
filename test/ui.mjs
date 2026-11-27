@@ -214,6 +214,8 @@ function answer(msg) {
     case 'video_bg_put': window.__videoBgs = Object.assign(window.__videoBgs || {}, { [msg.id || 'main']: msg.picture || '' }); if ((msg.id || 'main') === 'main') window.__videoBg = msg.picture || ''; return reply({ type: 'video_bg', id: msg.id || 'main', ok: true, picture: msg.picture || '' });
     // Watermark pictures, by id.
     case 'mark_pic_get': { const r = { type: 'mark_pic', id: msg.id, picture: (window.__markPics || {})[msg.id] || '' }; if (window.__markDelay) { setTimeout(() => reply(r), window.__markDelay); return; } return reply(r); }
+    case 'sticker_get': return reply({ type: 'sticker', id: msg.id, picture: (window.__stickers || {})[msg.id] || '' });
+    case 'sticker_put': window.__stickers = Object.assign(window.__stickers || {}, { [msg.id]: msg.picture || '' }); return reply({ type: 'sticker', id: msg.id, ok: true });
     case 'mark_pic_put': window.__markPics = Object.assign(window.__markPics || {}, { [msg.id]: msg.picture || '' }); return reply({ type: 'mark_pic', id: msg.id, ok: true });
     // Mood pictures, by person and feeling.
     case 'mood_pic_get': return reply({ type: 'mood_pic', member: msg.member, feeling: msg.feeling, picture: (window.__moodPics || {})[msg.member + ':' + msg.feeling] || '' });
@@ -387,6 +389,11 @@ window.__ctx = {
         return [{ name: window.__fontFile.name, mimeType: 'font/ttf', bytes }];
       }
       if (!o || !(o.accept || []).some((x) => /image/.test(x))) return [];
+      // A picture the check made, such as a sticker with see-through parts.
+      if (window.__pickPic) {
+        const b = await (await fetch(window.__pickPic.url)).blob();
+        return [{ name: window.__pickPic.name, mimeType: b.type, bytes: new Uint8Array(await b.arrayBuffer()) }];
+      }
       // Narrow stripes, for a check that needs to see a picture move.
       if (window.__stripes) {
         const c = document.createElement('canvas');
@@ -6605,6 +6612,268 @@ if (section("new shapes")) {
   }
 }
 
+if (section("top bar")) {
+  console.log("The Studio's top bar: every button draws an icon, the name has room on a phone, and More holds the rest");
+  // How many pixels inside a button differ from its most common color.
+  const inkOf = async (page, sel) => {
+    const els = await page.$$(sel);
+    const out = [];
+    for (const h of els) {
+      const vis = await h.evaluate((b) => { const r = b.getBoundingClientRect(); return getComputedStyle(b).display !== "none" && r.width > 0 && r.height > 0 ? { id: b.getAttribute("data-af-ws") || b.getAttribute("data-af-moreitem") || b.textContent.trim(), h: r.height } : null; });
+      if (!vis) continue;
+      const png = (await h.screenshot()).toString("base64");
+      const ink = await page.evaluate(async (png) => {
+        const im = new Image();
+        im.src = "data:image/png;base64," + png;
+        await im.decode();
+        const c = document.createElement("canvas"); c.width = im.width; c.height = im.height;
+        const g = c.getContext("2d"); g.drawImage(im, 0, 0);
+        const x0 = Math.round(im.width * 0.2), y0 = Math.round(im.height * 0.2), w = Math.max(1, Math.round(im.width * 0.6)), h = Math.max(1, Math.round(im.height * 0.6));
+        const d = g.getImageData(x0, y0, w, h).data;
+        const tally = new Map();
+        for (let i = 0; i < d.length; i += 4) { const k = (d[i] >> 4) + "," + (d[i + 1] >> 4) + "," + (d[i + 2] >> 4); tally.set(k, (tally.get(k) || 0) + 1); }
+        const top = [...tally.entries()].sort((a, b) => b[1] - a[1])[0][0].split(",").map((v) => Number(v) * 16 + 8);
+        let n = 0;
+        for (let i = 0; i < d.length; i += 4) if (Math.abs(d[i] - top[0]) + Math.abs(d[i + 1] - top[1]) + Math.abs(d[i + 2] - top[2]) > 60) n++;
+        return n;
+      }, png);
+      out.push(Object.assign(vis, { ink }));
+    }
+    return out;
+  };
+  for (const width of [360, 390, 414]) {
+    const size = { name: "phone " + width, width, height: 800, touch: true };
+    const { context, page, errors } = await open(THEMES[0], size, 1);
+    await openWs(page);
+    await page.waitForTimeout(500);
+    const btns = await inkOf(page, "[data-af-ws-acts] > button");
+    const blank = btns.filter((b) => b.ink < 10);
+    check(btns.length && !blank.length, size.name + ": every top bar button draws an icon. Blank: " + blank.map((b) => b.id).join(", "));
+    const ids = btns.map((b) => b.id);
+    check(["undo", "more", "close"].every((x) => ids.includes(x)) && !["redo", "lockall", "focus", "keys"].some((x) => ids.includes(x)), size.name + ": the bar keeps Make a video, Download audio, Undo, More and Close (" + ids.join(", ") + ")");
+    check(btns.every((b) => b.h >= 32), size.name + ": the top bar buttons are 32 pixels tall or more");
+    const sub = await page.evaluate(() => { const s = document.querySelector("[data-af-ws-sub]"); const r = s.getBoundingClientRect(); return { text: s.textContent, cut: s.scrollWidth > s.clientWidth + 1, w: Math.round(r.width) }; });
+    check(!sub.cut && sub.w > 60, size.name + ": the line under the name is not cut (" + JSON.stringify(sub) + ")");
+    const m = await page.evaluate(MEASURE, true);
+    check(!m.overflow.length, size.name + ": the Studio fits. " + m.overflow.slice(0, 2).join("; "));
+    await page.tap('[data-af-ws="more"]');
+    await page.waitForTimeout(400);
+    const menu = await page.evaluate(() => ({ items: [...document.querySelectorAll("[data-af-moreitem]")].map((b) => b.getAttribute("data-af-moreitem")), expanded: (document.querySelector('[data-af-ws="more"]') || { getAttribute: () => "" }).getAttribute("aria-expanded") }));
+    check(menu.items.join(",") === "redo,lockall,focus" && menu.expanded === "true", size.name + ": More opens a menu with Redo, Lock all and Focus (" + menu.items.join(", ") + ")");
+    const items = await inkOf(page, "[data-af-moreitem]");
+    check(items.length === 3 && items.every((b) => b.ink >= 10 && b.h >= 32), size.name + ": every item in More has an icon and is 32 pixels tall or more");
+    if (menu.items.length) {
+      await page.tap('[data-af-moreitem="lockall"]');
+      await page.waitForTimeout(400);
+      const locked = await page.evaluate(() => ({ on: window.__settings.studioLockAll, menu: !!document.querySelector("[data-af-moremenu]") }));
+      check(locked.on === true && !locked.menu, size.name + ": Lock all in More turns it on and closes the menu");
+      await page.tap('[data-af-ws="more"]');
+      await page.waitForTimeout(300);
+      await page.touchscreen.tap(20, 400);
+      await page.waitForTimeout(400);
+      check(!(await page.$("[data-af-moremenu]")), size.name + ": a press outside the menu closes it");
+      await page.tap('[data-af-ws="more"]');
+      await page.waitForTimeout(300);
+      await page.tap('[data-af-moreitem="focus"]');
+      await page.waitForTimeout(900);
+      const foc = await page.evaluate(() => ({ on: !!document.querySelector("[data-af-focus]"), shown: (() => { const b = document.querySelector('[data-af-ws="focus"]'); return !!b && getComputedStyle(b).display !== "none"; })() }));
+      check(foc.on && foc.shown, size.name + ": Focus from More turns focus on, and Exit focus shows in the bar");
+    }
+    check(!errors.length, size.name + ": no page errors. " + errors.slice(0, 2).join(" | "));
+    await context.close();
+  }
+  {
+    const size = SIZES.find((x) => !x.touch) || SIZES[0];
+    const { context, page, errors } = await open(THEMES[0], size, 1);
+    await openWs(page);
+    await page.waitForTimeout(500);
+    const btns = await inkOf(page, "[data-af-ws-acts] > button");
+    const ids = btns.map((b) => b.id);
+    check(["undo", "redo", "lockall", "focus", "keys", "close"].every((x) => ids.includes(x)) && !ids.includes("more"), size.name + ": the full bar shows, with no More (" + ids.join(", ") + ")");
+    check(btns.every((b) => b.ink >= 10), size.name + ": every top bar button draws an icon. Blank: " + btns.filter((b) => b.ink < 10).map((b) => b.id).join(", "));
+    const titles = await page.evaluate(() => [...document.querySelectorAll("[data-af-ws-acts] > button")].filter((b) => getComputedStyle(b).display !== "none").map((b) => [b.getAttribute("data-af-ws"), b.title, b.getAttribute("aria-label") || b.textContent.trim()]));
+    check(titles.every((t) => t[1] && t[2]), size.name + ": every top bar button has a hover title and a name (" + titles.filter((t) => !t[1] || !t[2]).map((t) => t[0]).join(", ") + ")");
+    const focusTitle = (titles.find((t) => t[0] === "focus") || [])[1] || "";
+    check(focusTitle.includes("(\\)"), size.name + ": Focus shows its key in its hover title (" + focusTitle + ")");
+    const lockIcon = async () => page.evaluate(() => document.querySelector('[data-af-ws="lockall"] svg').innerHTML);
+    const open1 = await lockIcon();
+    await page.click('[data-af-ws="lockall"]');
+    await page.waitForTimeout(300);
+    check(open1 !== (await lockIcon()), size.name + ": the padlock shows closed once Lock all is on");
+    check(!errors.length, size.name + ": no page errors. " + errors.slice(0, 2).join(" | "));
+    await context.close();
+  }
+}
+
+if (section("stickers")) {
+  console.log("Stickers: drawn where they are put, flipped, mixed, filling the frame, behind the words, at their times, and edited on a phone and a laptop");
+  // The pictures the checks use, drawn once in a page of their own.
+  const maker = await browser.newPage();
+  const PICS = await maker.evaluate(() => {
+    const make = (w, h, paint) => { const c = document.createElement("canvas"); c.width = w; c.height = h; paint(c.getContext("2d")); return c.toDataURL("image/png"); };
+    return {
+      // Red on the left, blue on the right.
+      rb: make(200, 100, (g) => { g.fillStyle = "#ff0000"; g.fillRect(0, 0, 100, 100); g.fillStyle = "#0000ff"; g.fillRect(100, 0, 100, 100); }),
+      // Black on the left, white on the right.
+      bw: make(200, 100, (g) => { g.fillStyle = "#000000"; g.fillRect(0, 0, 100, 100); g.fillStyle = "#ffffff"; g.fillRect(100, 0, 100, 100); }),
+      green: make(64, 64, (g) => { g.fillStyle = "#00ff00"; g.fillRect(0, 0, 64, 64); }),
+      // A green dot with see-through corners.
+      dot: make(100, 100, (g) => { g.fillStyle = "#00ff00"; g.beginPath(); g.arc(50, 50, 40, 0, Math.PI * 2); g.fill(); }),
+    };
+  });
+  await maker.close();
+  const sticker = (over) => Object.assign({ id: "k1", x: 0.5, y: 0.5, w: 400, h: 200, rot: 0, clear: 0, flipX: false, flipY: false, blend: "normal", cover: false, layer: "top", when: "all", from: 0, secs: 4, backs: [], lock: false }, over);
+  const PLAIN = `window.__settings.videoBacks = [{ id: "main", name: "Main", kind: "color", color: "#808080", fill: "solid", stops: [], dir: "down", dim: 40, blur: 0, shapes: [], use: "match", moods: [], places: [] }]; window.__settings.videoBackPick = "main"; window.__settings.videoEdges = 0; window.__settings.videoTitleOn = false; window.__settings.videoPics = false; window.__settings.videoNames = false; window.__settings.videoCaptions = false; window.__settings.videoBox = false;`;
+  const laptop = SIZES.find((x) => !x.touch) || SIZES[0];
+  // The preview at a time, as a function that reads a pixel by where it is,
+  // from 0 to 1 each way.
+  const frameAt = async (page, at) => page.evaluate(async (at) => {
+    const r = document.querySelector("[data-af-scrub] input");
+    if (r && at !== null) {
+      r.step = "any";
+      r.value = String(at);
+      r.dispatchEvent(new Event("input", { bubbles: true }));
+    }
+    await new Promise((x) => setTimeout(x, 200));
+    await new Promise((x) => requestAnimationFrame(() => requestAnimationFrame(x)));
+    const c = document.querySelector("[data-af-videopreview]");
+    return { w: c.width, h: c.height, d: Array.from(c.getContext("2d").getImageData(0, 0, c.width, c.height).data) };
+  }, at);
+  const px = (f, nx, ny) => { const x = Math.min(f.w - 1, Math.round(nx * f.w)), y = Math.min(f.h - 1, Math.round(ny * f.h)); const i = (y * f.w + x) * 4; return [f.d[i], f.d[i + 1], f.d[i + 2]]; };
+  const near = (a, b, by = 40) => Math.abs(a[0] - b[0]) + Math.abs(a[1] - b[1]) + Math.abs(a[2] - b[2]) <= by;
+  const greenShare = (f) => { let n = 0; for (let i = 0; i < f.d.length; i += 4) if (f.d[i + 1] > 200 && f.d[i] < 60 && f.d[i + 2] < 60) n++; return n / (f.d.length / 4); };
+  const shot = async (list, pics, extra = "", at = 2) => {
+    const o = await open(THEMES[0], laptop, 1, PLAIN + extra + `window.__settings.videoStickers = ${JSON.stringify(list)}; window.__stickers = ${JSON.stringify(pics)};`);
+    await openWs(o.page);
+    await o.page.waitForTimeout(700);
+    const f = await frameAt(o.page, at);
+    const errs = o.errors.slice();
+    await o.context.close();
+    return { f, errs };
+  };
+  {
+    // Placed at 30% across and down: its left half is red there.
+    const { f, errs } = await shot([sticker({ x: 0.3, y: 0.3 })], { k1: PICS.rb });
+    const u = Math.min(f.w, f.h) / 1080;
+    const left = px(f, 0.3 - (100 * u) / f.w, 0.3);
+    const right = px(f, 0.3 + (100 * u) / f.w, 0.3);
+    check(near(left, [255, 0, 0]) && near(right, [0, 0, 255]) && near(px(f, 0.5, 0.5), [128, 128, 128]), "a sticker shows where it is put, red then blue (" + JSON.stringify([left, right]) + ")");
+    check(!errs.length, "no page errors. " + errs.slice(0, 2).join(" | "));
+  }
+  {
+    const { f } = await shot([sticker({ x: 0.3, y: 0.3, flipX: true })], { k1: PICS.rb });
+    const u = Math.min(f.w, f.h) / 1080;
+    const left = px(f, 0.3 - (100 * u) / f.w, 0.3);
+    check(near(left, [0, 0, 255]), "Flip across mirrors it: blue is on the left (" + JSON.stringify(left) + ")");
+    const { f: g } = await shot([sticker({ x: 0.3, y: 0.3, rot: 90, flipY: true, w: 200, h: 100 })], { k1: PICS.rb });
+    check(!near(px(g, 0.3, 0.3 - (40 * u) / g.h), [128, 128, 128]), "a turned sticker draws on its turned box");
+  }
+  {
+    const u0 = (f) => Math.min(f.w, f.h) / 1080;
+    const { f: scr } = await shot([sticker({ blend: "screen" })], { k1: PICS.bw });
+    const darkS = px(scr, 0.5 - (100 * u0(scr)) / scr.w, 0.5);
+    const lightS = px(scr, 0.5 + (100 * u0(scr)) / scr.w, 0.5);
+    check(near(darkS, [128, 128, 128]) && near(lightS, [255, 255, 255]), "Screen makes the black part vanish and keeps the white (" + JSON.stringify([darkS, lightS]) + ")");
+    const { f: mul } = await shot([sticker({ blend: "multiply" })], { k1: PICS.bw });
+    const darkM = px(mul, 0.5 - (100 * u0(mul)) / mul.w, 0.5);
+    const lightM = px(mul, 0.5 + (100 * u0(mul)) / mul.w, 0.5);
+    check(near(darkM, [0, 0, 0]) && near(lightM, [128, 128, 128]), "Multiply darkens: black stays and white vanishes (" + JSON.stringify([darkM, lightM]) + ")");
+    const { f: see } = await shot([sticker({ clear: 50 })], { k1: PICS.bw });
+    const halfS = px(see, 0.5 - (100 * u0(see)) / see.w, 0.5);
+    check(halfS[0] > 40 && halfS[0] < 90, "See-through at 50% lets the background show through (" + JSON.stringify(halfS) + ")");
+    const { f: dot } = await shot([sticker({ w: 400, h: 400 })], { k1: PICS.dot });
+    check(near(px(dot, 0.5, 0.5), [0, 255, 0]) && near(px(dot, 0.5 + (190 * u0(dot)) / dot.w, 0.5 - (190 * u0(dot)) / dot.h), [128, 128, 128]), "the see-through corners of a picture stay see-through");
+  }
+  {
+    const { f } = await shot([sticker({ cover: true, w: 40, h: 20 })], { k1: PICS.rb });
+    check(near(px(f, 0.02, 0.02), [255, 0, 0]) && near(px(f, 0.98, 0.98), [0, 0, 255]) && near(px(f, 0.02, 0.98), [255, 0, 0]), "Fill the frame covers the whole frame");
+  }
+  {
+    // Words on, with a green picture over the whole frame: over everything
+    // it hides them, behind the words it does not.
+    const words = `window.__settings.videoInk = "#ffffff"; window.__settings.videoWordFill = "solid";`;
+    const non = (f) => 1 - greenShare(f);
+    const { f: top } = await shot([sticker({ cover: true })], { k1: PICS.green }, words, 3);
+    const { f: back } = await shot([sticker({ cover: true, layer: "back" })], { k1: PICS.green }, words, 3);
+    check(non(top) < 0.002 && non(back) > 0.003, "behind the words, a sticker does not cover the words (" + [non(top).toFixed(4), non(back).toFixed(4)].join(" over, ") + " behind)");
+  }
+  {
+    const o = await open(THEMES[0], laptop, 1, PLAIN + `window.__settings.videoStickers = ${JSON.stringify([sticker({ cover: true, when: "from", from: 2, secs: 2 })])}; window.__stickers = ${JSON.stringify({ k1: PICS.green })};`);
+    await openWs(o.page);
+    await o.page.waitForTimeout(700);
+    const at = [];
+    for (const t of [0.5, 3, 6]) at.push(greenShare(await frameAt(o.page, t)));
+    check(at[0] < 0.01 && at[1] > 0.95 && at[2] < 0.01, "a sticker from 2 seconds for 2 seconds shows only then (" + at.map((x) => x.toFixed(2)).join(", ") + ")");
+    await o.context.close();
+  }
+  // The editor, at each size.
+  for (const size of SIZES) {
+    const { context, page, errors } = await open(THEMES[0], size, 1, PLAIN);
+    await openWs(page);
+    await wsSec(page, "Stickers");
+    await page.evaluate((url) => (window.__pickPic = { url, name: "dot.png" }), PICS.rb);
+    await page.click("[data-af-sticker-add]");
+    await page.waitForTimeout(900);
+    const added = await page.evaluate(() => ({ list: window.__settings.videoStickers, kept: Object.keys(window.__stickers || {}).length, said: (document.querySelector("[data-af-sticker-status]") || {}).textContent }));
+    const k = (added.list || [])[0];
+    check(k && Math.abs(k.w / k.h - 2) < 0.05 && added.kept === 1, size.name + ": Add a sticker keeps the picture and sizes it to its shape (" + JSON.stringify(k && [k.w, k.h]) + ")");
+    const hint1 = await page.evaluate(() => document.querySelector("[data-af-sticker-blend]").closest(".af-col, [data-af-row]").parentElement.textContent);
+    await page.selectOption("[data-af-sticker-blend]", "screen");
+    await page.waitForTimeout(600);
+    const after = await page.evaluate(() => ({ blend: window.__settings.videoStickers[0].blend, text: document.querySelector("[data-af-sticker-edit]").textContent }));
+    check(after.blend === "screen" && /black parts vanish/.test(after.text) && !/black parts vanish/.test(hint1), size.name + ": the overlay type is saved and its hint changes with it");
+    const m = await page.evaluate(MEASURE, size.touch);
+    check(!m.overflow.length && !m.small.length, size.name + ": the sticker editor fits. " + m.overflow.concat(m.small).slice(0, 2).join("; "));
+    await page.click('[data-af-sticker-act="dup"]');
+    await page.waitForTimeout(700);
+    const two = await page.evaluate(() => ({ n: window.__settings.videoStickers.length, ids: window.__settings.videoStickers.map((x) => x.id), kept: Object.values(window.__stickers || {}).filter(Boolean).length }));
+    check(two.n === 2 && two.ids[0] !== two.ids[1] && two.kept === 2, size.name + ": Duplicate adds a copy with a picture of its own (" + JSON.stringify(two) + ")");
+    await page.click('[data-af-sticker-act="lock"]');
+    await page.waitForTimeout(300);
+    await page.evaluate(() => (window.__asked = 0));
+    await page.click('[data-af-sticker-act="delete"]');
+    await page.waitForTimeout(500);
+    const locked = await page.evaluate(() => ({ asked: window.__asked, n: window.__settings.videoStickers.length }));
+    check(locked.asked === 0 && locked.n === 2, size.name + ": a locked sticker is not deleted");
+    await page.click('[data-af-sticker-act="lock"]');
+    await page.waitForTimeout(300);
+    await page.click('[data-af-sticker-act="delete"]');
+    await page.waitForTimeout(700);
+    const gone = await page.evaluate(() => ({ asked: window.__asked, n: window.__settings.videoStickers.length }));
+    check(gone.asked === 1 && gone.n === 1, size.name + ": Delete asks first, then takes the sticker out (" + JSON.stringify(gone) + ")");
+    check(!errors.length, size.name + ": no page errors. " + errors.slice(0, 2).join(" | "));
+    await context.close();
+  }
+  // Dragged with UI Scale on, a sticker lands under the pointer.
+  for (const zoom of [1, 1.25, 0.85]) {
+    const { context, page, errors } = await open(THEMES[0], laptop, zoom, PLAIN + `window.__settings.videoStickers = ${JSON.stringify([sticker({})])}; window.__stickers = ${JSON.stringify({ k1: PICS.rb })};`);
+    await openWs(page);
+    await page.waitForTimeout(900);
+    await wsSec(page, "Stickers");
+    await page.waitForTimeout(400);
+    const moved = await page.evaluate(async () => {
+      const c = document.querySelector("[data-af-videopreview]");
+      c.scrollIntoView({ block: "center" });
+      await new Promise((x) => setTimeout(x, 200));
+      const r = c.getBoundingClientRect();
+      const ev = (type, x, y) => c.dispatchEvent(new PointerEvent(type, { bubbles: true, cancelable: true, clientX: x, clientY: y, pointerId: 3, pointerType: "mouse", isPrimary: true }));
+      ev("pointerdown", r.left + r.width * 0.5, r.top + r.height * 0.5);
+      ev("pointermove", r.left + r.width * 0.6, r.top + r.height * 0.6);
+      ev("pointermove", r.left + r.width * 0.7, r.top + r.height * 0.7);
+      ev("pointerup", r.left + r.width * 0.7, r.top + r.height * 0.7);
+      await new Promise((x) => setTimeout(x, 700));
+      const k = window.__settings.videoStickers[0];
+      return { x: k.x, y: k.y };
+    });
+    check(Math.abs(moved.x - 0.7) < 0.03 && Math.abs(moved.y - 0.7) < 0.03, "zoom " + zoom + ": a sticker dragged on the preview lands under the pointer (" + JSON.stringify(moved) + ")");
+    const f = await frameAt(page, null);
+    const u = Math.min(f.w, f.h) / 1080;
+    check(near(px(f, 0.7 - (100 * u) / f.w, 0.7), [255, 0, 0]), "zoom " + zoom + ": the dragged sticker is drawn where it was dropped");
+    check(!errors.length, "zoom " + zoom + ": no page errors. " + errors.slice(0, 2).join(" | "));
+    await context.close();
+  }
+}
+
 if (section("template use matches")) {
   console.log("With a long-used account, Use this template draws exactly what trying it drew, in every scene, for every template");
   // A long-time reader's settings.
@@ -6730,6 +6999,13 @@ if (section("lock and focus")) {
         for (let k = 1; k <= 5; k++) await page.mouse.move(x + (dx * k) / 5, y + (dy * k) / 5);
         await page.mouse.up(); await page.waitForTimeout(500);
       };
+      // On a phone, Lock all and Focus are in the More menu.
+      const press = async (id) => {
+        if (!size.touch) return page.click('[data-af-ws="' + id + '"]');
+        await page.tap('[data-af-ws="more"]');
+        await page.waitForTimeout(300);
+        await page.tap('[data-af-moreitem="' + id + '"]');
+      };
       const before = await pos();
       await dragFrom(0.3, 0.3, 80, 40);
       const afterLocked = await pos();
@@ -6744,16 +7020,16 @@ if (section("lock and focus")) {
       await dragFrom(0.7, 0.7, -60, -30);
       const moved = await pos();
       check(moved[1][1] !== before[1][1], say + ": an unlocked shape still moves");
-      await page.click('[data-af-ws="lockall"]');
+      await press("lockall");
       await page.waitForTimeout(300);
       const was = await pos();
       await dragFrom(0.7 + (moved[1][1] - before[1][1]), 0.7 + (moved[1][2] - before[1][2]), 60, 30);
       check(JSON.stringify(await pos()) === JSON.stringify(was) && (await page.getAttribute('[data-af-ws="lockall"]', "aria-pressed")) === "true", say + ": Lock all stops every shape, and shows that it is on");
-      await page.click('[data-af-ws="lockall"]');
+      await press("lockall");
       // Focus mode.
       const panelScroll = await page.evaluate(() => { const p = document.querySelector("[data-af-ws-panel]"); p.scrollTop = 120; return p.scrollTop; });
       const pvBefore = (await page.locator("[data-af-videopreview]").boundingBox()).width;
-      await page.click('[data-af-ws="focus"]');
+      await press("focus");
       await page.waitForTimeout(600);
       const inFocus = await page.evaluate(() => ({ rail: getComputedStyle(document.querySelector("[data-af-ws-rail]")).display, panel: getComputedStyle(document.querySelector("[data-af-ws-panel]")).display, line: (() => { const l = document.querySelector("[data-af-timeline]"); return !l || getComputedStyle(l).display === "none" || l.hidden; })(), play: !!document.querySelector('[data-af-studio="play"]').offsetParent }));
       const pvFocus = (await page.locator("[data-af-videopreview]").boundingBox()).width;
