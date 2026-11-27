@@ -16044,10 +16044,26 @@ export function setup(ctx: Ctx, overrides?: any) {
 
   // Opens the workspace, on one section when given. Open already, it shows
   // that section.
+  // Lumiverse's drawer is drawn above the Studio, so it is closed whenever
+  // the Studio opens or is brought to the front. No answer in 3 seconds is
+  // taken as no.
+  function closeDrawer() {
+    rpc({ type: 'close_drawer' }, 3000).then(
+      (r: any) => {
+        if (!r || !r.ok) log('Lumiverse did not close its drawer, so the Studio may be under it. Close the drawer to see the Studio.', 'bad');
+      },
+      () => log('Lumiverse did not close its drawer, so the Studio may be under it. Close the drawer to see the Studio.', 'bad'),
+    );
+  }
+  // The drawer's Studio tab says whether the Studio is open.
+  function paintStudioTab() {
+    if (tab === 'studio') renderTab();
+  }
   function openStudio(section?: string, then?: () => void) {
     if (section) wsSection = section;
+    closeDrawer();
     if (ws && ws.box.isConnected && !ws.closing) {
-      renderWorkspace();
+      if (section) renderWorkspace();
       focusWs();
       if (then) then();
       return;
@@ -16115,6 +16131,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       }
     }, 1000);
     ws = { box, how, handle, closing: false, watch };
+    paintStudioTab();
     undoStart();
     // Built in full, and its first preview frame drawn, before it shows,
     // so it never shows half laid out. Then it fades in and slides up a
@@ -16209,6 +16226,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       else if (!w.closing) w.handle.dismiss();
     } catch (_) {}
     w.box.remove();
+    paintStudioTab();
   }
   async function closeStudio(fromHost = false) {
     const w = ws;
@@ -16956,9 +16974,17 @@ export function setup(ctx: Ctx, overrides?: any) {
     setText(what, sh ? 'Loaded: ' + String(sh.fileTitle || sh.title || 'the last message played') + '.' : 'Nothing is loaded. Play a message, or open one from Saved audio in the Studio.');
     c.appendChild(what);
     const row = el('<div class="af-row"></div>');
-    const open = button('Open the Studio', () => openStudio(), 'af-primary', ICON_VIDEO);
-    open.setAttribute('data-af-studio-open', '');
-    row.appendChild(open);
+    if (ws && !ws.closing) {
+      // While the Studio is open, this brings it to the front.
+      c.appendChild(el('<p class="af-status" data-af-studio-isopen>The Studio is open.</p>'));
+      const go = button('Go to the Studio', () => openStudio(), 'af-primary', ICON_VIDEO);
+      go.setAttribute('data-af-studio-goto', '');
+      row.appendChild(go);
+    } else {
+      const open = button('Open the Studio', () => openStudio(), 'af-primary', ICON_VIDEO);
+      open.setAttribute('data-af-studio-open', '');
+      row.appendChild(open);
+    }
     c.appendChild(row);
     // Quick shortcuts.
     const box = el('<div class="af-col af-quick" data-af-quick><h4 class="af-quickh">Quick shortcuts</h4></div>');

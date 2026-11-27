@@ -177,6 +177,9 @@ function answer(msg) {
     // As the backend does: the kept audio and the scripts go together.
     case 'clips_clear': window.__clips = {}; window.__keptList = []; return reply({ type: 'clips_state', ok: true, count: 0, bytes: 0 });
     case 'clips_have': return reply({ type: 'clips_have', have: (msg.sigs || []).filter((x) => (window.__clips || {})[x]) });
+    // Lumiverse closes its drawer when asked. window.__drawerLumi draws the
+    // drawer as Lumiverse does, over the app overlay.
+    case 'close_drawer': { window.__drawerCloses = (window.__drawerCloses || 0) + 1; if (window.__drawerLumi) document.getElementById('drawer').style.display = 'none'; return reply({ type: 'close_drawer', ok: !window.__drawerStays }); }
     case 'kept_list': return reply({ type: 'kept_list', list: window.__keptList || [] });
     // Projects, as the backend keeps them: an index and one file each.
     case 'project_list': return reply({ type: 'projects', ok: true, list: JSON.parse(JSON.stringify(window.__projIndex || [])), folders: [] });
@@ -292,9 +295,14 @@ window.__ctx = {
       r.setAttribute('data-spindle-extension-root', 'auto_foley');
       r.setAttribute('data-spindle-app-mount', 'auto_foley');
       if (o && o.className) r.className = o.className;
-      document.body.appendChild(r);
+      // Lumiverse puts the overlay in a box of its own at z-index 9990,
+      // under its drawer at 9992.
+      const box = document.createElement('div');
+      box.style.cssText = 'position:relative;z-index:9990';
+      box.appendChild(r);
+      document.body.appendChild(box);
       window.__appMounts = (window.__appMounts || 0) + 1;
-      return { root: r, mountId: 'm1', setVisible() {}, destroy() { r.remove(); window.__appMounts--; } };
+      return { root: r, mountId: 'm1', setVisible() {}, destroy() { box.remove(); window.__appMounts--; } };
     },
     // Lumiverse's extension window, with its title row, body and root.
     showModal(o) {
@@ -5923,6 +5931,42 @@ if (section("projects")) {
     check(!m.overflow.length && !m.small.length, say + ": Projects fit. " + m.overflow.concat(m.small).slice(0, 2).join("; "));
     check(!errors.length, say + ": no page errors. " + errors.slice(0, 2).join(" | "));
     await context.close();
+  }
+}
+
+if (section("studio over the drawer")) {
+  console.log("Open the Studio closes Lumiverse's drawer, so the Studio is in view, and the drawer's tab says it is open");
+  for (const size of SIZES) {
+    for (const how of ["app", "modal"]) {
+      const say = size.name + ", " + (how === "app" ? "full screen" : "in a window");
+      const { context, page, errors } = await open(THEMES[0], size, 1, how === "modal" ? "window.__noApp = true;" : null);
+      // The drawer as Lumiverse draws it: fixed, over the app overlay.
+      await page.evaluate(() => { window.__drawerLumi = true; const d = document.getElementById("drawer"); d.style.cssText += ";position:fixed;top:0;right:0;bottom:0;width:min(420px,100vw);overflow:auto;z-index:9992"; });
+      await page.click('.af-tab[data-tab="studio"]');
+      await page.waitForTimeout(200);
+      await page.click("[data-af-studio-open]");
+      await page.waitForTimeout(900);
+      const top = await page.evaluate(() => { const e = document.elementFromPoint(innerWidth / 2, innerHeight / 2); return !!(e && e.closest("[data-af-ws]")); });
+      check(top && (await page.evaluate(() => window.__drawerCloses)) >= 1, say + ": with the drawer open, Open the Studio leaves the Studio on top at the center of the screen");
+      // The drawer opened again shows that the Studio is open.
+      await page.evaluate(() => { document.getElementById("drawer").style.display = ""; });
+      await page.waitForTimeout(200);
+      const tabNow = await page.evaluate(() => ({ line: (document.querySelector("[data-af-studio-isopen]") || {}).textContent || "", go: !!document.querySelector("[data-af-studio-goto]"), open: !!document.querySelector("[data-af-studio-open]") }));
+      check(tabNow.line === "The Studio is open." && tabNow.go && !tabNow.open, say + ": the drawer's Studio tab says the Studio is open, with Go to the Studio (" + JSON.stringify(tabNow) + ")");
+      // In a window, Lumiverse draws the window over the drawer, so only the
+      // full-screen Studio can be under it.
+      if (how === "app") await page.click("[data-af-studio-goto]");
+      else await page.evaluate(() => document.querySelector("[data-af-studio-goto]").click());
+      await page.waitForTimeout(500);
+      const top2 = await page.evaluate(() => { const e = document.elementFromPoint(innerWidth / 2, innerHeight / 2); return !!(e && e.closest("[data-af-ws]")); });
+      check(top2, say + ": Go to the Studio closes the drawer and the Studio is in view");
+      await page.evaluate(() => { document.getElementById("drawer").style.display = ""; });
+      await page.evaluate(() => document.querySelector('[data-af-ws="close"]').click());
+      await page.waitForTimeout(700);
+      check(!!(await page.$("[data-af-studio-open]")) && !(await page.$("[data-af-studio-isopen]")), say + ": closing the Studio puts the tab back to Open the Studio");
+      check(!errors.length, say + ": no page errors. " + errors.slice(0, 2).join(" | "));
+      await context.close();
+    }
   }
 }
 

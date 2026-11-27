@@ -73,6 +73,7 @@ The file is saved as an MP4 or a WebM, named with the chat's name and the day.
    - **Open the Studio** in the floating player's menu.
    - **Download or make a video** on the Stage tab, and **Open in the Studio** under **Saved audio**.
    - Searching for Auto Foley, the Studio or a video in Lumiverse's command palette (Ctrl+K or Cmd+K) opens the drawer's **Studio** tab, with its **Open the Studio** button.
+   Opening the Studio closes Lumiverse's drawer, so the Studio is in view. While the Studio is open, the drawer's **Studio** tab says "The Studio is open." with **Go to the Studio**, which closes the drawer again.
 2. Pick a part of the Studio and change its settings. The preview changes at once.
 3. Close it with **Close** at the top, or Escape.
 

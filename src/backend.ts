@@ -5924,6 +5924,21 @@ async function onPanel(p: any, userId: string | undefined) {
         notify(str(p.kind, 10), str(p.text, 500), userId);
         return;
       }
+      case 'close_drawer': {
+        // The Studio opens over Lumiverse, and Lumiverse's drawer sits above
+        // it, so the drawer is closed when the Studio opens from it.
+        let ok = false;
+        try {
+          if (spindle.ui && typeof (spindle.ui as any).closeDrawer === 'function') {
+            await (spindle.ui as any).closeDrawer({ userId });
+            ok = true;
+          } else logWarn('this Lumiverse cannot close the drawer for an extension, so the Studio may open under it');
+        } catch (e: any) {
+          logWarn('could not close the drawer for the Studio: ' + String((e && e.message) || 'no reason given'));
+        }
+        answer({ type: 'close_drawer', ok });
+        return;
+      }
       default:
         return;
     }
