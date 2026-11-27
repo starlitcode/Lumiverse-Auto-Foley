@@ -1698,6 +1698,8 @@ html[data-af-still] .af-ws-sec.af-ws-in, .af-ws[data-af-still] .af-ws-sec.af-ws-
 .af-ws-pop { position: absolute; z-index: 6; top: 56px; right: 12px; display: flex; flex-direction: column; gap: 10px; width: min(440px, calc(100% - 24px)); max-height: calc(100% - 72px); overflow: auto; padding: 14px; border: 1px solid var(--af-line); border-radius: var(--af-r-md); background-color: var(--lumiverse-card-bg-solid, rgb(24,20,34)); background-image: linear-gradient(var(--lumiverse-bg-elevated, rgba(35,30,48,.98)), var(--lumiverse-bg-elevated, rgba(35,30,48,.98))); box-shadow: 0 10px 30px rgba(0,0,0,.35); opacity: 0; transform: translateY(4px); transition: opacity .18s ease-out, transform .18s ease-out; outline: none; }
 .af-ws-pop[data-af-open] { opacity: 1; transform: none; }
 .af-ws-morebtn { display: none; }
+.af-anim-canvas { display: block; width: 100%; max-width: 480px; height: auto; aspect-ratio: 16 / 9; border-radius: var(--af-r); border: 1px solid var(--af-line); }
+.af-ease-canvas { flex: none; width: 96px; height: 96px; }
 .af-ws-menu { width: auto; min-width: 200px; max-width: calc(100% - 24px); gap: 4px; padding: 6px; top: calc(52px + env(safe-area-inset-top, 0px)); right: 8px; }
 .af-ws-menu .af-ws-item { justify-content: flex-start; width: 100%; min-height: 40px; border-color: transparent; background: transparent; }
 .af-ws-menu .af-ws-item:hover:not(:disabled) { background: var(--af-fill-subtle); }
@@ -18069,9 +18071,567 @@ export function setup(ctx, overrides) {
         r.appendChild(add);
         box.appendChild(r);
     }
+    // ---- your animations: the advanced editor ----
+    // The reader's own animations, each made from a built-in or from nothing,
+    // with its keyframes, easing and mask, and a preview that loops.
+    let animEditId = '';
+    let animSave = null;
+    function saveOwnAnims(now) {
+        if (animSave)
+            clearTimeout(animSave);
+        animSave = null;
+        const go = () => {
+            animSave = null;
+            set({ videoAnimsOwn: ownAnims().slice() });
+        };
+        if (now)
+            go();
+        else
+            animSave = setTimeout(go, 400);
+    }
+    disposers.push(() => {
+        if (animSave) {
+            clearTimeout(animSave);
+            animSave = null;
+            try {
+                set({ videoAnimsOwn: ownAnims().slice() });
+            }
+            catch (_) { }
+        }
+    });
+    const newAnimId = () => {
+        let id = '';
+        do
+            id = 'u' + Math.random().toString(36).replace(/[^a-z0-9]/g, '').slice(0, 9);
+        while (ownAnims().some((x) => x.id === id) || BUILT_IN_ANIMS.some((x) => x.id === id));
+        return id;
+    };
+    const copyAnim = (a, name) => Object.assign(JSON.parse(JSON.stringify(a)), { id: newAnimId(), name: name.slice(0, 40) });
+    function ownList() {
+        if (!Array.isArray(S.videoAnimsOwn))
+            S.videoAnimsOwn = [];
+        return S.videoAnimsOwn;
+    }
+    // A small stage for the preview, with the sample words and a picture.
+    function animPreview(get) {
+        const box = el('<div class="af-col" data-af-animpreview></div>');
+        const c = canvasOf(320, 180);
+        c.className = 'af-anim-canvas';
+        c.setAttribute('role', 'img');
+        c.setAttribute('aria-label', 'A preview of the animation, coming in and going out');
+        box.appendChild(c);
+        const st = { w: 320, h: 180 };
+        const W = 320;
+        const H = 180;
+        let pos = 0;
+        let playing = !calm();
+        let half = false;
+        let last = 0;
+        let frame = 0;
+        const cycle = (a) => Math.max(0.2, a.delay + a.secs) * 2 + 1;
+        const sample = (g, al, x, y) => {
+            g.save();
+            g.globalAlpha = al;
+            g.fillStyle = '#b9a6e8';
+            g.beginPath();
+            g.arc(W / 2 + x, 58 + y, 22, 0, Math.PI * 2);
+            g.fill();
+            g.fillStyle = '#ffffff';
+            g.font = '600 26px system-ui, sans-serif';
+            g.textAlign = 'center';
+            const words = 'Your words here';
+            const rev = textReveal;
+            const shown = rev ? (rev.kind === 'words' ? words.split(' ').slice(0, Math.floor(rev.frac * 3 + 1e-6)).join(' ') : words.slice(0, Math.round(rev.frac * words.length))) : words;
+            g.textAlign = 'left';
+            const full = g.measureText(words).width;
+            g.fillText(shown, W / 2 - full / 2 + x, 122 + y);
+            g.restore();
+        };
+        const draw = () => {
+            const g = c.getContext('2d');
+            const a = get();
+            if (!g || !a)
+                return;
+            g.setTransform(1, 0, 0, 1, 0, 0);
+            g.globalAlpha = 1;
+            g.fillStyle = '#20243a';
+            g.fillRect(0, 0, W, H);
+            const L = Math.max(0.01, a.secs);
+            const len = cycle(a);
+            const t = pos * len;
+            const use = { def: a, secs: L, delay: a.delay };
+            const inEnd = a.delay + L;
+            if (t < a.delay)
+                return;
+            if (t < inEnd)
+                runAnim(g, st, use, 'in', (t - a.delay) / L, sample, 0);
+            else if (t < inEnd + 1)
+                sample(g, 1, 0, 0);
+            else if (t < inEnd + 1 + L)
+                runAnim(g, st, use, 'out', (t - inEnd - 1) / L, sample, 0);
+        };
+        const scrubId = rid('as');
+        const scrubRow = el('<div class="af-col"></div>');
+        scrubRow.appendChild(labelRow('Where in the preview', 'Drag to look at one moment. In, then out.', scrubId));
+        const scrub = el('<input type="range" class="af-range" min="0" max="1000" step="1" id="' + scrubId + '" data-af-animscrub>');
+        scrub.value = '0';
+        scrub.addEventListener('input', () => {
+            pos = Number(scrub.value) / 1000;
+            playing = false;
+            paintPlay();
+            draw();
+        });
+        scrubRow.appendChild(scrub);
+        box.appendChild(scrubRow);
+        const row = el('<div class="af-row af-wrap"></div>');
+        const play = button('Pause', () => {
+            playing = !playing;
+            paintPlay();
+            if (playing)
+                loop();
+        });
+        play.setAttribute('data-af-animplay', '');
+        const paintPlay = () => setText(play.querySelector('span'), playing ? 'Pause' : 'Play');
+        const slow = button('Half speed', () => {
+            half = !half;
+            slow.setAttribute('aria-pressed', half ? 'true' : 'false');
+        });
+        slow.setAttribute('aria-pressed', 'false');
+        slow.setAttribute('data-af-animhalf', '');
+        row.appendChild(play);
+        row.appendChild(slow);
+        box.appendChild(row);
+        paintPlay();
+        const loop = () => {
+            if (frame)
+                cancelAnimationFrame(frame);
+            last = performance.now();
+            const step = (now) => {
+                frame = 0;
+                if (!c.isConnected || !playing)
+                    return;
+                const a = get();
+                if (!a)
+                    return;
+                pos = (pos + ((now - last) / 1000 / cycle(a)) * (half ? 0.5 : 1)) % 1;
+                last = now;
+                scrub.value = String(Math.round(pos * 1000));
+                draw();
+                frame = requestAnimationFrame(step);
+            };
+            frame = requestAnimationFrame(step);
+        };
+        disposers.push(() => {
+            if (frame)
+                cancelAnimationFrame(frame);
+            frame = 0;
+        });
+        box._redraw = draw;
+        draw();
+        if (playing)
+            loop();
+        return box;
+    }
+    // The small drawing of an easing curve.
+    function easeDrawing(curve) {
+        const c = canvasOf(96, 96);
+        c.className = 'af-ease-canvas';
+        c.setAttribute('role', 'img');
+        c.setAttribute('aria-label', 'The easing curve');
+        const g = c.getContext('2d');
+        if (!g)
+            return c;
+        let ink = '#cccccc';
+        try {
+            ink = getComputedStyle(root).color || ink;
+        }
+        catch (_) { }
+        g.strokeStyle = ink;
+        g.globalAlpha = 0.35;
+        g.strokeRect(8, 8, 80, 80);
+        g.globalAlpha = 1;
+        g.lineWidth = 2;
+        g.beginPath();
+        for (let i = 0; i <= 40; i++) {
+            const k = i / 40;
+            const x = 8 + k * 80;
+            const y = 88 - bezier(curve, k) * 80;
+            if (i)
+                g.lineTo(x, y);
+            else
+                g.moveTo(x, y);
+        }
+        g.stroke();
+        return c;
+    }
+    function drawOwnAnims(box, changed, redrawPlaces) {
+        box.replaceChildren();
+        const h = el('<h3 class="af-ws-h">Your animations</h3>');
+        box.appendChild(h);
+        box.appendChild(hint('Make your own from a built-in or from nothing. Fast changes between light and dark can flash.'));
+        const said = el('<p class="af-status" role="status" data-af-animsaid></p>');
+        const say = (t, bad) => {
+            said.textContent = t;
+            if (bad)
+                said.dataset.kind = 'bad';
+            else
+                delete said.dataset.kind;
+        };
+        const list = ownList();
+        const redraw = () => {
+            drawOwnAnims(box, changed, redrawPlaces);
+            redrawPlaces();
+        };
+        const listBox = el('<div class="af-col af-shapes" data-af-ownanims role="group" aria-label="Your animations"></div>');
+        for (const a of list) {
+            const b = button(a.name, () => {
+                animEditId = animEditId === a.id ? '' : a.id;
+                redraw();
+            });
+            b.classList.add('af-shape-pick');
+            b.setAttribute('data-af-ownanim', a.id);
+            b.setAttribute('aria-pressed', a.id === animEditId ? 'true' : 'false');
+            listBox.appendChild(b);
+        }
+        if (!list.length)
+            listBox.appendChild(el('<p class="af-note">None yet.</p>'));
+        box.appendChild(listBox);
+        // Making one: from a built-in, or a plain fade.
+        let from = 'fade';
+        const fromRow = select('Start from', BUILT_IN_ANIMS.map((a) => ({ id: a.id, label: a.name })), from, (v) => {
+            from = v;
+        }, 'A copy of it is made, which you can change.');
+        fromRow.querySelector('select').setAttribute('data-af-animfrom', '');
+        box.appendChild(fromRow);
+        const tools = el('<div class="af-row af-wrap"></div>');
+        const make = button('Make an animation', () => {
+            if (list.length >= 30)
+                return say('You have 30 animations, which is the most there can be.', true);
+            const base = animById(from) || BUILT_IN_ANIMS[0];
+            const a = copyAnim(base, 'My ' + base.name.toLowerCase());
+            list.push(a);
+            animEditId = a.id;
+            saveOwnAnims(true);
+            redraw();
+        });
+        make.setAttribute('data-af-animmake', '');
+        make.disabled = list.length >= 30;
+        const imp = button('Add from a file', async () => {
+            let files = [];
+            try {
+                files = await ctx.uploads.pickFile({ accept: ['application/json', '.json'], multiple: false, maxSizeBytes: 512 * 1024 });
+            }
+            catch (e) {
+                return say('The file picker could not open: ' + String((e && e.message) || e).slice(0, 200), true);
+            }
+            const f = files && files[0];
+            if (!f)
+                return;
+            let got = null;
+            try {
+                got = JSON.parse(new TextDecoder().decode(f.bytes));
+            }
+            catch (_) {
+                return say('That file is not an animation Auto Foley can read.', true);
+            }
+            const items = Array.isArray(got && got.animations) ? got.animations : got && got.inT ? [got] : [];
+            if (!items.length)
+                return say('That file has no animation in it.', true);
+            let added = 0;
+            for (const it of items) {
+                if (list.length >= 30)
+                    break;
+                if (!it || typeof it !== 'object' || !it.inT || !it.outT)
+                    continue;
+                let name = String(it.name || 'An animation').slice(0, 40);
+                // A name already used gets a copy of its own, so nothing is lost.
+                if (list.some((x) => x.name === name))
+                    name = (name.slice(0, 33) + ' (copy)').slice(0, 40);
+                list.push(Object.assign(copyAnim(it, name), { kind: ['text', 'frame', 'any'].indexOf(it.kind) >= 0 ? it.kind : 'any' }));
+                added++;
+            }
+            saveOwnAnims(true);
+            redraw();
+            say(added ? 'Added ' + (added === 1 ? 'one animation' : added + ' animations') + '.' : 'Nothing was added: there is no room, or the file has no animation in it.', !added);
+        });
+        imp.setAttribute('data-af-animimport', '');
+        tools.appendChild(make);
+        tools.appendChild(imp);
+        box.appendChild(tools);
+        box.appendChild(said);
+        const a = list.find((x) => x.id === animEditId);
+        if (!a)
+            return;
+        const ed = el('<div class="af-col af-anim-edit" data-af-animedit></div>');
+        box.appendChild(ed);
+        let preview = null;
+        const touched = () => {
+            saveOwnAnims();
+            changed();
+            if (preview && preview._redraw)
+                preview._redraw();
+        };
+        const nameId = rid('an');
+        ed.appendChild(labelRow('Name', '', nameId));
+        const name = el('<input type="text" class="af-field" maxlength="40" autocomplete="off" id="' + nameId + '" data-af-animname>');
+        name.value = a.name;
+        name.addEventListener('change', () => {
+            const v = name.value.trim().slice(0, 40);
+            if (!v) {
+                name.value = a.name;
+                return;
+            }
+            a.name = v;
+            saveOwnAnims(true);
+            redraw();
+        });
+        ed.appendChild(name);
+        preview = animPreview(() => ownList().find((x) => x.id === a.id) || null);
+        ed.appendChild(preview);
+        ed.appendChild(segmented('Used for', [
+            { id: 'any', label: 'Text and the frame' },
+            { id: 'text', label: 'Text only' },
+            { id: 'frame', label: 'The frame only' },
+        ], a.kind, (v) => {
+            a.kind = v === 'text' || v === 'frame' ? v : 'any';
+            touched();
+            redrawPlaces();
+        }));
+        const grid = el('<div class="af-shape-grid"></div>');
+        const num = (key, label, value, min, max, step, help, take) => {
+            const r = numberRow(label, value, min, max, step, (v) => {
+                take(v);
+                touched();
+            }, help);
+            r.setAttribute('data-af-animnum', key);
+            grid.appendChild(r);
+        };
+        num('secs', 'Length, in seconds', a.secs, 0, 10, 0.1, 'How long each of in and out takes.', (v) => (a.secs = v));
+        num('delay', 'Delay, in seconds', a.delay, 0, 10, 0.1, 'It waits this long before it starts.', (v) => (a.delay = v));
+        num('overlap', 'Overlap, in percent', Math.round(numOr(a.overlap, 1) * 100), 0, 100, 5, '100 moves the leaving and the arriving part at once.', (v) => (a.overlap = v / 100));
+        ed.appendChild(grid);
+        ed.appendChild(select('Turns and sizes around', [
+            { id: 'center', label: 'The middle' },
+            { id: 'top', label: 'The top' },
+            { id: 'bottom', label: 'The bottom' },
+            { id: 'left', label: 'The left' },
+            { id: 'right', label: 'The right' },
+        ], a.anchor || 'center', (v) => {
+            a.anchor = v;
+            touched();
+        }, 'The middle of the frame by default.'));
+        if (a.kind !== 'frame')
+            ed.appendChild(select('Show the text', [
+                { id: '', label: 'All at once' },
+                { id: 'chars', label: 'A letter at a time, as Typewriter does' },
+                { id: 'words', label: 'A word at a time, as Word by word does' },
+            ], a.reveal || '', (v) => {
+                a.reveal = v === 'chars' || v === 'words' ? v : '';
+                touched();
+            }, 'While it comes in. All at once by default.'));
+        // Easing: a preset, or the curve's four numbers.
+        const easeBox = el('<div class="af-col" data-af-animease></div>');
+        const paintEase = () => {
+            easeBox.replaceChildren();
+            const match = EASES.find((e) => e.curve.every((v, i) => Math.abs(v - (a.ease[i] || 0)) < 1e-6));
+            const pick = select('Easing', EASES.map((e) => ({ id: e.id, label: e.label })).concat(match ? [] : [{ id: 'own', label: 'Your own curve' }]), match ? match.id : 'own', (v) => {
+                const e = EASES.find((x) => x.id === v);
+                if (!e)
+                    return;
+                a.ease = e.curve.slice();
+                touched();
+                paintEase();
+            }, 'Gentle by default. The four numbers below are the curve, as in CSS cubic-bezier.');
+            pick.querySelector('select').setAttribute('data-af-animeasepick', '');
+            easeBox.appendChild(pick);
+            const row = el('<div class="af-row af-wrap"></div>');
+            row.appendChild(easeDrawing(a.ease));
+            const g2 = el('<div class="af-shape-grid af-grow"></div>');
+            ['First x', 'First y', 'Second x', 'Second y'].forEach((label, i) => {
+                const r = numberRow(label, a.ease[i], i % 2 ? -1 : 0, i % 2 ? 2 : 1, 0.05, (v) => {
+                    a.ease[i] = v;
+                    touched();
+                    paintEase();
+                });
+                r.setAttribute('data-af-animcurve', String(i));
+                g2.appendChild(r);
+            });
+            row.appendChild(g2);
+            easeBox.appendChild(row);
+        };
+        paintEase();
+        ed.appendChild(easeBox);
+        // The two tracks, each with its keyframes and its mask.
+        let side = 'in';
+        const trackBox = el('<div class="af-col" data-af-animtrack></div>');
+        const PROPS = [
+            { key: 'o', label: 'Strength, in percent', min: 0, max: 100, step: 5 },
+            { key: 'x', label: 'Across, in pixels', min: -2000, max: 2000, step: 1 },
+            { key: 'y', label: 'Down, in pixels', min: -2000, max: 2000, step: 1 },
+            { key: 's', label: 'Size, in percent', min: 0, max: 400, step: 1 },
+            { key: 'r', label: 'Turn, in degrees', min: -720, max: 720, step: 1 },
+            { key: 'b', label: 'Blur, in pixels', min: 0, max: 60, step: 1 },
+            { key: 'l', label: 'Brightness, in percent', min: 0, max: 200, step: 5 },
+            { key: 'ta', label: 'Tint, in percent', min: 0, max: 100, step: 5 },
+        ];
+        const paintTrack = () => {
+            trackBox.replaceChildren();
+            trackBox.appendChild(segmented('Track', [
+                { id: 'in', label: 'Coming in' },
+                { id: 'out', label: 'Going out' },
+            ], side, (v) => {
+                side = v === 'out' ? 'out' : 'in';
+                paintTrack();
+            }));
+            const tr = side === 'in' ? a.inT : a.outT;
+            if (!Array.isArray(tr.keys))
+                tr.keys = [];
+            tr.keys.sort((x, y) => x.at - y.at);
+            tr.keys.forEach((k, n) => {
+                const one = el('<div class="af-col af-moodedit" data-af-animkey></div>');
+                one.setAttribute('data-af-animkey', String(n));
+                const g3 = el('<div class="af-shape-grid"></div>');
+                const at = numberRow('When, in percent of the length', Math.round(k.at * 100), 0, 100, 1, (v) => {
+                    k.at = v / 100;
+                    touched();
+                });
+                at.setAttribute('data-af-keyat', String(n));
+                g3.appendChild(at);
+                for (const p of PROPS) {
+                    const has = k[p.key] != null;
+                    const shownV = p.key === 'o' ? Math.round(numOr(k.o, 1) * 100) : numOr(k[p.key], p.key === 's' || p.key === 'l' ? 100 : 0);
+                    const r = numberRow(p.label, shownV, p.min, p.max, p.step, (v) => {
+                        k[p.key] = p.key === 'o' ? v / 100 : v;
+                        touched();
+                    }, has ? '' : 'Not set: it stays as it is.');
+                    r.setAttribute('data-af-keyprop', p.key);
+                    g3.appendChild(r);
+                }
+                one.appendChild(g3);
+                one.appendChild(colorRow('animTint' + a.id + side + n, 'Tint color', 'Used with Tint, in percent.', '--af-none', '#ffffff', 'Use white', () => touched(), {
+                    get: () => String(k.tint || ''),
+                    put: (hex) => {
+                        k.tint = hex || undefined;
+                    },
+                }));
+                const rm = button('Delete this keyframe', async () => {
+                    await leave(one);
+                    tr.keys.splice(tr.keys.indexOf(k), 1);
+                    touched();
+                    paintTrack();
+                });
+                rm.setAttribute('data-af-keydel', String(n));
+                const rr = el('<div class="af-row"></div>');
+                rr.appendChild(rm);
+                one.appendChild(rr);
+                trackBox.appendChild(one);
+            });
+            const addKey = button('Add a keyframe', () => {
+                if (tr.keys.length >= 12)
+                    return;
+                const lastAt = tr.keys.length ? tr.keys[tr.keys.length - 1].at : -0.5;
+                tr.keys.push({ at: Math.min(1, lastAt + 0.5), o: 1 });
+                touched();
+                paintTrack();
+            });
+            addKey.setAttribute('data-af-keyadd', '');
+            addKey.disabled = tr.keys.length >= 12;
+            const ar = el('<div class="af-row"></div>');
+            ar.appendChild(addKey);
+            trackBox.appendChild(ar);
+            // The mask of this track.
+            const maskOpts = [
+                { id: 'none', label: 'None' },
+                { id: 'linear', label: 'A straight wipe' },
+                { id: 'radial', label: 'A soft circle' },
+                { id: 'iris', label: 'An iris' },
+                { id: 'clock', label: 'A clock' },
+            ];
+            if (!tr.mask)
+                tr.mask = { type: 'none', angle: 0, feather: 0 };
+            const mk = select('Mask', maskOpts, tr.mask.type, (v) => {
+                tr.mask.type = (maskOpts.some((o) => o.id === v) ? v : 'none');
+                touched();
+                paintTrack();
+            }, 'None by default. A mask shows the part a little at a time.');
+            mk.querySelector('select').setAttribute('data-af-animmask', '');
+            trackBox.appendChild(mk);
+            if (tr.mask.type !== 'none') {
+                const g4 = el('<div class="af-shape-grid"></div>');
+                if (tr.mask.type === 'linear') {
+                    const an = numberRow('Angle, in degrees', tr.mask.angle, -360, 360, 15, (v) => {
+                        tr.mask.angle = v;
+                        touched();
+                    }, '0 wipes from the left, 90 from the top.');
+                    an.setAttribute('data-af-maskangle', '');
+                    g4.appendChild(an);
+                }
+                if (tr.mask.type !== 'clock') {
+                    const fe = numberRow('Soft edge, in percent', tr.mask.feather, 0, 100, 5, (v) => {
+                        tr.mask.feather = v;
+                        touched();
+                    });
+                    fe.setAttribute('data-af-maskfeather', '');
+                    g4.appendChild(fe);
+                }
+                trackBox.appendChild(g4);
+            }
+        };
+        paintTrack();
+        ed.appendChild(trackBox);
+        const acts = el('<div class="af-row af-wrap"></div>');
+        const dup = button('Duplicate', () => {
+            if (list.length >= 30)
+                return say('You have 30 animations, which is the most there can be.', true);
+            const c = copyAnim(a, (a.name.slice(0, 33) + ' (copy)').slice(0, 40));
+            list.splice(list.indexOf(a) + 1, 0, c);
+            animEditId = c.id;
+            saveOwnAnims(true);
+            redraw();
+        });
+        dup.setAttribute('data-af-animact', 'dup');
+        const exp = button('Share', () => {
+            const body = { app: 'Auto Foley', kind: 'animation', version: VERSION, animations: [Object.assign({}, a, { id: undefined })] };
+            if (!saveFile(new Blob([JSON.stringify(body, null, 2)], { type: 'application/json' }), 'auto-foley-animation-' + (a.name.replace(/[^a-z0-9]+/gi, '-').toLowerCase().replace(/^-|-$/g, '') || 'mine') + '.json'))
+                say('The file could not be made. Try again.', true);
+        });
+        exp.setAttribute('data-af-animact', 'share');
+        const del = button('Delete', async () => {
+            const uses = ANIM_PLACES.filter((p) => ((S.videoAnims || {})[p.id] || {}).id === a.id).map((p) => p.label);
+            if (!(await askSure('Delete ' + a.name, 'Delete the animation ' + a.name + '?' + (uses.length ? ' ' + uses.join(', ') + ' go back to Default.' : '') + ' There is no undo.', 'Delete', true)))
+                return;
+            await leaveAll([listBox.querySelector('[data-af-ownanim="' + a.id + '"]'), ed]);
+            const now = ownList();
+            const i = now.indexOf(a);
+            if (i >= 0)
+                now.splice(i, 1);
+            animEditId = '';
+            const places = Object.assign({}, S.videoAnims || {});
+            for (const p of Object.keys(places))
+                if (places[p] && places[p].id === a.id)
+                    delete places[p];
+            set({ videoAnimsOwn: now.slice(), videoAnims: places });
+            changed();
+            redraw();
+        });
+        del.setAttribute('data-af-animact', 'delete');
+        acts.appendChild(dup);
+        acts.appendChild(exp);
+        acts.appendChild(del);
+        ed.appendChild(acts);
+    }
     // The places an animation is used, each with a dropdown: its default,
     // the built-in animations, and the reader's own.
-    function drawAnimPlaces(box, changed) {
+    function drawAnimPlaces(outer, changed) {
+        outer.replaceChildren();
+        const box = el('<div class="af-col" data-af-animplaces></div>');
+        const ownBox = el('<div class="af-col" data-af-animown></div>');
+        outer.appendChild(box);
+        outer.appendChild(ownBox);
+        paintAnimPlaces(box, changed);
+        drawOwnAnims(ownBox, changed, () => paintAnimPlaces(box, changed));
+    }
+    function paintAnimPlaces(box, changed) {
         box.replaceChildren();
         box.appendChild(hint('How each part of the video comes in and goes out. Each one is Default until you pick another.'));
         const now = () => Object.assign({}, S.videoAnims || {});

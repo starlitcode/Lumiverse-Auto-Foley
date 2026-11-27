@@ -79,6 +79,57 @@ Half way through the opening, the corners are still black and the middle of the 
 
 Pixels are pixels of a 1080-pixel frame, so they look the same at any size of video.
 
+## Your animations
+
+Under the places, **Your animations** makes animations of your own. Up to 30.
+
+1. Pick a built-in in **Start from**, and press **Make an animation**. A copy of it is made, named such as "My rise".
+2. Press its name in the list to change it. The preview under its name plays it, in and then out, over and over.
+3. Change what you want:
+   - **Name**, as it shows in the dropdowns.
+   - **Used for**: text and the frame, text only, or the frame only.
+   - **Length**, **Delay** and **Overlap**. An overlap of 100% moves the leaving and the arriving part at once.
+   - **Turns and sizes around**: the middle, top, bottom, left or right of the frame.
+   - **Show the text**: all at once, a letter at a time, or a word at a time.
+   - **Easing**: a preset, or the four numbers of a curve, as in CSS `cubic-bezier`. The small drawing shows the curve.
+   - **Track**: **Coming in** or **Going out**. Each has its own keyframes and mask.
+4. Pick it in a place's dropdown, under **Your animations**.
+
+**The preview** has **Where in the preview**, to look at one moment, **Play** or **Pause**, and **Half speed**. With Reduce motion on, it starts paused.
+
+### Keyframes
+
+A keyframe is a moment of a track, from 0% (its start) to 100% (its end). Between two keyframes, each value moves in a straight line, along the easing curve. A value no keyframe sets stays at rest.
+
+| Value | At rest | Range |
+| --- | --- | --- |
+| Strength, in percent | 100 | 0 to 100 |
+| Across and Down, in pixels | 0 | -2000 to 2000 |
+| Size, in percent | 100 | 0 to 400 |
+| Turn, in degrees | 0 | -720 to 720 |
+| Blur, in pixels | 0 | 0 to 60 |
+| Brightness, in percent | 100 | 0 to 200 |
+| Tint, in percent, with its color | 0 | 0 to 100 |
+
+A track has up to 12 keyframes. **Add a keyframe** adds one after the last. **Delete this keyframe** takes it out.
+
+Fast changes between light and dark can flash. Keep brightness changes slow.
+
+### Masks
+
+A mask shows a part a little at a time:
+
+- **A straight wipe**, with an **Angle**: 0 wipes from the left, 90 from the top. Going out, the edge moves on in the same direction.
+- **A soft circle** and **An iris**: a circle from the middle that opens coming in and closes going out. **Soft edge** sets how soft its edge is.
+- **A clock**: a sweep like a clock's hand, from the top, clockwise.
+
+### Sharing
+
+- **Share** saves the animation in a file, `auto-foley-animation-` and its name. The file holds the animation and the version of Auto Foley. Nothing else is in it.
+- **Add from a file** adds the animations in such a file. One with a name you already use is added as a copy, so nothing is replaced.
+- **Duplicate** makes a copy to change.
+- **Delete** asks first, and says which places use it. Those places go back to **Default**.
+
 ## Details
 
 - **Typewriter** and **Word by word** are only offered for text.

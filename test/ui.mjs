@@ -389,6 +389,11 @@ window.__ctx = {
         for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
         return [{ name: window.__fontFile.name, mimeType: 'font/ttf', bytes }];
       }
+      // A file the check made, such as a shared animation.
+      if (o && (o.accept || []).some((x) => /json/.test(x))) {
+        if (!window.__pickJson) return [];
+        return [{ name: 'shared.json', mimeType: 'application/json', bytes: new TextEncoder().encode(window.__pickJson) }];
+      }
       if (!o || !(o.accept || []).some((x) => /image/.test(x))) return [];
       // A picture the check made, such as a sticker with see-through parts.
       if (window.__pickPic) {
@@ -6997,6 +7002,93 @@ if (section("animations")) {
     await page.selectOption('[data-af-animplace="lines"]', "");
     await page.waitForTimeout(500);
     check(await page.evaluate(() => !window.__settings.videoAnims.lines), size.name + ": Default takes it off");
+    check(!errors.length, size.name + ": no page errors. " + errors.slice(0, 2).join(" | "));
+    await context.close();
+  }
+}
+
+if (section("animation editor")) {
+  console.log("Your animations: made from a built-in, changed with keyframes, easing and a mask, previewed, used in a place, shared and added back from the file");
+  const PLAIN = `window.__settings.videoBacks = [{ id: "main", name: "Main", kind: "color", color: "#808080", fill: "solid", stops: [], dir: "down", dim: 40, blur: 0, shapes: [], use: "match", moods: [], places: [] }]; window.__settings.videoBackPick = "main"; window.__settings.videoEdges = 0; window.__settings.videoPics = false; window.__settings.videoNames = false; window.__settings.videoCaptions = false; window.__settings.videoBox = false; window.__settings.videoInk = "#ffffff"; window.__settings.videoWordFill = "solid"; window.__settings.videoWords = "all"; window.__settings.videoWordShadow = false; window.__settings.videoTitleOn = false;`;
+  {
+    // One of the reader's own, used for Lines, draws as its keyframes say.
+    const own = [{ id: "u1", name: "From far left", kind: "any", secs: 3, delay: 0, ease: [0, 0, 1, 1], inT: { keys: [{ at: 0, o: 1, x: -400 }, { at: 1, o: 1, x: 0 }], mask: { type: "none", angle: 0, feather: 0 } }, outT: { keys: [], mask: { type: "none", angle: 0, feather: 0 } }, overlap: 1, stagger: 0, anchor: "center", reveal: "" }];
+    const size = SIZES.find((x) => !x.touch) || SIZES[0];
+    const o = await open(THEMES[0], size, 1, PLAIN + `window.__settings.videoAnimsOwn = ${JSON.stringify(own)}; window.__settings.videoAnims = { lines: { id: "u1", secs: 3, delay: 0 } };`);
+    await openWs(o.page);
+    await o.page.waitForTimeout(700);
+    const cx = await o.page.evaluate(async () => {
+      const r = document.querySelector("[data-af-scrub] input");
+      r.step = "any";
+      r.value = "1.6";
+      r.dispatchEvent(new Event("input", { bubbles: true }));
+      await new Promise((x) => setTimeout(x, 160));
+      await new Promise((x) => requestAnimationFrame(() => requestAnimationFrame(x)));
+      const c = document.querySelector("[data-af-videopreview]");
+      const d = c.getContext("2d").getImageData(0, 0, c.width, c.height).data;
+      let n = 0, sx = 0;
+      for (let i = 0; i < d.length; i += 8) if (d[i] > 200 && d[i + 1] > 200) { n++; sx += (i / 4) % c.width; }
+      return n ? sx / n / c.width : 0.5;
+    });
+    check(cx < 0.45, "a line with your own animation comes in from far left, as its keyframes say (" + cx.toFixed(3) + ")");
+    await o.context.close();
+  }
+  for (const size of SIZES) {
+    const { context, page, errors } = await open(THEMES[0], size, 1, PLAIN);
+    await openWs(page);
+    await wsSec(page, "Animations");
+    await page.waitForTimeout(400);
+    await page.selectOption("[data-af-animfrom]", "rise");
+    await page.click("[data-af-animmake]");
+    await page.waitForTimeout(600);
+    const made = await page.evaluate(() => (window.__settings.videoAnimsOwn || [])[0]);
+    check(made && /^u/.test(made.id) && made.name === "My rise" && made.inT.keys.length === 2, size.name + ": Make an animation copies Rise as your own (" + JSON.stringify(made && made.name) + ")");
+    const drawn = await page.evaluate(async () => {
+      await new Promise((x) => setTimeout(x, 400));
+      const c = document.querySelector("[data-af-animpreview] canvas");
+      const d = c.getContext("2d").getImageData(0, 0, c.width, c.height).data;
+      let n = 0;
+      for (let i = 0; i < d.length; i += 4) if (d[i] > 200 && d[i + 1] > 200 && d[i + 2] > 200) n++;
+      return n;
+    });
+    check(drawn > 20, size.name + ": the preview draws the sample words (" + drawn + " pixels)");
+    await page.click("[data-af-keyadd]");
+    await page.waitForTimeout(300);
+    const keys = await page.evaluate(() => window.__settings.videoAnimsOwn[0].inT.keys.length);
+    check(keys === 3, size.name + ": Add a keyframe adds one (" + keys + ")");
+    await page.selectOption("[data-af-animmask]", "linear");
+    await page.waitForTimeout(300);
+    check(await page.evaluate(() => !!document.querySelector("[data-af-maskangle]") && window.__settings.videoAnimsOwn[0].inT.mask.type === "linear"), size.name + ": a straight wipe mask shows its angle box");
+    await page.selectOption("[data-af-animeasepick]", "linear");
+    await page.waitForTimeout(600);
+    check(await page.evaluate(() => JSON.stringify(window.__settings.videoAnimsOwn[0].ease) === "[0,0,1,1]"), size.name + ": an easing preset sets the curve");
+    const inPlaces = await page.evaluate(() => [...document.querySelectorAll('[data-af-animplace="lines"] option')].some((o) => o.textContent === "My rise"));
+    check(inPlaces, size.name + ": your animation is offered in the places");
+    const m = await page.evaluate(MEASURE, size.touch);
+    check(!m.overflow.length && !m.small.length, size.name + ": the editor fits. " + m.overflow.concat(m.small).slice(0, 2).join("; "));
+    await page.selectOption('[data-af-animplace="lines"]', made.id);
+    await page.waitForTimeout(300);
+    const [dl] = await Promise.all([page.waitForEvent("download", { timeout: 5000 }).catch(() => null), page.click('[data-af-animact="share"]')]);
+    let shared = "";
+    if (dl) {
+      const fs = await import("node:fs");
+      const p = await dl.path();
+      shared = p ? fs.readFileSync(p, "utf8") : "";
+    }
+    const body = shared ? JSON.parse(shared) : {};
+    check(body.kind === "animation" && body.version && body.animations && body.animations[0].name === "My rise" && !("id" in body.animations[0]), size.name + ": Share saves a file with the animation, its version, and no id");
+    await page.evaluate(() => (window.__asked = 0));
+    await page.click('[data-af-animact="delete"]');
+    await page.waitForTimeout(700);
+    const gone = await page.evaluate(() => ({ asked: window.__asked, text: window.__askedText, n: window.__settings.videoAnimsOwn.length, place: window.__settings.videoAnims.lines }));
+    check(gone.asked === 1 && /Lines/.test(gone.text) && gone.n === 0 && !gone.place, size.name + ": Delete asks first, names the places that use it, and they go back to Default");
+    await page.evaluate((j) => (window.__pickJson = j), shared);
+    await page.click("[data-af-animimport]");
+    await page.waitForTimeout(600);
+    await page.click("[data-af-animimport]");
+    await page.waitForTimeout(600);
+    const back = await page.evaluate(() => window.__settings.videoAnimsOwn.map((x) => x.name));
+    check(back.length === 2 && back[0] === "My rise" && back[1] === "My rise (copy)", size.name + ": Add from a file adds it back, and a second one with the same name is a copy (" + back.join(", ") + ")");
     check(!errors.length, size.name + ": no page errors. " + errors.slice(0, 2).join(" | "));
     await context.close();
   }
