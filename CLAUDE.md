@@ -203,9 +203,11 @@ Two skills are available. Load them before starting work.
   plain.
 - A font is bundled only when its license allows it. Its license file is kept
   in the repo, and it is credited in the README's Credits.
-- Built-in transitions and effects never flash. Each one passes the
-  frame-by-frame transition check. An animation a user makes is their own
-  choice.
+- Built-in transitions and effects never flash, except the ones behind the
+  **Show effects that flash** switch. That switch is off by default and asks
+  first, with a warning about eyes and seizures. Built-in templates never use a
+  flashing effect. Every calm built-in passes the frame-by-frame transition
+  check. An animation a user makes is their own choice.
 - Make a video uses the look the preview shows, and the two match frame for
   frame.
 - A shared file never holds keys, chat text, persona or character names,
