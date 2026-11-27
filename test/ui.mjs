@@ -4030,6 +4030,8 @@ if (section("studio extras")) {
     ]);
     window.__moodPics = { "pt:angry": dot("#ff3090") };
     window.__settings.videoEdges = 0;
+    // The quiet one darkened, so each picture keeps its own color to find.
+    window.__settings.videoQuiet = "darken";
     window.__script = { key: "k", messageId: "m1", author: "Brisa", directed: true, added: [], sent: 1, back: 1, counted: true, log: [], lines: [
       { i: 0, kind: "speech", speaker: "Brisa", text: "You took it from the desk this morning.", plain: "", tags: [], inSounds: [], big: false, before: "", after: "", note: "" },
       { i: 1, kind: "speech", speaker: "Tollan", text: "[angrily] Give the map back.", plain: "", tags: ["angrily"], inSounds: [], big: false, before: "", after: "", note: "" },
@@ -6675,6 +6677,36 @@ if (process.env.UI_SHEET_OUT && section("shapes sheet")) {
   const png = await page.evaluate(() => document.querySelector("[data-af-videopreview]").toDataURL("image/png").split(",")[1]);
   (await import("node:fs")).writeFileSync(process.env.UI_SHEET_OUT, Buffer.from(png, "base64"));
   await context.close();
+}
+
+if (section("quiet speaker")) {
+  console.log("Two speakers on screen: the quiet one fades into a colored background, not toward black");
+  const size = SIZES.find((x) => !x.touch) || SIZES[0];
+  const run = async (quiet) => {
+    const o = await open(THEMES[0], size, 1, `Object.assign(window.__settings, { videoQuiet: "${quiet}", videoQuietStrength: 60, videoWords: "all", videoBacks: [{ id: "main", name: "Main", kind: "color", color: "#d06a1a", fill: "solid", stops: [], dir: "down", dim: 40, blur: 0, shapes: [], use: "match", moods: [], places: [] }], videoBackPick: "main", videoEdges: 0, videoPicRing: false });`);
+    await openWs(o.page);
+    await o.page.waitForTimeout(800);
+    const got = await o.page.evaluate(async () => {
+      const r = document.querySelector("[data-af-scrub] input");
+      r.step = "any";
+      r.value = "15.4";
+      r.dispatchEvent(new Event("input", { bubbles: true }));
+      await new Promise((x) => requestAnimationFrame(() => requestAnimationFrame(x)));
+      const c = document.querySelector("[data-af-videopreview]");
+      const d = c.getContext("2d").getImageData(0, 0, c.width, c.height).data;
+      // The darkest of the two pictures: the band where they sit, left and
+      // right halves, measured by how far each is from the background.
+      const bg = [0xd0, 0x6a, 0x1a];
+      const half = (x0, x1) => { let n = 0, dist = 0, lum = 0; for (let y = Math.floor(c.height * 0.2); y < c.height * 0.5; y += 3) for (let x = Math.floor(x0); x < x1; x += 3) { const i = (y * c.width + x) * 4; const dd = Math.abs(d[i] - bg[0]) + Math.abs(d[i + 1] - bg[1]) + Math.abs(d[i + 2] - bg[2]); if (dd > 40) { n++; dist += dd; lum += d[i] + d[i + 1] + d[i + 2]; } } return { n, dist: n ? dist / n : 0, lum: n ? lum / n : 0 }; };
+      return { left: half(c.width * 0.3, c.width * 0.5), right: half(c.width * 0.5, c.width * 0.7) };
+    });
+    await o.context.close();
+    return got;
+  };
+  const none = await run("none"), fade = await run("fade"), dark = await run("darken");
+  // The quiet one is the half whose picture changed most from No change.
+  const side = Math.abs(fade.left.dist - none.left.dist) > Math.abs(fade.right.dist - none.right.dist) ? "left" : "right";
+  check(none[side].n > 0 && fade[side].dist < none[side].dist - 10 && fade[side].lum > dark[side].lum + 20, size.name + ": with Fade the quiet picture moves toward the background color, and with Darken it goes darker (" + JSON.stringify({ side, none: none[side], fade: fade[side], dark: dark[side] }) + ")");
 }
 
 if (section("snapping")) {

@@ -1956,6 +1956,8 @@ const DEFAULTS = {
     videoBox: false,
     videoOwnColors: false,
     videoBackRules: true,
+    videoQuiet: 'fade',
+    videoQuietStrength: 45,
     videoKindColors: {},
     videoPersonColors: {},
     videoBoxColor: '#000000',
@@ -4968,12 +4970,48 @@ export function setup(ctx, overrides) {
     const textFill = (g, which, first, x0, y0, x1, y1) => fillOf(g, String(S['video' + which + 'Fill'] || 'solid'), [first].concat(Array.isArray(S['video' + which + 'Stops']) ? S['video' + which + 'Stops'] : []), String(S['video' + which + 'Dir'] || 'down'), x0, y0, x1, y1);
     // One picture, in its circle or rounded square, with its ring, at x (its
     // middle) and top. It keeps the soft dark shadow it always had.
-    function drawPicture(g, st, f, x, top, a) {
+    // q is how quiet the person is, from 0 while they speak to 1 while the
+    // other one speaks. How the quiet one looks is a setting: faded toward
+    // the background, darkened, a little smaller, or no change.
+    let quietTmp = null;
+    function drawPicture(g, st, f, x, top, a, q = 0) {
         const pic = S.videoPics !== false && f.picture ? st.pics.get(f.picture) : undefined;
         if (!pic || a <= 0)
             return;
         const u = Math.min(st.w, st.h) / 1080;
-        const PIC = Math.round(Math.min(300, Math.max(60, Number(S.videoPicSize) || 150)) * u);
+        const how = S.videoQuiet === 'darken' || S.videoQuiet === 'smaller' || S.videoQuiet === 'none' ? S.videoQuiet : 'fade';
+        const strong = (Math.min(90, Math.max(0, numOr(S.videoQuietStrength, 45))) / 100) * Math.min(1, Math.max(0, q));
+        if (how === 'darken')
+            a *= 1 - strong;
+        const full = Math.round(Math.min(300, Math.max(60, Number(S.videoPicSize) || 150)) * u);
+        const PIC = how === 'smaller' ? Math.round(full * (1 - strong * 0.4)) : full;
+        if (how === 'smaller')
+            top += (full - PIC) / 2;
+        if ((how === 'fade' || how === 'smaller') && strong > 0.001) {
+            // Drawn whole on a canvas of its own, then laid over at a lower
+            // strength, so it blends into what is behind it and never goes dark.
+            const pad = Math.ceil(24 * u + 6);
+            const side = PIC + pad * 2;
+            if (!quietTmp)
+                quietTmp = canvasOf(side, side);
+            if (quietTmp.width < side || quietTmp.height < side) {
+                quietTmp.width = Math.max(quietTmp.width, side);
+                quietTmp.height = Math.max(quietTmp.height, side);
+            }
+            const tg = quietTmp.getContext('2d');
+            tg.setTransform(1, 0, 0, 1, 0, 0);
+            tg.clearRect(0, 0, side + 1, side + 1);
+            drawPictureAt(tg, st, f, pic, pad + PIC / 2, pad, PIC, 1);
+            g.save();
+            g.globalAlpha *= a * (1 - strong * (how === 'smaller' ? 0.5 : 1));
+            g.drawImage(quietTmp, 0, 0, side, side, x - PIC / 2 - pad, top - pad, side, side);
+            g.restore();
+            return;
+        }
+        drawPictureAt(g, st, f, pic, x, top, PIC, a);
+    }
+    function drawPictureAt(g, st, f, pic, x, top, PIC, a) {
+        const u = Math.min(st.w, st.h) / 1080;
         const ink = hexOr(S.videoInk, STORY_INK);
         const ring = S.videoNameColor === 'words' ? ink : videoHex(f.who, f.member);
         const round = S.videoPicShape === 'rounded';
@@ -5130,9 +5168,11 @@ export function setup(ctx, overrides) {
         const places = [];
         if (now.kind === 'pair') {
             const off = PIC / 2 + PAIR_GAP / 2;
-            const dimOf = (n) => (now.speaking === n ? 1 : now.speaking < 0 ? 0.8 : 0.55);
-            places.push({ face: now.a, x: cx - off, top: y, a: alpha * dimOf(0) });
-            places.push({ face: now.b, x: cx + off, top: y, a: alpha * dimOf(1) });
+            // How quiet each is: 0 while speaking, a little during narration
+            // between their lines, and fully while the other speaks.
+            const quietOf = (n) => (now.speaking === n ? 0 : now.speaking < 0 ? 0.45 : 1);
+            places.push({ face: now.a, x: cx - off, top: y, a: alpha, q: quietOf(0) });
+            places.push({ face: now.b, x: cx + off, top: y, a: alpha, q: quietOf(1) });
         }
         else if (S.videoPics !== false && now.face.picture && st.pics.has(now.face.picture))
             places.push({ face: now.face, x: cx, top: y, a: alpha });
@@ -5143,7 +5183,7 @@ export function setup(ctx, overrides) {
         // The pictures, unless a transition draws them on their own.
         if (what === 'all')
             for (const f of places)
-                drawPicture(g, st, f.face, f.x, f.top, f.a);
+                drawPicture(g, st, f.face, f.x, f.top, f.a, f.q || 0);
         // The names, under the pictures, or alone with none.
         if (names) {
             const maxName = now.kind === 'pair' ? PIC + PAIR_GAP - 12 * u : MAX_W;
@@ -5662,16 +5702,16 @@ export function setup(ctx, overrides) {
         lg.clearRect(0, 0, st.w, st.h);
         lg.globalCompositeOperation = 'lighter';
         let layered = false;
-        const fade = (face, x, top, a) => {
+        const fade = (face, x, top, a, q) => {
             if (a <= 0)
                 return;
-            drawPicture(lg, st, face, x, top, a);
+            drawPicture(lg, st, face, x, top, a, q);
             layered = true;
         };
         for (const b of to) {
             const at = from.findIndex((a, n) => !used.has(n) && a.face.name === b.face.name);
             if (at < 0) {
-                fade(b.face, b.x, b.top - 4 * u * (1 - k), b.a * k);
+                fade(b.face, b.x, b.top - 4 * u * (1 - k), b.a * k, b.q || 0);
                 continue;
             }
             used.add(at);
@@ -5679,18 +5719,20 @@ export function setup(ctx, overrides) {
             const x = a.x + (b.x - a.x) * k;
             const top = a.top + (b.top - a.top) * k;
             const strength = a.a + (b.a - a.a) * k;
+            // Who is quiet changes with the line's transition, never in one step.
+            const q = (a.q || 0) + ((b.q || 0) - (a.q || 0)) * k;
             // A new picture of the same person, such as one for a mood, fades
             // over the old one as it moves.
             if (a.face.picture !== b.face.picture) {
-                fade(a.face, x, top, strength * (1 - k));
-                fade(b.face, x, top, strength * k);
+                fade(a.face, x, top, strength * (1 - k), q);
+                fade(b.face, x, top, strength * k, q);
             }
             else
-                drawPicture(g, st, b.face, x, top, strength);
+                drawPicture(g, st, b.face, x, top, strength, q);
         }
         from.forEach((a, n) => {
             if (!used.has(n))
-                fade(a.face, a.x, a.top + 4 * u * k, a.a * (1 - k));
+                fade(a.face, a.x, a.top + 4 * u * k, a.a * (1 - k), a.q || 0);
         });
         lg.globalCompositeOperation = 'source-over';
         if (layered)
@@ -16061,7 +16103,7 @@ export function setup(ctx, overrides) {
         'videoBylineShadow', 'videoBylineShadowInk', 'videoBylineShadowDark', 'videoBylineShadowSoft', 'videoBylineShadowFar', 'videoMarks',
         'videoWordFill', 'videoWordStops', 'videoWordDir', 'videoNameFill', 'videoNameStops', 'videoNameDir', 'videoCapFill', 'videoCapStops', 'videoCapDir',
         'videoWordShadow', 'videoWordShadowInk', 'videoWordShadowDark', 'videoWordShadowSoft', 'videoWordShadowFar',
-        'videoBox', 'videoBoxColor', 'videoBoxClear', 'videoBoxRound', 'videoBoxWidth', 'videoOwnColors', 'videoKindColors', 'videoBackRules',
+        'videoBox', 'videoBoxColor', 'videoBoxClear', 'videoBoxRound', 'videoBoxWidth', 'videoOwnColors', 'videoKindColors', 'videoBackRules', 'videoQuiet', 'videoQuietStrength',
         'videoNameShadow', 'videoNameShadowInk', 'videoNameShadowDark', 'videoNameShadowSoft', 'videoNameShadowFar', 'videoEdges', 'videoEdgeColor', 'videoMove', 'videoMoveSecs',
         'videoTitleOn', 'videoFadeOut', 'videoCaptions',
     ];
@@ -16482,7 +16524,7 @@ export function setup(ctx, overrides) {
                 videoNameDir: 'right', videoNameShadow: true, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18,
                 videoNameShadowFar: 2,
                 videoPicShape: 'circle', videoPicSize: 150, videoPicRing: true, videoPicRingWidth: 3, videoPicMove: true, videoTwo: true,
-                videoMoodPics: true,
+                videoMoodPics: true, videoQuiet: 'fade', videoQuietStrength: 45,
                 videoEdges: 35, videoEdgeColor: '', videoMove: 'rise', videoMoveSecs: 0.5,
                 videoTitleOn: true, videoFadeOut: 1.5, videoBylineInk: '', videoBylineFont: '', videoBylineFill: 'solid', videoBylineStops: ['#f2b880'],
                 videoBylineDir: 'right', videoBylineShadow: true, videoBylineShadowInk: '', videoBylineShadowDark: 65, videoBylineShadowSoft: 18,
@@ -16508,7 +16550,7 @@ export function setup(ctx, overrides) {
                 videoNameDir: 'right', videoNameShadow: false, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18,
                 videoNameShadowFar: 2,
                 videoPicShape: 'rounded', videoPicSize: 132, videoPicRing: false, videoPicRingWidth: 3, videoPicMove: false, videoTwo: true,
-                videoMoodPics: true,
+                videoMoodPics: true, videoQuiet: 'fade', videoQuietStrength: 45,
                 videoEdges: 0, videoEdgeColor: '', videoMove: 'dissolve', videoMoveSecs: 0.3,
                 videoTitleOn: true, videoFadeOut: 1, videoBylineInk: '#a9a49a', videoBylineFont: '', videoBylineFill: 'solid', videoBylineStops: ['#f2b880'],
                 videoBylineDir: 'right', videoBylineShadow: false, videoBylineShadowInk: '', videoBylineShadowDark: 65, videoBylineShadowSoft: 18,
@@ -16534,7 +16576,7 @@ export function setup(ctx, overrides) {
                 videoNameDir: 'right', videoNameShadow: false, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18,
                 videoNameShadowFar: 2,
                 videoPicShape: 'circle', videoPicSize: 140, videoPicRing: true, videoPicRingWidth: 2, videoPicMove: true, videoTwo: true,
-                videoMoodPics: true,
+                videoMoodPics: true, videoQuiet: 'fade', videoQuietStrength: 45,
                 videoEdges: 30, videoEdgeColor: '#6b4a24', videoMove: 'rise', videoMoveSecs: 0.6,
                 videoTitleOn: true, videoFadeOut: 2, videoBylineInk: '#9a4a1c', videoBylineFont: '', videoBylineFill: 'solid', videoBylineStops: ['#f2b880'],
                 videoBylineDir: 'right', videoBylineShadow: false, videoBylineShadowInk: '', videoBylineShadowDark: 65, videoBylineShadowSoft: 18,
@@ -16567,7 +16609,7 @@ export function setup(ctx, overrides) {
                 videoNameDir: 'right', videoNameShadow: true, videoNameShadowInk: '#000000', videoNameShadowDark: 90, videoNameShadowSoft: 6,
                 videoNameShadowFar: 2,
                 videoPicShape: 'rounded', videoPicSize: 120, videoPicRing: true, videoPicRingWidth: 2, videoPicMove: true, videoTwo: true,
-                videoMoodPics: true,
+                videoMoodPics: true, videoQuiet: 'fade', videoQuietStrength: 45,
                 videoEdges: 60, videoEdgeColor: '#000000', videoMove: 'dissolve', videoMoveSecs: 0.7,
                 videoTitleOn: true, videoFadeOut: 2, videoBylineInk: '#f0c36a', videoBylineFont: '', videoBylineFill: 'solid', videoBylineStops: ['#f2b880'],
                 videoBylineDir: 'right', videoBylineShadow: true, videoBylineShadowInk: '#000000', videoBylineShadowDark: 90, videoBylineShadowSoft: 6,
@@ -16596,7 +16638,7 @@ export function setup(ctx, overrides) {
                 videoNameDir: 'right', videoNameShadow: false, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18,
                 videoNameShadowFar: 2,
                 videoPicShape: 'circle', videoPicSize: 150, videoPicRing: true, videoPicRingWidth: 3, videoPicMove: true, videoTwo: true,
-                videoMoodPics: true,
+                videoMoodPics: true, videoQuiet: 'fade', videoQuietStrength: 45,
                 videoEdges: 30, videoEdgeColor: '#05010f', videoMove: 'zoom', videoMoveSecs: 0.5,
                 videoTitleOn: true, videoFadeOut: 1.5, videoBylineInk: '#ff7ad9', videoBylineFont: '', videoBylineFill: 'solid',
                 videoBylineStops: ['#f2b880'], videoBylineDir: 'right', videoBylineShadow: false, videoBylineShadowInk: '', videoBylineShadowDark: 65,
@@ -16633,7 +16675,7 @@ export function setup(ctx, overrides) {
                 videoNameDir: 'right', videoNameShadow: false, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18,
                 videoNameShadowFar: 2,
                 videoPicShape: 'circle', videoPicSize: 150, videoPicRing: true, videoPicRingWidth: 3, videoPicMove: true, videoTwo: true,
-                videoMoodPics: true,
+                videoMoodPics: true, videoQuiet: 'fade', videoQuietStrength: 45,
                 videoEdges: 0, videoEdgeColor: '', videoMove: 'dissolve', videoMoveSecs: 0.6,
                 videoTitleOn: true, videoFadeOut: 1.5, videoBylineInk: '#c25b7d', videoBylineFont: '', videoBylineFill: 'solid',
                 videoBylineStops: ['#f2b880'], videoBylineDir: 'right', videoBylineShadow: false, videoBylineShadowInk: '', videoBylineShadowDark: 65,
@@ -16662,7 +16704,7 @@ export function setup(ctx, overrides) {
                 videoNameDir: 'right', videoNameShadow: false, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18,
                 videoNameShadowFar: 2,
                 videoPicShape: 'rounded', videoPicSize: 124, videoPicRing: true, videoPicRingWidth: 1, videoPicMove: true, videoTwo: true,
-                videoMoodPics: true,
+                videoMoodPics: true, videoQuiet: 'fade', videoQuietStrength: 45,
                 videoEdges: 85, videoEdgeColor: '#000000', videoMove: 'black', videoMoveSecs: 0.9,
                 videoTitleOn: true, videoFadeOut: 3, videoBylineInk: '#c0504d', videoBylineFont: '', videoBylineFill: 'solid', videoBylineStops: ['#f2b880'],
                 videoBylineDir: 'right', videoBylineShadow: true, videoBylineShadowInk: '#000000', videoBylineShadowDark: 90, videoBylineShadowSoft: 20,
@@ -16688,7 +16730,7 @@ export function setup(ctx, overrides) {
                 videoNameDir: 'right', videoNameShadow: false, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18,
                 videoNameShadowFar: 2,
                 videoPicShape: 'rounded', videoPicSize: 170, videoPicRing: true, videoPicRingWidth: 6, videoPicMove: true, videoTwo: true,
-                videoMoodPics: true,
+                videoMoodPics: true, videoQuiet: 'fade', videoQuietStrength: 45,
                 videoEdges: 0, videoEdgeColor: '', videoMove: 'slide', videoMoveSecs: 0.4,
                 videoTitleOn: true, videoFadeOut: 1, videoBylineInk: '#c2185b', videoBylineFont: '', videoBylineFill: 'solid', videoBylineStops: ['#f2b880'],
                 videoBylineDir: 'right', videoBylineShadow: false, videoBylineShadowInk: '', videoBylineShadowDark: 65, videoBylineShadowSoft: 18,
@@ -16717,7 +16759,7 @@ export function setup(ctx, overrides) {
                 videoNameDir: 'right', videoNameShadow: false, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18,
                 videoNameShadowFar: 2,
                 videoPicShape: 'rounded', videoPicSize: 120, videoPicRing: false, videoPicRingWidth: 3, videoPicMove: false, videoTwo: true,
-                videoMoodPics: true,
+                videoMoodPics: true, videoQuiet: 'fade', videoQuietStrength: 45,
                 videoEdges: 0, videoEdgeColor: '', videoMove: 'fade', videoMoveSecs: 0.5,
                 videoTitleOn: true, videoFadeOut: 1.5, videoBylineInk: '#b03a2e', videoBylineFont: 'type', videoBylineFill: 'solid',
                 videoBylineStops: ['#f2b880'], videoBylineDir: 'right', videoBylineShadow: false, videoBylineShadowInk: '', videoBylineShadowDark: 65,
@@ -16753,7 +16795,7 @@ export function setup(ctx, overrides) {
                 videoNameDir: 'right', videoNameShadow: true, videoNameShadowInk: '#1a0b02', videoNameShadowDark: 65, videoNameShadowSoft: 18,
                 videoNameShadowFar: 2,
                 videoPicShape: 'circle', videoPicSize: 150, videoPicRing: true, videoPicRingWidth: 3, videoPicMove: true, videoTwo: true,
-                videoMoodPics: true,
+                videoMoodPics: true, videoQuiet: 'fade', videoQuietStrength: 45,
                 videoEdges: 55, videoEdgeColor: '#0d0602', videoMove: 'rise', videoMoveSecs: 0.5,
                 videoTitleOn: true, videoFadeOut: 2, videoBylineInk: '#ff9f4a', videoBylineFont: '', videoBylineFill: 'solid', videoBylineStops: ['#f2b880'],
                 videoBylineDir: 'right', videoBylineShadow: true, videoBylineShadowInk: '#1a0b02', videoBylineShadowDark: 70, videoBylineShadowSoft: 16,
@@ -16779,7 +16821,7 @@ export function setup(ctx, overrides) {
                 videoNameDir: 'right', videoNameShadow: false, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18,
                 videoNameShadowFar: 2,
                 videoPicShape: 'circle', videoPicSize: 150, videoPicRing: true, videoPicRingWidth: 2, videoPicMove: true, videoTwo: true,
-                videoMoodPics: true,
+                videoMoodPics: true, videoQuiet: 'fade', videoQuietStrength: 45,
                 videoEdges: 25, videoEdgeColor: '#050a1f', videoMove: 'focus', videoMoveSecs: 0.7,
                 videoTitleOn: true, videoFadeOut: 2, videoBylineInk: '#f6d98b', videoBylineFont: '', videoBylineFill: 'solid', videoBylineStops: ['#f2b880'],
                 videoBylineDir: 'right', videoBylineShadow: true, videoBylineShadowInk: '#0b1638', videoBylineShadowDark: 60, videoBylineShadowSoft: 16,
@@ -16825,7 +16867,7 @@ export function setup(ctx, overrides) {
                 videoNameDir: 'right', videoNameShadow: false, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18,
                 videoNameShadowFar: 2,
                 videoPicShape: 'rounded', videoPicSize: 120, videoPicRing: true, videoPicRingWidth: 1, videoPicMove: false, videoTwo: true,
-                videoMoodPics: true,
+                videoMoodPics: true, videoQuiet: 'fade', videoQuietStrength: 45,
                 videoEdges: 20, videoEdgeColor: '#000000', videoMove: 'cut', videoMoveSecs: 0.3,
                 videoTitleOn: true, videoFadeOut: 1, videoBylineInk: '#b8ffcb', videoBylineFont: 'type', videoBylineFill: 'solid',
                 videoBylineStops: ['#f2b880'], videoBylineDir: 'right', videoBylineShadow: true, videoBylineShadowInk: '#00ff55', videoBylineShadowDark: 45,
@@ -16882,7 +16924,7 @@ export function setup(ctx, overrides) {
                 videoNameDir: 'right', videoNameShadow: false, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18,
                 videoNameShadowFar: 2,
                 videoPicShape: 'rounded', videoPicSize: 200, videoPicRing: true, videoPicRingWidth: 2, videoPicMove: true, videoTwo: true,
-                videoMoodPics: true,
+                videoMoodPics: true, videoQuiet: 'fade', videoQuietStrength: 45,
                 videoEdges: 25, videoEdgeColor: '#05060c', videoMove: 'dissolve', videoMoveSecs: 0.25,
                 videoTitleOn: true, videoFadeOut: 1, videoBylineInk: '#c9bfff', videoBylineFont: '', videoBylineFill: 'solid', videoBylineStops: ['#f2b880'],
                 videoBylineDir: 'right', videoBylineShadow: false, videoBylineShadowInk: '', videoBylineShadowDark: 65, videoBylineShadowSoft: 18,
@@ -16908,7 +16950,7 @@ export function setup(ctx, overrides) {
                 videoNameDir: 'right', videoNameShadow: true, videoNameShadowInk: '#1c252d', videoNameShadowDark: 65, videoNameShadowSoft: 18,
                 videoNameShadowFar: 2,
                 videoPicShape: 'circle', videoPicSize: 140, videoPicRing: true, videoPicRingWidth: 2, videoPicMove: true, videoTwo: true,
-                videoMoodPics: true,
+                videoMoodPics: true, videoQuiet: 'fade', videoQuietStrength: 45,
                 videoEdges: 40, videoEdgeColor: '#1a2128', videoMove: 'fade', videoMoveSecs: 0.6,
                 videoTitleOn: true, videoFadeOut: 2, videoBylineInk: '#bcd3e3', videoBylineFont: '', videoBylineFill: 'solid', videoBylineStops: ['#f2b880'],
                 videoBylineDir: 'right', videoBylineShadow: true, videoBylineShadowInk: '#1c252d', videoBylineShadowDark: 60, videoBylineShadowSoft: 14,
@@ -16961,7 +17003,7 @@ export function setup(ctx, overrides) {
                 videoNameDir: 'right', videoNameShadow: false, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18,
                 videoNameShadowFar: 2,
                 videoPicShape: 'rounded', videoPicSize: 140, videoPicRing: false, videoPicRingWidth: 3, videoPicMove: true, videoTwo: true,
-                videoMoodPics: true,
+                videoMoodPics: true, videoQuiet: 'fade', videoQuietStrength: 45,
                 videoEdges: 45, videoEdgeColor: '#3a2814', videoMove: 'black', videoMoveSecs: 0.8,
                 videoTitleOn: true, videoFadeOut: 2, videoBylineInk: '#5a3a18', videoBylineFont: '', videoBylineFill: 'solid', videoBylineStops: ['#f2b880'],
                 videoBylineDir: 'right', videoBylineShadow: false, videoBylineShadowInk: '', videoBylineShadowDark: 65, videoBylineShadowSoft: 18,
@@ -17001,7 +17043,7 @@ export function setup(ctx, overrides) {
                 videoNameDir: 'right', videoNameShadow: false, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18,
                 videoNameShadowFar: 2,
                 videoPicShape: 'circle', videoPicSize: 130, videoPicRing: true, videoPicRingWidth: 3, videoPicMove: true, videoTwo: true,
-                videoMoodPics: true,
+                videoMoodPics: true, videoQuiet: 'fade', videoQuietStrength: 45,
                 videoEdges: 30, videoEdgeColor: '#000000', videoMove: 'dissolve', videoMoveSecs: 0.4,
                 videoTitleOn: true, videoFadeOut: 1.5, videoBylineInk: '#e0a030', videoBylineFont: '', videoBylineFill: 'solid',
                 videoBylineStops: ['#f2b880'], videoBylineDir: 'right', videoBylineShadow: false, videoBylineShadowInk: '', videoBylineShadowDark: 65,
@@ -17044,7 +17086,7 @@ export function setup(ctx, overrides) {
                 videoNameDir: 'right', videoNameShadow: false, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18,
                 videoNameShadowFar: 2,
                 videoPicShape: 'circle', videoPicSize: 140, videoPicRing: true, videoPicRingWidth: 2, videoPicMove: true, videoTwo: true,
-                videoMoodPics: true,
+                videoMoodPics: true, videoQuiet: 'fade', videoQuietStrength: 45,
                 videoEdges: 45, videoEdgeColor: '#0a0205', videoMove: 'dissolve', videoMoveSecs: 0.9,
                 videoTitleOn: true, videoFadeOut: 3, videoBylineInk: '#f4a6a0', videoBylineFont: '', videoBylineFill: 'solid', videoBylineStops: ['#f2b880'],
                 videoBylineDir: 'right', videoBylineShadow: true, videoBylineShadowInk: '#12030a', videoBylineShadowDark: 60, videoBylineShadowSoft: 16,
@@ -17082,7 +17124,7 @@ export function setup(ctx, overrides) {
                 videoNameDir: 'right', videoNameShadow: true, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18,
                 videoNameShadowFar: 2,
                 videoPicShape: 'circle', videoPicSize: 150, videoPicRing: true, videoPicRingWidth: 3, videoPicMove: true, videoTwo: true,
-                videoMoodPics: true,
+                videoMoodPics: true, videoQuiet: 'fade', videoQuietStrength: 45,
                 videoEdges: 30, videoEdgeColor: '#000000', videoMove: 'fade', videoMoveSecs: 0.5,
                 videoTitleOn: true, videoFadeOut: 1.5, videoBylineInk: '#ff6b6b', videoBylineFont: '', videoBylineFill: 'solid',
                 videoBylineStops: ['#f2b880'], videoBylineDir: 'right', videoBylineShadow: true, videoBylineShadowInk: '', videoBylineShadowDark: 65,
@@ -17108,7 +17150,7 @@ export function setup(ctx, overrides) {
                 videoNameDir: 'right', videoNameShadow: true, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18,
                 videoNameShadowFar: 2,
                 videoPicShape: 'circle', videoPicSize: 150, videoPicRing: true, videoPicRingWidth: 3, videoPicMove: true, videoTwo: true,
-                videoMoodPics: true,
+                videoMoodPics: true, videoQuiet: 'fade', videoQuietStrength: 45,
                 videoEdges: 30, videoEdgeColor: '#000000', videoMove: 'fade', videoMoveSecs: 0.5,
                 videoTitleOn: true, videoFadeOut: 1.5, videoBylineInk: '#ffa25c', videoBylineFont: '', videoBylineFill: 'solid',
                 videoBylineStops: ['#f2b880'], videoBylineDir: 'right', videoBylineShadow: true, videoBylineShadowInk: '', videoBylineShadowDark: 65,
@@ -17134,7 +17176,7 @@ export function setup(ctx, overrides) {
                 videoNameDir: 'right', videoNameShadow: true, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18,
                 videoNameShadowFar: 2,
                 videoPicShape: 'circle', videoPicSize: 150, videoPicRing: true, videoPicRingWidth: 3, videoPicMove: true, videoTwo: true,
-                videoMoodPics: true,
+                videoMoodPics: true, videoQuiet: 'fade', videoQuietStrength: 45,
                 videoEdges: 30, videoEdgeColor: '#000000', videoMove: 'fade', videoMoveSecs: 0.5,
                 videoTitleOn: true, videoFadeOut: 1.5, videoBylineInk: '#ffd84a', videoBylineFont: '', videoBylineFill: 'solid',
                 videoBylineStops: ['#f2b880'], videoBylineDir: 'right', videoBylineShadow: true, videoBylineShadowInk: '', videoBylineShadowDark: 65,
@@ -17160,7 +17202,7 @@ export function setup(ctx, overrides) {
                 videoNameDir: 'right', videoNameShadow: true, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18,
                 videoNameShadowFar: 2,
                 videoPicShape: 'circle', videoPicSize: 150, videoPicRing: true, videoPicRingWidth: 3, videoPicMove: true, videoTwo: true,
-                videoMoodPics: true,
+                videoMoodPics: true, videoQuiet: 'fade', videoQuietStrength: 45,
                 videoEdges: 30, videoEdgeColor: '#000000', videoMove: 'fade', videoMoveSecs: 0.5,
                 videoTitleOn: true, videoFadeOut: 1.5, videoBylineInk: '#5ee08a', videoBylineFont: '', videoBylineFill: 'solid',
                 videoBylineStops: ['#f2b880'], videoBylineDir: 'right', videoBylineShadow: true, videoBylineShadowInk: '', videoBylineShadowDark: 65,
@@ -17186,7 +17228,7 @@ export function setup(ctx, overrides) {
                 videoNameDir: 'right', videoNameShadow: true, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18,
                 videoNameShadowFar: 2,
                 videoPicShape: 'circle', videoPicSize: 150, videoPicRing: true, videoPicRingWidth: 3, videoPicMove: true, videoTwo: true,
-                videoMoodPics: true,
+                videoMoodPics: true, videoQuiet: 'fade', videoQuietStrength: 45,
                 videoEdges: 30, videoEdgeColor: '#000000', videoMove: 'fade', videoMoveSecs: 0.5,
                 videoTitleOn: true, videoFadeOut: 1.5, videoBylineInk: '#6aa8ff', videoBylineFont: '', videoBylineFill: 'solid',
                 videoBylineStops: ['#f2b880'], videoBylineDir: 'right', videoBylineShadow: true, videoBylineShadowInk: '', videoBylineShadowDark: 65,
@@ -17212,7 +17254,7 @@ export function setup(ctx, overrides) {
                 videoNameDir: 'right', videoNameShadow: true, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18,
                 videoNameShadowFar: 2,
                 videoPicShape: 'circle', videoPicSize: 150, videoPicRing: true, videoPicRingWidth: 3, videoPicMove: true, videoTwo: true,
-                videoMoodPics: true,
+                videoMoodPics: true, videoQuiet: 'fade', videoQuietStrength: 45,
                 videoEdges: 30, videoEdgeColor: '#000000', videoMove: 'fade', videoMoveSecs: 0.5,
                 videoTitleOn: true, videoFadeOut: 1.5, videoBylineInk: '#9a97ff', videoBylineFont: '', videoBylineFill: 'solid',
                 videoBylineStops: ['#f2b880'], videoBylineDir: 'right', videoBylineShadow: true, videoBylineShadowInk: '', videoBylineShadowDark: 65,
@@ -17238,7 +17280,7 @@ export function setup(ctx, overrides) {
                 videoNameDir: 'right', videoNameShadow: true, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18,
                 videoNameShadowFar: 2,
                 videoPicShape: 'circle', videoPicSize: 150, videoPicRing: true, videoPicRingWidth: 3, videoPicMove: true, videoTwo: true,
-                videoMoodPics: true,
+                videoMoodPics: true, videoQuiet: 'fade', videoQuietStrength: 45,
                 videoEdges: 30, videoEdgeColor: '#000000', videoMove: 'fade', videoMoveSecs: 0.5,
                 videoTitleOn: true, videoFadeOut: 1.5, videoBylineInk: '#c18bff', videoBylineFont: '', videoBylineFill: 'solid',
                 videoBylineStops: ['#f2b880'], videoBylineDir: 'right', videoBylineShadow: true, videoBylineShadowInk: '', videoBylineShadowDark: 65,
@@ -17264,7 +17306,7 @@ export function setup(ctx, overrides) {
                 videoNameDir: 'right', videoNameShadow: true, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18,
                 videoNameShadowFar: 2,
                 videoPicShape: 'circle', videoPicSize: 150, videoPicRing: true, videoPicRingWidth: 3, videoPicMove: true, videoTwo: true,
-                videoMoodPics: true,
+                videoMoodPics: true, videoQuiet: 'fade', videoQuietStrength: 45,
                 videoEdges: 30, videoEdgeColor: '#000000', videoMove: 'fade', videoMoveSecs: 0.5,
                 videoTitleOn: true, videoFadeOut: 1.5, videoBylineInk: '#ff8ccf', videoBylineFont: '', videoBylineFill: 'solid',
                 videoBylineStops: ['#f2b880'], videoBylineDir: 'right', videoBylineShadow: true, videoBylineShadowInk: '', videoBylineShadowDark: 65,
@@ -17290,7 +17332,7 @@ export function setup(ctx, overrides) {
                 videoNameDir: 'right', videoNameShadow: false, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18,
                 videoNameShadowFar: 2,
                 videoPicShape: 'circle', videoPicSize: 150, videoPicRing: true, videoPicRingWidth: 4, videoPicMove: true, videoTwo: true,
-                videoMoodPics: true,
+                videoMoodPics: true, videoQuiet: 'fade', videoQuietStrength: 45,
                 videoEdges: 0, videoEdgeColor: '', videoMove: 'dissolve', videoMoveSecs: 0.5,
                 videoTitleOn: true, videoFadeOut: 1.5, videoBylineInk: '#b05a3a', videoBylineFont: '', videoBylineFill: 'solid',
                 videoBylineStops: ['#f2b880'], videoBylineDir: 'right', videoBylineShadow: false, videoBylineShadowInk: '', videoBylineShadowDark: 65,
@@ -17327,7 +17369,7 @@ export function setup(ctx, overrides) {
                 videoNameDir: 'right', videoNameShadow: false, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18,
                 videoNameShadowFar: 2,
                 videoPicShape: 'circle', videoPicSize: 150, videoPicRing: true, videoPicRingWidth: 4, videoPicMove: true, videoTwo: true,
-                videoMoodPics: true,
+                videoMoodPics: true, videoQuiet: 'fade', videoQuietStrength: 45,
                 videoEdges: 0, videoEdgeColor: '', videoMove: 'dissolve', videoMoveSecs: 0.5,
                 videoTitleOn: true, videoFadeOut: 1.5, videoBylineInk: '#3d6a9e', videoBylineFont: '', videoBylineFill: 'solid',
                 videoBylineStops: ['#f2b880'], videoBylineDir: 'right', videoBylineShadow: false, videoBylineShadowInk: '', videoBylineShadowDark: 65,
@@ -17363,7 +17405,7 @@ export function setup(ctx, overrides) {
                 videoNameDir: 'right', videoNameShadow: false, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18,
                 videoNameShadowFar: 2,
                 videoPicShape: 'circle', videoPicSize: 150, videoPicRing: true, videoPicRingWidth: 4, videoPicMove: true, videoTwo: true,
-                videoMoodPics: true,
+                videoMoodPics: true, videoQuiet: 'fade', videoQuietStrength: 45,
                 videoEdges: 0, videoEdgeColor: '', videoMove: 'dissolve', videoMoveSecs: 0.5,
                 videoTitleOn: true, videoFadeOut: 1.5, videoBylineInk: '#7a5aa8', videoBylineFont: '', videoBylineFill: 'solid',
                 videoBylineStops: ['#f2b880'], videoBylineDir: 'right', videoBylineShadow: false, videoBylineShadowInk: '', videoBylineShadowDark: 65,
@@ -17399,7 +17441,7 @@ export function setup(ctx, overrides) {
                 videoNameDir: 'right', videoNameShadow: false, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18,
                 videoNameShadowFar: 2,
                 videoPicShape: 'circle', videoPicSize: 140, videoPicRing: true, videoPicRingWidth: 2, videoPicMove: true, videoTwo: true,
-                videoMoodPics: true,
+                videoMoodPics: true, videoQuiet: 'fade', videoQuietStrength: 45,
                 videoEdges: 55, videoEdgeColor: '#000000', videoMove: 'black', videoMoveSecs: 0.8,
                 videoTitleOn: true, videoFadeOut: 2.5, videoBylineInk: '#c8c4d4', videoBylineFont: '', videoBylineFill: 'solid',
                 videoBylineStops: ['#f2b880'], videoBylineDir: 'right', videoBylineShadow: true, videoBylineShadowInk: '#000000', videoBylineShadowDark: 70,
@@ -17439,7 +17481,7 @@ export function setup(ctx, overrides) {
                 videoNameDir: 'right', videoNameShadow: false, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18,
                 videoNameShadowFar: 2,
                 videoPicShape: 'rounded', videoPicSize: 140, videoPicRing: true, videoPicRingWidth: 3, videoPicMove: true, videoTwo: true,
-                videoMoodPics: true,
+                videoMoodPics: true, videoQuiet: 'fade', videoQuietStrength: 45,
                 videoEdges: 30, videoEdgeColor: '#000000', videoMove: 'slide', videoMoveSecs: 0.35,
                 videoTitleOn: true, videoFadeOut: 1, videoBylineInk: '#ff2d8a', videoBylineFont: '', videoBylineFill: 'solid', videoBylineStops: ['#f2b880'],
                 videoBylineDir: 'right', videoBylineShadow: false, videoBylineShadowInk: '', videoBylineShadowDark: 65, videoBylineShadowSoft: 18,
@@ -17476,7 +17518,7 @@ export function setup(ctx, overrides) {
                 videoNameDir: 'right', videoNameShadow: false, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18,
                 videoNameShadowFar: 2,
                 videoPicShape: 'circle', videoPicSize: 150, videoPicRing: true, videoPicRingWidth: 5, videoPicMove: true, videoTwo: true,
-                videoMoodPics: true,
+                videoMoodPics: true, videoQuiet: 'fade', videoQuietStrength: 45,
                 videoEdges: 0, videoEdgeColor: '', videoMove: 'dissolve', videoMoveSecs: 0.5,
                 videoTitleOn: true, videoFadeOut: 1.5, videoBylineInk: '#d0609a', videoBylineFont: '', videoBylineFill: 'solid',
                 videoBylineStops: ['#f2b880'], videoBylineDir: 'right', videoBylineShadow: false, videoBylineShadowInk: '', videoBylineShadowDark: 65,
@@ -17516,7 +17558,7 @@ export function setup(ctx, overrides) {
                 videoNameDir: 'right', videoNameShadow: true, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18,
                 videoNameShadowFar: 2,
                 videoPicShape: 'circle', videoPicSize: 150, videoPicRing: true, videoPicRingWidth: 4, videoPicMove: true, videoTwo: true,
-                videoMoodPics: true,
+                videoMoodPics: true, videoQuiet: 'fade', videoQuietStrength: 45,
                 videoEdges: 25, videoEdgeColor: '#000000', videoMove: 'fade', videoMoveSecs: 0.5,
                 videoTitleOn: true, videoFadeOut: 1.5, videoBylineInk: '#ff8c00', videoBylineFont: '', videoBylineFill: 'solid',
                 videoBylineStops: ['#f2b880'], videoBylineDir: 'right', videoBylineShadow: true, videoBylineShadowInk: '', videoBylineShadowDark: 65,
@@ -17547,7 +17589,7 @@ export function setup(ctx, overrides) {
                 videoNameDir: 'right', videoNameShadow: true, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18,
                 videoNameShadowFar: 2,
                 videoPicShape: 'circle', videoPicSize: 150, videoPicRing: true, videoPicRingWidth: 4, videoPicMove: true, videoTwo: true,
-                videoMoodPics: true,
+                videoMoodPics: true, videoQuiet: 'fade', videoQuietStrength: 45,
                 videoEdges: 25, videoEdgeColor: '#000000', videoMove: 'fade', videoMoveSecs: 0.5,
                 videoTitleOn: true, videoFadeOut: 1.5, videoBylineInk: '#ef7627', videoBylineFont: '', videoBylineFill: 'solid',
                 videoBylineStops: ['#f2b880'], videoBylineDir: 'right', videoBylineShadow: true, videoBylineShadowInk: '', videoBylineShadowDark: 65,
@@ -17578,7 +17620,7 @@ export function setup(ctx, overrides) {
                 videoNameDir: 'right', videoNameShadow: true, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18,
                 videoNameShadowFar: 2,
                 videoPicShape: 'circle', videoPicSize: 150, videoPicRing: true, videoPicRingWidth: 4, videoPicMove: true, videoTwo: true,
-                videoMoodPics: true,
+                videoMoodPics: true, videoQuiet: 'fade', videoQuietStrength: 45,
                 videoEdges: 25, videoEdgeColor: '#000000', videoMove: 'fade', videoMoveSecs: 0.5,
                 videoTitleOn: true, videoFadeOut: 1.5, videoBylineInk: '#26ceaa', videoBylineFont: '', videoBylineFill: 'solid',
                 videoBylineStops: ['#f2b880'], videoBylineDir: 'right', videoBylineShadow: true, videoBylineShadowInk: '', videoBylineShadowDark: 65,
@@ -17609,7 +17651,7 @@ export function setup(ctx, overrides) {
                 videoNameDir: 'right', videoNameShadow: true, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18,
                 videoNameShadowFar: 2,
                 videoPicShape: 'circle', videoPicSize: 150, videoPicRing: true, videoPicRingWidth: 4, videoPicMove: true, videoTwo: true,
-                videoMoodPics: true,
+                videoMoodPics: true, videoQuiet: 'fade', videoQuietStrength: 45,
                 videoEdges: 25, videoEdgeColor: '#000000', videoMove: 'fade', videoMoveSecs: 0.5,
                 videoTitleOn: true, videoFadeOut: 1.5, videoBylineInk: '#d60270', videoBylineFont: '', videoBylineFill: 'solid',
                 videoBylineStops: ['#f2b880'], videoBylineDir: 'right', videoBylineShadow: true, videoBylineShadowInk: '', videoBylineShadowDark: 65,
@@ -17640,7 +17682,7 @@ export function setup(ctx, overrides) {
                 videoNameDir: 'right', videoNameShadow: true, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18,
                 videoNameShadowFar: 2,
                 videoPicShape: 'circle', videoPicSize: 150, videoPicRing: true, videoPicRingWidth: 4, videoPicMove: true, videoTwo: true,
-                videoMoodPics: true,
+                videoMoodPics: true, videoQuiet: 'fade', videoQuietStrength: 45,
                 videoEdges: 25, videoEdgeColor: '#000000', videoMove: 'fade', videoMoveSecs: 0.5,
                 videoTitleOn: true, videoFadeOut: 1.5, videoBylineInk: '#f5a9b8', videoBylineFont: '', videoBylineFill: 'solid',
                 videoBylineStops: ['#f2b880'], videoBylineDir: 'right', videoBylineShadow: true, videoBylineShadowInk: '', videoBylineShadowDark: 65,
@@ -17671,7 +17713,7 @@ export function setup(ctx, overrides) {
                 videoNameDir: 'right', videoNameShadow: true, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18,
                 videoNameShadowFar: 2,
                 videoPicShape: 'circle', videoPicSize: 150, videoPicRing: true, videoPicRingWidth: 4, videoPicMove: true, videoTwo: true,
-                videoMoodPics: true,
+                videoMoodPics: true, videoQuiet: 'fade', videoQuietStrength: 45,
                 videoEdges: 25, videoEdgeColor: '#000000', videoMove: 'fade', videoMoveSecs: 0.5,
                 videoTitleOn: true, videoFadeOut: 1.5, videoBylineInk: '#00a2e8', videoBylineFont: '', videoBylineFill: 'solid',
                 videoBylineStops: ['#f2b880'], videoBylineDir: 'right', videoBylineShadow: true, videoBylineShadowInk: '', videoBylineShadowDark: 65,
@@ -17702,7 +17744,7 @@ export function setup(ctx, overrides) {
                 videoNameDir: 'right', videoNameShadow: true, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18,
                 videoNameShadowFar: 2,
                 videoPicShape: 'circle', videoPicSize: 150, videoPicRing: true, videoPicRingWidth: 4, videoPicMove: true, videoTwo: true,
-                videoMoodPics: true,
+                videoMoodPics: true, videoQuiet: 'fade', videoQuietStrength: 45,
                 videoEdges: 25, videoEdgeColor: '#000000', videoMove: 'fade', videoMoveSecs: 0.5,
                 videoTitleOn: true, videoFadeOut: 1.5, videoBylineInk: '#ffd800', videoBylineFont: '', videoBylineFill: 'solid',
                 videoBylineStops: ['#f2b880'], videoBylineDir: 'right', videoBylineShadow: true, videoBylineShadowInk: '', videoBylineShadowDark: 65,
@@ -17734,7 +17776,7 @@ export function setup(ctx, overrides) {
                 videoNameDir: 'right', videoNameShadow: true, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18,
                 videoNameShadowFar: 2,
                 videoPicShape: 'circle', videoPicSize: 150, videoPicRing: true, videoPicRingWidth: 4, videoPicMove: true, videoTwo: true,
-                videoMoodPics: true,
+                videoMoodPics: true, videoQuiet: 'fade', videoQuietStrength: 45,
                 videoEdges: 25, videoEdgeColor: '#000000', videoMove: 'fade', videoMoveSecs: 0.5,
                 videoTitleOn: true, videoFadeOut: 1.5, videoBylineInk: '#800080', videoBylineFont: '', videoBylineFill: 'solid',
                 videoBylineStops: ['#f2b880'], videoBylineDir: 'right', videoBylineShadow: true, videoBylineShadowInk: '', videoBylineShadowDark: 65,
@@ -17765,7 +17807,7 @@ export function setup(ctx, overrides) {
                 videoNameDir: 'right', videoNameShadow: true, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18,
                 videoNameShadowFar: 2,
                 videoPicShape: 'circle', videoPicSize: 150, videoPicRing: true, videoPicRingWidth: 4, videoPicMove: true, videoTwo: true,
-                videoMoodPics: true,
+                videoMoodPics: true, videoQuiet: 'fade', videoQuietStrength: 45,
                 videoEdges: 25, videoEdgeColor: '#000000', videoMove: 'fade', videoMoveSecs: 0.5,
                 videoTitleOn: true, videoFadeOut: 1.5, videoBylineInk: '#ffd800', videoBylineFont: '', videoBylineFill: 'solid',
                 videoBylineStops: ['#f2b880'], videoBylineDir: 'right', videoBylineShadow: true, videoBylineShadowInk: '', videoBylineShadowDark: 65,
@@ -17796,7 +17838,7 @@ export function setup(ctx, overrides) {
                 videoNameDir: 'right', videoNameShadow: true, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18,
                 videoNameShadowFar: 2,
                 videoPicShape: 'circle', videoPicSize: 150, videoPicRing: true, videoPicRingWidth: 4, videoPicMove: true, videoTwo: true,
-                videoMoodPics: true,
+                videoMoodPics: true, videoQuiet: 'fade', videoQuietStrength: 45,
                 videoEdges: 25, videoEdgeColor: '#000000', videoMove: 'fade', videoMoveSecs: 0.5,
                 videoTitleOn: true, videoFadeOut: 1.5, videoBylineInk: '#9c59d1', videoBylineFont: '', videoBylineFill: 'solid',
                 videoBylineStops: ['#f2b880'], videoBylineDir: 'right', videoBylineShadow: true, videoBylineShadowInk: '', videoBylineShadowDark: 65,
@@ -17827,7 +17869,7 @@ export function setup(ctx, overrides) {
                 videoNameDir: 'right', videoNameShadow: true, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18,
                 videoNameShadowFar: 2,
                 videoPicShape: 'circle', videoPicSize: 150, videoPicRing: true, videoPicRingWidth: 4, videoPicMove: true, videoTwo: true,
-                videoMoodPics: true,
+                videoMoodPics: true, videoQuiet: 'fade', videoQuietStrength: 45,
                 videoEdges: 25, videoEdgeColor: '#000000', videoMove: 'fade', videoMoveSecs: 0.5,
                 videoTitleOn: true, videoFadeOut: 1.5, videoBylineInk: '#a7d379', videoBylineFont: '', videoBylineFill: 'solid',
                 videoBylineStops: ['#f2b880'], videoBylineDir: 'right', videoBylineShadow: true, videoBylineShadowInk: '', videoBylineShadowDark: 65,
@@ -17858,7 +17900,7 @@ export function setup(ctx, overrides) {
                 videoNameDir: 'right', videoNameShadow: true, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18,
                 videoNameShadowFar: 2,
                 videoPicShape: 'circle', videoPicSize: 150, videoPicRing: true, videoPicRingWidth: 4, videoPicMove: true, videoTwo: true,
-                videoMoodPics: true,
+                videoMoodPics: true, videoQuiet: 'fade', videoQuietStrength: 45,
                 videoEdges: 25, videoEdgeColor: '#000000', videoMove: 'fade', videoMoveSecs: 0.5,
                 videoTitleOn: true, videoFadeOut: 1.5, videoBylineInk: '#c011d7', videoBylineFont: '', videoBylineFill: 'solid',
                 videoBylineStops: ['#f2b880'], videoBylineDir: 'right', videoBylineShadow: true, videoBylineShadowInk: '', videoBylineShadowDark: 65,
@@ -17889,7 +17931,7 @@ export function setup(ctx, overrides) {
                 videoNameDir: 'right', videoNameShadow: true, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18,
                 videoNameShadowFar: 2,
                 videoPicShape: 'circle', videoPicSize: 150, videoPicRing: true, videoPicRingWidth: 4, videoPicMove: true, videoTwo: true,
-                videoMoodPics: true,
+                videoMoodPics: true, videoQuiet: 'fade', videoQuietStrength: 45,
                 videoEdges: 25, videoEdgeColor: '#000000', videoMove: 'fade', videoMoveSecs: 0.5,
                 videoTitleOn: true, videoFadeOut: 1.5, videoBylineInk: '#b8f483', videoBylineFont: '', videoBylineFill: 'solid',
                 videoBylineStops: ['#f2b880'], videoBylineDir: 'right', videoBylineShadow: true, videoBylineShadowInk: '', videoBylineShadowDark: 65,
@@ -20415,7 +20457,21 @@ export function setup(ctx, overrides) {
                         return r;
                     })(),
                 ]),
-                toggle('Two speakers on screen', 'On by default. Two people who take turns in a scene are shown side by side.', 'videoTwo', look),
+                toggle('Two speakers on screen', 'On by default. Two people who take turns in a scene are shown side by side.', 'videoTwo', look, () => [
+                    select('How the quiet one looks', [
+                        { id: 'fade', label: 'Fade' },
+                        { id: 'darken', label: 'Darken' },
+                        { id: 'smaller', label: 'Smaller' },
+                        { id: 'none', label: 'No change' },
+                    ], S.videoQuiet === 'darken' || S.videoQuiet === 'smaller' || S.videoQuiet === 'none' ? S.videoQuiet : 'fade', (v) => {
+                        set({ videoQuiet: v });
+                        look();
+                    }, 'Fade by default: the one not speaking blends into the background.'),
+                    numberRow('How strong, in percent', numOr(S.videoQuietStrength, 45), 0, 90, 5, (v) => {
+                        set({ videoQuietStrength: v });
+                        look();
+                    }, '45 by default.'),
+                ]),
                 toggle('A picture for each mood', 'On by default. A person with mood pictures on the Cast tab is shown with the one that fits the line.', 'videoMoodPics', look),
             ]));
             b.appendChild(segmented('Color of the names', [

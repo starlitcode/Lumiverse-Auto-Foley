@@ -335,6 +335,8 @@ interface Settings {
   videoBox: boolean;
   videoOwnColors: boolean;
   videoBackRules: boolean;
+  videoQuiet: 'fade' | 'darken' | 'smaller' | 'none';
+  videoQuietStrength: number;
   videoKindColors: Record<string, string>;
   videoPersonColors: Record<string, string>;
   videoBoxColor: string;
@@ -622,6 +624,8 @@ const DEFAULT_SETTINGS: Settings = {
   videoBox: false,
   videoOwnColors: false,
   videoBackRules: true,
+  videoQuiet: 'fade',
+  videoQuietStrength: 45,
   videoKindColors: {},
   videoPersonColors: {},
   videoBoxColor: '#000000',
@@ -1161,7 +1165,7 @@ const LOOK_KEYS = [
   'videoBylineShadow', 'videoBylineShadowInk', 'videoBylineShadowDark', 'videoBylineShadowSoft', 'videoBylineShadowFar', 'videoMarks',
   'videoWordFill', 'videoWordStops', 'videoWordDir', 'videoNameFill', 'videoNameStops', 'videoNameDir', 'videoCapFill', 'videoCapStops', 'videoCapDir',
   'videoWordShadow', 'videoWordShadowInk', 'videoWordShadowDark', 'videoWordShadowSoft', 'videoWordShadowFar',
-  'videoBox', 'videoBoxColor', 'videoBoxClear', 'videoBoxRound', 'videoBoxWidth', 'videoOwnColors', 'videoKindColors', 'videoBackRules',
+  'videoBox', 'videoBoxColor', 'videoBoxClear', 'videoBoxRound', 'videoBoxWidth', 'videoOwnColors', 'videoKindColors', 'videoBackRules', 'videoQuiet', 'videoQuietStrength',
   'videoNameShadow', 'videoNameShadowInk', 'videoNameShadowDark', 'videoNameShadowSoft', 'videoNameShadowFar', 'videoEdges', 'videoEdgeColor', 'videoMove', 'videoMoveSecs',
   'videoTitleOn', 'videoFadeOut', 'videoCaptions',
 ];
@@ -1356,6 +1360,8 @@ function cleanSettings(raw: any): Settings {
     videoBox: bool(r.videoBox, d.videoBox),
     videoOwnColors: bool(r.videoOwnColors, d.videoOwnColors),
     videoBackRules: bool(r.videoBackRules, d.videoBackRules),
+    videoQuiet: pick(r.videoQuiet, ['fade', 'darken', 'smaller', 'none'] as const, d.videoQuiet),
+    videoQuietStrength: Math.round(num(r.videoQuietStrength, 0, 90, d.videoQuietStrength)),
     videoKindColors: cleanColorMap(r.videoKindColors, (k) => (['narrator', 'character', 'persona', 'npc'].indexOf(k) >= 0 ? k : ''), 4),
     videoPersonColors: cleanColorMap(r.videoPersonColors, (k) => str(k, 40).replace(/[^a-z0-9_-]/gi, ''), 60),
     videoBoxColor: hexColor(r.videoBoxColor) || d.videoBoxColor,

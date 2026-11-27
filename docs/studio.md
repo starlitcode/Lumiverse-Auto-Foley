@@ -682,6 +682,8 @@ Brisa and Tollan are made-up characters, in one scene. Both have a picture, and 
 
 ### Details
 
+
+- **How the quiet one looks**, under **Two speakers on screen**: **Fade**, by default, makes the one not speaking partly see-through, so it blends into the background. **Darken** darkens it. **Smaller** makes it a little smaller, with a light fade. **No change** leaves it as it is. **How strong, in percent** is 45 by default. The change from one speaker to the other follows the line's transition.
 - Two people are shown when they are the last two to speak in the scene, and both have a picture. A new scene starts again from one.
 - The first of the two to speak is on the left.
 - Names show under each picture, cut short with an ellipsis if there is no room.
