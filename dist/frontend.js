@@ -1700,6 +1700,17 @@ html[data-af-still] .af-ws-sec.af-ws-in, .af-ws[data-af-still] .af-ws-sec.af-ws-
 .af-ws-morebtn { display: none; }
 .af-anim-canvas { display: block; width: 100%; max-width: 480px; height: auto; aspect-ratio: 16 / 9; border-radius: var(--af-r); border: 1px solid var(--af-line); }
 .af-ease-canvas { flex: none; width: 96px; height: 96px; }
+.af-anim-sticky { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "view btns" "scrub scrub"; align-items: center; column-gap: 10px; row-gap: 4px; position: sticky; top: 0; z-index: 3; padding: 6px 0; background-color: var(--lumiverse-card-bg-solid, rgb(24,20,34)); background-image: linear-gradient(var(--lumiverse-bg-elevated, rgba(35,30,48,.98)), var(--lumiverse-bg-elevated, rgba(35,30,48,.98))); box-shadow: 0 6px 8px -8px rgba(0,0,0,.6); }
+.af-anim-sticky > canvas { grid-area: view; max-width: 240px; }
+.af-anim-sticky > .af-anim-btns { grid-area: btns; flex-direction: column; align-items: stretch; gap: 6px; }
+.af-anim-sticky > .af-anim-scrub { grid-area: scrub; gap: 2px; }
+@container afws (max-width: 639.98px) { .af-anim-sticky > canvas { max-width: 176px; } }
+.af-effect-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 8px; }
+.af-effect-card { display: flex; flex-direction: column; align-items: center; gap: 4px; min-height: 32px; padding: 6px; border-radius: var(--af-r); border: 1px solid var(--af-line); background: var(--af-fill-subtle); color: var(--af-text); font: 12px/1.3 var(--lumiverse-font-family, system-ui); cursor: pointer; }
+.af-effect-card canvas { display: block; width: 100%; max-width: 88px; height: auto; aspect-ratio: 88 / 50; border-radius: 6px; }
+.af-effect-card[aria-pressed="true"] { border-color: var(--af-accent); box-shadow: 0 0 0 2px var(--af-accent-soft); }
+@media (hover: hover) { .af-effect-card:not([aria-pressed="true"]):hover { border-color: var(--af-line-hover); } }
+.af-anim-side { gap: 8px; }
 .af-ws-menu { width: auto; min-width: 200px; max-width: calc(100% - 24px); gap: 4px; padding: 6px; top: calc(52px + env(safe-area-inset-top, 0px)); right: 8px; }
 .af-ws-menu .af-ws-item { justify-content: flex-start; width: 100%; min-height: 40px; border-color: transparent; background: transparent; }
 .af-ws-menu .af-ws-item:hover:not(:disabled) { background: var(--af-fill-subtle); }
@@ -1835,6 +1846,7 @@ function animAt(def, which, k) {
     // same direction, so the part goes the way it came.
     out.mask = mask;
     out.p = e;
+    out.k = Math.min(1, Math.max(0, k));
     out.hide = which === 'out';
     out.fx = def.fx || '';
     out.o = Math.min(1, Math.max(0, out.o));
@@ -1874,6 +1886,75 @@ const BUILT_IN_ANIMS = [
     builtIn('shuffle', 'Pixel shuffle', 'any', [], [], { secs: 0.7, ease: [0, 0, 1, 1], fx: 'shuffle' }),
     builtIn('lost', 'Signal lost', 'frame', [], [], { secs: 1.2, ease: [0, 0, 1, 1], fx: 'lost' }),
 ];
+const SIMPLE_EFFECTS = [
+    { id: 'fade', label: 'Fade' },
+    { id: 'rise', label: 'Rise' },
+    { id: 'drop', label: 'Drop' },
+    { id: 'slide', label: 'Slide' },
+    { id: 'focus', label: 'Soft focus' },
+    { id: 'wipe', label: 'Wipe' },
+    { id: 'grow', label: 'Grow' },
+    { id: 'iris', label: 'Iris' },
+    { id: 'shape', label: 'Through a shape' },
+    { id: 'type', label: 'Typewriter', textIn: true },
+    { id: 'words', label: 'Word by word', textIn: true },
+    { id: 'none', label: 'None' },
+];
+const EFFECT_DEFAULTS = { slide: { dir: 'l' }, wipe: { dir: 'l', soft: 25 }, iris: { cx: 0.5, cy: 0.5, soft: 6 }, shape: { through: 'iris', cx: 0.5, cy: 0.5, size: 100, soft: 10, kind: 'heart' } };
+const WIPE_ANGLE = { l: 0, r: 180, t: 90, b: 270 };
+function presetTrack(which, pr) {
+    const base = pr.id === 'slide' ? 'slide-' + (pr.dir || 'l') : pr.id === 'wipe' ? 'wipe-' + (pr.dir || 'l') : pr.id === 'shape' ? 'none' : pr.id;
+    const b = BUILT_IN_ANIMS.find((x) => x.id === base) || BUILT_IN_ANIMS[0];
+    const src = which === 'in' ? b.inT : b.outT;
+    const keys = JSON.parse(JSON.stringify(src.keys));
+    let mask = JSON.parse(JSON.stringify(src.mask));
+    if (pr.id === 'wipe')
+        mask = { type: 'linear', angle: WIPE_ANGLE[pr.dir || 'l'], feather: keyOr(pr.soft, 25) };
+    if (pr.id === 'iris')
+        mask = { type: 'iris', angle: 0, feather: keyOr(pr.soft, 6), cx: keyOr(pr.cx, 0.5), cy: keyOr(pr.cy, 0.5) };
+    if (pr.id === 'shape') {
+        mask = { type: pr.through || 'iris', angle: 0, feather: pr.through === 'clock' ? 0 : keyOr(pr.soft, 10), cx: keyOr(pr.cx, 0.5), cy: keyOr(pr.cy, 0.5) };
+        if (pr.through !== 'clock')
+            mask.size = keyOr(pr.size, 100);
+        if (pr.through === 'shape')
+            mask.shape = pr.kind || 'heart';
+        if (pr.invert)
+            mask.invert = true;
+    }
+    if ((which === 'out' && (pr.id === 'type' || pr.id === 'words')))
+        return { keys: JSON.parse(JSON.stringify(FADE_OUT)), mask: NO_MASK };
+    return { keys, mask };
+}
+// The preset a track was made from, if it still matches what it makes.
+function presetOf(a, which) {
+    const tr = which === 'in' ? a.inT : a.outT;
+    return tr && tr.preset && typeof tr.preset === 'object' ? tr.preset : null;
+}
+function samePreset(a, which, pr) {
+    const tr = which === 'in' ? a.inT : a.outT;
+    const made = presetTrack(which, pr);
+    const want = (pr.id === 'type' || pr.id === 'words') && which === 'in' ? (pr.id === 'type' ? 'chars' : 'words') : '';
+    return JSON.stringify(made.keys) === JSON.stringify(tr.keys) && JSON.stringify(made.mask) === JSON.stringify(tr.mask) && (which === 'out' || (a.reveal || '') === want) && !a.fx;
+}
+function applyPreset(a, which, pr) {
+    const t = presetTrack(which, pr);
+    const tr = which === 'in' ? a.inT : a.outT;
+    tr.keys = t.keys;
+    tr.mask = t.mask;
+    tr.preset = pr;
+    if (which === 'in')
+        a.reveal = pr.id === 'type' ? 'chars' : pr.id === 'words' ? 'words' : '';
+    a.fx = '';
+}
+// The preset for a built-in, so an animation made from one starts simple.
+function presetFor(id) {
+    const m = /^(slide|wipe)-([lrtb])$/.exec(id);
+    if (m)
+        return Object.assign({}, EFFECT_DEFAULTS[m[1]], { id: m[1], dir: m[2] });
+    if (SIMPLE_EFFECTS.some((x) => x.id === id))
+        return Object.assign({}, EFFECT_DEFAULTS[id] || {}, { id });
+    return null;
+}
 // The places an animation is used, in the frame and in the text. Each has a
 // default, which is what it did before an animation was picked for it.
 const ANIM_PLACES = [
@@ -6309,56 +6390,139 @@ export function setup(ctx, overrides) {
     // Typewriter and Word by word: how much of the text drawn now is shown,
     // from 0 to 1. Read by drawPart and drawTitle while it is set.
     let textReveal = null;
+    // The reveal, as a picture of its own: solid where the layer shows.
+    // Drawn on its own canvas, then laid over the layer, so the reveal itself
+    // is never drawn.
+    let revealCanvas = null;
+    function revealOpen(s) {
+        const m = s.mask;
+        const e = Array.isArray(m.ease) && m.ease.length === 4 ? bezier(m.ease, s.k) : s.p;
+        if (m.from != null && m.to != null && Number.isFinite(Number(m.from)) && Number.isFinite(Number(m.to)))
+            return { open: (Number(m.from) + (Number(m.to) - Number(m.from)) * e) / 100, hideWipe: false };
+        // A wipe going out moves on in the same direction, so the part goes the
+        // way it came. Every other reveal closes.
+        if (s.hide && m.type === 'linear')
+            return { open: e, hideWipe: true };
+        return { open: s.hide ? 1 - e : e, hideWipe: false };
+    }
+    function revealPath(g, m, W, H, scale) {
+        const cx = keyOr(m.cx, 0.5) * W;
+        const cy = keyOr(m.cy, 0.5) * H;
+        const dx = Math.max(cx, W - cx);
+        const dy = Math.max(cy, H - cy);
+        const size = Math.max(0, keyOr(m.size, 100)) / 100;
+        g.beginPath();
+        if (m.type === 'box') {
+            const hx = dx * scale * size;
+            const hy = dy * scale * size;
+            g.rect(cx - hx, cy - hy, hx * 2, hy * 2);
+        }
+        else if (m.type === 'diamond') {
+            const hx = (dx + (dy * W) / H) * scale * size;
+            const hy = (hx * H) / W;
+            g.moveTo(cx, cy - hy);
+            g.lineTo(cx + hx, cy);
+            g.lineTo(cx, cy + hy);
+            g.lineTo(cx - hx, cy);
+            g.closePath();
+        }
+        else if (m.type === 'shape') {
+            // A shape from the shape picker, large enough at full size to cover
+            // the frame from its middle.
+            const ext = Math.hypot(dx, dy) * 1.7 * scale * size;
+            const def = { id: 'r', kind: m.shape || 'heart', x: 0, y: 0, w: ext * 2, h: ext * 2, rot: 0, fill: '', grad: 'none', stops: [], dir: 'down', clear: 0, text: '' };
+            g.save();
+            g.translate(cx, cy);
+            shapePath(g, def, ext * 2, ext * 2);
+            g.restore();
+        }
+        else {
+            const R = Math.hypot(dx, dy) * size;
+            g.arc(cx, cy, Math.max(0, R * scale), 0, Math.PI * 2);
+        }
+    }
     function maskOn(lg, W, H, s) {
         const m = s.mask;
         const f = Math.min(100, Math.max(0, Number(m.feather) || 0)) / 100;
-        lg.fillStyle = '#000';
+        const { open, hideWipe } = revealOpen(s);
+        if (!revealCanvas || revealCanvas.width !== W || revealCanvas.height !== H)
+            revealCanvas = canvasOf(W, H);
+        const mg = revealCanvas.getContext('2d');
+        mg.setTransform(1, 0, 0, 1, 0, 0);
+        mg.globalAlpha = 1;
+        mg.globalCompositeOperation = 'source-over';
+        mg.clearRect(0, 0, W, H);
+        mg.fillStyle = '#000';
         if (m.type === 'linear') {
             const a = ((Number(m.angle) || 0) * Math.PI) / 180;
-            const dx = Math.cos(a);
-            const dy = Math.sin(a);
-            const proj = [0, W * dx, H * dy, W * dx + H * dy];
+            const ux = Math.cos(a);
+            const uy = Math.sin(a);
+            const proj = [0, W * ux, H * uy, W * ux + H * uy];
             const mn = Math.min(...proj);
             const mx = Math.max(...proj);
             const fw = Math.max(1, f * (mx - mn));
             const run = mx - mn + fw;
-            // In: shown up to an edge that moves on. Out: hidden up to it.
-            const edge = s.hide ? mn - fw + run * s.p : mn + run * s.p;
-            const g0 = s.hide ? edge : edge - fw;
-            const g1 = s.hide ? edge + fw : edge;
-            const grad = lg.createLinearGradient(dx * g0, dy * g0, dx * g1, dy * g1);
-            grad.addColorStop(0, s.hide ? 'rgba(0,0,0,0)' : 'rgba(0,0,0,1)');
-            grad.addColorStop(1, s.hide ? 'rgba(0,0,0,1)' : 'rgba(0,0,0,0)');
-            lg.fillStyle = grad;
-            lg.fillRect(0, 0, W, H);
+            const edge = hideWipe ? mn - fw + run * open : mn + run * open;
+            const g0 = hideWipe ? edge : edge - fw;
+            const g1 = hideWipe ? edge + fw : edge;
+            const grad = mg.createLinearGradient(ux * g0, uy * g0, ux * g1, uy * g1);
+            grad.addColorStop(0, hideWipe ? 'rgba(0,0,0,0)' : 'rgba(0,0,0,1)');
+            grad.addColorStop(1, hideWipe ? 'rgba(0,0,0,1)' : 'rgba(0,0,0,0)');
+            mg.fillStyle = grad;
+            mg.fillRect(0, 0, W, H);
         }
         else if (m.type === 'radial' || m.type === 'iris') {
-            // A circle from the middle: it opens as an in track goes on, and
-            // closes as an out track does.
-            const p = s.hide ? 1 - s.p : s.p;
-            const R = Math.hypot(W, H) / 2;
+            const cx = keyOr(m.cx, 0.5) * W;
+            const cy = keyOr(m.cy, 0.5) * H;
+            const R = Math.hypot(Math.max(cx, W - cx), Math.max(cy, H - cy)) * Math.max(0, keyOr(m.size, 100)) / 100;
             const fw = Math.max(1, f * R);
-            const r = (R + fw) * p;
-            const grad = lg.createRadialGradient(W / 2, H / 2, Math.max(0, r - fw), W / 2, H / 2, Math.max(0.01, r));
+            const r = (R + fw) * open;
+            const grad = mg.createRadialGradient(cx, cy, Math.max(0, r - fw), cx, cy, Math.max(0.01, r));
             grad.addColorStop(0, 'rgba(0,0,0,1)');
             grad.addColorStop(1, 'rgba(0,0,0,0)');
-            lg.fillStyle = grad;
-            lg.fillRect(0, 0, W, H);
+            mg.fillStyle = grad;
+            mg.fillRect(0, 0, W, H);
         }
         else if (m.type === 'clock') {
-            // A sweep like a clock's hand, from the top, clockwise.
-            const p = Math.min(1, Math.max(0, s.p));
-            const R = Math.hypot(W, H);
-            const top = -Math.PI / 2;
-            lg.beginPath();
-            lg.moveTo(W / 2, H / 2);
-            if (s.hide)
-                lg.arc(W / 2, H / 2, R, top + p * Math.PI * 2, top + Math.PI * 2);
+            const cx = keyOr(m.cx, 0.5) * W;
+            const cy = keyOr(m.cy, 0.5) * H;
+            const p = Math.min(1, Math.max(0, open));
+            const R = Math.hypot(W, H) * 2;
+            const top = -Math.PI / 2 + ((Number(m.start) || 0) * Math.PI) / 180;
+            const sweep = p * Math.PI * 2;
+            mg.beginPath();
+            mg.moveTo(cx, cy);
+            if (m.dir === 'ccw')
+                mg.arc(cx, cy, R, top - sweep, top);
             else
-                lg.arc(W / 2, H / 2, R, top, top + p * Math.PI * 2);
-            lg.closePath();
-            lg.fill();
+                mg.arc(cx, cy, R, top, top + sweep);
+            mg.closePath();
+            if (p >= 0.999)
+                mg.fillRect(0, 0, W, H);
+            else if (p > 0)
+                mg.fill();
         }
+        else if (m.type === 'box' || m.type === 'diamond' || m.type === 'shape') {
+            // A soft edge is the shape drawn a few times, each a little larger and
+            // fainter, added together.
+            const steps = f > 0 ? 12 : 1;
+            mg.globalCompositeOperation = 'lighter';
+            for (let i = 0; i < steps; i++) {
+                mg.globalAlpha = 1 / steps;
+                revealPath(mg, m, W, H, Math.max(0, open * (1 + (f * i) / Math.max(1, steps - 1))));
+                mg.fill();
+            }
+            mg.globalCompositeOperation = 'source-over';
+            mg.globalAlpha = 1;
+        }
+        else
+            mg.fillRect(0, 0, W, H);
+        lg.save();
+        lg.setTransform(1, 0, 0, 1, 0, 0);
+        lg.globalAlpha = 1;
+        lg.globalCompositeOperation = m.invert ? 'destination-out' : 'destination-in';
+        lg.drawImage(revealCanvas, 0, 0);
+        lg.restore();
     }
     // Draws d as the state says. A state that only fades and moves draws
     // straight onto the frame. Anything more is drawn on a layer of its own
@@ -6398,10 +6562,8 @@ export function setup(ctx, overrides) {
             lg.fillRect(0, 0, W, H);
         }
         lg.globalAlpha = 1;
-        if (s.mask.type !== 'none') {
-            lg.globalCompositeOperation = 'destination-in';
+        if (s.mask.type !== 'none')
             maskOn(lg, W, H, s);
-        }
         lg.globalCompositeOperation = 'source-over';
         // A blur, drawn small and stretched back, which is fast in every
         // browser.
@@ -18207,6 +18369,66 @@ export function setup(ctx, overrides) {
     // The reader's own animations, each made from a built-in or from nothing,
     // with its keyframes, easing and mask, and a preview that loops.
     let animEditId = '';
+    // The editor's own state: whether the timeline shows, the track being
+    // changed, and which of Coming in and Going out are open.
+    let animTimeline = false;
+    let animSide = 'in';
+    const animOpenSides = {};
+    // The small moving examples on the effect cards, drawn by one loop.
+    const fxCards = new Set();
+    let fxFrame = 0;
+    const fxSample = (g, al, x, y) => {
+        g.save();
+        g.globalAlpha = al;
+        g.fillStyle = '#ffffff';
+        g.font = '700 17px system-ui, sans-serif';
+        const words = 'Aa Bb';
+        const rev = textReveal;
+        const shown = rev ? (rev.kind === 'words' ? words.split(' ').slice(0, Math.floor(rev.frac * 2 + 1e-6)).join(' ') : words.slice(0, Math.round(rev.frac * words.length))) : words;
+        const full = g.measureText(words).width;
+        g.fillText(shown, 44 - full / 2 + x, 31 + y);
+        g.restore();
+    };
+    function drawFxCard(e, k) {
+        const g = e.c.getContext('2d');
+        if (!g)
+            return;
+        g.setTransform(1, 0, 0, 1, 0, 0);
+        g.globalAlpha = 1;
+        g.fillStyle = '#20243a';
+        g.fillRect(0, 0, 88, 50);
+        runAnim(g, e.st, { def: e.def, secs: 1, delay: 0 }, e.which, k, fxSample, 0);
+    }
+    function effectExample(c, id, which) {
+        const pr = Object.assign({}, EFFECT_DEFAULTS[id] || {}, { id });
+        const def = Object.assign(JSON.parse(JSON.stringify(BUILT_IN_ANIMS[0])), { id: 'x', secs: 1, inT: presetTrack('in', pr), outT: presetTrack('out', pr), reveal: id === 'type' ? 'chars' : id === 'words' ? 'words' : '' });
+        const e = { c, def, st: { w: 88, h: 50 }, which };
+        fxCards.add(e);
+        drawFxCard(e, 0.6);
+        if (calm() || fxFrame)
+            return;
+        const step = (now) => {
+            fxFrame = 0;
+            const t = (now / 1000) % 1.8;
+            const k = Math.min(1, t / 1.2);
+            for (const x of Array.from(fxCards)) {
+                if (!x.c.isConnected) {
+                    fxCards.delete(x);
+                    continue;
+                }
+                drawFxCard(x, k);
+            }
+            if (fxCards.size && !calm())
+                fxFrame = requestAnimationFrame(step);
+        };
+        fxFrame = requestAnimationFrame(step);
+    }
+    disposers.push(() => {
+        if (fxFrame)
+            cancelAnimationFrame(fxFrame);
+        fxFrame = 0;
+        fxCards.clear();
+    });
     let animSave = null;
     function saveOwnAnims(now) {
         if (animSave)
@@ -18245,7 +18467,7 @@ export function setup(ctx, overrides) {
         return S.videoAnimsOwn;
     }
     // A small stage for the preview, with the sample words and a picture.
-    function animPreview(get) {
+    function animPreview(get, centerOf, moved) {
         const box = el('<div class="af-col" data-af-animpreview></div>');
         const c = canvasOf(320, 180);
         c.className = 'af-anim-canvas';
@@ -18261,13 +18483,11 @@ export function setup(ctx, overrides) {
         let last = 0;
         let frame = 0;
         const cycle = (a) => Math.max(0.2, a.delay + a.secs) * 2 + 1;
+        // The sample is the words alone, in the middle, so what moves is the
+        // layer the animation is for, and nothing else is drawn.
         const sample = (g, al, x, y) => {
             g.save();
             g.globalAlpha = al;
-            g.fillStyle = '#b9a6e8';
-            g.beginPath();
-            g.arc(W / 2 + x, 58 + y, 22, 0, Math.PI * 2);
-            g.fill();
             g.fillStyle = '#ffffff';
             g.font = '600 26px system-ui, sans-serif';
             g.textAlign = 'center';
@@ -18276,7 +18496,7 @@ export function setup(ctx, overrides) {
             const shown = rev ? (rev.kind === 'words' ? words.split(' ').slice(0, Math.floor(rev.frac * 3 + 1e-6)).join(' ') : words.slice(0, Math.round(rev.frac * words.length))) : words;
             g.textAlign = 'left';
             const full = g.measureText(words).width;
-            g.fillText(shown, W / 2 - full / 2 + x, 122 + y);
+            g.fillText(shown, W / 2 - full / 2 + x, 99 + y);
             g.restore();
         };
         const draw = () => {
@@ -18302,20 +18522,84 @@ export function setup(ctx, overrides) {
             else if (t < inEnd + 1 + L)
                 runAnim(g, st, use, 'out', (t - inEnd - 1) / L, sample, 0);
         };
+        // The middle of a circle, box, diamond, clock or shape reveal is dragged
+        // on the preview, and snaps to the middle and the thirds.
+        if (centerOf) {
+            let dragging = false;
+            const put = (e) => {
+                const m = centerOf();
+                if (!m)
+                    return false;
+                const rc = c.getBoundingClientRect();
+                const snap = (v) => {
+                    for (const t of [0.5, 1 / 3, 2 / 3])
+                        if (Math.abs(v - t) < 0.03)
+                            return Math.round(t * 1000) / 1000;
+                    return Math.round(Math.min(1, Math.max(0, v)) * 1000) / 1000;
+                };
+                m.cx = snap((e.clientX - rc.left) / Math.max(1, rc.width));
+                m.cy = snap((e.clientY - rc.top) / Math.max(1, rc.height));
+                const pr = get() && centerOwner();
+                if (pr) {
+                    pr.cx = m.cx;
+                    pr.cy = m.cy;
+                }
+                draw();
+                return true;
+            };
+            const centerOwner = () => {
+                const a = get();
+                if (!a)
+                    return null;
+                const tr = animSide === 'out' ? a.outT : a.inT;
+                return tr && tr.preset && (tr.preset.id === 'iris' || tr.preset.id === 'shape') ? tr.preset : null;
+            };
+            c.addEventListener('pointerdown', (e) => {
+                if (!centerOf())
+                    return;
+                dragging = true;
+                playing = false;
+                paintPlay();
+                e.preventDefault();
+                try {
+                    c.setPointerCapture(e.pointerId);
+                }
+                catch (_) { }
+                put(e);
+            });
+            c.addEventListener('pointermove', (e) => {
+                if (dragging)
+                    put(e);
+            });
+            const end = () => {
+                if (!dragging)
+                    return;
+                dragging = false;
+                if (moved)
+                    moved();
+            };
+            c.addEventListener('pointerup', end);
+            c.addEventListener('pointercancel', end);
+            c.style.touchAction = 'none';
+        }
         const scrubId = rid('as');
         const scrubRow = el('<div class="af-col"></div>');
-        scrubRow.appendChild(labelRow('Where in the preview', 'Drag to look at one moment. In, then out.', scrubId));
-        const scrub = el('<input type="range" class="af-range" min="0" max="1000" step="1" id="' + scrubId + '" data-af-animscrub>');
+        scrubRow.classList.add('af-anim-scrub');
+        scrubRow.appendChild(labelRow('Where in the preview', '', scrubId));
+        const scrub = el('<input type="range" min="0" max="1000" step="1" id="' + scrubId + '" data-af-animscrub>');
         scrub.value = '0';
+        // Filled to the knob by the same code as every other slider.
+        fillTo(scrub, 0);
         scrub.addEventListener('input', () => {
             pos = Number(scrub.value) / 1000;
+            fillTo(scrub, pos);
             playing = false;
             paintPlay();
             draw();
         });
         scrubRow.appendChild(scrub);
         box.appendChild(scrubRow);
-        const row = el('<div class="af-row af-wrap"></div>');
+        const row = el('<div class="af-row af-wrap af-anim-btns"></div>');
         const play = button('Pause', () => {
             playing = !playing;
             paintPlay();
@@ -18348,6 +18632,7 @@ export function setup(ctx, overrides) {
                 pos = (pos + ((now - last) / 1000 / cycle(a)) * (half ? 0.5 : 1)) % 1;
                 last = now;
                 scrub.value = String(Math.round(pos * 1000));
+                fillTo(scrub, pos);
                 draw();
                 frame = requestAnimationFrame(step);
             };
@@ -18396,6 +18681,33 @@ export function setup(ctx, overrides) {
         g.stroke();
         return c;
     }
+    // A small picture of a reveal, part of the way through: the shown part
+    // light, the rest dim.
+    function revealIcon(c, type) {
+        const g = c.getContext('2d');
+        if (!g)
+            return;
+        let ink = '#cccccc';
+        try {
+            ink = getComputedStyle(root).color || ink;
+        }
+        catch (_) { }
+        const N = 56;
+        g.clearRect(0, 0, N, N);
+        g.fillStyle = ink;
+        g.globalAlpha = 0.18;
+        g.fillRect(8, 12, 40, 32);
+        const st = { w: N, h: N };
+        const layer = canvasOf(N, N);
+        const lg = layer.getContext('2d');
+        lg.fillStyle = ink;
+        lg.fillRect(8, 12, 40, 32);
+        if (type !== 'none')
+            maskOn(lg, N, N, { mask: { type, angle: 0, feather: type === 'linear' ? 20 : 4, shape: 'heart' }, p: 0.6, k: 0.6, hide: false });
+        void st;
+        g.globalAlpha = 1;
+        g.drawImage(layer, 0, 0);
+    }
     function drawOwnAnims(box, changed, redrawPlaces) {
         box.replaceChildren();
         const h = el('<h3 class="af-ws-h">Your animations</h3>');
@@ -18441,6 +18753,12 @@ export function setup(ctx, overrides) {
                 return say('You have 30 animations, which is the most there can be.', true);
             const base = animById(from) || BUILT_IN_ANIMS[0];
             const a = copyAnim(base, 'My ' + base.name.toLowerCase());
+            // Made from a built-in the simple editor knows, it starts simple.
+            const pr = presetFor(base.id);
+            if (pr) {
+                applyPreset(a, 'in', pr);
+                applyPreset(a, 'out', pr);
+            }
             list.push(a);
             animEditId = a.id;
             saveOwnAnims(true);
@@ -18503,8 +18821,11 @@ export function setup(ctx, overrides) {
             if (preview && preview._redraw)
                 preview._redraw();
         };
+        // The name and what can be done with it, in one short row at the top.
+        const top = el('<div class="af-col" data-af-animtop></div>');
+        ed.appendChild(top);
         const nameId = rid('an');
-        ed.appendChild(labelRow('Name', '', nameId));
+        top.appendChild(labelRow('Name', '', nameId));
         const name = el('<input type="text" class="af-field" maxlength="40" autocomplete="off" id="' + nameId + '" data-af-animname>');
         name.value = a.name;
         name.addEventListener('change', () => {
@@ -18517,13 +18838,23 @@ export function setup(ctx, overrides) {
             saveOwnAnims(true);
             redraw();
         });
-        ed.appendChild(name);
-        preview = animPreview(() => ownList().find((x) => x.id === a.id) || null);
+        top.appendChild(name);
+        // The preview stays in view while the settings under it scroll.
+        preview = animPreview(() => ownList().find((x) => x.id === a.id) || null, () => {
+            const tr = animSide === 'out' ? a.outT : a.inT;
+            return tr && tr.mask && tr.mask.type !== 'none' && tr.mask.type !== 'linear' ? tr.mask : null;
+        }, () => {
+            touched();
+            paintSimple();
+            if (animTimeline)
+                paintTrack();
+        });
+        preview.classList.add('af-anim-sticky');
         ed.appendChild(preview);
-        ed.appendChild(segmented('Used for', [
-            { id: 'any', label: 'Text and the frame' },
-            { id: 'text', label: 'Text only' },
-            { id: 'frame', label: 'The frame only' },
+        ed.appendChild(segmented('What does it move?', [
+            { id: 'any', label: 'Both' },
+            { id: 'text', label: 'Text' },
+            { id: 'frame', label: 'The frame' },
         ], a.kind, (v) => {
             a.kind = v === 'text' || v === 'frame' ? v : 'any';
             touched();
@@ -18540,9 +18871,33 @@ export function setup(ctx, overrides) {
         };
         num('secs', 'Length, in seconds', a.secs, 0, 10, 0.1, 'How long each of in and out takes.', (v) => (a.secs = v));
         num('delay', 'Delay, in seconds', a.delay, 0, 10, 0.1, 'It waits this long before it starts.', (v) => (a.delay = v));
-        num('overlap', 'Overlap, in percent', Math.round(numOr(a.overlap, 1) * 100), 0, 100, 5, '100 moves the leaving and the arriving part at once.', (v) => (a.overlap = v / 100));
         ed.appendChild(grid);
-        ed.appendChild(select('Turns and sizes around', [
+        // Coming in and going out, each chosen by look. The timeline under them
+        // shows every keyframe.
+        const simple = el('<div class="af-col" data-af-animsimple></div>');
+        ed.appendChild(simple);
+        const adv = el('<div class="af-sub"><div class="af-under af-col" data-af-animadvanced></div></div>');
+        const advIn = adv.firstElementChild;
+        const tl = personSwitch('Show the timeline', 'Every keyframe, the easing curve and each reveal setting. Off by default.', animTimeline, (on) => {
+            animTimeline = on;
+            showUnder(adv, animTimeline);
+            if (animTimeline)
+                paintTrack();
+            paintSimple();
+        });
+        tl.setAttribute('data-af-row', 'animTimeline');
+        const tlBox = tl.querySelector('input');
+        tlBox.setAttribute('data-af-animtimeline', '');
+        ed.appendChild(tl);
+        adv.hidden = !animTimeline;
+        ed.appendChild(adv);
+        const ov = numberRow('Overlap, in percent', Math.round(numOr(a.overlap, 1) * 100), 0, 100, 5, (v) => {
+            a.overlap = v / 100;
+            touched();
+        }, '100 moves the leaving and the arriving part at once.');
+        ov.setAttribute('data-af-animnum', 'overlap');
+        advIn.appendChild(ov);
+        advIn.appendChild(select('Turns and sizes around', [
             { id: 'center', label: 'The middle' },
             { id: 'top', label: 'The top' },
             { id: 'bottom', label: 'The bottom' },
@@ -18553,7 +18908,7 @@ export function setup(ctx, overrides) {
             touched();
         }, 'The middle of the frame by default.'));
         if (a.kind !== 'frame')
-            ed.appendChild(select('Show the text', [
+            advIn.appendChild(select('Show the text', [
                 { id: '', label: 'All at once' },
                 { id: 'chars', label: 'A letter at a time, as Typewriter does' },
                 { id: 'words', label: 'A word at a time, as Word by word does' },
@@ -18592,9 +18947,9 @@ export function setup(ctx, overrides) {
             easeBox.appendChild(row);
         };
         paintEase();
-        ed.appendChild(easeBox);
+        advIn.appendChild(easeBox);
         // The two tracks, each with its keyframes and its mask.
-        let side = 'in';
+        let side = animSide;
         const trackBox = el('<div class="af-col" data-af-animtrack></div>');
         const PROPS = [
             { key: 'o', label: 'Strength, in percent', min: 0, max: 100, step: 5 },
@@ -18613,6 +18968,7 @@ export function setup(ctx, overrides) {
                 { id: 'out', label: 'Going out' },
             ], side, (v) => {
                 side = v === 'out' ? 'out' : 'in';
+                animSide = side;
                 paintTrack();
             }));
             const tr = side === 'in' ? a.inT : a.outT;
@@ -18671,46 +19027,273 @@ export function setup(ctx, overrides) {
             const ar = el('<div class="af-row"></div>');
             ar.appendChild(addKey);
             trackBox.appendChild(ar);
-            // The mask of this track.
-            const maskOpts = [
-                { id: 'none', label: 'None' },
-                { id: 'linear', label: 'A straight wipe' },
-                { id: 'radial', label: 'A soft circle' },
-                { id: 'iris', label: 'An iris' },
-                { id: 'clock', label: 'A clock' },
-            ];
+            // How this track reveals the layer. The saved name is mask. A reveal
+            // only decides which part of the layer shows. It is never drawn.
             if (!tr.mask)
                 tr.mask = { type: 'none', angle: 0, feather: 0 };
-            const mk = select('Mask', maskOpts, tr.mask.type, (v) => {
-                tr.mask.type = (maskOpts.some((o) => o.id === v) ? v : 'none');
-                touched();
-                paintTrack();
-            }, 'None by default. A mask shows the part a little at a time.');
-            mk.querySelector('select').setAttribute('data-af-animmask', '');
-            trackBox.appendChild(mk);
-            if (tr.mask.type !== 'none') {
-                const g4 = el('<div class="af-shape-grid"></div>');
-                if (tr.mask.type === 'linear') {
-                    const an = numberRow('Angle, in degrees', tr.mask.angle, -360, 360, 15, (v) => {
-                        tr.mask.angle = v;
+            const m = tr.mask;
+            const REVEALS = [
+                { id: 'none', label: 'None' },
+                { id: 'linear', label: 'Wipe' },
+                { id: 'iris', label: 'Circle' },
+                { id: 'box', label: 'Box' },
+                { id: 'diamond', label: 'Diamond' },
+                { id: 'clock', label: 'Clock' },
+                { id: 'shape', label: 'A shape' },
+            ];
+            const rv = el('<div class="af-col" data-af-row="animReveal"></div>');
+            rv.appendChild(labelRow('Reveal', 'Shows the layer bit by bit, through a shape: a wipe across, or a circle that opens.'));
+            const picks = el('<div class="af-shape-kinds" role="group" aria-label="Reveal" data-af-animmask></div>');
+            const shownType = m.type === 'radial' ? 'iris' : m.type;
+            for (const r of REVEALS) {
+                const b = el('<button type="button" class="af-shape-kind" aria-pressed="false"><canvas width="56" height="56" aria-hidden="true"></canvas><span></span></button>');
+                b.setAttribute('data-af-reveal', r.id);
+                b.setAttribute('aria-pressed', shownType === r.id ? 'true' : 'false');
+                setText(b.querySelector('span'), r.label);
+                revealIcon(b.querySelector('canvas'), r.id);
+                b.addEventListener('click', () => {
+                    m.type = r.id;
+                    if (r.id === 'shape' && !m.shape)
+                        m.shape = 'heart';
+                    touched();
+                    paintTrack();
+                });
+                picks.appendChild(b);
+            }
+            rv.appendChild(picks);
+            trackBox.appendChild(rv);
+            if (m.type !== 'none') {
+                const ctl = el('<div class="af-col" data-af-revealctl></div>');
+                const num2 = (key, label, value, min, max, step, help, take) => {
+                    const r = numberRow(label, value, min, max, step, (v) => {
+                        take(v);
                         touched();
-                    }, '0 wipes from the left, 90 from the top.');
-                    an.setAttribute('data-af-maskangle', '');
-                    g4.appendChild(an);
+                    }, help);
+                    r.setAttribute('data-af-reveal-num', key);
+                    return r;
+                };
+                if (m.type === 'shape') {
+                    const sp = select('Shape', SHAPE_KINDS.filter((k) => k.id !== 'text' && k.id !== 'line').map((k) => ({ id: k.id, label: k.label })), m.shape || 'heart', (v) => {
+                        m.shape = v;
+                        touched();
+                    }, 'Any shape from the shape picker, such as a heart or a star.');
+                    sp.querySelector('select').setAttribute('data-af-revealshape', '');
+                    ctl.appendChild(sp);
                 }
-                if (tr.mask.type !== 'clock') {
-                    const fe = numberRow('Soft edge, in percent', tr.mask.feather, 0, 100, 5, (v) => {
-                        tr.mask.feather = v;
+                if (m.type === 'linear') {
+                    const dirs = [
+                        { id: '0', label: 'From the left' },
+                        { id: '180', label: 'From the right' },
+                        { id: '90', label: 'From the top' },
+                        { id: '270', label: 'From the bottom' },
+                    ];
+                    const ang = String(((Math.round(Number(m.angle) || 0) % 360) + 360) % 360);
+                    ctl.appendChild(segmented('Direction', dirs, dirs.some((d) => d.id === ang) ? ang : '', (v) => {
+                        m.angle = Number(v);
+                        touched();
+                        paintTrack();
+                    }));
+                    ctl.appendChild(num2('angle', 'Angle, in degrees', Math.round(Number(m.angle) || 0), -360, 360, 1, '0 wipes from the left, 90 from the top.', (v) => (m.angle = v)));
+                }
+                if (m.type === 'clock') {
+                    ctl.appendChild(segmented('Which way it turns', [
+                        { id: 'cw', label: 'Clockwise' },
+                        { id: 'ccw', label: 'Counterclockwise' },
+                    ], m.dir === 'ccw' ? 'ccw' : 'cw', (v) => {
+                        m.dir = v === 'ccw' ? 'ccw' : 'cw';
+                        touched();
+                    }));
+                    ctl.appendChild(num2('start', 'Where it starts, in degrees', Math.round(keyOr(m.start, 0)), -360, 360, 1, '0 is the top, 90 the right.', (v) => (m.start = v)));
+                }
+                if (m.type !== 'linear') {
+                    const g5 = el('<div class="af-shape-grid"></div>');
+                    g5.appendChild(num2('cx', 'Middle across, in percent', Math.round(keyOr(m.cx, 0.5) * 100), 0, 100, 1, 'Or drag on the preview.', (v) => (m.cx = v / 100)));
+                    g5.appendChild(num2('cy', 'Middle down, in percent', Math.round(keyOr(m.cy, 0.5) * 100), 0, 100, 1, '50 is the middle.', (v) => (m.cy = v / 100)));
+                    ctl.appendChild(g5);
+                }
+                if (m.type !== 'linear' && m.type !== 'clock')
+                    ctl.appendChild(num2('size', 'Size, in percent', Math.round(keyOr(m.size, 100)), 0, 400, 5, '100 opens to cover the frame. More opens past its edge.', (v) => (m.size = v)));
+                if (m.type !== 'clock') {
+                    const soft = slider('Soft edge', Math.round(Number(m.feather) || 0), 0, 100, 1, (v) => (v ? v + '%' : 'Sharp'), (v) => {
+                        m.feather = v;
                         touched();
                     });
-                    fe.setAttribute('data-af-maskfeather', '');
-                    g4.appendChild(fe);
+                    soft.setAttribute('data-af-byeye', '');
+                    soft.setAttribute('data-af-reveal-soft', '');
+                    ctl.appendChild(soft);
                 }
-                trackBox.appendChild(g4);
+                const g6 = el('<div class="af-shape-grid"></div>');
+                const dFrom = side === 'in' ? 0 : 100;
+                g6.appendChild(num2('from', 'How open at the start, in percent', Math.round(keyOr(m.from, dFrom)), 0, 100, 5, '', (v) => {
+                    m.from = v;
+                    if (m.to == null)
+                        m.to = 100 - dFrom;
+                }));
+                g6.appendChild(num2('to', 'How open at the end, in percent', Math.round(keyOr(m.to, 100 - dFrom)), 0, 100, 5, '', (v) => {
+                    m.to = v;
+                    if (m.from == null)
+                        m.from = dFrom;
+                }));
+                ctl.appendChild(g6);
+                const curEase = Array.isArray(m.ease) ? EASES.find((e) => e.curve.every((v, i) => Math.abs(v - m.ease[i]) < 1e-6)) : null;
+                ctl.appendChild(select('Easing of the reveal', [{ id: '', label: 'The same as the animation' }].concat(EASES.map((e) => ({ id: e.id, label: e.label }))), curEase ? curEase.id : '', (v) => {
+                    const e = EASES.find((x) => x.id === v);
+                    m.ease = e ? e.curve.slice() : undefined;
+                    touched();
+                }));
+                const inv = button('Turn the other way', () => {
+                    m.invert = !m.invert;
+                    inv.setAttribute('aria-pressed', m.invert ? 'true' : 'false');
+                    touched();
+                });
+                inv.setAttribute('aria-pressed', m.invert ? 'true' : 'false');
+                inv.setAttribute('data-af-revealinvert', '');
+                const ir = el('<div class="af-row af-wrap"></div>');
+                ir.appendChild(inv);
+                ir.appendChild(hint('Hides through the shape instead of showing.'));
+                ctl.appendChild(ir);
+                trackBox.appendChild(ctl);
             }
         };
         paintTrack();
-        ed.appendChild(trackBox);
+        advIn.appendChild(trackBox);
+        // Simple: a card for each effect, by look, and only the settings the
+        // chosen one has.
+        function paintSimple() {
+            if (!a)
+                return;
+            simple.replaceChildren();
+            for (const which of ['in', 'out']) {
+                const tr = which === 'in' ? a.inT : a.outT;
+                const pr = presetOf(a, which);
+                const custom = !pr || !samePreset(a, which, pr);
+                const sec = el('<div class="af-col af-anim-side"></div>');
+                sec.setAttribute('data-af-animside', which);
+                const head = el('<button type="button" class="af-fold" aria-expanded="true"><span class="af-caret">▶</span><span></span></button>');
+                setText(head.lastElementChild, which === 'in' ? 'Coming in' : 'Going out');
+                const body = el('<div class="af-sub"><div class="af-foldbody af-col"></div></div>');
+                const inner = body.firstElementChild;
+                const open = animOpenSides[which] !== false;
+                head.setAttribute('aria-expanded', open ? 'true' : 'false');
+                body.hidden = !open;
+                head.addEventListener('click', () => {
+                    const now = head.getAttribute('aria-expanded') !== 'true';
+                    animOpenSides[which] = now;
+                    head.setAttribute('aria-expanded', now ? 'true' : 'false');
+                    reveal(body, now);
+                    if (now)
+                        animSide = which;
+                });
+                sec.appendChild(head);
+                sec.appendChild(body);
+                simple.appendChild(sec);
+                const cards = el('<div class="af-effect-cards" role="group"></div>');
+                cards.setAttribute('aria-label', which === 'in' ? 'How it comes in' : 'How it goes out');
+                for (const fx of SIMPLE_EFFECTS) {
+                    if (fx.textIn && (which === 'out' || a.kind === 'frame'))
+                        continue;
+                    const card = el('<button type="button" class="af-effect-card" aria-pressed="false"><canvas width="88" height="50" aria-hidden="true"></canvas><span></span></button>');
+                    card.setAttribute('data-af-effect', fx.id);
+                    card.setAttribute('aria-pressed', !custom && pr && pr.id === fx.id ? 'true' : 'false');
+                    setText(card.querySelector('span'), fx.label);
+                    effectExample(card.querySelector('canvas'), fx.id, which);
+                    card.addEventListener('click', () => {
+                        animSide = which;
+                        const next = Object.assign({}, EFFECT_DEFAULTS[fx.id] || {}, { id: fx.id });
+                        applyPreset(a, which, next);
+                        touched();
+                        paintSimple();
+                        if (animTimeline)
+                            paintTrack();
+                    });
+                    cards.appendChild(card);
+                }
+                inner.appendChild(cards);
+                if (custom) {
+                    inner.appendChild(hint(animTimeline ? 'Custom timing: change it on the timeline below, or pick an effect to replace it.' : 'Custom timing is kept. Turn the timeline on to change it.'));
+                    continue;
+                }
+                const set2 = (patch) => {
+                    applyPreset(a, which, Object.assign({}, pr, patch));
+                    touched();
+                    if (animTimeline)
+                        paintTrack();
+                };
+                const ctl = el('<div class="af-col" data-af-effectctl></div>');
+                if (pr.id === 'slide' || pr.id === 'wipe')
+                    ctl.appendChild(segmented('Direction', [
+                        { id: 'l', label: 'From the left' },
+                        { id: 'r', label: 'From the right' },
+                        { id: 't', label: 'From the top' },
+                        { id: 'b', label: 'From the bottom' },
+                    ], pr.dir || 'l', (v) => set2({ dir: v })));
+                if (pr.id === 'shape') {
+                    const kinds = [
+                        { id: 'iris', label: 'Circle' },
+                        { id: 'box', label: 'Box' },
+                        { id: 'diamond', label: 'Diamond' },
+                        { id: 'clock', label: 'Clock' },
+                        { id: 'shape', label: 'A shape' },
+                    ];
+                    const picks = el('<div class="af-shape-kinds" role="group" aria-label="The shape it shows through" data-af-effectshapes></div>');
+                    for (const k of kinds) {
+                        const bt = el('<button type="button" class="af-shape-kind" aria-pressed="false"><canvas width="56" height="56" aria-hidden="true"></canvas><span></span></button>');
+                        bt.setAttribute('data-af-reveal', k.id);
+                        bt.setAttribute('aria-pressed', (pr.through || 'iris') === k.id ? 'true' : 'false');
+                        setText(bt.querySelector('span'), k.label);
+                        revealIcon(bt.querySelector('canvas'), k.id);
+                        bt.addEventListener('click', () => {
+                            set2({ through: k.id });
+                            paintSimple();
+                        });
+                        picks.appendChild(bt);
+                    }
+                    ctl.appendChild(labelRow('The shape it shows through', ''));
+                    ctl.appendChild(picks);
+                    if (pr.through === 'shape') {
+                        const sp = select('Shape', SHAPE_KINDS.filter((k) => k.id !== 'text' && k.id !== 'line').map((k) => ({ id: k.id, label: k.label })), pr.kind || 'heart', (v) => set2({ kind: v }), 'Any shape from the shape picker, such as a heart or a star.');
+                        sp.querySelector('select').setAttribute('data-af-revealshape', '');
+                        ctl.appendChild(sp);
+                    }
+                }
+                if (pr.id === 'iris' || pr.id === 'shape') {
+                    const g7 = el('<div class="af-shape-grid"></div>');
+                    const cxr = numberRow('Middle across, in percent', Math.round(keyOr(pr.cx, 0.5) * 100), 0, 100, 1, (v) => set2({ cx: v / 100 }), 'Or drag on the preview.');
+                    cxr.setAttribute('data-af-reveal-num', 'cx');
+                    const cyr = numberRow('Middle down, in percent', Math.round(keyOr(pr.cy, 0.5) * 100), 0, 100, 1, (v) => set2({ cy: v / 100 }), '50 is the middle.');
+                    cyr.setAttribute('data-af-reveal-num', 'cy');
+                    g7.appendChild(cxr);
+                    g7.appendChild(cyr);
+                    ctl.appendChild(g7);
+                }
+                if (pr.id === 'shape' && pr.through !== 'clock') {
+                    const sz = numberRow('Size, in percent', Math.round(keyOr(pr.size, 100)), 0, 400, 5, (v) => set2({ size: v }), '100 opens to cover the frame. Less stops part of the way.');
+                    sz.setAttribute('data-af-reveal-num', 'size');
+                    ctl.appendChild(sz);
+                }
+                if (pr.id === 'wipe' || pr.id === 'iris' || (pr.id === 'shape' && pr.through !== 'clock')) {
+                    const soft = slider('Soft edge', Math.round(keyOr(pr.soft, 25)), 0, 100, 1, (v) => (v ? v + '%' : 'Sharp'), (v) => set2({ soft: v }));
+                    soft.setAttribute('data-af-byeye', '');
+                    soft.setAttribute('data-af-reveal-soft', '');
+                    ctl.appendChild(soft);
+                }
+                if (pr.id === 'shape') {
+                    const inv = button('Turn the other way', () => {
+                        set2({ invert: !pr.invert });
+                        paintSimple();
+                    });
+                    inv.setAttribute('aria-pressed', pr.invert ? 'true' : 'false');
+                    inv.setAttribute('data-af-revealinvert', '');
+                    const ir = el('<div class="af-row af-wrap"></div>');
+                    ir.appendChild(inv);
+                    ir.appendChild(hint('Hides through the shape instead of showing.'));
+                    ctl.appendChild(ir);
+                }
+                if (ctl.childNodes.length)
+                    inner.appendChild(ctl);
+                void tr;
+            }
+        }
         const acts = el('<div class="af-row af-wrap"></div>');
         const dup = button('Duplicate', () => {
             if (list.length >= 30)
@@ -18750,7 +19333,8 @@ export function setup(ctx, overrides) {
         acts.appendChild(dup);
         acts.appendChild(exp);
         acts.appendChild(del);
-        ed.appendChild(acts);
+        top.appendChild(acts);
+        paintSimple();
     }
     // The places an animation is used, each with a dropdown: its default,
     // the built-in animations, and the reader's own.

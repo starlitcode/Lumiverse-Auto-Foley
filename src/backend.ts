@@ -996,7 +996,7 @@ function cleanAnimPlaces(v: any): Settings['videoAnims'] {
   }
   return out;
 }
-function cleanAnimTrack(t: any): { keys: any[]; mask: { type: string; angle: number; feather: number } } {
+function cleanAnimTrack(t: any): any {
   const keys: any[] = [];
   for (const k of Array.isArray(t && t.keys) ? t.keys.slice(0, 12) : []) {
     if (!k || typeof k !== 'object') continue;
@@ -1016,7 +1016,35 @@ function cleanAnimTrack(t: any): { keys: any[]; mask: { type: string; angle: num
     keys.push(o);
   }
   const m = (t && t.mask) || {};
-  return { keys, mask: { type: pick(m.type, ['none', 'linear', 'radial', 'iris', 'clock'] as const, 'none'), angle: Math.round(num(m.angle, -360, 360, 0)), feather: Math.round(num(m.feather, 0, 100, 0)) } };
+  // The reveal of a track, kept under its saved name, mask.
+  const mask: any = { type: pick(m.type, ['none', 'linear', 'radial', 'iris', 'box', 'diamond', 'clock', 'shape'] as const, 'none'), angle: Math.round(num(m.angle, -360, 360, 0)), feather: Math.round(num(m.feather, 0, 100, 0)) };
+  const has = (k: string) => m[k] != null && m[k] !== '' && Number.isFinite(Number(m[k]));
+  if (has('cx')) mask.cx = Math.round(num(m.cx, 0, 1, 0.5) * 1000) / 1000;
+  if (has('cy')) mask.cy = Math.round(num(m.cy, 0, 1, 0.5) * 1000) / 1000;
+  if (has('from') && has('to')) {
+    mask.from = Math.round(num(m.from, 0, 100, 0));
+    mask.to = Math.round(num(m.to, 0, 100, 100));
+  }
+  if (has('size')) mask.size = Math.round(num(m.size, 0, 400, 100));
+  if (has('start')) mask.start = Math.round(num(m.start, -360, 360, 0));
+  if (m.invert === true) mask.invert = true;
+  if (m.dir === 'ccw') mask.dir = 'ccw';
+  if (typeof m.shape === 'string' && /^[a-z]{2,16}$/.test(m.shape)) mask.shape = m.shape;
+  if (Array.isArray(m.ease) && m.ease.length === 4 && m.ease.every((x: any) => Number.isFinite(Number(x)))) mask.ease = m.ease.map((x: any, i: number) => Math.round(num(x, i % 2 ? -2 : 0, i % 2 ? 3 : 1, 0) * 1000) / 1000);
+  // The simple editor's effect the track was made from, with its settings.
+  const out: any = { keys, mask };
+  const pr = t && t.preset;
+  if (pr && typeof pr === 'object' && /^[a-z]{2,12}$/.test(String(pr.id || ''))) {
+    const keep: any = { id: String(pr.id) };
+    if (['l', 'r', 't', 'b'].indexOf(pr.dir) >= 0) keep.dir = pr.dir;
+    for (const k of ['soft', 'size']) if (Number.isFinite(Number(pr[k])) && pr[k] !== '' && pr[k] != null) keep[k] = Math.round(num(pr[k], 0, 400, 0));
+    for (const k of ['cx', 'cy']) if (Number.isFinite(Number(pr[k])) && pr[k] !== '' && pr[k] != null) keep[k] = Math.round(num(pr[k], 0, 1, 0.5) * 1000) / 1000;
+    if (['iris', 'box', 'diamond', 'clock', 'shape'].indexOf(pr.through) >= 0) keep.through = pr.through;
+    if (typeof pr.kind === 'string' && /^[a-z]{2,16}$/.test(pr.kind)) keep.kind = pr.kind;
+    if (pr.invert === true) keep.invert = true;
+    out.preset = keep;
+  }
+  return out;
 }
 function cleanOwnAnims(v: any): any[] {
   const out: any[] = [];

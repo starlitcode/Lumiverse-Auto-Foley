@@ -91,19 +91,48 @@ The last five are calm glitches. They move smoothly, and none of them flashes: a
 
 Under the places, **Your animations** makes animations of your own. Up to 30.
 
-1. Pick a built-in in **Start from**, and press **Make an animation**. A copy of it is made, named such as "My rise".
-2. Press its name in the list to change it. The preview under its name plays it, in and then out, over and over.
-3. Change what you want:
-   - **Name**, as it shows in the dropdowns.
-   - **Used for**: text and the frame, text only, or the frame only.
-   - **Length**, **Delay** and **Overlap**. An overlap of 100% moves the leaving and the arriving part at once.
-   - **Turns and sizes around**: the middle, top, bottom, left or right of the frame.
-   - **Show the text**: all at once, a letter at a time, or a word at a time.
-   - **Easing**: a preset, or the four numbers of a curve, as in CSS `cubic-bezier`. The small drawing shows the curve.
-   - **Track**: **Coming in** or **Going out**. Each has its own keyframes and mask.
-4. Pick it in a place's dropdown, under **Your animations**.
+### Making one
 
-**The preview** has **Where in the preview**, to look at one moment, **Play** or **Pause**, and **Half speed**. With Reduce motion on, it starts paused.
+1. Pick a built-in in **Start from**, and press **Make an animation**. A copy of it is made, named such as "My rise".
+2. Press its name in the list to change it.
+3. At the top are its **Name**, **Duplicate**, **Share** and **Delete**.
+4. Under them is the preview. It stays at the top while the settings scroll. It plays the animation in and then out, over and over. **Play** or **Pause**, **Half speed**, and **Where in the preview** to look at one moment. With Reduce motion on, it starts paused.
+5. **What does it move?**: **Both** text and the frame, **Text** only, or **The frame** only.
+6. **Length** and **Delay**, in seconds, for coming in and going out.
+7. **Coming in** and **Going out** each have a row of cards. Each card plays a small example of its effect. Press one to use it.
+8. Under the card picked are only the settings that effect has:
+   - **Slide**: **Direction**.
+   - **Wipe**: **Direction** and **Soft edge**.
+   - **Iris**: the middle of the circle, and **Soft edge**.
+   - **Through a shape**: the shape, its middle, **Size**, **Soft edge** and **Turn the other way**.
+   - **Typewriter** and **Word by word** are for coming in, on text.
+   - The others have no settings of their own.
+9. Pick your animation in a place's dropdown, under **Your animations**.
+
+### Reveal
+
+A reveal shows the layer bit by bit, through a shape: a wipe across, or a circle that opens. Only the layer is drawn. The shape decides which part of it shows.
+
+![A wipe from the left and an iris, each at four moments](reveal-wipe-iris.png)
+
+**Wipe**, **Iris** and **Through a shape** use a reveal. Its settings:
+
+- **The shape it shows through**: **Circle**, **Box** (a rectangle that opens from its middle), **Diamond**, **Clock** (a sweep around its middle), or **A shape** from the shape picker, such as a heart or a star.
+- **Direction**, for a wipe: from the left, the right, the top or the bottom. On the timeline, any angle in degrees.
+- **Middle across** and **Middle down**, in percent of the frame. Or press and drag on the preview. It snaps to the middle and the thirds.
+- **Size**, in percent: 100 opens to cover the frame. Less stops part of the way. More opens past the edge.
+- **Soft edge**: from sharp to very soft, set by eye on the preview.
+- **Turn the other way**: hides through the shape, in place of showing.
+
+### The timeline
+
+**Show the timeline** is off by default. On, it shows everything under the simple choices:
+
+- **Overlap**, **Turns and sizes around**, **Show the text** and **Easing**: a preset, or the four numbers of a curve, as in CSS `cubic-bezier`, with a small drawing of the curve.
+- **Track**: **Coming in** or **Going out**, each with its keyframes and its reveal.
+- A reveal on the timeline also has **How open at the start** and **How open at the end**, in percent, **Easing of the reveal**, and, for a clock, **Which way it turns** and **Where it starts**.
+
+The timeline starts from what the cards made, so nothing is lost. Turning it off keeps any change made on it, and **Coming in** or **Going out** then says "Custom timing is kept. Turn the timeline on to change it." Pressing a card replaces the custom timing with that effect.
 
 ### Keyframes
 
@@ -123,14 +152,6 @@ A track has up to 12 keyframes. **Add a keyframe** adds one after the last. **De
 
 Fast changes between light and dark can flash. Keep brightness changes slow.
 
-### Masks
-
-A mask shows a part a little at a time:
-
-- **A straight wipe**, with an **Angle**: 0 wipes from the left, 90 from the top. Going out, the edge moves on in the same direction.
-- **A soft circle** and **An iris**: a circle from the middle that opens coming in and closes going out. **Soft edge** sets how soft its edge is.
-- **A clock**: a sweep like a clock's hand, from the top, clockwise.
-
 ### Sharing
 
 - **Share** saves the animation in a file, `auto-foley-animation-` and its name. The file holds the animation and the version of Auto Foley. Nothing else is in it.
@@ -142,5 +163,5 @@ A mask shows a part a little at a time:
 
 - **Typewriter** and **Word by word** are only offered for text.
 - **Ending** takes as long as **Fade to black at the end**, under **Title and ending**. It has a delay of 0.
-- On **Words**, an animation moves, sizes, turns, fades and blurs each word. A mask, a tint and a change in brightness are left out, since each word is drawn on its own.
+- On **Words**, an animation moves, sizes, turns, fades and blurs each word. A reveal, a tint and a change in brightness are left out, since each word is drawn on its own.
 - The leaving part and the arriving part move at the same time.

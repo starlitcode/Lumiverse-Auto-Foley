@@ -7008,6 +7008,13 @@ if (section("animations")) {
 }
 
 if (section("animation editor")) {
+  // The preview stays at the top of the panel, so a control is scrolled to
+  // the middle before it is pressed, as a person would.
+  const press = async (page, sel) => {
+    await page.evaluate((sel) => document.querySelector(sel) && document.querySelector(sel).scrollIntoView({ block: "center" }), sel);
+    await page.waitForTimeout(60);
+    await page.click(sel);
+  };
   console.log("Your animations: made from a built-in, changed with keyframes, easing and a mask, previewed, used in a place, shared and added back from the file");
   const PLAIN = `window.__settings.videoBacks = [{ id: "main", name: "Main", kind: "color", color: "#808080", fill: "solid", stops: [], dir: "down", dim: 40, blur: 0, shapes: [], use: "match", moods: [], places: [] }]; window.__settings.videoBackPick = "main"; window.__settings.videoEdges = 0; window.__settings.videoPics = false; window.__settings.videoNames = false; window.__settings.videoCaptions = false; window.__settings.videoBox = false; window.__settings.videoInk = "#ffffff"; window.__settings.videoWordFill = "solid"; window.__settings.videoWords = "all"; window.__settings.videoWordShadow = false; window.__settings.videoTitleOn = false;`;
   {
@@ -7039,7 +7046,7 @@ if (section("animation editor")) {
     await wsSec(page, "Animations");
     await page.waitForTimeout(400);
     await page.selectOption("[data-af-animfrom]", "rise");
-    await page.click("[data-af-animmake]");
+    await press(page, "[data-af-animmake]");
     await page.waitForTimeout(600);
     const made = await page.evaluate(() => (window.__settings.videoAnimsOwn || [])[0]);
     check(made && /^u/.test(made.id) && made.name === "My rise" && made.inT.keys.length === 2, size.name + ": Make an animation copies Rise as your own (" + JSON.stringify(made && made.name) + ")");
@@ -7052,16 +7059,86 @@ if (section("animation editor")) {
       return n;
     });
     check(drawn > 20, size.name + ": the preview draws the sample words (" + drawn + " pixels)");
-    await page.click("[data-af-keyadd]");
+    // Simple: the card of the effect it was made from is picked in both
+    // sections, and Rise has no settings of its own.
+    const simple = await page.evaluate(() => ({ cin: document.querySelector('[data-af-animside="in"] [data-af-effect="rise"]').getAttribute("aria-pressed"), cout: document.querySelector('[data-af-animside="out"] [data-af-effect="rise"]').getAttribute("aria-pressed"), ctl: !!document.querySelector('[data-af-animside="in"] [data-af-effectctl]'), adv: !document.querySelector("[data-af-animadvanced]").closest(".af-sub").hidden }));
+    check(simple.cin === "true" && simple.cout === "true" && !simple.ctl && !simple.adv, size.name + ": simple by default: Rise is picked both ways, with no settings of its own and no timeline (" + JSON.stringify(simple) + ")");
+    const only = async (fx) => {
+      await press(page, '[data-af-animside="in"] [data-af-effect="' + fx + '"]');
+      await page.waitForTimeout(300);
+      return page.evaluate(() => {
+        const box = document.querySelector('[data-af-animside="in"] [data-af-effectctl]');
+        if (!box) return [];
+        return [...box.querySelectorAll("[data-af-reveal-num], [data-af-reveal-soft], [data-af-revealinvert], [data-af-revealshape], [data-af-effectshapes], .af-seg")].map((x) => x.getAttribute("data-af-reveal-num") || (x.hasAttribute("data-af-reveal-soft") ? "soft" : x.hasAttribute("data-af-revealinvert") ? "invert" : x.hasAttribute("data-af-revealshape") ? "shape" : x.hasAttribute("data-af-effectshapes") ? "shapes" : "direction"));
+      });
+    };
+    const slideCtl = await only("slide");
+    const wipeCtl = await only("wipe");
+    const irisCtl = await only("iris");
+    const shapeCtl = await only("shape");
+    check(slideCtl.join() === "direction" && wipeCtl.sort().join() === "direction,soft" && irisCtl.sort().join() === "cx,cy,soft" && ["shapes", "cx", "cy", "size", "soft", "invert"].every((x) => shapeCtl.includes(x)), size.name + ": each effect shows only its own settings (" + JSON.stringify({ slideCtl, wipeCtl, irisCtl, shapeCtl }) + ")");
+    const disabled = await page.evaluate(() => [...document.querySelectorAll("[data-af-animedit] button, [data-af-animedit] input, [data-af-animedit] select")].filter((x) => x.disabled && x.offsetParent).map((x) => x.textContent || x.name || x.type));
+    check(!disabled.length, size.name + ": no control in the editor is shown that cannot be changed (" + disabled.join(", ") + ")");
+    // The middle of a shape reveal is dragged on the preview.
+    await page.evaluate(() => document.querySelector("[data-af-animpreview]").scrollIntoView({ block: "center" }));
+    await page.waitForTimeout(100);
+    const box = await page.locator("[data-af-animpreview] canvas").boundingBox();
+    if (size.touch) await page.touchscreen.tap(box.x + box.width * 0.2, box.y + box.height * 0.32);
+    else await page.mouse.click(box.x + box.width * 0.2, box.y + box.height * 0.32);
+    await page.waitForTimeout(500);
+    const mid = await page.evaluate(() => window.__settings.videoAnimsOwn[0].inT.mask);
+    check(Math.abs(mid.cx - 0.2) < 0.03 && Math.abs(mid.cy - 1 / 3) < 0.03, size.name + ": a press on the preview moves the middle of the reveal, snapping to the thirds (" + JSON.stringify([mid.cx, mid.cy]) + ")");
+    // The timeline shows what the simple choices made, and turning it on
+    // and off changes nothing that is drawn.
+    const frame = () => page.evaluate(async () => {
+      const r = document.querySelector("[data-af-animscrub]");
+      r.value = "300";
+      r.dispatchEvent(new Event("input", { bubbles: true }));
+      await new Promise((x) => setTimeout(x, 100));
+      const c = document.querySelector("[data-af-animpreview] canvas");
+      return Array.from(c.getContext("2d").getImageData(0, 0, c.width, c.height).data).join(",");
+    });
+    const off = await frame();
+    await press(page, "[data-af-animtimeline]");
+    await page.waitForTimeout(500);
+    const on = await frame();
+    await press(page, "[data-af-animtimeline]");
+    await page.waitForTimeout(500);
+    const off2 = await frame();
+    check(off === on && on === off2, size.name + ": turning the timeline on and off leaves the animation the same");
+    await press(page, "[data-af-animtimeline]");
+    await page.waitForTimeout(500);
+    await press(page, '[data-af-animtrack] [data-af-reveal="iris"]').catch(() => {});
+    await press(page, "[data-af-keyadd]");
     await page.waitForTimeout(300);
     const keys = await page.evaluate(() => window.__settings.videoAnimsOwn[0].inT.keys.length);
-    check(keys === 3, size.name + ": Add a keyframe adds one (" + keys + ")");
-    await page.selectOption("[data-af-animmask]", "linear");
+    check(keys >= 1, size.name + ": the timeline adds a keyframe (" + keys + ")");
+    await press(page, '[data-af-animtrack] [data-af-reveal="linear"]');
     await page.waitForTimeout(300);
-    check(await page.evaluate(() => !!document.querySelector("[data-af-maskangle]") && window.__settings.videoAnimsOwn[0].inT.mask.type === "linear"), size.name + ": a straight wipe mask shows its angle box");
+    check(await page.evaluate(() => !!document.querySelector('[data-af-reveal-num="angle"]') && window.__settings.videoAnimsOwn[0].inT.mask.type === "linear"), size.name + ": on the timeline, a wipe reveal shows its angle box");
+    await press(page, "[data-af-animtimeline]");
+    await page.waitForTimeout(400);
+    const kept = await page.evaluate(() => document.querySelector('[data-af-animside="in"]').textContent);
+    check(/Custom timing is kept/.test(kept), size.name + ": with the timeline off, custom timing is kept and the panel says so");
+    await press(page, "[data-af-animtimeline]");
+    await page.waitForTimeout(300);
     await page.selectOption("[data-af-animeasepick]", "linear");
     await page.waitForTimeout(600);
     check(await page.evaluate(() => JSON.stringify(window.__settings.videoAnimsOwn[0].ease) === "[0,0,1,1]"), size.name + ": an easing preset sets the curve");
+    if (process.env.UI_ANIM_SHOTS) {
+      await press(page, "[data-af-animtimeline]");
+      await page.waitForTimeout(400);
+      await press(page, '[data-af-animside="in"] [data-af-effect="slide"]');
+      await page.waitForTimeout(400);
+      await page.evaluate(() => document.querySelector("[data-af-animedit]").scrollIntoView({ block: "start" }));
+      await page.waitForTimeout(300);
+      await page.screenshot({ path: process.env.UI_ANIM_SHOTS + "/" + size.name + "-simple.png" });
+      await press(page, "[data-af-animtimeline]");
+      await page.waitForTimeout(500);
+      await page.evaluate(() => document.querySelector("[data-af-animadvanced]").scrollIntoView({ block: "start" }));
+      await page.waitForTimeout(300);
+      await page.screenshot({ path: process.env.UI_ANIM_SHOTS + "/" + size.name + "-timeline.png" });
+    }
     const inPlaces = await page.evaluate(() => [...document.querySelectorAll('[data-af-animplace="lines"] option')].some((o) => o.textContent === "My rise"));
     check(inPlaces, size.name + ": your animation is offered in the places");
     const m = await page.evaluate(MEASURE, size.touch);
@@ -7078,14 +7155,14 @@ if (section("animation editor")) {
     const body = shared ? JSON.parse(shared) : {};
     check(body.kind === "animation" && body.version && body.animations && body.animations[0].name === "My rise" && !("id" in body.animations[0]), size.name + ": Share saves a file with the animation, its version, and no id");
     await page.evaluate(() => (window.__asked = 0));
-    await page.click('[data-af-animact="delete"]');
+    await press(page, '[data-af-animact="delete"]');
     await page.waitForTimeout(700);
     const gone = await page.evaluate(() => ({ asked: window.__asked, text: window.__askedText, n: window.__settings.videoAnimsOwn.length, place: window.__settings.videoAnims.lines }));
     check(gone.asked === 1 && /Lines/.test(gone.text) && gone.n === 0 && !gone.place, size.name + ": Delete asks first, names the places that use it, and they go back to Default");
     await page.evaluate((j) => (window.__pickJson = j), shared);
-    await page.click("[data-af-animimport]");
+    await press(page, "[data-af-animimport]");
     await page.waitForTimeout(600);
-    await page.click("[data-af-animimport]");
+    await press(page, "[data-af-animimport]");
     await page.waitForTimeout(600);
     const back = await page.evaluate(() => window.__settings.videoAnimsOwn.map((x) => x.name));
     check(back.length === 2 && back[0] === "My rise" && back[1] === "My rise (copy)", size.name + ": Add from a file adds it back, and a second one with the same name is a copy (" + back.join(", ") + ")");
@@ -7151,6 +7228,156 @@ if (section("calm glitches")) {
   check(["Color split", "Slice shift", "Scanline wobble", "Pixel shuffle", "Signal lost"].every((n) => names.includes(n)), "the calm glitches are offered for between lines");
   check(!errors.length, "no page errors. " + errors.slice(0, 2).join(" | "));
   await context.close();
+}
+
+if (section("reveal")) {
+  console.log("Reveal: the middle moves the opening, the soft edge widens the blend, turning it the other way swaps shown and hidden; the editor preview draws nothing but the layer; its slider fills to the knob");
+  const PLAIN = `window.__settings.videoBacks = [{ id: "main", name: "Main", kind: "color", color: "#808080", fill: "solid", stops: [], dir: "down", dim: 40, blur: 0, shapes: [], use: "match", moods: [], places: [] }]; window.__settings.videoBackPick = "main"; window.__settings.videoEdges = 0; window.__settings.videoTitleOn = false; window.__settings.videoPics = false; window.__settings.videoNames = false; window.__settings.videoCaptions = false; window.__settings.videoInk = "#808080";`;
+  const size = SIZES.find((x) => !x.touch) || SIZES[0];
+  // The opening, held part open with from and to the same, so every frame
+  // of it is the same.
+  const shot = async (mask) => {
+    const own = [{ id: "u1", name: "Held", kind: "any", secs: 3, delay: 0, ease: [0, 0, 1, 1], inT: { keys: [], mask: Object.assign({ angle: 0, feather: 0, from: 30, to: 30 }, mask) }, outT: { keys: [], mask: { type: "none", angle: 0, feather: 0 } }, overlap: 1, stagger: 0, anchor: "center", reveal: "" }];
+    const o = await open(THEMES[0], size, 1, PLAIN + `window.__settings.videoAnimsOwn = ${JSON.stringify(own)}; window.__settings.videoAnims = { open: { id: "u1", secs: 3, delay: 0 } };`);
+    await openWs(o.page);
+    await o.page.waitForTimeout(600);
+    const f = await o.page.evaluate(async () => {
+      const r = document.querySelector("[data-af-scrub] input");
+      r.step = "any";
+      r.value = "1.5";
+      r.dispatchEvent(new Event("input", { bubbles: true }));
+      await new Promise((x) => setTimeout(x, 160));
+      await new Promise((x) => requestAnimationFrame(() => requestAnimationFrame(x)));
+      const c = document.querySelector("[data-af-videopreview]");
+      const d = c.getContext("2d").getImageData(0, 0, c.width, c.height).data;
+      let soft = 0;
+      for (let i = 0; i < d.length; i += 16) if (d[i] > 20 && d[i] < 110) soft++;
+      const at = (fx, fy) => d[(Math.round(fy * (c.height - 1)) * c.width + Math.round(fx * (c.width - 1))) * 4];
+      return { left: at(0.2, 0.5), right: at(0.8, 0.5), soft };
+    });
+    await o.context.close();
+    return f;
+  };
+  const l = await shot({ type: "iris", cx: 0.2, cy: 0.5 });
+  const r = await shot({ type: "iris", cx: 0.8, cy: 0.5 });
+  check(l.left > 100 && l.right < 20 && r.right > 100 && r.left < 20, "the middle moves the opening (" + JSON.stringify([l, r].map((x) => [x.left, x.right])) + ")");
+  const hard = await shot({ type: "box", cx: 0.5, cy: 0.5, feather: 0 });
+  const softer = await shot({ type: "box", cx: 0.5, cy: 0.5, feather: 60 });
+  check(softer.soft > hard.soft * 3 + 50, "the soft edge widens the blend (" + hard.soft + " then " + softer.soft + " pixels part way)");
+  const inv = await shot({ type: "iris", cx: 0.2, cy: 0.5, invert: true });
+  check(inv.left < 20 && inv.right > 100, "Turn the other way swaps what is shown and hidden (" + JSON.stringify([inv.left, inv.right]) + ")");
+  const heart = await shot({ type: "shape", shape: "heart", cx: 0.5, cy: 0.5 });
+  check(heart.left < 20 && heart.right < 20, "a heart reveal keeps the sides hidden while it is part open");
+  // The picture for the docs: a wipe and an iris at four moments, drawn by
+  // the editor's own preview.
+  if (process.env.UI_REVEAL_PIC) {
+    const { context, page } = await open(THEMES[0], size, 1);
+    await openWs(page);
+    await wsSec(page, "Animations");
+    await page.waitForTimeout(300);
+    const png = await page.evaluate(async () => {
+      document.querySelector("[data-af-animmake]").click();
+      await new Promise((x) => setTimeout(x, 400));
+      const out = document.createElement("canvas");
+      out.width = 4 * 330 + 10; out.height = 2 * 220 + 10;
+      const og = out.getContext("2d");
+      og.fillStyle = "#15121c"; og.fillRect(0, 0, out.width, out.height);
+      const scrub = document.querySelector("[data-af-animscrub]");
+      let row = 0;
+      for (const fx of ["wipe", "iris"]) {
+        document.querySelector('[data-af-animside="in"] [data-af-effect="' + fx + '"]').click();
+        await new Promise((x) => setTimeout(x, 200));
+        const play = document.querySelector("[data-af-animplay]");
+        if (/Pause/.test(play.textContent)) play.click();
+        let col = 0;
+        for (const v of [60, 110, 160, 230]) {
+          scrub.value = String(v); scrub.dispatchEvent(new Event("input", { bubbles: true }));
+          await new Promise((x) => setTimeout(x, 60));
+          const c = document.querySelector("[data-af-animpreview] canvas");
+          og.drawImage(c, 10 + col * 330, 10 + row * 220, 320, 180);
+          og.fillStyle = "#d8d4e4"; og.font = "16px system-ui, sans-serif";
+          og.fillText((fx === "wipe" ? "Wipe" : "Iris") + ", " + ["a little", "a third", "two thirds", "all"][col] + " of the way", 10 + col * 330, 10 + row * 220 + 202);
+          col++;
+        }
+        row++;
+      }
+      return out.toDataURL("image/png").split(",")[1];
+    });
+    (await import("node:fs")).writeFileSync(process.env.UI_REVEAL_PIC, Buffer.from(png, "base64"));
+    await context.close();
+  }
+  // The editor preview: every reveal, at several moments, draws only inside
+  // the words' own box.
+  for (const zoom of [1, 1.25, 0.85]) {
+    const { context, page, errors } = await open(THEMES[0], size, zoom, scale(zoom) + ";");
+    await openWs(page);
+    await wsSec(page, "Animations");
+    await page.waitForTimeout(300);
+    await page.evaluate(() => { document.querySelector("[data-af-animfrom]").value = "fade"; document.querySelector("[data-af-animfrom]").dispatchEvent(new Event("change", { bubbles: true })); });
+    await page.evaluate(() => document.querySelector("[data-af-animmake]").click());
+    await page.waitForTimeout(500);
+    const outside = await page.evaluate(async () => {
+      const c = document.querySelector("[data-af-animpreview] canvas");
+      const g = c.getContext("2d");
+      const bg = [32, 36, 58];
+      const scrub = document.querySelector("[data-af-animscrub]");
+      const read = () => g.getImageData(0, 0, c.width, c.height).data;
+      // The box of the words at rest.
+      scrub.value = "450"; scrub.dispatchEvent(new Event("input", { bubbles: true }));
+      await new Promise((x) => setTimeout(x, 60));
+      let d = read();
+      let x0 = c.width, x1 = 0, y0 = c.height, y1 = 0;
+      for (let y = 0; y < c.height; y++) for (let x = 0; x < c.width; x++) { const i = (y * c.width + x) * 4; if (Math.abs(d[i] - bg[0]) + Math.abs(d[i + 1] - bg[1]) + Math.abs(d[i + 2] - bg[2]) > 30) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y); } }
+      let worst = 0;
+      for (const kind of ["iris", "box", "diamond", "clock", "shape"]) {
+        const card = document.querySelector('[data-af-animside="in"] [data-af-effect="shape"]');
+        card.click();
+        await new Promise((x) => setTimeout(x, 60));
+        const b = document.querySelector('[data-af-animside="in"] [data-af-effectshapes] [data-af-reveal="' + kind + '"]');
+        if (b) b.click();
+        await new Promise((x) => setTimeout(x, 60));
+        for (const v of [60, 120, 200, 300]) {
+          scrub.value = String(v); scrub.dispatchEvent(new Event("input", { bubbles: true }));
+          await new Promise((x) => setTimeout(x, 40));
+          d = read();
+          for (let y = 0; y < c.height; y++) for (let x = 0; x < c.width; x++) {
+            if (x >= x0 - 1 && x <= x1 + 1 && y >= y0 - 1 && y <= y1 + 1) continue;
+            const i = (y * c.width + x) * 4;
+            if (Math.abs(d[i] - bg[0]) + Math.abs(d[i + 1] - bg[1]) + Math.abs(d[i + 2] - bg[2]) > 30) worst++;
+          }
+        }
+      }
+      return worst;
+    });
+    check(outside === 0, "zoom " + zoom + ": the editor preview draws nothing outside the words, with any reveal (" + outside + " pixels)");
+    // The slider fills to its knob at 10%, 50% and 90%, read from a
+    // screenshot.
+    const gaps = [];
+    for (const v of [100, 500, 900]) {
+      await page.evaluate((v) => { const r = document.querySelector("[data-af-animscrub]"); r.value = String(v); r.dispatchEvent(new Event("input", { bubbles: true })); r.scrollIntoView({ block: "center" }); }, v);
+      await page.waitForTimeout(150);
+      const el = await page.$("[data-af-animscrub]");
+      const png = (await el.screenshot()).toString("base64");
+      const gap = await page.evaluate(async ({ png, v }) => {
+        const im = new Image(); im.src = "data:image/png;base64," + png; await im.decode();
+        const c = document.createElement("canvas"); c.width = im.width; c.height = im.height;
+        const g = c.getContext("2d"); g.drawImage(im, 0, 0);
+        const y = Math.round(im.height / 2);
+        const d = g.getImageData(0, y, im.width, 1).data;
+        // The accent color runs from the left to the knob with no dark gap.
+        const lit = (x) => d[x * 4] > 150 && d[x * 4 + 2] > 150;
+        let knob = 0;
+        for (let x = 0; x < im.width; x++) if (lit(x)) knob = x;
+        let dark = 0;
+        for (let x = 2; x < knob - 2; x++) if (!lit(x)) dark++;
+        return { dark, knob, w: im.width };
+      }, { png, v });
+      gaps.push(gap.dark);
+    }
+    check(gaps.every((g) => g === 0), "zoom " + zoom + ": the preview slider fills to its knob at 10%, 50% and 90% (" + gaps.join(", ") + " dark pixels)");
+    check(!errors.length, "zoom " + zoom + ": no page errors. " + errors.slice(0, 2).join(" | "));
+    await context.close();
+  }
 }
 
 if (section("stickers")) {
