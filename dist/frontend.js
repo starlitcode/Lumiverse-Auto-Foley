@@ -9993,6 +9993,22 @@ export function setup(ctx, overrides) {
                 return;
             if (savedPlaying === e.key)
                 stopSavedPlay();
+            // The message's player closes now. If it is the message playing, it
+            // stops, since its audio is going.
+            const mid = String(e.messageId || '');
+            if (mid) {
+                if (show && show.messageId === mid)
+                    stop('Its saved audio was deleted, so it stopped.');
+                playerDropping.add(mid);
+                fillPlayers();
+            }
+            const back = () => {
+                if (!mid)
+                    return;
+                playerDropping.delete(mid);
+                fillPlayers();
+                paintPlayers();
+            };
             let sigs = [];
             try {
                 const r = await rpc({ type: 'kept_script', key: e.key }, 15000);
@@ -10004,6 +10020,7 @@ export function setup(ctx, overrides) {
                 const r = await rpc({ type: 'kept_drop', key: e.key, sigs }, 30000);
                 if (r && !r.ok && r.error) {
                     del.textContent = 'Delete';
+                    back();
                     say(String(r.error));
                     return;
                 }
@@ -10011,10 +10028,13 @@ export function setup(ctx, overrides) {
                     throw new Error('no');
                 await leave(live());
                 savedForget([e.key]);
+                if (mid)
+                    playerDropping.delete(mid);
                 log('A saved script and its saved audio were deleted.', '', 'setting');
             }
             catch (_) {
                 del.textContent = 'Delete';
+                back();
                 say('It could not be deleted: the backend did not answer.');
             }
         }, 'af-danger');
@@ -10040,8 +10060,11 @@ export function setup(ctx, overrides) {
     // The messages with a saved script, from the account, and the ones
     // performed since the panel loaded.
     const playerIds = new Set();
+    // Messages whose saved audio is being deleted. Their players close at the
+    // press, rather than once the backend has deleted every line.
+    const playerDropping = new Set();
     function playerWanted(id) {
-        if (!onHere() || !S.messagePlayer || !id)
+        if (!onHere() || !S.messagePlayer || !id || playerDropping.has(id))
             return false;
         return playerIds.has(id) || (!!show && show.messageId === id) || busyMessage === id;
     }

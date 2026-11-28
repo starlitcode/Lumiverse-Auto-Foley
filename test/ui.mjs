@@ -257,7 +257,8 @@ function answer(msg) {
     case 'direct_stop': (window.__stops = window.__stops || []).push(Date.now()); return;
     case 'music_for': (window.__musicAsked = window.__musicAsked || []).push(msg.mood); return reply({ type: 'music', id: 'mu-' + msg.mood, url: 'https://example.invalid/' + msg.mood + '.mp3', name: 'A ' + msg.mood + ' track' });
     case 'sound_edit': (window.__soundEdits = window.__soundEdits || []).push(msg); { const e = (window.__sounds || []).find((x) => x.id === msg.id); if (e && typeof msg.mood === 'string') { if (msg.mood) e.mood = msg.mood; else delete e.mood; } } return reply({ type: 'sounds', sounds: window.__sounds });
-    case 'kept_drop': (window.__dropped = window.__dropped || []).push(msg); window.__keptList = (window.__keptList || []).filter((e) => e.key !== msg.key); return reply({ type: 'kept_dropped', ok: true, clips: (msg.sigs || []).length });
+    // window.__dropMs: a backend that takes that long to delete.
+    case 'kept_drop': { const done = () => { (window.__dropped = window.__dropped || []).push(msg); window.__keptList = (window.__keptList || []).filter((e) => e.key !== msg.key); reply({ type: 'kept_dropped', ok: true, clips: (msg.sigs || []).length }); }; return window.__dropMs ? setTimeout(done, window.__dropMs) : done(); }
     default: return;
   }
 }
@@ -3613,6 +3614,56 @@ if (section("saved in the drawer")) {
     await openWs(page);
     await page.waitForTimeout(600);
     check((await page.locator('#drawer [data-af-saved-row], #drawer [data-af-saved]').count()) === 0, where + ": with the Studio open, the drawer holds no second list");
+    check(!errors.length, where + ": no page errors. " + errors.slice(0, 2).join(" | "));
+    await context.close();
+  }
+}
+
+if (section("player on delete")) {
+  console.log("Deleting a message's saved audio closes its player at once, while the backend deletes it");
+  for (const size of SIZES) {
+    const where = size.name;
+    const { context, page, errors } = await open(THEMES[0], size);
+    await page.evaluate(() => {
+      const msg = document.querySelector('[data-message-id="m1"]');
+      const p = msg.querySelector("p");
+      const content = document.createElement("div");
+      content.setAttribute("data-component", "MessageContent");
+      p.replaceWith(content);
+      content.appendChild(p);
+      const mount = document.createElement("span");
+      mount.setAttribute("data-spindle-mount", "message_body_after");
+      mount.setAttribute("data-spindle-scope", "message:m1:minimal:body-after");
+      mount.style.display = "contents";
+      content.after(mount);
+      window.__keptList = [{ key: "k1", messageId: "m1", chatId: "chat1", author: "Ysolde", keptAt: Date.UTC(2026, 10, 20, 15), lines: 3, first: "The quay was empty but for the ferry." }];
+      window.__wav = [0.05, 0.4];
+      window.__clipMs = 4000;
+      window.__dropMs = 2000;
+    });
+    await pressMessage(page);
+    await page.waitForTimeout(1500);
+    check(await page.evaluate(() => !!document.querySelector("[data-af-player][data-open]")), where + ": the message has its player while it plays");
+    await page.click('.af-tab[data-tab="studio"]');
+    await page.waitForTimeout(700);
+    const row = page.locator('#drawer [data-af-saved-row]');
+    await row.locator("[data-af-savedmore-btn]").click();
+    await page.waitForTimeout(400);
+    await row.locator(".af-btn", { hasText: /^Delete$/ }).click();
+    const frames = await page.evaluate(async () => {
+      const out = [];
+      for (let k = 0; k < 40; k++) {
+        await new Promise((r) => requestAnimationFrame(r));
+        const b = document.querySelector("[data-af-player]");
+        out.push(b ? Math.round(b.getBoundingClientRect().height) : -1);
+      }
+      return out;
+    });
+    const top = Math.max(...frames.slice(0, 2));
+    check(frames.some((h) => h >= 0 && h < top - 4) && frames[frames.length - 1] === -1, where + ": the player closes over several frames, before the backend has finished (" + frames.slice(0, 24).join(",") + ")");
+    check(await page.evaluate(() => !(window.__Audio.all || []).some((a) => !a.paused)), where + ": the message stops, since its audio is going");
+    await page.waitForTimeout(2500);
+    check(await page.evaluate(() => (window.__dropped || []).some((d) => d.key === "k1") && !document.querySelector("[data-af-player]")), where + ": once deleted, it stays gone");
     check(!errors.length, where + ": no page errors. " + errors.slice(0, 2).join(" | "));
     await context.close();
   }

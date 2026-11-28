@@ -9725,6 +9725,20 @@ export function setup(ctx: Ctx, overrides?: any) {
     const del = button('Delete', async () => {
       if (!(await askSure('Delete this saved script', 'Its saved audio is deleted too. There is no undo.', 'Delete', true))) return;
       if (savedPlaying === e.key) stopSavedPlay();
+      // The message's player closes now. If it is the message playing, it
+      // stops, since its audio is going.
+      const mid = String(e.messageId || '');
+      if (mid) {
+        if (show && show.messageId === mid) stop('Its saved audio was deleted, so it stopped.');
+        playerDropping.add(mid);
+        fillPlayers();
+      }
+      const back = () => {
+        if (!mid) return;
+        playerDropping.delete(mid);
+        fillPlayers();
+        paintPlayers();
+      };
       let sigs: string[] = [];
       try {
         const r = await rpc({ type: 'kept_script', key: e.key }, 15000);
@@ -9734,15 +9748,18 @@ export function setup(ctx: Ctx, overrides?: any) {
         const r = await rpc({ type: 'kept_drop', key: e.key, sigs }, 30000);
         if (r && !r.ok && r.error) {
           del.textContent = 'Delete';
+          back();
           say(String(r.error));
           return;
         }
         if (!r || !r.ok) throw new Error('no');
         await leave(live());
         savedForget([e.key]);
+        if (mid) playerDropping.delete(mid);
         log('A saved script and its saved audio were deleted.', '', 'setting');
       } catch (_) {
         del.textContent = 'Delete';
+        back();
         say('It could not be deleted: the backend did not answer.');
       }
     }, 'af-danger');
@@ -9769,8 +9786,11 @@ export function setup(ctx: Ctx, overrides?: any) {
   // The messages with a saved script, from the account, and the ones
   // performed since the panel loaded.
   const playerIds = new Set<string>();
+  // Messages whose saved audio is being deleted. Their players close at the
+  // press, rather than once the backend has deleted every line.
+  const playerDropping = new Set<string>();
   function playerWanted(id: string): boolean {
-    if (!onHere() || !S.messagePlayer || !id) return false;
+    if (!onHere() || !S.messagePlayer || !id || playerDropping.has(id)) return false;
     return playerIds.has(id) || (!!show && show.messageId === id) || busyMessage === id;
   }
 
