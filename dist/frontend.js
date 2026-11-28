@@ -664,7 +664,7 @@ function phraseEnd(word) {
     const w = String(word || '').replace(/["”’'*_)\]]+$/, '');
     if (/[.!?…]$/.test(w))
         return 2;
-    if (/[,;:—–-]$/.test(w) || /\)["”’']*$/.test(String(word || '')))
+    if (/[,;:\u2014\u2013-]$/.test(w) || /\)["”’']*$/.test(String(word || '')))
         return 1;
     return 0;
 }
