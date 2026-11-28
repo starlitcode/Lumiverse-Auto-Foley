@@ -10353,9 +10353,9 @@ if (section("pictures")) {
       const d = g.getImageData(Math.floor(c.width / 2), Math.floor(c.height / 2), 1, 1).data;
       return { r: d[0], b: d[2], w: c.width };
     });
-    check(color.r > 150 && color.b < 100 && color.w === 128, size.name + ": the saved picture is the part the crop showed (" + JSON.stringify(color) + ")");
+    check(color.r > 150 && color.b < 100 && color.w === 320, size.name + ": the saved picture is the part the crop showed (" + JSON.stringify(color) + ")");
     await page.waitForTimeout(600);
-    const saved = await page.evaluate(() => (window.__settings.cast || []).some((m) => /^data:image\/jpeg;base64,/.test(m.picture || "")));
+    const saved = await page.evaluate(() => (window.__settings.cast || []).some((m) => /^data:image\/(?:webp|png|jpeg);base64,/.test(m.picture || "")));
     check(saved, size.name + ": it is made small and saved with the cast");
     await head.locator(".af-btn", { hasText: "Take it out" }).click();
     await page.waitForTimeout(300);

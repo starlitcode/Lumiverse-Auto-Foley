@@ -15748,6 +15748,9 @@ export function setup(ctx, overrides) {
         box.setAttribute('role', 'switch');
         box.checked = on;
         const row = labelRow(label, help, undefined, box);
+        // A row of its own, so its "?" opens its description next to it rather
+        // than at the card it sits in.
+        row.setAttribute('data-af-row', 'switch-' + label.toLowerCase().replace(/[^a-z0-9]+/g, '-'));
         const lab = row.querySelector('.af-lab');
         lab.id = id + '-name';
         box.setAttribute('aria-labelledby', lab.id);
