@@ -298,6 +298,9 @@ window.__fetch = async (url, init) => {
   if (u.includes('/characters/c')) return json({ id: 'c', name: 'Ysolde Marrow-Kestrel of the Lower Quays' });
   if (u.includes('/settings/voiceSettings')) return json({ key: 'voiceSettings', value: { ttsEnabled: true, ttsAutoPlay: true, ttsConnectionId: 't1' } });
   if (u.includes('/messages')) return json({ data: [{ id: 'm1', name: 'Ysolde Marrow-Kestrel of the Lower Quays', is_user: false, content: 'text', swipe_id: 0 }].concat(window.__moreMessages || []), total: 1 + (window.__moreMessages || []).length });
+  // window.__quota429: that many lines come back with Google's rate limit
+  // answer, as Lumiverse passes it on.
+  if (u.includes('/tts/synthesize') && window.__quota429) { window.__quota429--; window.__limitAt = (window.__limitAt || []).concat(Date.now()); return new Response(JSON.stringify({ error: 'Google AI Studio TTS tts synthesize failed (429): You exceeded your current quota, please check your plan and billing details. Please retry in 1.5s.' }), { status: 429, headers: { 'Content-Type': 'application/json' } }); }
   if (u.includes('/tts/synthesize') && window.__emptyOnce) { window.__emptyOnce--; window.__emptyAt = (window.__emptyAt || []).concat(Date.now()); return new Response(JSON.stringify({ error: 'Google AI Studio tts synthesize failed: No audio payload in Gemini TTS response' }), { status: 502, headers: { 'Content-Type': 'application/json' } }); }
   if (u.includes('/tts/synthesize') && window.__synthMs) await new Promise((r) => setTimeout(r, window.__synthMs));
   if (u.includes('/tts/synthesize') && window.__bigClip) { window.__synth = (window.__synth || []).concat(JSON.parse(init.body)); const b = new Uint8Array(window.__bigClip); for (let k = 0; k < b.length; k++) b[k] = k % 251; return new Response(new Blob([b], { type: 'audio/wav' }), { status: 200 }); }
@@ -3667,6 +3670,26 @@ if (section("player on delete")) {
     check(!errors.length, where + ": no page errors. " + errors.slice(0, 2).join(" | "));
     await context.close();
   }
+}
+
+if (section("rate limit")) {
+  console.log("A rate limit is waited out, with every line waiting, and is never called being out of credits");
+  const { context, page, errors } = await open(THEMES[0], SIZES[1], 1, () => {
+    window.__ttsList = [{ id: "t1", name: "Gemini here", provider: "google_tts", model: "gemini-3.8-flash-tts", is_default: true, has_api_key: true }];
+    window.__settings.ttsConnection = "t1";
+  });
+  await page.evaluate(() => { window.__clipMs = 200; window.__synth = []; window.__synthAt = []; window.__quota429 = 2; });
+  await toTab(page, "stage");
+  await page.waitForTimeout(150);
+  await pressMessage(page);
+  await page.waitForTimeout(9000);
+  const got = await page.evaluate(() => ({ limits: window.__limitAt || [], ok: window.__synthAt || [], played: window.__played || 0 }));
+  const said = await page.evaluate(() => Array.from(document.querySelectorAll(".af-log-line")).map((n) => n.textContent).join(" | "));
+  check(got.ok.length >= 3 && got.played >= 3, "after waiting, every line is spoken (" + got.ok.length + " spoken, " + got.played + " played)");
+  check(/reached its limit on lines in a minute or a day/.test(said) && !/out of credits/.test(said), "the Log calls it a limit, not being out of credits (" + said.slice(0, 300) + ")");
+  check(got.ok.length && got.limits.length && got.ok[0] - got.limits[0] >= 1400, "after the first limit answer, no line asks again until the named wait is over (" + (got.ok[0] - got.limits[0]) + " ms)");
+  check(!errors.length, "no page errors. " + errors.slice(0, 2).join(" | "));
+  await context.close();
 }
 
 if (section("still working")) {

@@ -284,6 +284,15 @@ Auto Foley says so in the Settings tab, the Director tab, the Cast tab and **Che
 - When sounds are made **In the voice** and the engine cannot make them. Its sounds become sound effects.
 - When your account has no TTS connection Auto Foley can use. The message says whether Lumiverse found no TTS connection at all, or names the ones it found and their service.
 
+### When a service says a limit was reached
+
+A voice service can limit how many lines your account asks for in a minute or in a day. Google calls this a quota, and answers with error 429. It is not about the money in your account.
+
+- Auto Foley waits for the time the service names, up to about a minute, then asks again. Every other line waits too.
+- **Wait out a provider that will not take the call**, on the Settings tab, says how many times it waits. It is 2 by default.
+- If the limit is still there after that, the Log says the limit may be for the day. Gemini's daily limit resets at midnight Pacific time.
+- An answer that names credits, a balance or a payment is read as an account that is out of credits. Auto Foley says so at once and does not wait.
+
 ### When a line comes back with too little voice
 
 A voice service can now and then send back a line with little or no voice in it, so the line is skipped or cut short. Auto Foley checks each new line:

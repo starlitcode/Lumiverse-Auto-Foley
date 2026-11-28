@@ -1033,6 +1033,13 @@ async function hostTrouble(res: Response, what: string): Promise<string> {
   return (await readTrouble(res, what)).why;
 }
 
+// A service out of money, as against one at its rate limit. "Quota" alone
+// is a rate limit: Google answers "You exceeded your current quota" (429,
+// RESOURCE_EXHAUSTED) for its requests per minute and per day, whatever is
+// in the account.
+const OUT_OF_CREDITS = /\bcredits?\b|insufficient (?:balance|funds)|payment required|\b402\b|balance (?:is )?too low/i;
+const RATE_LIMITED = /\b429\b|rate.?limit|too many requests|quota|resource.?exhausted/i;
+
 // The words for a failed call, and the same failure in the shape errorKind
 // reads, "failed (status): detail", to decide whether waiting can fix it.
 async function readTrouble(res: Response, what: string, who = 'the voice service'): Promise<{ why: string; raw: string }> {
@@ -1052,7 +1059,9 @@ async function readTrouble(res: Response, what: string, who = 'the voice service
   if (res.status === 401) return wrap(what + ' failed because Lumiverse says you are signed out. Reload the page and sign in.' + tail);
   if (res.status === 404) return wrap(what + ' failed because Lumiverse could not find it.' + tail);
   if (/No API key/i.test(said)) return wrap(what + ' failed because your connection to ' + who + ' in Lumiverse has no key saved.' + tail);
-  if (/quota|credit/i.test(said)) return wrap(what + ' failed because your account with ' + who + ' is out of credits.' + tail);
+  if (OUT_OF_CREDITS.test(said)) return wrap(what + ' failed because your account with ' + who + ' is out of credits.' + tail);
+  if (res.status === 429 || RATE_LIMITED.test(said))
+    return wrap(what + ' failed because ' + who + ' has a limit on how many lines your account can ask for in a minute or a day, and it was reached. This is not about the money in your account.' + tail);
   if (/401|invalid.*key|unauthori/i.test(said)) return wrap(what + ' failed because ' + who + ' refused the key saved on your connection.' + tail);
   if (/429|rate|busy|too many/i.test(said)) return wrap(what + ' failed because ' + who + ' is busy. Try again in a moment.' + tail);
   if (/ECONNREFUSED|fetch failed|Unable to connect|connect(ion)? refused|unreachable|timed? ?out/i.test(said))
@@ -3608,6 +3617,11 @@ export function setup(ctx: Ctx, overrides?: any) {
     for (let wait = 0; ; wait++) {
       let raw = '';
       let why = '';
+      // While another line waits out a rate limit, this one waits too.
+      if (Date.now() < rateUntil) {
+        const went = await pause(rateUntil - Date.now(), signal);
+        if (!went) return { why: what + ' was stopped.' };
+      }
       try {
         const res = await fetchImpl(API + '/tts/synthesize', {
           method: 'POST',
@@ -3657,24 +3671,38 @@ export function setup(ctx: Ctx, overrides?: any) {
         why = netTrouble(e, what);
         raw = 'network error';
       }
-      // An account out of credits reads like a busy one to the shared rules,
-      // since some services word it as a quota. It is said at once.
-      const kind = /quota|credits?|exceeds your/i.test(raw) ? 'hard' : raw === 'empty' ? 'wait' : errorKind(raw);
-      if (kind !== 'wait' || wait >= (Number(S.rateWaits) || 0)) return { why };
+      // An account out of credits is said at once, since waiting cannot
+      // change it. A rate limit is waited out, as a busy service is.
+      const limited = !OUT_OF_CREDITS.test(raw) && RATE_LIMITED.test(raw);
+      const kind = OUT_OF_CREDITS.test(raw) ? 'hard' : raw === 'empty' || limited ? 'wait' : errorKind(raw);
+      if (kind !== 'wait' || wait >= (Number(S.rateWaits) || 0)) {
+        if (limited && kind === 'wait')
+          return { why: why + ' If it keeps happening, the limit may be for the day.' + (/gemini/i.test(who) ? ' Gemini\u2019s resets at midnight Pacific time.' : '') };
+        return { why };
+      }
       // An answer with no audio in it, which Gemini's preview models send now
       // and then, is asked for again at once rather than waited out as a busy
       // service.
       const noAudio = raw === 'empty' || /no audio/i.test(raw);
-      const ms = noAudio ? 1500 : Math.min(30000, rateWait(wait + 1, raw));
+      // A limit per minute can take most of a minute to clear, and a wait
+      // the service names is followed.
+      const ms = noAudio ? 1500 : Math.min(limited ? 65000 : 30000, rateWait(wait + 1, raw));
+      // The other lines being made wait as well, rather than meet the same
+      // limit again.
+      if (limited) rateUntil = Math.max(rateUntil, Date.now() + ms);
       if (onWait) onWait(ms, wait + 1);
       log(
-        who.charAt(0).toUpperCase() + who.slice(1) + (noAudio ? ' sent back no audio' : ' is busy') + ' for line ' + (line.i + 1) + '. Trying again in ' + Math.max(1, Math.round(ms / 1000)) + ' s (wait ' + (wait + 1) + ' of ' + S.rateWaits + ').',
+        who.charAt(0).toUpperCase() + who.slice(1) + (noAudio ? ' sent back no audio' : limited ? ' reached its limit on lines in a minute or a day' : ' is busy') + ' for line ' + (line.i + 1) + '. Trying again in ' + Math.max(1, Math.round(ms / 1000)) + ' s (wait ' + (wait + 1) + ' of ' + S.rateWaits + ').',
       );
       const went = await pause(ms, signal);
       if (onWait) onWait(0, 0);
       if (!went) return { why: what + ' was stopped.' };
     }
   }
+
+  // Until when the voice service is being waited out for its rate limit.
+  // Every line waits until then before it asks.
+  let rateUntil = 0;
 
   // The sounds already said to have nothing to play.
   const soundMissSaid = new Set<string>();
