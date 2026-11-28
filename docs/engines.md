@@ -170,7 +170,7 @@ Chatterbox runs on your own computer, through a server such as Chatterbox-TTS-Se
 - Chatterbox-Turbo knows nine tags: `[clear throat]`, `[sigh]`, `[shush]`, `[cough]`, `[groan]`, `[sniff]`, `[gasp]`, `[chuckle]` and `[laugh]`. It reads English only.
 - Chatterbox-Multilingual takes no tags, so Auto Foley does not use it. A connection with "multilingual" in its name is taken to run it.
 - OpenVox can run Chatterbox Turbo too. See [OmniVoice, through OpenVox](#omnivoice-through-openvox).
-- The server makes WAV by default. Lumiverse asks an OpenAI TTS connection for MP3, which the server then makes from the WAV. So Auto Foley asks for WAV.
+- The server makes WAV by default. Lumiverse asks an OpenAI TTS connection for MP3, which the server then makes from the WAV. So Auto Foley asks for WAV, on an OpenAI TTS connection and on **Chatterbox server (direct)**.
 
 ### OmniVoice, through OpenVox
 

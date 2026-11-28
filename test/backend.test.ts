@@ -991,7 +991,7 @@ describe("more settings and Chatterbox, direct", () => {
     const said = (await h.ask({ type: "cbx_speak", text: "[sigh] Fine.", voice: "c:pell.mp3", params: { exaggeration: 0.9, speed: 1.4, seed: 7 } })).find((m) => m.type === "cbx_audio");
     expect(said.base64).toBe(mp3);
     const sent = JSON.parse(h.calls.cors.find((c) => c.url.endsWith("/tts")).init.body);
-    expect(sent).toMatchObject({ text: "[sigh] Fine.", voice_mode: "clone", reference_audio_filename: "pell.mp3", exaggeration: 0.9, speed_factor: 1.4, seed: 7, output_format: "mp3" });
+    expect(sent).toMatchObject({ text: "[sigh] Fine.", voice_mode: "clone", reference_audio_filename: "pell.mp3", exaggeration: 0.9, speed_factor: 1.4, seed: 7, output_format: "wav" });
   });
 
   test("a server that is not running, or runs a model with no tags, says so", async () => {

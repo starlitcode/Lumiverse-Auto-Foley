@@ -4578,8 +4578,10 @@ async function chatterboxInfo(base) {
         return { ok: false, model, voices, why: 'The Chatterbox server has no model loaded yet. Open its web page and load one.' };
     return { ok: true, model, voices, why: model === 'turbo' ? '' : 'The server runs the ' + (model || 'unknown') + ' model, which takes no tags. Load Chatterbox-Turbo on it.' };
 }
-// One line from the Chatterbox server, as MP3. A voice id starts with p: for
-// one of the server's own voices and c: for one cloned from a clip.
+// One line from the Chatterbox server, as WAV, the server's own default, so
+// the audio comes as the model made it with no MP3 step. A voice id starts
+// with p: for one of the server's own voices and c: for one cloned from a
+// clip.
 async function chatterboxSpeak(base, p) {
     if (!base)
         return { why: 'No Chatterbox server address is saved.' };
@@ -4593,7 +4595,7 @@ async function chatterboxSpeak(base, p) {
         if (!voice)
             return { why: 'The Chatterbox server has no voices. Add a voice on its web page, or pick one in the Cast tab.' };
     }
-    const body = { text, output_format: 'mp3', split_text: true, chunk_size: 250 };
+    const body = { text, output_format: 'wav', split_text: true, chunk_size: 250 };
     if (voice.indexOf('c:') === 0) {
         body.voice_mode = 'clone';
         body.reference_audio_filename = voice.slice(2);
@@ -4617,7 +4619,7 @@ async function chatterboxSpeak(base, p) {
         body.seed = seed;
     let res;
     try {
-        res = await cors(base + '/tts', { method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'audio/mpeg' }, body: JSON.stringify(body), responseType: 'arraybuffer', mediaType: 'audio' });
+        res = await cors(base + '/tts', { method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'audio/wav' }, body: JSON.stringify(body), responseType: 'arraybuffer', mediaType: 'audio' });
     }
     catch (e) {
         if (/only serves audio|does not match/i.test(String((e && e.message) || '')))
@@ -4630,7 +4632,7 @@ async function chatterboxSpeak(base, p) {
     const b64 = String(res.body || '');
     if (fromBase64(b64).length < 64)
         return { why: 'The Chatterbox server sent back no sound.' };
-    return { base64: b64, mime: 'audio/mpeg' };
+    return { base64: b64, mime: 'audio/wav' };
 }
 // One sound for a description: from the library when one fits, otherwise
 // found on Freesound or made by ElevenLabs and added to the library, so the
