@@ -2319,8 +2319,31 @@ function sentence(t) {
         return '';
     return s.charAt(0).toUpperCase() + s.slice(1) + (/[.!?]$/.test(s) ? '' : '.');
 }
+// Credits and rate limits, said the same way as for speech in the panel.
+// "Quota" alone is a rate limit: Google answers "You exceeded your current
+// quota" for its requests per minute and per day, whatever is in the
+// account. Returns '' when the error is neither.
+function limitTrouble(raw, who) {
+    if (/\bcredits?\b|insufficient[_ ](?:balance|funds|quota)|payment required|\b402\b|balance (?:is )?too low/i.test(raw))
+        return who + ' says your account is out of credits';
+    if (!/\b429\b|rate.?limit|too many requests|quota|resource.?exhausted/i.test(raw))
+        return '';
+    const notMoney = '. This is not about the money in your account';
+    const m = /\blimit:\s*(\d+)/i.exec(raw);
+    const n = m ? m[1] + ' ' : '';
+    if (/per[ _]?(?:model[ _]?per[ _]?)?day|daily/i.test(raw))
+        return who + ' reached its limit of ' + n + 'requests a day for your account' + notMoney + (/google|gemini/i.test(raw) ? '. Google\u2019s resets at midnight Pacific time' : '');
+    if (/per[ _]?minute/i.test(raw))
+        return who + ' reached its limit of ' + n + 'requests a minute for your account' + notMoney + '. Try again in a minute';
+    if (/concurren/i.test(raw))
+        return who + ' was asked for more at the same time than your plan allows. Try again in a moment';
+    if (/quota|resource.?exhausted/i.test(raw))
+        return who + ' reached its limit on requests in a minute or a day for your account' + notMoney + '. If it keeps happening, the limit may be for the day';
+    return who + ' is busy (too many requests). Try again in a moment';
+}
 function generationTrouble(e) {
-    const raw = String((e && e.message) || e || '').slice(0, 300);
+    // Long enough to hold the limit Google names, which comes after its links.
+    const raw = String((e && e.message) || e || '').slice(0, 700);
     if (PERSONAL_INSTALL.test(raw))
         return PERSONAL_WORDS;
     if (/PERMISSION_DENIED/i.test(raw) || (/permission/i.test(raw) && /generation/i.test(raw)))
@@ -2335,9 +2358,12 @@ function generationTrouble(e) {
         return 'the Director did not answer in time';
     if (/content filter|refus|declined|blocked/i.test(raw))
         return 'the Director\'s provider refused this message. Try another connection for the Director';
+    const limit = limitTrouble(raw, 'the Director\'s provider');
+    if (limit)
+        return limit + '. It said: ' + raw.slice(0, 300);
     if (/rate|429/i.test(raw))
         return 'the Director\'s provider is busy (too many requests). Try again in a moment';
-    return 'the Director could not be asked: ' + (raw || 'no answer');
+    return 'the Director could not be asked: ' + (raw.slice(0, 300) || 'no answer');
 }
 // ---- which errors are worth trying again ----
 // The same in Auto Retry, Auto Refine and Auto Foley, so the three agree. errorKind reads an
@@ -2364,7 +2390,12 @@ const HARD_STATUS = /\b(?:400|401|402|403|404|405|406|411|413|415|422)\b/;
 // the same prompt next time. A prompt declined as "reasoning_extraction",
 // for asking the model to write out its thinking, is declined again the same
 // way. These are hard whatever status comes with them.
-const HARD_SURE = /\b(?:reasoning[_ -]?extraction|invalid[_ ]?api[_ ]?key|authentication|unauthorized|insufficient[_ ](?:balance|credits?|funds|quota)|billing|context[_ ]length(?:[_ ]exceeded)?|maximum context|(?:prompt|input|context|messages?) (?:is |are )?too long|daily (?:request |token |usage )?(?:limit|quota|cap)|today['’]?s (?:free )?(?:requests|quota|limit|usage)|\w*(?:requests|tokens) ?per ?day\w*|resets? at (?:midnight|00:00))\b/i;
+const HARD_SURE = /\b(?:reasoning[_ -]?extraction|invalid[_ ]?api[_ ]?key|authentication|unauthorized|insufficient[_ ](?:balance|credits?|funds|quota)|billing|context[_ ]length(?:[_ ]exceeded)?|maximum context|(?:prompt|input|context|messages?) (?:is |are )?too long|daily (?:request |token |usage )?(?:limit|quota|cap)|today['’]?s (?:free )?(?:requests|quota|limit|usage)|\w*(?:requests|tokens)[ _]?per[ _]?(?:model[ _]?per[ _]?)?day\w*|resets? at (?:midnight|00:00))\b/i;
+// A limit per minute clears within a minute. Google's message for one also
+// says to check "your plan and billing details", which alone reads as hard.
+// A limit per day does not clear, so it stays hard.
+const PER_MINUTE = /per[ _]?minute/i;
+const PER_DAY = /per[ _]?(?:model[ _]?per[ _]?)?day/i;
 // Words that are hard from a provider, and that a gateway's page can also use
 // about itself.
 const HARD_LOOSE = /\b(?:forbidden|permission|not allowed|not found|does not exist|model missing)\b/i;
@@ -2375,7 +2406,7 @@ function errorKind(text) {
     const stated = STATED_STATUS.exec(text);
     const status = stated ? stated[1] : '';
     const detail = stated ? text.slice(stated.index + stated[0].length) : text;
-    if (HARD_SURE.test(detail))
+    if (HARD_SURE.test(detail) && !(PER_MINUTE.test(detail) && !PER_DAY.test(detail)))
         return 'hard';
     if (status) {
         if (GATEWAY_STATUS.test(status))
@@ -2851,7 +2882,8 @@ function who(model) {
 // Lumiverse's own message is kept after it, so a provider problem can still
 // be read.
 function decisionTrouble(e) {
-    const raw = String((e && e.message) || e || '').slice(0, 300);
+    // Long enough to hold the limit Google names, which comes after its links.
+    const raw = String((e && e.message) || e || '').slice(0, 700);
     if (PERSONAL_INSTALL.test(raw))
         return PERSONAL_WORDS;
     if (/permission/i.test(raw) && /decision/i.test(raw))
@@ -2866,7 +2898,10 @@ function decisionTrouble(e) {
         return 'the Decision model did not answer within 30 seconds';
     if (/cancel|abort/i.test(raw))
         return 'the call to the Decision model was stopped';
-    return 'the Decision model could not be asked: ' + (raw || 'no answer');
+    const limit = limitTrouble(raw, 'the Decision model\'s provider');
+    if (limit)
+        return limit + '. It said: ' + raw.slice(0, 300);
+    return 'the Decision model could not be asked: ' + (raw.slice(0, 300) || 'no answer');
 }
 // The most people offered as choices for one quote. A long list makes every
 // choice less likely and the answer less sure.
@@ -4507,14 +4542,18 @@ function elevenTrouble(status, body) {
     }
     catch (_) { }
     const tail = detail ? ' ElevenLabs said: ' + detail.slice(0, 200) : '';
+    // ElevenLabs answers an empty account with 401 and "quota_exceeded", so
+    // it is read before the refused key.
+    if (status === 402 || /quota_exceeded|credits?\b/i.test(body))
+        return 'The ElevenLabs account has no credits left for sound effects.' + tail;
     if (status === 401)
         return 'ElevenLabs refused the key. Check the key in the Sounds tab.' + tail;
     if (status === 403)
         return 'ElevenLabs says this key cannot make sound effects. Check the key has the Sound Effects permission.' + tail;
-    if (status === 402)
-        return 'The ElevenLabs account has no credits left for sound effects.' + tail;
     if (status === 422)
         return 'ElevenLabs could not use this sound description.' + tail;
+    if (status === 429 && /concurren/i.test(body))
+        return 'ElevenLabs was asked for more sounds at the same time than your plan allows. Try again in a moment.' + tail;
     if (status === 429)
         return 'ElevenLabs is busy (too many requests). Try again in a moment.' + tail;
     return 'ElevenLabs answered with an error (' + status + ').' + tail;

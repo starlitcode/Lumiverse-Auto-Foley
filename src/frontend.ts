@@ -1077,10 +1077,13 @@ async function readTrouble(res: Response, what: string, who = 'the voice service
     const span = limitSpan(said);
     const n = limitCount(said);
     const notMoney = ' This is not about the money in your account.';
+    // ElevenLabs and Cartesia answer 429 for too many lines being made at
+    // the same time on the plan, which clears as soon as one is done.
+    if (/concurren/i.test(said)) return wrap(what + ' failed because ' + who + ' was asked for more lines at the same time than your plan allows.' + notMoney + tail);
     if (span === 'day')
       return wrap(what + ' failed because ' + who + ' reached its limit of ' + (n ? n + ' ' : '') + 'lines a day for your account.' + notMoney + (/gemini/i.test(who) ? ' It resets at midnight Pacific time.' : ' It resets tomorrow.') + tail);
     if (span === 'minute') return wrap(what + ' failed because ' + who + ' reached its limit of ' + (n ? n + ' ' : '') + 'lines a minute for your account.' + notMoney + tail);
-    return wrap(what + ' failed because ' + who + ' has a limit on how many lines your account can ask for in a minute or a day, and it was reached.' + notMoney + tail);
+    return wrap(what + ' failed because ' + who + ' has a limit on how many lines your account can ask for in a minute or a day' + (n ? ' (' + n + ')' : '') + ', and it was reached.' + notMoney + tail);
   }
   if (/401|invalid.*key|unauthori/i.test(said)) return wrap(what + ' failed because ' + who + ' refused the key saved on your connection.' + tail);
   if (/429|rate|busy|too many/i.test(said)) return wrap(what + ' failed because ' + who + ' is busy. Try again in a moment.' + tail);
@@ -1189,7 +1192,12 @@ const HARD_STATUS = /\b(?:400|401|402|403|404|405|406|411|413|415|422)\b/;
 // for asking the model to write out its thinking, is declined again the same
 // way. These are hard whatever status comes with them.
 const HARD_SURE =
-  /\b(?:reasoning[_ -]?extraction|invalid[_ ]?api[_ ]?key|authentication|unauthorized|insufficient[_ ](?:balance|credits?|funds|quota)|billing|context[_ ]length(?:[_ ]exceeded)?|maximum context|(?:prompt|input|context|messages?) (?:is |are )?too long|daily (?:request |token |usage )?(?:limit|quota|cap)|today['’]?s (?:free )?(?:requests|quota|limit|usage)|\w*(?:requests|tokens) ?per ?day\w*|resets? at (?:midnight|00:00))\b/i;
+  /\b(?:reasoning[_ -]?extraction|invalid[_ ]?api[_ ]?key|authentication|unauthorized|insufficient[_ ](?:balance|credits?|funds|quota)|billing|context[_ ]length(?:[_ ]exceeded)?|maximum context|(?:prompt|input|context|messages?) (?:is |are )?too long|daily (?:request |token |usage )?(?:limit|quota|cap)|today['’]?s (?:free )?(?:requests|quota|limit|usage)|\w*(?:requests|tokens)[ _]?per[ _]?(?:model[ _]?per[ _]?)?day\w*|resets? at (?:midnight|00:00))\b/i;
+// A limit per minute clears within a minute. Google's message for one also
+// says to check "your plan and billing details", which alone reads as hard.
+// A limit per day does not clear, so it stays hard.
+const PER_MINUTE = /per[ _]?minute/i;
+const PER_DAY = /per[ _]?(?:model[ _]?per[ _]?)?day/i;
 // Words that are hard from a provider, and that a gateway's page can also use
 // about itself.
 const HARD_LOOSE = /\b(?:forbidden|permission|not allowed|not found|does not exist|model missing)\b/i;
@@ -1202,7 +1210,7 @@ function errorKind(text: string): string {
   const stated = STATED_STATUS.exec(text);
   const status = stated ? stated[1] : '';
   const detail = stated ? text.slice(stated.index + stated[0].length) : text;
-  if (HARD_SURE.test(detail)) return 'hard';
+  if (HARD_SURE.test(detail) && !(PER_MINUTE.test(detail) && !PER_DAY.test(detail))) return 'hard';
   if (status) {
     if (GATEWAY_STATUS.test(status)) return 'wait';
     if (HARD_STATUS.test(status) || HARD_LOOSE.test(detail)) return 'hard';
@@ -3697,7 +3705,11 @@ export function setup(ctx: Ctx, overrides?: any) {
       const limited = !OUT_OF_CREDITS.test(raw) && RATE_LIMITED.test(raw);
       const span = limited ? limitSpan(raw) : '';
       const kind = OUT_OF_CREDITS.test(raw) || span === 'day' ? 'hard' : raw === 'empty' || limited ? 'wait' : errorKind(raw);
-      if (kind !== 'wait' || wait >= (Number(S.rateWaits) || 0)) {
+      // A limit still there after one line waited it out is most likely
+      // for the day, so the other lines stop at once rather than wait too.
+      const stuck = limited && kind === 'wait' && Date.now() - rateGaveUp < 300000;
+      if (kind !== 'wait' || stuck || wait >= (Number(S.rateWaits) || 0)) {
+        if (limited && kind === 'wait' && span !== 'minute') rateGaveUp = Date.now();
         if (limited && kind === 'wait' && !span)
           return { why: why + ' If it keeps happening, the limit may be for the day.' + (/gemini/i.test(who) ? ' Gemini\u2019s resets at midnight Pacific time.' : '') };
         return { why };
@@ -3725,6 +3737,8 @@ export function setup(ctx: Ctx, overrides?: any) {
   // Until when the voice service is being waited out for its rate limit.
   // Every line waits until then before it asks.
   let rateUntil = 0;
+  // When a line last gave up on a rate limit after waiting it out.
+  let rateGaveUp = 0;
 
   // The sounds already said to have nothing to play.
   const soundMissSaid = new Set<string>();

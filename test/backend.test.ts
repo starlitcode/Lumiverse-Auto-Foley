@@ -1358,6 +1358,30 @@ describe("the Decision model", () => {
     expect(h.box.decisionTrouble(new Error("PERMISSION_DENIED: decisions"))).toContain("permission is refused");
     expect(h.box.decisionTrouble(new Error("timed out after 30000ms"))).toContain("30 seconds");
   });
+
+  // A rate limit is never called being out of credits, and an empty account
+  // is never called a refused key, for the Director, the Decision model and
+  // sounds alike.
+  test("credits and rate limits each have their own words", () => {
+    const h = host();
+    const google = (metric: string, n: number) =>
+      new Error("Google AI Studio generate failed (429): You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/usage?tab=rate-limit. * Quota exceeded for metric: generativelanguage.googleapis.com/" + metric + ", limit: " + n + ", model: lantern-9. Please retry in 20.1s.");
+    for (const trouble of [h.box.generationTrouble, h.box.decisionTrouble]) {
+      const day = trouble(google("generate_requests_per_model_per_day", 100));
+      expect(day).toContain("limit of 100 requests a day");
+      expect(day).toContain("midnight Pacific");
+      expect(day).not.toContain("busy");
+      expect(trouble(google("generate_requests_per_model_per_minute", 10))).toContain("limit of 10 requests a minute");
+      const unnamed = trouble(google("generate_content_paid_tier_requests", 10));
+      expect(unnamed).toContain("in a minute or a day");
+      expect(unnamed).not.toContain("credits");
+      expect(trouble(new Error("Lantern stream failed (402): Insufficient credits on this account"))).toContain("out of credits");
+      expect(trouble(new Error("Lantern stream failed (429): Too Many Requests"))).toContain("busy");
+    }
+    expect(h.box.elevenTrouble(401, JSON.stringify({ detail: { status: "quota_exceeded", message: "This request exceeds your quota of 500. You have 12 credits remaining, while 40 credits are required." } }))).toContain("no credits left");
+    expect(h.box.elevenTrouble(401, JSON.stringify({ detail: { status: "invalid_api_key", message: "Invalid API key" } }))).toContain("refused the key");
+    expect(h.box.elevenTrouble(429, JSON.stringify({ detail: { status: "too_many_concurrent_requests", message: "Too many concurrent requests for your plan." } }))).toContain("at the same time");
+  });
 });
 
 describe("asking again", () => {

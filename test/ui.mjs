@@ -301,6 +301,9 @@ window.__fetch = async (url, init) => {
   // window.__quota429: that many lines come back with Google's rate limit
   // answer, as Lumiverse passes it on.
   if (u.includes('/tts/synthesize') && window.__quota429) { window.__quota429--; window.__limitAt = (window.__limitAt || []).concat(Date.now()); return new Response(JSON.stringify({ error: 'Google AI Studio TTS tts synthesize failed (429): You exceeded your current quota, please check your plan and billing details. Please retry in 1.5s.' }), { status: 429, headers: { 'Content-Type': 'application/json' } }); }
+  // window.__quotaUnnamed: every line comes back with a limit that does not
+  // say whether it is per minute or per day.
+  if (u.includes('/tts/synthesize') && window.__quotaUnnamed) { window.__unnamedAsks = (window.__unnamedAsks || 0) + 1; return new Response(JSON.stringify({ error: 'Google AI Studio TTS tts synthesize failed (429): You exceeded your current quota, please check your plan and billing details. * Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_paid_tier_requests, limit: 100, model: gemini-3.8-flash-tts. Please retry in 0.4s.' }), { status: 502, headers: { 'Content-Type': 'application/json' } }); }
   // window.__quotaDay: every line comes back with Google's daily limit.
   if (u.includes('/tts/synthesize') && window.__quotaDay) { window.__dayAsks = (window.__dayAsks || 0) + 1; return new Response(JSON.stringify({ error: 'Google AI Studio TTS tts synthesize failed (429): You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/usage?tab=rate-limit. \\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_requests_per_model_per_day, limit: 100, model: gemini-3.8-flash-tts\\nPlease retry in 41.5s.' }), { status: 429, headers: { 'Content-Type': 'application/json' } }); }
   if (u.includes('/tts/synthesize') && window.__emptyOnce) { window.__emptyOnce--; window.__emptyAt = (window.__emptyAt || []).concat(Date.now()); return new Response(JSON.stringify({ error: 'Google AI Studio tts synthesize failed: No audio payload in Gemini TTS response' }), { status: 502, headers: { 'Content-Type': 'application/json' } }); }
@@ -3710,6 +3713,24 @@ if (section("rate limit")) {
   check(asks <= 3, "each line asks once (" + asks + " asks)");
   check(!day.errors.length, "no page errors. " + day.errors.slice(0, 2).join(" | "));
   await day.context.close();
+
+  console.log("A limit that is not named and outlasts the waits stops the other lines at once");
+  const un = await open(THEMES[0], SIZES[1], 1, () => {
+    window.__ttsList = [{ id: "t1", name: "Gemini here", provider: "google_tts", model: "gemini-3.8-flash-tts", is_default: true, has_api_key: true }];
+    window.__settings.ttsConnection = "t1";
+    window.__settings.rateWaits = 2;
+  });
+  await un.page.evaluate(() => { window.__clipMs = 200; window.__quotaUnnamed = true; });
+  await toTab(un.page, "stage");
+  await un.page.waitForTimeout(150);
+  await pressMessage(un.page);
+  await un.page.waitForTimeout(6000);
+  const unSaid = await un.page.evaluate(() => Array.from(document.querySelectorAll(".af-log-line")).map((n) => n.textContent).join(" | "));
+  const unAsks = await un.page.evaluate(() => window.__unnamedAsks || 0);
+  check(/in a minute or a day \(100\)/.test(unSaid) && /may be for the day/.test(unSaid) && !/out of credits/.test(unSaid), "the Log names the limit and says it may be for the day (" + unSaid.slice(-260) + ")");
+  check(unAsks <= 7, "after the lines being made waited twice, the next line asks once (" + unAsks + " asks)");
+  check(!un.errors.length, "no page errors. " + un.errors.slice(0, 2).join(" | "));
+  await un.context.close();
 }
 
 if (section("still working")) {

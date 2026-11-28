@@ -292,7 +292,9 @@ A voice service can limit how many lines your account asks for in a minute or in
 - A limit per day cannot be waited out. Auto Foley says so at once, with the limit, and that Gemini's resets at midnight Pacific time.
 - A limit per minute, or one that is not named, is waited out. Auto Foley waits for the time the service names, up to about a minute, then asks again. Every other line waits too.
 - **Wait out a provider that will not take the call**, on the Settings tab, says how many times it waits. It is 2 by default.
-- If a limit that is not named is still there after that, the Log says the limit may be for the day.
+- If a limit that is not named is still there after that, the Log says the limit may be for the day. The lines after it then stop at once, rather than wait again.
+- A voice service that was asked for more lines at the same time than your plan allows, such as ElevenLabs or Cartesia, is waited out. It clears as soon as a line is done.
+- The Director and the Decision model say the same about credits and limits.
 - On Google's lowest paid level, a Gemini voice model can allow as few as 10 lines a minute and 100 a day. Google AI Studio shows yours on its **Rate limit** page. Each line Auto Foley speaks is one request.
 - An answer that names credits, a balance or a payment is read as an account that is out of credits. Auto Foley says so at once and does not wait.
 
