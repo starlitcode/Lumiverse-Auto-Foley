@@ -4658,7 +4658,7 @@ export function setup(ctx, overrides) {
                 len: p.len,
                 who: partWho(line),
                 name: speakerName(line),
-                picture: mem && mem.picture ? String(mem.picture) : '',
+                picture: mem && mem.picture && mem.videoPic !== false ? String(mem.picture) : '',
                 caption: '',
                 member: mem ? String(mem.id) : '',
                 feeling: line.kind === 'narration' ? '' : feelingOf(line, moodAt(sh, p.k), moodsNow()),
@@ -5458,7 +5458,7 @@ export function setup(ctx, overrides) {
         if (S.videoPics !== false && S.videoMoodPics !== false)
             for (const p of parts) {
                 const mem = p.member ? (S.cast || []).find((m) => String(m.id) === p.member) : null;
-                if (mem && p.feeling && (mem.moodPics || []).indexOf(p.feeling) >= 0) {
+                if (mem && mem.videoPic !== false && p.feeling && (mem.moodPics || []).indexOf(p.feeling) >= 0) {
                     const pic = await moodPicture(String(mem.id), p.feeling);
                     if (pic)
                         p.picture = pic;
@@ -15440,6 +15440,15 @@ export function setup(ctx, overrides) {
     }
     function fillPerson(inner, m, paintName) {
         inner.appendChild(pictureRow(m, () => paintName()));
+        // Narration has no picture in a video, so the narrator has no switch.
+        if (m.kind !== 'narrator') {
+            const inVideos = personSwitch('Picture in videos', 'On by default. Off, the Studio\u2019s videos show no picture for them, and no mood picture.', m.videoPic !== false, (v) => {
+                m.videoPic = v;
+                save();
+            });
+            inVideos.setAttribute('data-af-videopic', '');
+            inner.appendChild(inVideos);
+        }
         // The narrator reads everything outside quotes, and the backend adds it
         // back whenever it is missing, so it has no Remove. It never has a voice
         // picked for it, so it has no Voice type.

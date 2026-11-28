@@ -14,6 +14,7 @@ _2026-11-28_
 
 - **Every Fish Audio setting on each person.** **More settings** in the Cast tab now has Repetition penalty, Volume, Read numbers as words, Quality guard, Keep the voice the same across parts, Part length, Shortest part, Most audio per part, Early stop, and a pronunciation dictionary. Each starts at Fish Audio's own default. See [Fish Audio settings](docs/cast.md#fish-audio-settings).
 - **Volume and Language for Cartesia on each person**, in **More settings** in the Cast tab.
+- **Picture in videos, for each person.** A switch on each person in the Cast tab, on by default. Off, the Studio's videos show no picture for them, and no mood picture, while their name still shows.
 - **Pictures with see-through parts.** A person's picture, a mood picture and a background picture now keep their see-through parts. In a video, the background shows through them, with no black circle under a person's picture. A picture you added before was saved without them, so choose it again to get them back.
 
 ### Fixed

@@ -238,6 +238,7 @@ function narrator() {
         group: '',
         picture: '',
         moodPics: [],
+        videoPic: true,
         stability: 0.5,
         similarity: 0.75,
         style: 0,
@@ -614,6 +615,7 @@ function cleanMember(m) {
         moodPics: Array.isArray(m.moodPics)
             ? m.moodPics.map((x) => moodId(x)).filter((x, i, all) => x && all.indexOf(x) === i).slice(0, MOODS_MAX)
             : [],
+        videoPic: bool(m.videoPic, true),
         stability: num(m.stability, 0, 1, base.stability),
         similarity: num(m.similarity, 0, 1, base.similarity),
         style: num(m.style, 0, 1, base.style),

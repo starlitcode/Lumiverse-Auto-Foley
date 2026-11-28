@@ -56,6 +56,8 @@ interface CastMember {
   // Each picture is kept in a file of its own, by the person's id and the
   // mood's id.
   moodPics: string[];
+  // Whether the Studio's videos show their picture and mood pictures.
+  videoPic: boolean;
   stability: number;
   similarity: number;
   style: number;
@@ -730,6 +732,7 @@ function narrator(): CastMember {
     group: '',
     picture: '',
     moodPics: [],
+    videoPic: true,
     stability: 0.5,
     similarity: 0.75,
     style: 0,
@@ -1113,6 +1116,7 @@ function cleanMember(m: any): CastMember | null {
     moodPics: Array.isArray(m.moodPics)
       ? m.moodPics.map((x: any) => moodId(x)).filter((x: string, i: number, all: string[]) => x && all.indexOf(x) === i).slice(0, MOODS_MAX)
       : [],
+    videoPic: bool(m.videoPic, true),
     stability: num(m.stability, 0, 1, base.stability),
     similarity: num(m.similarity, 0, 1, base.similarity),
     style: num(m.style, 0, 1, base.style),

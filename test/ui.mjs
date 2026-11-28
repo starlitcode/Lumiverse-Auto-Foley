@@ -3309,6 +3309,62 @@ if (section("lumiverse downloads")) {
   await context.close();
 }
 
+if (section("picture in videos")) {
+  console.log("Picture in videos, on a person: off, a video shows no picture for them");
+  for (const size of SIZES) {
+    const where = size.name;
+    const { context, page, errors } = await open(THEMES[0], size);
+    await toTab(page, "cast");
+    await page.waitForTimeout(300);
+    await page.locator('.af-person[data-person="a"] .af-person-head').click();
+    await page.waitForTimeout(600);
+    const row = page.locator('.af-person[data-person="a"] [data-af-videopic]');
+    check((await row.count()) === 1 && (await row.locator("input").isChecked()), where + ": the switch is there, on by default");
+    check((await page.locator('.af-person[data-kind="narrator"] [data-af-videopic]').count()) === 0, where + ": the narrator has none, since narration has no picture");
+    await row.locator("input").click();
+    await page.waitForTimeout(500);
+    check(await page.evaluate(() => window.__settings.cast.find((m) => m.id === "a").videoPic === false), where + ": turning it off is saved");
+    const m = await page.evaluate(MEASURE, !!size.touch);
+    check(!m.overflow.length && !m.small.length, where + ": the row fits, with tap targets big enough. " + m.overflow.concat(m.small).slice(0, 3).join("; "));
+    check(!errors.length, where + ": no page errors. " + errors.slice(0, 2).join(" | "));
+    await context.close();
+  }
+  // In a video: everyone has a solid black picture. With the switch off for
+  // all of them, none is drawn.
+  const size = SIZES.find((x) => !x.touch) || SIZES[0];
+  const run = async (shown) => {
+    const o = await open(THEMES[0], size, 1, `(() => { const c = document.createElement("canvas"); c.width = 64; c.height = 64; const g = c.getContext("2d"); g.fillStyle = "#000000"; g.fillRect(0, 0, 64, 64); const pic = c.toDataURL("image/png"); window.__settings.cast = window.__settings.cast.map((m) => Object.assign({}, m, { picture: pic, videoPic: ${shown} })); Object.assign(window.__settings, { videoWords: "all", videoInk: "#ffffff", videoBacks: [{ id: "main", name: "Main", kind: "color", color: "#d06a1a", fill: "solid", stops: [], dir: "down", dim: 40, blur: 0, shapes: [], use: "match", moods: [], places: [] }], videoBackPick: "main", videoEdges: 0, videoPicRing: false }); })()`);
+    await o.page.evaluate(() => { window.__wav = [0.1, 1.4]; window.__clipMs = 150; window.__synth = []; });
+    await pressMessage(o.page);
+    await o.page.waitForTimeout(8000);
+    await openWs(o.page);
+    await o.page.waitForTimeout(1500);
+    const dark = await o.page.evaluate(async () => {
+      const r = document.querySelector("[data-af-scrub] input");
+      const c = document.querySelector("[data-af-videopreview]");
+      const g = c.getContext("2d");
+      let most = 0;
+      for (let t = 2; t <= Number(r.max) - 3; t += 0.5) {
+        r.value = String(t);
+        r.dispatchEvent(new Event("input", { bubbles: true }));
+        await new Promise((x) => requestAnimationFrame(() => requestAnimationFrame(x)));
+        const d = g.getImageData(0, 0, c.width, c.height).data;
+        let n = 0;
+        for (let y = Math.floor(c.height * 0.25); y < c.height * 0.6; y += 2) for (let x = 0; x < c.width; x += 2) { const k = (y * c.width + x) * 4; if (d[k] + d[k + 1] + d[k + 2] < 60) n++; }
+        most = Math.max(most, n);
+      }
+      return most;
+    });
+    const errs = o.errors.slice();
+    await o.context.close();
+    return { dark, errs };
+  };
+  const on = await run(true), off = await run(false);
+  check(on.dark > 200, "with the switch on, the pictures are drawn (" + on.dark + " dark pixels)");
+  check(off.dark < 20, "with it off, no picture is drawn for them (" + off.dark + " dark pixels)");
+  check(!on.errs.length && !off.errs.length, "video: no page errors. " + on.errs.concat(off.errs).slice(0, 2).join(" | "));
+}
+
 if (section("still working")) {
   console.log("A slow Director is waited for while the backend says it is still working");
   for (const size of SIZES) {

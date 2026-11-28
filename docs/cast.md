@@ -20,6 +20,7 @@ Someone the AI added has no voice picked. The first time they speak, Auto Foley 
 ## A card
 
 - **Picture.** Optional. **Choose a picture** picks one from your device, then a crop box opens. Drag the picture to move it, and use **Zoom**, or the mouse wheel, to zoom in. The circle shows what the round picture shows. **Use this** saves it with the cast, as a square 320 pixels on a side, so it is sharp in a video. A picture with see-through parts keeps them. **Cancel** keeps the picture you had. With none, the first letter of the name is shown. **Take it out** asks first.
+- **Picture in videos**, under it. On by default. Off, the Studio's videos show no picture for this person, and no mood picture. Their name is still shown. The narrator has none, since narration has no picture.
 - **Pictures for moods**, under it. Optional. A picture for each mood in **Moods for pictures**, for the Studio's videos. See [Pictures for moods](#pictures-for-moods).
   - **Use their Lumiverse picture** takes the picture of the character or persona in Lumiverse with the same name, display name or other name, cut to a square from the middle. If there is none, the card says so.
   - **Use pictures from Lumiverse**, at the top of the Cast tab, does the same for everyone who has no picture yet. A picture already chosen is kept. It says how many it found.

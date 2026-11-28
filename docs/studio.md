@@ -408,7 +408,7 @@ When each word is said is worked out from where the voice is in the clip, so it 
   - **Font of the names**: **Clean** by default, beside the words in **Book**. Any font, your own included.
   - **Size of the names, in percent**: 100 by default, from 60 to 160. It is set apart from the size of the words and the size of the pictures.
   - **A shadow behind the names**: on by default, the same as the words' shadow, with its own color, darkness, softness and distance.
-- **Show pictures**: on by default. Each speaker's picture from the Cast tab is shown above their line. Narration has none. Under it:
+- **Show pictures**: on by default. Each speaker's picture from the Cast tab is shown above their line. Narration has none. A person with no picture shows only their name. To leave out one person's picture, turn off **Picture in videos** on them in the Cast tab. Under it:
   - **Shape of the pictures**: a circle or a rounded square.
   - **Size of the pictures**: 150 by default, in pixels of a 1080-pixel frame.
   - **A ring around each picture**: on by default, in the color of the name. Off shows the picture with no ring. Under it, **How thick the ring is**: 3 by default, from 1 to 20, in pixels of a 1080-pixel frame. It is the same for every picture, two speakers and mood pictures too.
