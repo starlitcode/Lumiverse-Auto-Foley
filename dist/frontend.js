@@ -3575,10 +3575,18 @@ export function setup(ctx, overrides) {
             sh.clips.set(k, p);
             if (it.kind === 'voice')
                 p.then((r) => {
+                    // A clip that is not a file, or did not come, is not read, so its
+                    // words are spread by length.
+                    if (!r || !r.blob || typeof r.blob === 'string')
+                        sh.voiced.set(k, []);
                     if (r && r.blob && typeof r.blob !== 'string')
                         voicedOf(r.blob).then((v) => {
-                            if (!v)
+                            // A clip the browser cannot read has its words spread over it
+                            // by length.
+                            if (!v) {
+                                sh.voiced.set(k, []);
                                 return;
+                            }
                             sh.voiced.set(k, v.voiced);
                             if (v.level == null || sh.voiceKeys.has(k))
                                 return;
@@ -3597,7 +3605,20 @@ export function setup(ctx, overrides) {
     // Reads which parts of a clip are voiced. An offline audio context decodes
     // without asking to play, so it needs no tap first. Any failure leaves the
     // words spread over the clip by length.
-    async function voicedOf(blob) {
+    // Read once for each clip: the check for too little voice and the lit
+    // words both need it.
+    const voicedRead = new WeakMap();
+    function voicedOf(blob) {
+        if (!blob || typeof blob !== 'object')
+            return Promise.resolve(null);
+        const had = voicedRead.get(blob);
+        if (had)
+            return had;
+        const p = readVoiced(blob);
+        voicedRead.set(blob, p);
+        return p;
+    }
+    async function readVoiced(blob) {
         try {
             const w = window;
             const Off = w.OfflineAudioContext || w.webkitOfflineAudioContext;
@@ -9273,6 +9294,8 @@ export function setup(ctx, overrides) {
             sh.played.push({ blob, k });
             if (it.kind === 'voice') {
                 const v = await voicedOf(blob);
+                if (!v)
+                    sh.voiced.set(k, []);
                 if (v) {
                     sh.voiced.set(k, v.voiced);
                     if (v.level != null) {
@@ -13800,6 +13823,44 @@ export function setup(ctx, overrides) {
     // start of each part is worked out once the clip's sound has been read, and
     // again if it is read after the line began.
     let syncCache = null;
+    // How long after the audio's clock a sound reaches the ear, in seconds:
+    // the delay the device reports for its sound output, read once from a
+    // short-lived audio context. A phone, and more so a Bluetooth headset,
+    // plays a moment after the clock says. 0 until it is read, and when the
+    // device reports nothing. At most 0.4 seconds.
+    let soundDelay = -1;
+    function readSoundDelay() {
+        if (soundDelay >= 0)
+            return;
+        soundDelay = 0;
+        try {
+            const w = window;
+            const A = w.AudioContext || w.webkitAudioContext;
+            if (!A)
+                return;
+            const c = new A();
+            const shut = () => {
+                try {
+                    c.close();
+                }
+                catch (_) { }
+            };
+            disposers.push(shut);
+            // The delay is known once the context runs.
+            const t = setTimeout(() => {
+                timers.delete(t);
+                try {
+                    const d = (Number(c.outputLatency) || 0) + (Number(c.baseLatency) || 0);
+                    if (Number.isFinite(d))
+                        soundDelay = Math.min(0.4, Math.max(0, d));
+                }
+                catch (_) { }
+                shut();
+            }, 400);
+            timers.add(t);
+        }
+        catch (_) { }
+    }
     function voiceNow() {
         const el2 = audio;
         if (!show || !el2 || !el2.dataset || el2.dataset.kind !== 'voice')
@@ -13810,15 +13871,20 @@ export function setup(ctx, overrides) {
         const dur = Number(el2.duration);
         if (!(dur > 0) || !Number.isFinite(dur))
             return null;
+        // Until the clip's sound has been read, no word is lit, so the first
+        // word does not light while the clip is still quiet.
+        if (!show.voiced.has(show.index))
+            return { k: -1, parts: lineParts(it.line).parts, item: show.index };
         const voiced = show.voiced.get(show.index);
         const mark = show.startedAt + ':' + show.index + ':' + (voiced ? 'v' : 'n') + ':' + Math.round(dur * 100);
         if (!syncCache || syncCache.mark !== mark) {
             const lp = lineParts(it.line);
             syncCache = { mark, parts: lp.parts, starts: partTimes(lp.weights, voiced || [], dur) };
         }
-        // A word is lit as it starts, a moment early, since the eye is slower
-        // than the ear.
-        const now = Number(el2.currentTime) + 0.08;
+        // A word is lit when it is heard: the audio's clock, less the time the
+        // device takes to play what the clock says.
+        readSoundDelay();
+        const now = Number(el2.currentTime) - soundDelay;
         const st = syncCache.starts;
         let k = -1;
         for (let j = 0; j < st.length; j++)

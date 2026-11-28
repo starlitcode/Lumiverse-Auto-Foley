@@ -1517,6 +1517,31 @@ if (section("sync")) {
   check(looks.every((x) => !/rgba\(0, 0, 0, 0\)|transparent/.test(x[2])), "a lit word is never see-through");
   check(!errors.length, "no console errors. " + errors.slice(0, 2).join("; "));
   await context.close();
+  {
+    const { context, page, errors } = await open(THEMES[0], SIZES[1]);
+    await page.evaluate(() => {
+      window.__wav = [0.8, 1.6];
+      window.__clipMs = 2400;
+    });
+    await toTab(page, "stage");
+    await page.waitForTimeout(200);
+    await pressMessage(page);
+    await page.waitForFunction(() => document.querySelector('[data-af="theater"]') && document.querySelector('[data-af="theater"]').dataset.state === "voice", null, { timeout: 8000 });
+  // The first word lights when the voice starts, at 0.8 s on the clip's
+    // clock, and not before it.
+    const first = await page.evaluate(async () => {
+      const playing = () => window.__Audio.all.filter((a) => !a.paused && a.dataset && a.dataset.kind === "voice").pop();
+      for (let k = 0; k < 120; k++) {
+        await new Promise((r) => requestAnimationFrame(r));
+        const a = playing();
+        if (a && document.querySelectorAll('[data-af="line"] .af-w.af-said').length) return a.currentTime;
+      }
+      return null;
+    });
+    check(first !== null && first >= 0.78, "the first word lights when the voice starts, not before it (at " + (first === null ? "never" : first.toFixed(3)) + " s of 0.8)");
+    check(!errors.length, "first word: no console errors. " + errors.slice(0, 2).join("; "));
+    await context.close();
+  }
 }
 
 if (section("script status")) {
