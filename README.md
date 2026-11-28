@@ -16,6 +16,14 @@ A Lumiverse extension. It gives voice acting and sound effects to your TTS, so a
 
 It works only with models that act: ElevenLabs v3 and v4, Fish Audio S2 and Drama 3, Gemini 3.8, Chatterbox-Turbo, OmniVoice through OpenVox, and Cartesia Sonic 3. ElevenLabs, Fish Audio and Gemini also work through OpenRouter. See [Voice engines](docs/engines.md).
 
+## It replaces Lumiverse's own TTS
+
+Auto Foley is a replacement for Lumiverse's own TTS, with more options. By using it, you accept that:
+
+- It reads your messages with its own player and its own settings, in place of Lumiverse's.
+- It speaks through your TTS connections in Lumiverse, and adds settings of its own, such as how a line is said and a higher quality. See [What it sends](docs/engines.md#what-it-sends).
+- A voice can sound different than with Lumiverse's own TTS. This is on purpose.
+
 ## Install
 
 1. In Lumiverse, open **Settings**, then **Extensions**, then **Install**.

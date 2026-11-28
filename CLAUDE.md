@@ -117,6 +117,13 @@ Two skills are available. Load them before starting work.
 
 ## Voice engines
 
+- Auto Foley replaces Lumiverse's TTS, with more options. The README's
+  **It replaces Lumiverse's own TTS** section says so, and that by using it
+  people accept that it uses its own player and settings, and that a voice
+  can sound different than with Lumiverse's own TTS. Where Lumiverse would
+  add a tag or a setting of its own on top of Auto Foley's, such as a
+  default style or a direction saved on the connection, Auto Foley sends
+  its own value so Lumiverse's is not used.
 - Auto Foley is only for models that act out tags. It speaks through a TTS
   connection in Lumiverse, with Lumiverse's own `/api/v1/tts/synthesize`
   route. Lumiverse keeps every speech key.

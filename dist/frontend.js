@@ -3050,14 +3050,18 @@ export function setup(ctx, overrides) {
         const speed = m ? Number(m.speed) || 1 : 1;
         const own = (m && m.params) || {};
         const has = (k) => own[k] !== undefined && own[k] !== '';
-        // What is saved on the Lumiverse connection. Lumiverse adds it under
-        // what is sent here, so a value sent here replaces it.
-        const saved = (conn.default_parameters && typeof conn.default_parameters === 'object' && conn.default_parameters) || {};
-        const unsaved = (k) => saved[k] === undefined || saved[k] === null || saved[k] === '';
-        // Values sent for quality when the connection has none of its own. They
-        // are left out of the fingerprint of kept audio, so a line kept before
-        // they were sent still plays from what was kept.
+        // Auto Foley replaces Lumiverse's TTS. Lumiverse adds what is saved on
+        // the connection, and some defaults of its own, under what is sent here,
+        // and a value sent here replaces it. So each of those that would sit on
+        // top of Auto Foley's own tags and settings is sent here, as Auto
+        // Foley's own value or empty. Lumiverse reads an empty value as not set.
+        // These are left out of the fingerprint of kept audio, so a line kept
+        // before they were sent still plays from what was kept.
         const auto = [];
+        const over = (k, v) => {
+            params[k] = v;
+            auto.push(k);
+        };
         if (eng.eleven && provider === 'elevenlabs') {
             // Eleven v3 takes Stability only, and Eleven v4 Stability and
             // Similarity. Neither takes Speed, Style or Speaker boost, so those
@@ -3068,8 +3072,14 @@ export function setup(ctx, overrides) {
                 if (/^eleven_v4/.test(model))
                     params.similarity_boost = m.similarity;
             }
+            // Style exaggerates the voice on top of its tags. ElevenLabs says to
+            // keep it at 0, and Lumiverse sends the one saved on the connection.
+            over('style', 0);
+            // A language saved on the connection would read every line in it.
             if (has('lang'))
                 params.language_code = own.lang;
+            else
+                over('language_code', '');
         }
         else if (!eng.eleven && speed !== 1 && provider !== 'google_tts' && provider !== 'google_vertex_tts' && provider !== 'openrouter_tts') {
             params.speed = eng.speed ? Math.min(eng.speed[1], Math.max(eng.speed[0], speed)) : speed;
@@ -3085,6 +3095,9 @@ export function setup(ctx, overrides) {
                     break;
                 }
             }
+            // An emotion saved on the connection would be read on every line.
+            if (!params.emotion)
+                over('emotion', '');
         }
         // Fish Audio names Drama 3 drama-3, and reads a name it does not know as
         // S2.1 without saying so. Lumiverse lists Drama 3 as drama-3-preview, so
@@ -3099,45 +3112,44 @@ export function setup(ctx, overrides) {
                 params.top_p = own.top_p;
             if (typeof own.normalize === 'boolean')
                 params.normalize_loudness = own.normalize;
+            // A direction saved on the connection would be put at the start of
+            // every line, so only the person's own is used.
             if (has('direction') && !fishDrama)
                 params.voice_direction = own.direction;
+            else
+                over('voice_direction', '');
             // Fish Audio makes its best audio at latency normal, and uses balanced
             // when none is sent. Lumiverse lists normal as the default but sends a
             // latency only when one is saved on the connection. MP3 is 128 kbps
             // unless asked for more; Lumiverse sends the bitrate only for MP3.
-            if (unsaved('latency')) {
-                params.latency = 'normal';
-                auto.push('latency');
-            }
-            if (unsaved('mp3_bitrate')) {
-                params.mp3_bitrate = '192';
-                auto.push('mp3_bitrate');
-            }
+            over('latency', 'normal');
+            over('mp3_bitrate', '192');
         }
         if (provider === 'google_tts' || provider === 'google_vertex_tts') {
             if (has('temperature'))
                 params.temperature = own.temperature;
+            // A language saved on the connection would read every line in it.
             if (has('lang'))
                 params.language_code = own.lang;
+            else
+                over('language_code', '');
         }
         if (provider === 'chatterbox_direct')
             for (const k of ['exaggeration', 'cfg_weight', 'temperature', 'seed'])
                 if (has(k))
                     params[k] = own[k];
         // Gemini 3.8 takes it as its speech style: the person's Gemini style and
-        // the line's note together. With neither, the style saved on the
-        // connection is used. With none saved there either, an empty style is
-        // sent: Lumiverse otherwise adds its own "casual, relaxed conversation,
-        // natural pacing, understated expression" to the line, and Google's
-        // guide says most lines need no style at all.
+        // the line's note together. With neither, an empty style is sent: a
+        // style saved on the connection would be read on every line, and with
+        // none saved Lumiverse adds its own "casual, relaxed conversation,
+        // natural pacing, understated expression". Google's guide says most
+        // lines need no style at all.
         const baseStyle = eng.style && has('style_base') ? String(own.style_base) : '';
         const told = geminiStyle(baseStyle, style);
         if (told)
             params.speech_style = told;
-        else if (eng.style && unsaved('speech_style') && unsaved('instructions')) {
-            params.speech_style = '';
-            auto.push('speech_style');
-        }
+        else if (eng.style)
+            over('speech_style', '');
         let said = text;
         // OpenRouter sends Fish Audio only the text, so the direction goes at the
         // start of it there too, the same as for Drama 3.
@@ -3150,8 +3162,8 @@ export function setup(ctx, overrides) {
         const body = { connectionId: conn.id, text: said, parameters: params };
         // A Chatterbox server makes WAV by default, but Lumiverse asks an
         // OpenAI-style connection for MP3, which the server then encodes from
-        // the WAV. WAV is asked for, unless a format is saved on the connection.
-        const wav = provider === 'openai_tts' && eng.id === 'chatterbox_turbo' && unsaved('output_format');
+        // the WAV. So WAV is asked for.
+        const wav = provider === 'openai_tts' && eng.id === 'chatterbox_turbo';
         if (wav)
             body.outputFormat = 'wav';
         if (pick.voice)

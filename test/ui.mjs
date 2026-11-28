@@ -3161,10 +3161,10 @@ if (section("gemini style")) {
   check(!!narr && narr.style === "", "the narrator, with neither, sends an empty style, so Lumiverse adds none of its own (" + JSON.stringify(narr) + ")");
   check(!errors.length, "no page errors. " + errors.slice(0, 2).join(" | "));
   await context.close();
-  // A style saved on the connection is left for Lumiverse to send.
+  // A style saved on the connection is not read on every line.
   {
     const { context, page, errors } = await open(THEMES[0], SIZES[1], 1, () => {
-      window.__ttsList = [{ id: "t1", name: "Gemini here", provider: "google_tts", model: "gemini-3.8-flash-tts", is_default: true, has_api_key: true, default_parameters: { speech_style: "slow and quiet" } }];
+      window.__ttsList = [{ id: "t1", name: "Gemini here", provider: "google_tts", model: "gemini-3.8-flash-tts", is_default: true, has_api_key: true, default_parameters: { speech_style: "slow and quiet", language_code: "de-DE" } }];
       window.__settings.ttsConnection = "t1";
       window.__script = JSON.parse(JSON.stringify(SCRIPT));
     });
@@ -3173,9 +3173,9 @@ if (section("gemini style")) {
     await page.waitForTimeout(150);
     await pressMessage(page);
     await page.waitForTimeout(2500);
-    const sent = await page.evaluate(() => (window.__synth || []).map((b) => ({ text: b.text, has: "speech_style" in (b.parameters || {}) })));
+    const sent = await page.evaluate(() => (window.__synth || []).map((b) => ({ text: b.text, style: (b.parameters || {}).speech_style, lang: (b.parameters || {}).language_code })));
     const narr = sent.find((b) => /set the cup down/.test(b.text || ""));
-    check(!!narr && !narr.has, "with a style saved on the connection, a line with no note sends none, so the saved one is used (" + JSON.stringify(narr) + ")");
+    check(!!narr && narr.style === "" && narr.lang === "", "with a style and a language saved on the connection, a line with no note sends both empty, so neither is read on it (" + JSON.stringify(narr) + ")");
     check(!errors.length, "saved style: no page errors. " + errors.slice(0, 2).join(" | "));
     await context.close();
   }
@@ -3727,7 +3727,12 @@ if (section("routes")) {
   r = await run([{ id: "t1", name: "Box at home", provider: "openai_tts", api_url: "http://192.0.2.10:8004/v1", model: "chatterbox", is_default: true, has_api_key: true }], {});
   check(r.sent.length > 0 && r.sent.every((b) => b.outputFormat === "wav"), "Chatterbox server: each line asks for WAV (" + (r.sent[0] || {}).outputFormat + ")");
   r = await run([{ id: "t1", name: "Box at home", provider: "openai_tts", api_url: "http://192.0.2.10:8004/v1", model: "chatterbox", is_default: true, has_api_key: true, default_parameters: { output_format: "opus" } }], {});
-  check(r.sent.length > 0 && r.sent.every((b) => !("outputFormat" in b)), "Chatterbox server: a format saved on the connection is left as it is");
+  check(r.sent.length > 0 && r.sent.every((b) => b.outputFormat === "wav"), "Chatterbox server: WAV is asked for over a format saved on the connection");
+  r = await run([{ id: "t1", name: "Eleven", provider: "elevenlabs", model: "eleven_v3", voice: "v0", is_default: true, has_api_key: true, default_parameters: { style: 0.8, language_code: "fr" } }], {});
+  check(r.sent.length > 0 && r.sent.every((b) => (b.parameters || {}).style === 0 && (b.parameters || {}).language_code === ""), "ElevenLabs: style 0 and an empty language are sent over the saved ones (" + JSON.stringify((r.sent[0] || {}).parameters) + ")");
+  r = await run([{ id: "t1", name: "Sonic", provider: "cartesia", model: "sonic-3", voice: "c0", is_default: true, has_api_key: true, default_parameters: { emotion: "angry" } }], {});
+  check(r.sent.length > 0 && r.sent.every((b) => (b.parameters || {}).emotion === ""), "Cartesia: a line with no emotion of its own clears the one saved on the connection (" + JSON.stringify((r.sent[0] || {}).parameters) + ")");
+  check(!r.errors.length, "Cartesia: no page errors. " + r.errors.slice(0, 2).join(" | "));
   check(!r.errors.length, "Chatterbox: no page errors. " + r.errors.slice(0, 2).join(" | "));
 }
 
@@ -3757,12 +3762,12 @@ if (section("proxy note")) {
 }
 
 if (section("fish saved")) {
-  console.log("A Fish Audio latency or bitrate saved on the connection is left as it is");
+  console.log("What is saved on a Fish Audio connection does not sit on top of Auto Foley's own");
   const { context, page, errors } = await open(THEMES[0], SIZES[0]);
   await page.evaluate(() => {
     window.__teardown();
     document.getElementById("drawer").innerHTML = "";
-    window.__ttsList = [{ id: "t1", name: "Fish here", provider: "fish_audio", model: "s2.1-pro", is_default: true, has_api_key: true, default_parameters: { latency: "low", mp3_bitrate: "64" } }];
+    window.__ttsList = [{ id: "t1", name: "Fish here", provider: "fish_audio", model: "s2.1-pro", is_default: true, has_api_key: true, default_parameters: { latency: "low", mp3_bitrate: "64", voice_direction: "cheerful" } }];
     window.__settings = Object.assign({}, window.__settings, { ttsConnection: "t1" });
     window.__synth = [];
     window.__clipMs = 40;
@@ -3773,7 +3778,7 @@ if (section("fish saved")) {
   await page.waitForFunction(() => (window.__synth || []).length > 0, null, { timeout: 10000 }).catch(() => {});
   await page.waitForTimeout(600);
   const sent = await page.evaluate(() => window.__synth || []);
-  check(sent.length > 0 && sent.every((b) => !("latency" in (b.parameters || {})) && !("mp3_bitrate" in (b.parameters || {}))), "neither is sent, so the saved ones are used (" + JSON.stringify((sent[0] || {}).parameters) + ")");
+  check(sent.length > 0 && sent.every((b) => (b.parameters || {}).latency === "normal" && (b.parameters || {}).mp3_bitrate === "192" && (b.parameters || {}).voice_direction === ""), "latency normal and 192 kbps are sent, and the saved direction is cleared (" + JSON.stringify((sent[0] || {}).parameters) + ")");
   check(!errors.length, "no page errors. " + errors.slice(0, 2).join(" | "));
   await context.close();
 }

@@ -35,6 +35,8 @@ A sung line on an engine that cannot sing is spoken.
 
 ## What it sends
 
+Auto Foley replaces Lumiverse's own TTS. It speaks through your TTS connections, with settings of its own. A voice can sound different than with Lumiverse's own TTS.
+
 Each line goes to Lumiverse's own TTS route, with:
 
 - The line, with only the tags its engine can read.
@@ -42,10 +44,25 @@ Each line goes to Lumiverse's own TTS route, with:
 - For ElevenLabs: stability from the Cast tab, and on Eleven v4 similarity too.
 - For Gemini 3.8: the line's note, as the speech style.
 - For Fish Audio, Chatterbox, OmniVoice and Cartesia: the speed, when it is not 1.
-- For Fish Audio: latency `normal` and 192 kbps MP3, unless the connection has its own saved. See [Fish Audio](#fish-audio).
-- For Gemini 3.8, on a line with no note: an empty style, unless the connection has one saved. See [Gemini](#gemini).
+- For Fish Audio: latency `normal` and 192 kbps MP3. See [Fish Audio](#fish-audio).
+- For Gemini 3.8, on a line with no note: an empty style. See [Gemini](#gemini).
 
-Anything saved on the connection in Lumiverse is still used, unless Auto Foley sends the same setting.
+### Settings saved on the connection
+
+Lumiverse adds what is saved on the connection, and some defaults of its own, to each line. Where that would sit on top of Auto Foley's own tags and settings, Auto Foley sends its own value, or an empty one, so Lumiverse's is not used:
+
+| Engine | What Lumiverse would add | What Auto Foley sends |
+| --- | --- | --- |
+| Gemini 3.8 | A style saved on the connection, or Lumiverse's own "casual, relaxed conversation" style | The line's style, or an empty one |
+| Gemini | A language saved on the connection | The person's language, or an empty one, so each line's language is found |
+| Fish Audio | A direction saved on the connection, at the start of every line | The person's **Fish Audio direction**, or an empty one |
+| Fish Audio | A lower latency or bitrate saved on the connection | Latency `normal` and 192 kbps |
+| ElevenLabs | A style saved on the connection, which makes the voice more extreme | Style 0, as ElevenLabs advises |
+| ElevenLabs | A language saved on the connection | The person's language, or an empty one, so each line's language is found |
+| Cartesia | A feeling saved on the connection, on every line | The line's feeling, or an empty one |
+| Chatterbox server | A format saved on the connection | WAV |
+
+Other settings saved on the connection, such as a temperature or a volume, are still used when the person has none of their own in the Cast tab.
 
 ### Audio you already kept
 
@@ -88,6 +105,7 @@ A person can speak through a connection of their own. Open them in the **Cast** 
 - Voice tags work with **Eleven v3** and **Eleven v4**. On other models the tags are taken out.
 - Eleven v3 has three stability settings: Creative, Natural and Robust.
 - A big moment loosens the voice so it can swing further.
+- Style is sent as 0, as ElevenLabs advises, so a style saved on the connection does not make the voice more extreme on top of its tags.
 
 ### Fish Audio
 
@@ -98,9 +116,9 @@ A person can speak through a connection of their own. Open them in the **Cast** 
 - A sentence with its own tag starts a new way of speaking for the sentences after it.
 - Sounds and pauses, such as `[sighs]` or `[short pause]`, happen once and are never repeated.
 - S1 does not act, so Auto Foley does not use it. Fish Audio is retiring it.
-- Fish Audio's docs say latency `normal` gives the best quality, and `balanced` is used when none is sent. Lumiverse shows `normal` as the default, but sends a latency only when one is saved on the connection. So Auto Foley asks for `normal`.
+- Fish Audio's docs say latency `normal` gives the best quality, and `balanced` is used when none is sent. Lumiverse shows `normal` as the default, but sends a latency only when one is saved on the connection. So Auto Foley always asks for `normal`.
 - Auto Foley also asks for 192 kbps MP3. Fish uses 128 kbps when none is sent. Lumiverse sends the bitrate only for MP3.
-- A latency or bitrate saved on the connection in Lumiverse is used instead.
+- A **Fish Audio direction** saved on the connection in Lumiverse is not used. Each person's own direction, in the Cast tab, is used instead.
 
 #### Drama 3
 
@@ -116,8 +134,7 @@ Gemini 3.8:
 - Gemini 3.8 knows only vocal sounds and pauses as tags, such as `<sigh>`, `<laugh>`, `<growl>` and `<short pause>`. Auto Foley writes them in Gemini's angle brackets. A tag in square brackets is not acted on, so it is never sent that way.
 - Gemini 3.8 reads its text word for word. A few words in `|pipes|` are said by a second voice in the background, and a word in `/slashes/` is read as a phonetic spelling. Auto Foley takes pipes, angle brackets and slash pairs out of the message first, so only its own tags are read that way.
 - How a line is said goes in its note, such as `hushed and nervous`.
-- With no note, the line uses the speech style saved on the connection in Lumiverse.
-- With none saved there, Auto Foley sends an empty style. Otherwise Lumiverse adds its own, "casual, relaxed conversation, natural pacing, understated expression", which would hold back a loud or tense line. Google's guide says most lines need no style at all.
+- With no note and no **Gemini style**, Auto Foley sends an empty style. Otherwise Lumiverse adds the style saved on the connection, or its own, "casual, relaxed conversation, natural pacing, understated expression", which would hold back a loud or tense line. Google's guide says most lines need no style at all.
 - Now and then Gemini answers with no audio. Auto Foley asks again after a moment.
 
 Gemini 2.5 and 3.1:
@@ -153,7 +170,7 @@ Chatterbox runs on your own computer, through a server such as Chatterbox-TTS-Se
 - Chatterbox-Turbo knows nine tags: `[clear throat]`, `[sigh]`, `[shush]`, `[cough]`, `[groan]`, `[sniff]`, `[gasp]`, `[chuckle]` and `[laugh]`. It reads English only.
 - Chatterbox-Multilingual takes no tags, so Auto Foley does not use it. A connection with "multilingual" in its name is taken to run it.
 - OpenVox can run Chatterbox Turbo too. See [OmniVoice, through OpenVox](#omnivoice-through-openvox).
-- The server makes WAV by default. Lumiverse asks an OpenAI TTS connection for MP3, which the server then makes from the WAV. So Auto Foley asks for WAV, unless a format is saved on the connection in Lumiverse.
+- The server makes WAV by default. Lumiverse asks an OpenAI TTS connection for MP3, which the server then makes from the WAV. So Auto Foley asks for WAV.
 
 ### OmniVoice, through OpenVox
 
@@ -183,6 +200,7 @@ Cartesia is a voice service with its own key. In Lumiverse, add a TTS connection
 - Cartesia's docs say six feelings work the best: `neutral`, `calm`, `angry`, `content`, `sad` and `scared`. Feelings work best with the voices Cartesia marks **Emotive**, and in English. They are in beta at Cartesia.
 - Cartesia's docs say a feeling works only when it fits the words. The Director is told to pick only a feeling the line already carries.
 - Speed goes from 0.6 to 1.5.
+- A feeling saved on the connection in Lumiverse is not used. A line with no feeling of its own is sent with none.
 - Models older than Sonic 3 take no tags, so Auto Foley does not use them.
 
 An example: the Director writes `[wearily] [exhales] Home at last. [laughs]`. Cartesia is sent `Home at last. [laughter]`, with the feeling `tired`.
