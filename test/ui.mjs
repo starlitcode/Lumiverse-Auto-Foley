@@ -300,6 +300,9 @@ window.__fetch = async (url, init) => {
   if (u.includes('/tts/synthesize') && window.__emptyOnce) { window.__emptyOnce--; window.__emptyAt = (window.__emptyAt || []).concat(Date.now()); return new Response(JSON.stringify({ error: 'Google AI Studio tts synthesize failed: No audio payload in Gemini TTS response' }), { status: 502, headers: { 'Content-Type': 'application/json' } }); }
   if (u.includes('/tts/synthesize') && window.__synthMs) await new Promise((r) => setTimeout(r, window.__synthMs));
   if (u.includes('/tts/synthesize') && window.__bigClip) { window.__synth = (window.__synth || []).concat(JSON.parse(init.body)); const b = new Uint8Array(window.__bigClip); for (let k = 0; k < b.length; k++) b[k] = k % 251; return new Response(new Blob([b], { type: 'audio/wav' }), { status: 200 }); }
+  // window.__silentFirst: that many clips for the line holding
+  // window.__silentText come back with no voice in them.
+  if (u.includes('/tts/synthesize') && window.__silentFirst && JSON.parse(init.body).text.includes(window.__silentText || '')) { window.__silentFirst--; window.__synth = (window.__synth || []).concat(JSON.parse(init.body)); return new Response(window.__makeWav(2, 0), { status: 200 }); }
   if (u.includes('/tts/synthesize')) { window.__synthAt = (window.__synthAt || []).concat(Date.now()); window.__synth = (window.__synth || []).concat(JSON.parse(init.body)); const body = JSON.parse(init.body); return new Response(window.__wav ? window.__makeWav(window.__wav[0], window.__wav[1], (window.__amps || {})[body.voice || '']) : new Blob([new Uint8Array(64)], { type: 'audio/mpeg' }), { status: 200 }); }
   return new Response('{}', { status: 404 });
 };
@@ -3363,6 +3366,32 @@ if (section("picture in videos")) {
   check(on.dark > 200, "with the switch on, the pictures are drawn (" + on.dark + " dark pixels)");
   check(off.dark < 20, "with it off, no picture is drawn for them (" + off.dark + " dark pixels)");
   check(!on.errs.length && !off.errs.length, "video: no page errors. " + on.errs.concat(off.errs).slice(0, 2).join(" | "));
+}
+
+if (section("too little voice")) {
+  console.log("A line that comes back with far too little voice for its words is made again once");
+  for (const size of SIZES) {
+    const where = size.name;
+    for (const [label, silent] of [["once", 1], ["twice", 2]]) {
+      const { context, page, errors } = await open(THEMES[0], size);
+      await page.evaluate((silent) => { window.__wav = [0.1, 3]; window.__clipMs = 150; window.__synth = []; window.__silentFirst = silent; window.__silentText = "She set the cup down"; window.__clips = {}; }, silent);
+      await pressMessage(page);
+      await page.waitForTimeout(5000);
+      const got = await page.evaluate(() => ({ asks: (window.__synth || []).filter((b) => /She set the cup down/.test(b.text)).length, kept: Object.keys(window.__clips || {}).length }));
+      await page.click('.af-tab[data-tab="stage"]').catch(() => {});
+      await page.waitForTimeout(300);
+      const said = await page.evaluate(() => Array.from(document.querySelectorAll(".af-log-line")).map((n) => n.textContent).join(" | "));
+      if (silent === 1) {
+        check(got.asks === 2, where + ": a silent line is asked for again, once (" + got.asks + " asks)");
+        check(/0\.0 s of voice for the 12 words of line 1, so it is made again/.test(said), where + ": the Log says why (" + said.slice(0, 200) + ")");
+      } else {
+        check(got.asks === 2, where + ": a line silent twice is not asked for a third time (" + got.asks + " asks)");
+        check(/too little voice for line 1 again, so it plays as it came/.test(said), where + ": the Log says it plays as it came (" + said.slice(0, 300) + ")");
+      }
+      check(!errors.length, where + ", " + label + ": no page errors. " + errors.slice(0, 2).join(" | "));
+      await context.close();
+    }
+  }
 }
 
 if (section("still working")) {

@@ -653,3 +653,22 @@ describe("proxyNote", () => {
   });
 });
 
+
+describe("a line with far too little voice for its words", () => {
+  const { spokenWords, tooShort } = __testing;
+  test("words are counted with the tags left out", () => {
+    expect(spokenWords("[softly] Mira turns the lamp down, <whisper> and waits by the door.")).toBe(10);
+    expect(spokenWords("[sighs] ...")).toBe(0);
+  });
+  test("a long line with almost no voice is too short", () => {
+    expect(tooShort(24, 0.3)).toBe(true);
+    expect(tooShort(24, 2)).toBe(true);
+  });
+  test("a fast line said in full is not", () => {
+    expect(tooShort(24, 2.5)).toBe(false);
+    expect(tooShort(24, 9)).toBe(false);
+  });
+  test("a short line is never checked", () => {
+    expect(tooShort(5, 0)).toBe(false);
+  });
+});

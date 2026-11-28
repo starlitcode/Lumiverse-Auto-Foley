@@ -512,6 +512,24 @@ function voicedFrames(samples: ArrayLike<number>, rate: number): boolean[] {
   return out;
 }
 
+// A line whose audio has far too little voice for its words, such as one a
+// voice service skipped or cut short, is made again once. Far too little is
+// less than a second of voice for every MOST_WORDS_PER_SEC words, faster
+// than anyone speaks. A line under SHORT_LINE_WORDS words is not checked,
+// since a few words can be said very fast.
+const SHORT_LINE_WORDS = 6;
+const MOST_WORDS_PER_SEC = 10;
+// The words of a line, with its tags left out.
+function spokenWords(text: string): number {
+  return String(text || '')
+    .replace(/\[[^\]]*\]|<[^>]*>/g, ' ')
+    .split(/\s+/)
+    .filter((w) => /[\p{L}\p{N}]/u.test(w)).length;
+}
+function tooShort(words: number, voicedSecs: number): boolean {
+  return words >= SHORT_LINE_WORDS && voicedSecs * MOST_WORDS_PER_SEC < words;
+}
+
 // How loud a clip is while someone speaks, in dB below full scale. Only the
 // voiced frames count, so pauses and silence at the ends do not make a voice
 // read as quieter than it is. A clip with no voiced frames gives null.
@@ -3463,6 +3481,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     // A busy voice service, or a connection that dropped, is waited out up
     // to Wait out a provider that will not take the call. A refused key or an
     // empty account is said at once, since waiting cannot change it.
+    let madeAgain = false;
     for (let wait = 0; ; wait++) {
       let raw = '';
       let why = '';
@@ -3483,6 +3502,23 @@ export function setup(ctx: Ctx, overrides?: any) {
             return { why };
           }
           if (blob.size) {
+            const words = spokenWords(body.text);
+            const heard = words >= SHORT_LINE_WORDS ? await voicedOf(blob) : null;
+            const secs = heard ? heard.voiced.filter(Boolean).length * FRAME_SECS : 0;
+            if (heard && tooShort(words, secs)) {
+              const Who = who.charAt(0).toUpperCase() + who.slice(1);
+              if (!madeAgain) {
+                madeAgain = true;
+                log(Who + ' sent back ' + secs.toFixed(1) + ' s of voice for the ' + words + ' words of line ' + (line.i + 1) + ', so it is made again.', 'bad');
+                if (signal.aborted) return { why: what + ' was stopped.' };
+                // Not a wait for a busy service, so it does not count as one.
+                wait--;
+                continue;
+              }
+              // Played as it came, and not kept, so the next play asks again.
+              log(Who + ' sent back too little voice for line ' + (line.i + 1) + ' again, so it plays as it came.', 'bad');
+              return { blob };
+            }
             if (sig) keepClip(sig, blob, line.i + 1);
             return { blob };
           }
@@ -25000,7 +25036,7 @@ export function setup(ctx: Ctx, overrides?: any) {
   };
 }
 
-export const __testing = { bezier, animAt, BUILT_IN_ANIMS, ANIM_PLACES, EASES, feelingOf, BUILT_IN_MOODS, plainWord, hideList, hiddenWords, geminiStyle, sortCast, CAST_SORTS, keyCombo, PAUSE_KEY_DEFAULT, wavBlob, noConnectionWhy, perSentence, clipLevel, levelGain, voiceGender, describeWords, markText, movedFor, movedRowMark, MOVED_DEFAULTS, looksLikeDate, voicedFrames, wordWeight, partTimes, engineOf, noTagsWhy, proxyNote, openRouterVoices, colorCode, hexHsl, hslHex, computedHex, fitTag, tagSound, textFor, styleFor, stripTags, stabilityFor, ENGINES };
+export const __testing = { bezier, animAt, BUILT_IN_ANIMS, ANIM_PLACES, EASES, feelingOf, BUILT_IN_MOODS, plainWord, hideList, hiddenWords, geminiStyle, sortCast, CAST_SORTS, keyCombo, PAUSE_KEY_DEFAULT, wavBlob, noConnectionWhy, perSentence, clipLevel, levelGain, voiceGender, describeWords, markText, movedFor, movedRowMark, MOVED_DEFAULTS, looksLikeDate, voicedFrames, spokenWords, tooShort, wordWeight, partTimes, engineOf, noTagsWhy, proxyNote, openRouterVoices, colorCode, hexHsl, hslHex, computedHex, fitTag, tagSound, textFor, styleFor, stripTags, stabilityFor, ENGINES };
 
 // The built-in cheer: "Cheering and clapping crowd 1" by freesound_community,
 // a free sound from Pixabay (pixabay.com/sound-effects/people-cheering-and-clapping-crowd-1-5995/),

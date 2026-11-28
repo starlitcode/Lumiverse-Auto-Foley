@@ -284,6 +284,14 @@ Auto Foley says so in the Settings tab, the Director tab, the Cast tab and **Che
 - When sounds are made **In the voice** and the engine cannot make them. Its sounds become sound effects.
 - When your account has no TTS connection Auto Foley can use. The message says whether Lumiverse found no TTS connection at all, or names the ones it found and their service.
 
+### When a line comes back with too little voice
+
+A voice service can now and then send back a line with little or no voice in it, so the line is skipped or cut short. Auto Foley checks each new line:
+
+- A line of 6 words or more needs at least one second of voice for every 10 words. Nobody speaks faster than that, even at double speed.
+- A line with less is made again once, and the Log says so.
+- If it comes back short again, it plays as it came, and the Log says so. It is not kept, so the next play asks for it again.
+
 ### When your connection does not show
 
 1. Open **Connections** in Lumiverse, then the **TTS** tab. A key added under the **LLM** tab is not a TTS connection.
