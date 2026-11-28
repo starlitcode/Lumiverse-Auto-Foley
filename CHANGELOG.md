@@ -14,10 +14,17 @@ _2026-11-28_
 
 - **Every Fish Audio setting on each person.** **More settings** in the Cast tab now has Repetition penalty, Volume, Read numbers as words, Quality guard, Keep the voice the same across parts, Part length, Shortest part, Most audio per part, Early stop, and a pronunciation dictionary. Each starts at Fish Audio's own default. See [Fish Audio settings](docs/cast.md#fish-audio-settings).
 - **Volume and Language for Cartesia on each person**, in **More settings** in the Cast tab.
+- **Pictures with see-through parts.** A person's picture, a mood picture and a background picture now keep their see-through parts. In a video, the background shows through them, with no black circle under a person's picture. A picture you added before was saved without them, so choose it again to get them back.
+
+### Fixed
+
+- **The status line no longer flickers while the Director writes.** Under **Getting ready**, the line switched twice a second between two counts of seconds, such as "25 s" and "25 s (26 s)". It now shows one count, the seconds since the Director started.
 
 ### Changed
 
 - **Voice settings saved on a connection in Lumiverse are no longer used.** Auto Foley replaces Lumiverse's TTS, so it now sends every voice setting with each line: the person's own from the Cast tab, or the voice service's own default. Before, a setting such as a Fish Audio repetition penalty or a Cartesia volume came from the connection when the person had none. To change one, set it on the person in the Cast tab. See [Settings saved on the connection](docs/engines.md#settings-saved-on-the-connection).
+- **Sharper pictures of people.** A person's picture and a mood picture are now kept at 320 pixels on a side, up from 128, so they are sharp at every size a video draws them. Pictures are saved as WebP, which keeps more detail than the JPEG used before. Choose a picture again to get the sharper one.
+- **Better sound in videos.** A video's sound is made at 320 kilobits a second, up from 256, the most AAC takes.
 - **ElevenLabs is asked for its own default format.** Each line asks for MP3 at 44.1 kHz and 128 kbps, ElevenLabs' default, the best MP3 every plan can ask for. Before, a format saved on the connection was used.
 
 ---

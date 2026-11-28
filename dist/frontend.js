@@ -774,6 +774,65 @@ function geminiStyle(base, line) {
 // Eleven v3 has three stability settings, not a range: Creative, Natural and
 // Robust, at 0, 0.5 and 1. Any other value is moved to the nearest one.
 const V3_STEPS = [0, 0.5, 1];
+// Whether a picture drawn on a canvas has any see-through parts.
+function seeThrough(c) {
+    try {
+        const g = c.getContext('2d');
+        if (!g)
+            return false;
+        const d = g.getImageData(0, 0, c.width, c.height).data;
+        for (let i = 3; i < d.length; i += 4)
+            if (d[i] < 255)
+                return true;
+    }
+    catch (_) { }
+    return false;
+}
+// A picture drawn on a canvas, as a data address no longer than `max`, or
+// empty when it cannot be made that small. WebP keeps see-through parts and
+// is small. A browser that cannot write WebP gives a PNG for a picture with
+// see-through parts, and a JPEG for one with none.
+function pictureData(c, max) {
+    for (const q of [0.92, 0.85, 0.75]) {
+        const d = c.toDataURL('image/webp', q);
+        if (!/^data:image\/webp/.test(d))
+            break;
+        if (d.length <= max)
+            return d;
+    }
+    if (seeThrough(c)) {
+        const d = c.toDataURL('image/png');
+        if (d.length <= max)
+            return d;
+    }
+    for (const q of [0.92, 0.85, 0.75]) {
+        const d = c.toDataURL('image/jpeg', q);
+        if (d.length <= max)
+            return d;
+    }
+    return '';
+}
+// A person's picture or a mood picture: a square, 320 pixels on a side, so it
+// is sharp at the largest size a video draws it. The backend keeps one of up
+// to 60,000 characters, so a picture that will not fit is made smaller.
+const PIC_SIDES = [320, 256, 192, 128];
+const PIC_MAX = 58000;
+function squarePicture(draw) {
+    for (const side of PIC_SIDES) {
+        const c = document.createElement('canvas');
+        c.width = side;
+        c.height = side;
+        const g = c.getContext('2d');
+        if (!g)
+            return '';
+        g.imageSmoothingQuality = 'high';
+        draw(g, side);
+        const d = pictureData(c, PIC_MAX);
+        if (d)
+            return d;
+    }
+    return '';
+}
 // A Fish Audio setting of the person's own, by its key in the person's
 // settings, and the name Lumiverse takes it by. Fish Audio's own defaults are
 // in docs/engines.md, under Fish Audio.
@@ -5568,6 +5627,29 @@ export function setup(ctx, overrides) {
         }
         drawPictureAt(g, st, f, pic, x, top, PIC, a);
     }
+    // Whether a loaded picture has see-through parts, worked out once for each.
+    const seeThroughPics = new WeakMap();
+    function picSeeThrough(pic) {
+        if (!pic || typeof pic !== 'object')
+            return false;
+        const known = seeThroughPics.get(pic);
+        if (known !== undefined)
+            return known;
+        let clear = false;
+        try {
+            const c = document.createElement('canvas');
+            c.width = Math.max(1, Math.min(64, pic.width || 1));
+            c.height = Math.max(1, Math.min(64, pic.height || 1));
+            const g = c.getContext('2d');
+            if (g) {
+                g.drawImage(pic, 0, 0, c.width, c.height);
+                clear = seeThrough(c);
+            }
+        }
+        catch (_) { }
+        seeThroughPics.set(pic, clear);
+        return clear;
+    }
     function drawPictureAt(g, st, f, pic, x, top, PIC, a) {
         const u = Math.min(st.w, st.h) / 1080;
         const ink = hexOr(S.videoInk, STORY_INK);
@@ -5587,8 +5669,12 @@ export function setup(ctx, overrides) {
         g.shadowOffsetX = 0;
         g.shadowOffsetY = 2 * u;
         pathPic();
-        g.fillStyle = '#000';
-        g.fill();
+        // The black circle casts the shadow. A picture with see-through parts has
+        // none under it, so the video shows through those parts.
+        if (!picSeeThrough(pic)) {
+            g.fillStyle = '#000';
+            g.fill();
+        }
         g.shadowColor = 'transparent';
         g.clip();
         const sc = Math.max(PIC / pic.width, PIC / pic.height);
@@ -7513,9 +7599,13 @@ export function setup(ctx, overrides) {
             src.buffer = buf;
             const dest = actx.createMediaStreamDestination();
             src.connect(dest);
+            // 30 frames a second, since the browser records as it draws and a
+            // phone drops frames at 60. 12 megabits a second is above what sharing
+            // sites ask for at 1080p, and 320 kilobits a second is the most AAC
+            // takes, so the voices lose as little as they can.
             const stream = canvas.captureStream(30);
             dest.stream.getAudioTracks().forEach((t) => stream.addTrack(t));
-            rec = new Rec(stream, { mimeType: type, videoBitsPerSecond: 12000000, audioBitsPerSecond: 256000 });
+            rec = new Rec(stream, { mimeType: type, videoBitsPerSecond: 12000000, audioBitsPerSecond: 320000 });
         }
         catch (e) {
             try {
@@ -8437,10 +8527,13 @@ export function setup(ctx, overrides) {
         paintButtons();
         if (tab === 'stage')
             renderTab();
+        // The seconds of the wait, until the Director starts. From then the
+        // shared tick counts the Director's own seconds, and one count on the
+        // line at a time keeps it from switching between two.
         const waitTick = setInterval(() => {
-            if (busyMessage !== messageId)
+            if (busyMessage !== messageId || directorWriting)
                 return;
-            phase = busyWords() + ' (' + Math.round((Date.now() - started) / 1000) + ' s)';
+            phase = busyWords() + ', ' + secsSince(started) + ' s';
             paintStage();
         }, 1000);
         if (!activeConnection())
@@ -14501,23 +14594,14 @@ export function setup(ctx, overrides) {
             URL.revokeObjectURL(url);
             if (!im || !im.width)
                 return null;
-            const c = document.createElement('canvas');
-            c.width = PIC_SIDE;
-            c.height = PIC_SIDE;
-            const g = c.getContext('2d');
-            if (!g)
-                return null;
             const side = Math.min(im.width, im.height);
-            g.imageSmoothingQuality = 'high';
-            g.drawImage(im, (im.width - side) / 2, (im.height - side) / 2, side, side, 0, 0, PIC_SIDE, PIC_SIDE);
-            return c.toDataURL('image/jpeg', 0.85);
+            return squarePicture((g, to) => g.drawImage(im, (im.width - side) / 2, (im.height - side) / 2, side, side, 0, 0, to, to)) || null;
         }
         catch (_) {
             return null;
         }
     }
-    // done gets the crop as a small JPEG, or null when it is canceled.
-    const PIC_SIDE = 128;
+    // done gets the crop as a square picture, or null when it is canceled.
     function cropPicture(src, w, h, done) {
         const wrap = el('<div class="af-crop" data-af-crop><div class="af-crop-frame" role="img" aria-label="Drag to move the picture"><img alt=""><span class="af-crop-ring"></span></div></div>');
         const frame = wrap.firstElementChild;
@@ -14591,15 +14675,8 @@ export function setup(ctx, overrides) {
         const row = el('<div class="af-row"></div>');
         row.appendChild(button('Use this', () => {
             try {
-                const c = document.createElement('canvas');
-                c.width = PIC_SIDE;
-                c.height = PIC_SIDE;
-                const g = c.getContext('2d');
-                if (!g)
-                    throw new Error('no canvas');
                 const cut = side() / scale();
-                g.drawImage(pic, cx * w - cut / 2, cy * h - cut / 2, cut, cut, 0, 0, PIC_SIDE, PIC_SIDE);
-                done(c.toDataURL('image/jpeg', 0.85));
+                done(squarePicture((g, to) => g.drawImage(pic, cx * w - cut / 2, cy * h - cut / 2, cut, cut, 0, 0, to, to)) || null);
             }
             catch (_) {
                 done(null);
@@ -24147,10 +24224,8 @@ export function setup(ctx, overrides) {
                         return;
                     g.imageSmoothingQuality = 'high';
                     g.drawImage(im, 0, 0, cv.width, cv.height);
-                    let data = cv.toDataURL('image/jpeg', 0.92);
-                    if (data.length > 2900000)
-                        data = cv.toDataURL('image/jpeg', 0.8);
-                    await keep(data);
+                    // The backend keeps one of up to 3,000,000 characters.
+                    await keep(pictureData(cv, 2900000) || cv.toDataURL('image/jpeg', 0.6));
                 });
                 choose.setAttribute('data-af-videobg', 'choose');
                 const drop = button('Take it out', () => keep(''));

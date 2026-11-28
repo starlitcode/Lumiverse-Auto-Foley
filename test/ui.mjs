@@ -3117,6 +3117,84 @@ if (section("picture edge")) {
   }
 }
 
+if (section("see-through pictures")) {
+  console.log("A picture with see-through parts keeps them, saved sharp, and a video shows the background through them");
+  // A picture made on the page: a red ring with a clear middle and clear
+  // corners.
+  const RING = `(() => { const c = document.createElement("canvas"); c.width = 400; c.height = 400; const g = c.getContext("2d"); g.lineWidth = 60; g.strokeStyle = "#ff0000"; g.beginPath(); g.arc(200, 200, 150, 0, Math.PI * 2); g.stroke(); return c.toDataURL("image/png"); })()`;
+  for (const size of SIZES) {
+    const where = size.name;
+    const { context, page, errors } = await open(THEMES[0], size);
+    await page.evaluate((ring) => (window.__pickPic = { url: eval(ring), name: "ring.png" }), RING);
+    await toTab(page, "cast");
+    await page.waitForTimeout(300);
+    await page.locator('.af-person[data-person="a"] .af-person-head').click();
+    await page.waitForTimeout(600);
+    await page.locator('.af-person[data-person="a"] [data-af-row="castPicture"] button', { hasText: "Choose a picture" }).first().click();
+    await page.waitForTimeout(800);
+    await page.locator('.af-person[data-person="a"] [data-af-crop] button', { hasText: "Use this" }).first().click();
+    await page.waitForTimeout(800);
+    const got = await page.evaluate(async () => {
+      const pic = (window.__settings.cast.find((m) => m.id === "a") || {}).picture || "";
+      if (!pic) return { pic: "" };
+      const img = new Image();
+      await new Promise((ok) => { img.onload = ok; img.onerror = ok; img.src = pic; });
+      const c = document.createElement("canvas");
+      c.width = img.naturalWidth; c.height = img.naturalHeight;
+      const g = c.getContext("2d");
+      g.drawImage(img, 0, 0);
+      const at = (x, y) => Array.from(g.getImageData(Math.floor(x), Math.floor(y), 1, 1).data);
+      return { pic: pic.slice(0, 16), w: c.width, h: c.height, corner: at(2, 2), middle: at(c.width / 2, c.height / 2), ring: at(c.width / 2, c.height * 0.125) };
+    });
+    check(/^data:image\/webp/.test(got.pic), where + ": the picture is saved as WebP (" + got.pic + ")");
+    check(got.w === 320 && got.h === 320, where + ": it is 320 pixels on a side (" + got.w + " by " + got.h + ")");
+    check(got.corner && got.corner[3] < 20 && got.middle[3] < 20, where + ": its corners and middle stay see-through (" + JSON.stringify({ corner: got.corner, middle: got.middle }) + ")");
+    check(got.ring && got.ring[3] > 230 && got.ring[0] > 200, where + ": the ring stays solid red (" + JSON.stringify(got.ring) + ")");
+    check(!errors.length, where + ": no page errors. " + errors.slice(0, 2).join(" | "));
+    await context.close();
+  }
+  // In a video, a picture that is all see-through shows the background, with
+  // no black circle under it.
+  const size = SIZES.find((x) => !x.touch) || SIZES[0];
+  const run = async (clear) => {
+    const o = await open(THEMES[0], size, 1, `(() => { const c = document.createElement("canvas"); c.width = 64; c.height = 64; const g = c.getContext("2d"); if (!${clear}) { g.fillStyle = "#000000"; g.fillRect(0, 0, 64, 64); } g.fillStyle = "#ff0000"; g.fillRect(0, 0, 2, 2); const pic = c.toDataURL("image/png"); window.__settings.cast = window.__settings.cast.map((m) => Object.assign({}, m, { picture: pic })); Object.assign(window.__settings, { videoWords: "all", videoInk: "#ffffff", videoBacks: [{ id: "main", name: "Main", kind: "color", color: "#d06a1a", fill: "solid", stops: [], dir: "down", dim: 40, blur: 0, shapes: [], use: "match", moods: [], places: [] }], videoBackPick: "main", videoEdges: 0, videoPicRing: false }); })()`);
+    // A message played first, so the video is of the cast and their pictures.
+    await o.page.evaluate(() => { window.__wav = [0.1, 1.4]; window.__clipMs = 150; window.__synth = []; });
+    await pressMessage(o.page);
+    await o.page.waitForFunction(() => document.querySelector('#mount [data-af-slot="message"]').getAttribute("aria-busy") === null && (window.__synth || []).length >= 2, null, { timeout: 30000 }).catch(() => {});
+    await o.page.waitForTimeout(8000);
+    await openWs(o.page);
+    await o.page.waitForTimeout(1500);
+    const dark = await o.page.evaluate(async () => {
+      const r = document.querySelector("[data-af-scrub] input");
+      const c = document.querySelector("[data-af-videopreview]");
+      const g = c.getContext("2d");
+      // The most dark pixels on any frame, so a frame with no picture on it
+      // does not decide the count.
+      let most = 0;
+      // Away from the fade in and the fade out.
+      for (let t = 2; t <= Number(r.max) - 3; t += 0.5) {
+        r.value = String(t);
+        r.dispatchEvent(new Event("input", { bubbles: true }));
+        await new Promise((x) => requestAnimationFrame(() => requestAnimationFrame(x)));
+        const d = g.getImageData(0, 0, c.width, c.height).data;
+        let n = 0;
+        for (let y = Math.floor(c.height * 0.25); y < c.height * 0.6; y += 2) for (let x = 0; x < c.width; x += 2) { const k = (y * c.width + x) * 4; if (d[k] + d[k + 1] + d[k + 2] < 60) n++; }
+        if (n >= most) { most = n; window.__shot = c.toDataURL("image/png"); }
+      }
+      return most;
+    });
+    const errs = o.errors.slice();
+    if (process.env.UI_SHOT_DIR) (await import("node:fs")).writeFileSync(process.env.UI_SHOT_DIR + "/clear-" + clear + ".png", Buffer.from((await o.page.evaluate(() => window.__shot)).split(",")[1], "base64"));
+    await o.context.close();
+    return { dark, errs };
+  };
+  const solid = await run(false), clear = await run(true);
+  check(solid.dark > 200, "a solid black picture is drawn in the video, so the check reads the pictures (" + solid.dark + " dark pixels)");
+  check(clear.dark < 20, "a see-through picture has no black circle under it (" + clear.dark + " dark pixels)");
+  check(!solid.errs.length && !clear.errs.length, "video: no page errors. " + solid.errs.concat(clear.errs).slice(0, 2).join(" | "));
+}
+
 if (section("still working")) {
   console.log("A slow Director is waited for while the backend says it is still working");
   for (const size of SIZES) {
@@ -3147,6 +3225,36 @@ if (section("still working")) {
       check(!errors.length, where + ", " + label + ": no page errors. " + errors.slice(0, 2).join(" | "));
       await context.close();
     }
+  }
+}
+
+if (section("one count")) {
+  console.log("While the Director writes, the status line shows one count of seconds, never two in turn");
+  for (const size of SIZES) {
+    const where = size.name;
+    const { context, page, errors } = await open(THEMES[0], size);
+    // The Director starts 1.2 seconds after the press, and the script comes
+    // 5 seconds after it.
+    await page.evaluate(() => { window.__directHold = 5000; window.__workingEvery = 400; window.__directingAt = 1200; });
+    await toTab(page, "stage");
+    await page.waitForTimeout(150);
+    await pressMessage(page);
+    const seen = await page.evaluate(async () => {
+      const out = [];
+      for (let k = 0; k < 40; k++) {
+        await new Promise((r) => setTimeout(r, 100));
+        const n = Array.from(document.querySelectorAll(".af-now-sub")).find((x) => x.getClientRects().length);
+        out.push(n ? n.textContent : "");
+      }
+      return out;
+    });
+    const writing = seen.filter((t) => /Director is writing the script/.test(t));
+    check(writing.length > 10, where + ": the line says the Director is writing (" + writing.length + " of " + seen.length + ")");
+    check(writing.every((t) => /writing the script, \d+ s$/.test(t)), where + ": it shows one count, the same way each time (" + Array.from(new Set(writing)).join(" | ") + ")");
+    const nums = writing.map((t) => Number((t.match(/(\d+) s$/) || [])[1]));
+    check(nums.every((v, k) => k === 0 || v >= nums[k - 1]), where + ": the count never goes back (" + nums.join(",") + ")");
+    check(!errors.length, where + ": no page errors. " + errors.slice(0, 2).join(" | "));
+    await context.close();
   }
 }
 

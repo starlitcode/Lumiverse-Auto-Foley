@@ -27,7 +27,7 @@
 
 Nothing. The audio, the ZIP and the video are made in your browser, from the audio already heard.
 
-Some things are kept on your account in files of their own: a picture for each background that has one, at most 1920 pixels on its long side, your own fonts, and the pictures for moods. See [Privacy](privacy.md).
+Some things are kept on your account in files of their own: a picture for each background that has one, at most 1920 pixels on its long side, with its see-through parts kept, your own fonts, and the pictures for moods. See [Privacy](privacy.md).
 
 ## An example
 
@@ -264,7 +264,12 @@ The preview draws the video with your choices. **Where** moves through it. **Pla
 - Some phones start the sound again only after a press. Then the video waits, and **Play the preview** becomes **Go on with the video**. Press it to carry on.
 - **Stop the video** stops it and saves nothing.
 
-A browser that can make MP4, such as a recent Chrome or Safari, saves MP4, which phones and sharing sites play. Any other browser saves WebM. The video is made at a high quality.
+A browser that can make MP4, such as a recent Chrome or Safari, saves MP4, which phones and sharing sites play. Any other browser saves WebM. The video is made at:
+
+- 1920 by 1080 for **Wide**, 1080 by 1920 for **Tall**, and 1080 by 1080 for **Square**.
+- 30 frames a second. The browser records the video as it draws it, and a phone drops frames at 60.
+- 12 megabits a second for the picture, more than sharing sites ask for at 1080p.
+- 320 kilobits a second for the sound, the most AAC takes.
 
 ### The example clip
 
