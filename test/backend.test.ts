@@ -737,6 +737,36 @@ describe("keeping made audio", () => {
     expect((await h.ask({ type: "clip_get", sig: "zzz999zzz" })).find((m) => m.type === "clip").found).toBe(false);
   });
 
+  test("a line too long for one message comes in parts, and is kept whole", async () => {
+    const h = host();
+    const part = 2 * 1024 * 1024;
+    const whole = new Uint8Array(5 * 1024 * 1024);
+    for (let k = 0; k < whole.length; k++) whole[k] = k % 251;
+    const n = Math.ceil(whole.length / part);
+    let last: any[] = [];
+    for (let i = 0; i < n; i++) {
+      last = await h.ask({ type: "clip_part", sig: "long5mb01", mime: "audio/wav", upload: "up123abc", i, n, base64: Buffer.from(whole.subarray(i * part, (i + 1) * part)).toString("base64") });
+      if (i < n - 1) expect(last.find((m) => m.type === "clip_part_got").ok).toBe(true);
+    }
+    expect(last.find((m) => m.type === "clip_kept").ok).toBe(true);
+    const got = (await h.ask({ type: "clip_get", sig: "long5mb01" })).find((m) => m.type === "clip");
+    expect(got.found).toBe(true);
+    expect(Buffer.from(got.base64, "base64").equals(Buffer.from(whole))).toBe(true);
+  });
+
+  test("parts from two accounts stay apart, and a part too big is refused", async () => {
+    const h = host();
+    const one = (i: number, fill: number) => Buffer.from(new Uint8Array(1000).fill(fill)).toString("base64");
+    await h.ask({ type: "clip_part", sig: "pair00001", mime: "audio/wav", upload: "same0001", i: 0, n: 2, base64: one(0, 1) }, "alice");
+    await h.ask({ type: "clip_part", sig: "pair00001", mime: "audio/wav", upload: "same0001", i: 0, n: 2, base64: one(0, 2) }, "bob");
+    await h.ask({ type: "clip_part", sig: "pair00001", mime: "audio/wav", upload: "same0001", i: 1, n: 2, base64: one(1, 1) }, "alice");
+    const got = (await h.ask({ type: "clip_get", sig: "pair00001" }, "alice")).find((m) => m.type === "clip");
+    expect(Buffer.from(got.base64, "base64").every((x: number) => x === 1)).toBe(true);
+    const big = Buffer.from(new Uint8Array(2 * 1024 * 1024 + 1)).toString("base64");
+    const r = await h.ask({ type: "clip_part", sig: "toobig001", mime: "audio/wav", upload: "big00001", i: 0, n: 2, base64: big });
+    expect(r.find((m) => m.type === "clip_kept").ok).toBe(false);
+  });
+
   test("nothing is kept or found with Keep made audio off", async () => {
     const h = host();
     await h.ask({ type: "save", settings: { keepAudio: 0 } });

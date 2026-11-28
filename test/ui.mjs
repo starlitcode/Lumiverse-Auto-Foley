@@ -181,6 +181,15 @@ function answer(msg) {
       return setTimeout(() => { window.__clipGetNow--; reply(r); }, window.__clipGetMs);
     }
     case 'clip_put': window.__clips = Object.assign(window.__clips || {}, { [msg.sig]: { base64: msg.base64, mime: msg.mime } }); return reply({ type: 'clip_kept', ok: true });
+    // A long line in parts, put together as the backend does.
+    case 'clip_part': {
+      window.__partMsgs = (window.__partMsgs || 0) + 1;
+      const up = (window.__ups = window.__ups || {})[msg.upload + msg.sig] = window.__ups[msg.upload + msg.sig] || [];
+      up[msg.i] = atob(msg.base64);
+      if (up.filter((x) => x != null).length < msg.n) return reply({ type: 'clip_part_got', ok: true });
+      window.__clips = Object.assign(window.__clips || {}, { [msg.sig]: { base64: btoa(up.join('')), mime: msg.mime } });
+      return reply({ type: 'clip_kept', ok: true });
+    }
     case 'clips_state': { const c = window.__clips || {}; return reply({ type: 'clips_state', count: Object.keys(c).length, bytes: Object.values(c).reduce((n, x) => n + x.base64.length * 0.75, 0) }); }
     // As the backend does: the kept audio and the scripts go together.
     case 'clips_clear': window.__clips = {}; window.__keptList = []; return reply({ type: 'clips_state', ok: true, count: 0, bytes: 0 });
@@ -265,6 +274,7 @@ window.__fetch = async (url, init) => {
   if (u.includes('/messages')) return json({ data: [{ id: 'm1', name: 'Ysolde Marrow-Kestrel of the Lower Quays', is_user: false, content: 'text', swipe_id: 0 }].concat(window.__moreMessages || []), total: 1 + (window.__moreMessages || []).length });
   if (u.includes('/tts/synthesize') && window.__emptyOnce) { window.__emptyOnce--; window.__emptyAt = (window.__emptyAt || []).concat(Date.now()); return new Response(JSON.stringify({ error: 'Google AI Studio tts synthesize failed: No audio payload in Gemini TTS response' }), { status: 502, headers: { 'Content-Type': 'application/json' } }); }
   if (u.includes('/tts/synthesize') && window.__synthMs) await new Promise((r) => setTimeout(r, window.__synthMs));
+  if (u.includes('/tts/synthesize') && window.__bigClip) { window.__synth = (window.__synth || []).concat(JSON.parse(init.body)); const b = new Uint8Array(window.__bigClip); for (let k = 0; k < b.length; k++) b[k] = k % 251; return new Response(new Blob([b], { type: 'audio/wav' }), { status: 200 }); }
   if (u.includes('/tts/synthesize')) { window.__synthAt = (window.__synthAt || []).concat(Date.now()); window.__synth = (window.__synth || []).concat(JSON.parse(init.body)); const body = JSON.parse(init.body); return new Response(window.__wav ? window.__makeWav(window.__wav[0], window.__wav[1], (window.__amps || {})[body.voice || '']) : new Blob([new Uint8Array(64)], { type: 'audio/mpeg' }), { status: 200 }); }
   return new Response('{}', { status: 404 });
 };
@@ -3692,7 +3702,7 @@ if (section("fish drama")) {
     } else {
       check(sent.length > 0 && sent.every((b) => b.model !== "drama-3" && (b.parameters || {}).voice_direction === "low and [tired]" && !/^\[low and tired\]/.test(b.text)), model + ": other Fish models are sent as before, with the direction beside the line");
     }
-    check(sent.length > 0 && sent.every((b) => (b.parameters || {}).latency === "normal" && (b.parameters || {}).mp3_bitrate === "192"), model + ": with nothing saved on the connection, each line asks for latency normal and 192 kbps (" + JSON.stringify(one.parameters) + ")");
+    check(sent.length > 0 && sent.every((b) => (b.parameters || {}).latency === "normal" && b.outputFormat === "wav"), model + ": each line asks for latency normal, as WAV (" + JSON.stringify(one.parameters) + ")");
     check(!errors.length, model + ": no page errors. " + errors.slice(0, 2).join(" | "));
     await context.close();
   }
@@ -3732,8 +3742,36 @@ if (section("routes")) {
   check(r.sent.length > 0 && r.sent.every((b) => (b.parameters || {}).style === 0 && (b.parameters || {}).language_code === ""), "ElevenLabs: style 0 and an empty language are sent over the saved ones (" + JSON.stringify((r.sent[0] || {}).parameters) + ")");
   r = await run([{ id: "t1", name: "Sonic", provider: "cartesia", model: "sonic-3", voice: "c0", is_default: true, has_api_key: true, default_parameters: { emotion: "angry" } }], {});
   check(r.sent.length > 0 && r.sent.every((b) => (b.parameters || {}).emotion === ""), "Cartesia: a line with no emotion of its own clears the one saved on the connection (" + JSON.stringify((r.sent[0] || {}).parameters) + ")");
+  check(r.sent.length > 0 && r.sent.every((b) => (b.parameters || {}).output_format === "wav"), "Cartesia: each line asks for WAV");
   check(!r.errors.length, "Cartesia: no page errors. " + r.errors.slice(0, 2).join(" | "));
   check(!r.errors.length, "Chatterbox: no page errors. " + r.errors.slice(0, 2).join(" | "));
+}
+
+if (section("long lines kept")) {
+  console.log("A line too long for one message to the backend is kept in parts, each under Lumiverse's 4 MB");
+  const { context, page, errors } = await open(THEMES[0], SIZES[1]);
+  await page.evaluate(() => {
+    window.__bigClip = 5 * 1024 * 1024;
+    window.__clipMs = 40;
+    window.__sentSizes = [];
+    const send = window.__ctx.sendToBackend;
+    window.__ctx.sendToBackend = (m) => {
+      window.__sentSizes.push(JSON.stringify(m).length);
+      return send(m);
+    };
+  });
+  await pressMessage(page);
+  await page.waitForFunction(() => Object.keys(window.__clips || {}).length > 0, null, { timeout: 20000 }).catch(() => {});
+  await page.waitForTimeout(800);
+  const got = await page.evaluate(() => {
+    const c = Object.values(window.__clips || {});
+    return { parts: window.__partMsgs || 0, biggest: Math.max(0, ...window.__sentSizes), kept: c.length, whole: c.every((x) => atob(x.base64).length === 5 * 1024 * 1024) };
+  });
+  check(got.parts >= 3, "each long line goes in parts (" + got.parts + " parts)");
+  check(got.biggest < 4 * 1024 * 1024, "every message to the backend is under 4 MB (largest " + (got.biggest / 1048576).toFixed(2) + " MB)");
+  check(got.kept > 0 && got.whole, "and each line is kept whole (" + got.kept + " kept)");
+  check(!errors.length, "no page errors. " + errors.slice(0, 2).join(" | "));
+  await context.close();
 }
 
 if (section("proxy note")) {
@@ -3767,7 +3805,7 @@ if (section("fish saved")) {
   await page.evaluate(() => {
     window.__teardown();
     document.getElementById("drawer").innerHTML = "";
-    window.__ttsList = [{ id: "t1", name: "Fish here", provider: "fish_audio", model: "s2.1-pro", is_default: true, has_api_key: true, default_parameters: { latency: "low", mp3_bitrate: "64", voice_direction: "cheerful" } }];
+    window.__ttsList = [{ id: "t1", name: "Fish here", provider: "fish_audio", model: "s2.1-pro", is_default: true, has_api_key: true, default_parameters: { latency: "low", format: "mp3", voice_direction: "cheerful" } }];
     window.__settings = Object.assign({}, window.__settings, { ttsConnection: "t1" });
     window.__synth = [];
     window.__clipMs = 40;
@@ -3778,7 +3816,7 @@ if (section("fish saved")) {
   await page.waitForFunction(() => (window.__synth || []).length > 0, null, { timeout: 10000 }).catch(() => {});
   await page.waitForTimeout(600);
   const sent = await page.evaluate(() => window.__synth || []);
-  check(sent.length > 0 && sent.every((b) => (b.parameters || {}).latency === "normal" && (b.parameters || {}).mp3_bitrate === "192" && (b.parameters || {}).voice_direction === ""), "latency normal and 192 kbps are sent, and the saved direction is cleared (" + JSON.stringify((sent[0] || {}).parameters) + ")");
+  check(sent.length > 0 && sent.every((b) => (b.parameters || {}).latency === "normal" && b.outputFormat === "wav" && (b.parameters || {}).voice_direction === ""), "latency normal and WAV are sent over the saved ones, and the saved direction is cleared (" + JSON.stringify((sent[0] || {}).parameters) + ")");
   check(!errors.length, "no page errors. " + errors.slice(0, 2).join(" | "));
   await context.close();
 }
@@ -5618,6 +5656,11 @@ if (section("quick shortcuts")) {
       }));
       check(q.audio && q.video && q.mains === 1, say + ": the tab has Open the Studio as its one main button, and Quick shortcuts with Download audio and Make a video");
       check(q.off && /Play a message first, then it can be downloaded here\./.test(q.line), say + ": with nothing saved, both wait, and say why (" + q.line + ")");
+      const mp3 = await page.evaluate(() => {
+        const a = document.querySelector("[data-af-quick] a[data-af-quickmp3]");
+        return a ? { href: a.getAttribute("href"), shown: !!a.offsetParent, line: a.closest(".af-hint, p, div").textContent } : null;
+      });
+      check(!!mp3 && mp3.shown && /docs\/studio\.md#getting-an-mp3$/.test(mp3.href) && /Download audio saves a WAV\./.test(mp3.line), say + ": under the buttons, a line says it is a WAV and links to Getting an MP3 (" + JSON.stringify(mp3) + ")");
       const m = await page.evaluate(MEASURE, size.touch);
       check(!m.overflow.length && !m.small.length, say + ": the tab fits. " + m.overflow.concat(m.small).slice(0, 2).join("; "));
       check(!errors.length, say + ": no page errors. " + errors.slice(0, 2).join(" | "));

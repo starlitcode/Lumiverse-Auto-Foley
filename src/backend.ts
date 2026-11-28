@@ -3685,7 +3685,18 @@ async function saveKeptScripts(userId: string): Promise<string> {
 // spent. A changed voice or setting is a new fingerprint, so only that line is
 // made again. The oldest go first once the total passes Keep made audio.
 const CLIP_INDEX = 'clips/index.json';
-const CLIP_MAX_BYTES = 2.5 * 1024 * 1024;
+// The most one kept line can be: about 3 minutes of WAV at 44.1 kHz.
+const CLIP_MAX_BYTES = 16 * 1024 * 1024;
+// Lumiverse takes a message from the panel of up to 4 MB, and a line goes as
+// base64, a third larger. So a line longer than one part comes in parts of
+// up to 2 MB, put together here before it is kept.
+const CLIP_PART_BYTES = 2 * 1024 * 1024;
+const CLIP_PARTS_MAX = Math.ceil(CLIP_MAX_BYTES / CLIP_PART_BYTES);
+// Parts still coming in, by account, upload and line. One left unfinished
+// for a minute is dropped, and an account has at most a few at once.
+const clipUploads = new Map<string, { parts: Uint8Array[]; got: number; at: number }>();
+const CLIP_UPLOAD_MS = 60 * 1000;
+const CLIP_UPLOADS_PER_ACCOUNT = 4;
 interface ClipEntry {
   sig: string;
   mime: string;
@@ -3693,6 +3704,43 @@ interface ClipEntry {
   at: number;
 }
 const clipLists: Record<string, ClipEntry[]> = {};
+
+// Why a line cannot be kept, before any of it is read. Empty when it can.
+function clipPutWrong(s: Settings, sig: string, mime: string): any {
+  if (!s.keepAudio) return { type: 'clip_kept', ok: false, error: 'Keep made audio is off, so the line was not kept.' };
+  if (!/^[a-z0-9]{6,40}$/.test(sig)) return { type: 'clip_kept', ok: false, error: 'The line could not be kept: its fingerprint was not valid.' };
+  if (!mime) return { type: 'clip_kept', ok: false, error: 'The line could not be kept: what was sent is not audio.' };
+  return null;
+}
+
+// Keeps one whole line by its fingerprint, and lets the oldest go once the
+// total passes Keep made audio.
+async function keepClipBytes(userId: string | undefined, s: Settings, sig: string, mime: string, bytes: Uint8Array): Promise<any> {
+  if (!bytes.length) return { type: 'clip_kept', ok: false, error: 'The line could not be kept: it had no sound in it.' };
+  if (bytes.length > CLIP_MAX_BYTES)
+    return { type: 'clip_kept', ok: false, error: 'A line is too long to keep (' + (bytes.length / 1048576).toFixed(1) + ' MB, the most is ' + CLIP_MAX_BYTES / 1048576 + ' MB), so it is made again each time it plays.' };
+  try {
+    await spindle.userStorage.writeBinary('clips/' + sig, bytes, userId);
+  } catch (e: any) {
+    return { type: 'clip_kept', ok: false, error: 'The audio could not be kept: ' + String((e && e.message) || e).slice(0, 200) };
+  }
+  const list = (await loadClips(userId)).filter((x) => x.sig !== sig);
+  list.push({ sig, mime, bytes: bytes.length, at: Date.now() });
+  // The oldest go first, until the total fits.
+  list.sort((a, b) => a.at - b.at);
+  const cap = s.keepAudio * 1024 * 1024;
+  let total = list.reduce((n, x) => n + x.bytes, 0);
+  const gone: ClipEntry[] = [];
+  while (total > cap && list.length > 1) {
+    const old = list.shift() as ClipEntry;
+    total -= old.bytes;
+    gone.push(old);
+  }
+  const ok = await saveClips(userId, list);
+  await dropClips(userId, gone);
+  return { type: 'clip_kept', ok, error: ok ? '' : 'The line was kept, but the list of kept audio could not be saved, so it may be made again.' };
+}
+
 // A list that could not be read throws ReadFailed and is not kept, so no
 // clip is written into an index that has lost the others.
 async function loadClips(userId: string | undefined): Promise<ClipEntry[]> {
@@ -5582,32 +5630,52 @@ async function panelRequest(p: any, userId: string | undefined) {
         const sig = str(p.sig, 40);
         const s = await loadSettings(userId);
         const mime = /^audio\/[a-z0-9.+-]+$/i.test(String(p.mime)) ? String(p.mime) : '';
-        if (!s.keepAudio) return answer({ type: 'clip_kept', ok: false, error: 'Keep made audio is off, so the line was not kept.' });
-        if (!/^[a-z0-9]{6,40}$/.test(sig)) return answer({ type: 'clip_kept', ok: false, error: 'The line could not be kept: its fingerprint was not valid.' });
-        if (!mime) return answer({ type: 'clip_kept', ok: false, error: 'The line could not be kept: what was sent is not audio.' });
-        const bytes = fromBase64(str(p.base64, CLIP_MAX_BYTES * 2));
-        if (!bytes.length) return answer({ type: 'clip_kept', ok: false, error: 'The line could not be kept: it had no sound in it.' });
-        if (bytes.length > CLIP_MAX_BYTES) return answer({ type: 'clip_kept', ok: false, error: 'A line is too long to keep (' + (bytes.length / 1048576).toFixed(1) + ' MB, the most is 2.5 MB), so it is made again each time it plays.' });
-        try {
-          await spindle.userStorage.writeBinary('clips/' + sig, bytes, userId);
-        } catch (e: any) {
-          return answer({ type: 'clip_kept', ok: false, error: 'The audio could not be kept: ' + String((e && e.message) || e).slice(0, 200) });
+        const wrong = clipPutWrong(s, sig, mime);
+        if (wrong) return answer(wrong);
+        return answer(await keepClipBytes(userId, s, sig, mime, fromBase64(str(p.base64, CLIP_PART_BYTES * 2))));
+      }
+      case 'clip_part': {
+        // One part of a line too long for one message. The last part keeps
+        // the line, and answers the same way clip_put does.
+        const sig = str(p.sig, 40);
+        const s = await loadSettings(userId);
+        const mime = /^audio\/[a-z0-9.+-]+$/i.test(String(p.mime)) ? String(p.mime) : '';
+        const wrong = clipPutWrong(s, sig, mime);
+        if (wrong) return answer(wrong);
+        const upload = str(p.upload, 40);
+        const i = Math.floor(Number(p.i));
+        const n = Math.floor(Number(p.n));
+        if (!/^[a-z0-9]{6,40}$/i.test(upload) || !(n >= 2 && n <= CLIP_PARTS_MAX) || !(i >= 0 && i < n))
+          return answer({ type: 'clip_kept', ok: false, error: 'A line is too long to keep (the most is ' + CLIP_MAX_BYTES / 1048576 + ' MB), so it is made again each time it plays.' });
+        const bytes = fromBase64(str(p.base64, CLIP_PART_BYTES * 2));
+        if (!bytes.length || bytes.length > CLIP_PART_BYTES) return answer({ type: 'clip_kept', ok: false, error: 'The line could not be kept: a part of it did not arrive whole.' });
+        const now = Date.now();
+        for (const [k, u] of clipUploads) if (now - u.at > CLIP_UPLOAD_MS) clipUploads.delete(k);
+        const who = (userId || '') + ':';
+        const key = who + upload + ':' + sig;
+        let up = clipUploads.get(key);
+        if (!up) {
+          if ([...clipUploads.keys()].filter((k) => k.indexOf(who) === 0).length >= CLIP_UPLOADS_PER_ACCOUNT)
+            return answer({ type: 'clip_kept', ok: false, error: 'The line could not be kept: too many long lines were being kept at once. It is made again the next time it plays.' });
+          up = { parts: new Array(n), got: 0, at: now };
+          clipUploads.set(key, up);
         }
-        const list = (await loadClips(userId)).filter((x) => x.sig !== sig);
-        list.push({ sig, mime, bytes: bytes.length, at: Date.now() });
-        // The oldest go first, until the total fits.
-        list.sort((a, b) => a.at - b.at);
-        const cap = s.keepAudio * 1024 * 1024;
-        let total = list.reduce((n, x) => n + x.bytes, 0);
-        const gone: ClipEntry[] = [];
-        while (total > cap && list.length > 1) {
-          const old = list.shift() as ClipEntry;
-          total -= old.bytes;
-          gone.push(old);
+        if (up.parts.length !== n) {
+          clipUploads.delete(key);
+          return answer({ type: 'clip_kept', ok: false, error: 'The line could not be kept: its parts did not match.' });
         }
-        const ok = await saveClips(userId, list);
-        await dropClips(userId, gone);
-        return answer({ type: 'clip_kept', ok, error: ok ? '' : 'The line was kept, but the list of kept audio could not be saved, so it may be made again.' });
+        if (!up.parts[i]) up.got++;
+        up.parts[i] = bytes;
+        up.at = now;
+        if (up.got < n) return answer({ type: 'clip_part_got', ok: true });
+        clipUploads.delete(key);
+        const whole = new Uint8Array(up.parts.reduce((t, x) => t + x.length, 0));
+        let at = 0;
+        for (const x of up.parts) {
+          whole.set(x, at);
+          at += x.length;
+        }
+        return answer(await keepClipBytes(userId, s, sig, mime, whole));
       }
       case 'clip_drop': {
         // One kept line is let go, so it is made again the next time.

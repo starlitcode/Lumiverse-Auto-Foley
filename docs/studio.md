@@ -237,13 +237,14 @@ Any audio converter can save the WAV as an MP3.
 - **On a computer:** most audio programs can open a WAV and save it as an MP3.
 - **On a phone:** the free [audio converter from Wave](https://wave.co/tools/audio-converter) works in the browser. Its page says the file is not uploaded. Open it in your phone's own browser, not inside the Lumiverse app, since an app may not let the page pick a file.
 
-**Audio**, in the Studio, links to this section.
+**Audio**, in the Studio, and **Quick shortcuts**, on the drawer's **Studio** tab, link to this section.
 
 ### Better sound from the start
 
 The sound can only be as good as what the voice service sends.
 
-- Each TTS connection in Lumiverse has an **output format**. Pick a higher one there, such as MP3 at 192 kbps or PCM at 44.1 kHz on ElevenLabs, or WAV on Fish Audio. Some formats need a paid plan with the service.
+- Auto Foley asks Gemini, Fish Audio, Cartesia, Chatterbox and OmniVoice for WAV, which is not compressed. See [The format each engine sends](engines.md#the-format-each-engine-sends).
+- On ElevenLabs, the **output format** on the TTS connection in Lumiverse is used. Pick a higher one there, such as MP3 at 192 kbps or PCM at 44.1 kHz. These need a paid plan with ElevenLabs.
 - A line kept in **Keep made audio** is played as it was first made. Press **Clear kept audio** to make lines again in a new format.
 
 ## Video

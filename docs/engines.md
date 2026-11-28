@@ -44,7 +44,8 @@ Each line goes to Lumiverse's own TTS route, with:
 - For ElevenLabs: stability from the Cast tab, and on Eleven v4 similarity too.
 - For Gemini 3.8: the line's note, as the speech style.
 - For Fish Audio, Chatterbox, OmniVoice and Cartesia: the speed, when it is not 1.
-- For Fish Audio: latency `normal` and 192 kbps MP3. See [Fish Audio](#fish-audio).
+- For Fish Audio: latency `normal`, as WAV. See [Fish Audio](#fish-audio).
+- For Cartesia: WAV.
 - For Gemini 3.8, on a line with no note: an empty style. See [Gemini](#gemini).
 
 ### Settings saved on the connection
@@ -56,7 +57,8 @@ Lumiverse adds what is saved on the connection, and some defaults of its own, to
 | Gemini 3.8 | A style saved on the connection, or Lumiverse's own "casual, relaxed conversation" style | The line's style, or an empty one |
 | Gemini | A language saved on the connection | The person's language, or an empty one, so each line's language is found |
 | Fish Audio | A direction saved on the connection, at the start of every line | The person's **Fish Audio direction**, or an empty one |
-| Fish Audio | A lower latency or bitrate saved on the connection | Latency `normal` and 192 kbps |
+| Fish Audio | A lower latency, or a compressed format such as MP3, saved on the connection | Latency `normal`, as WAV |
+| Cartesia | A compressed format such as MP3 saved on the connection | WAV |
 | ElevenLabs | A style saved on the connection, which makes the voice more extreme | Style 0, as ElevenLabs advises |
 | ElevenLabs | A language saved on the connection | The person's language, or an empty one, so each line's language is found |
 | Cartesia | A feeling saved on the connection, on every line | The line's feeling, or an empty one |
@@ -64,9 +66,24 @@ Lumiverse adds what is saved on the connection, and some defaults of its own, to
 
 Other settings saved on the connection, such as a temperature or a volume, are still used when the person has none of their own in the Cast tab.
 
+### The format each engine sends
+
+Auto Foley asks for audio as the voice made it, with no compression, wherever the service allows it on every plan:
+
+| Engine | What you get |
+| --- | --- |
+| Gemini 3.8 | WAV, 24 kHz. Google makes only this. |
+| Fish Audio | WAV, 44.1 kHz |
+| Cartesia | WAV, at the 22.05 kHz Lumiverse asks for |
+| Chatterbox, OmniVoice | WAV, 24 kHz |
+| ElevenLabs | The format saved on the connection, MP3 by default. Its uncompressed formats at full quality need a paid plan, so Auto Foley does not ask for them. |
+| Through OpenRouter | Gemini as WAV. ElevenLabs and Fish Audio as MP3. |
+
+WAV files are larger. A line of up to 16 MB is kept, about 3 minutes of Fish Audio's WAV. Lumiverse takes a message of up to 4 MB from the panel, so a longer line is sent to the backend in parts and put back together there.
+
 ### Audio you already kept
 
-The latency, the bitrate and the empty style are left out when Auto Foley checks whether a line was kept before. So a line kept before Auto Foley sent them still plays from what was kept, and is not paid for again.
+The latency, the format and the empty values are left out when Auto Foley checks whether a line was kept before. So a line kept before Auto Foley sent them still plays from what was kept, and is not paid for again.
 
 ## An example
 
@@ -117,7 +134,7 @@ A person can speak through a connection of their own. Open them in the **Cast** 
 - Sounds and pauses, such as `[sighs]` or `[short pause]`, happen once and are never repeated.
 - S1 does not act, so Auto Foley does not use it. Fish Audio is retiring it.
 - Fish Audio's docs say latency `normal` gives the best quality, and `balanced` is used when none is sent. Lumiverse shows `normal` as the default, but sends a latency only when one is saved on the connection. So Auto Foley always asks for `normal`.
-- Auto Foley also asks for 192 kbps MP3. Fish uses 128 kbps when none is sent. Lumiverse sends the bitrate only for MP3.
+- Auto Foley also asks for WAV, which Fish's docs call its highest quality. WAV is not compressed, so the audio is exactly as Fish made it.
 - A **Fish Audio direction** saved on the connection in Lumiverse is not used. Each person's own direction, in the Cast tab, is used instead.
 
 #### Drama 3

@@ -3265,11 +3265,12 @@ export function setup(ctx: Ctx, overrides?: any) {
       else over('voice_direction', '');
       // Fish Audio makes its best audio at latency normal, and uses balanced
       // when none is sent. Lumiverse lists normal as the default but sends a
-      // latency only when one is saved on the connection. MP3 is 128 kbps
-      // unless asked for more; Lumiverse sends the bitrate only for MP3.
+      // latency only when one is saved on the connection.
       over('latency', 'normal');
-      over('mp3_bitrate', '192');
     }
+    // Cartesia's audio as WAV, with no MP3 step. Lumiverse reads its format
+    // from the parameters.
+    if (provider === 'cartesia') over('output_format', 'wav');
     if (provider === 'google_tts' || provider === 'google_vertex_tts') {
       if (has('temperature')) params.temperature = own.temperature;
       // A language saved on the connection would read every line in it.
@@ -3296,10 +3297,12 @@ export function setup(ctx: Ctx, overrides?: any) {
       if (dir) said = '[' + dir + '] ' + text;
     }
     const body: any = { connectionId: conn.id, text: said, parameters: params };
-    // A Chatterbox server makes WAV by default, but Lumiverse asks an
-    // OpenAI-style connection for MP3, which the server then encodes from
-    // the WAV. So WAV is asked for.
-    const wav = provider === 'openai_tts' && eng.id === 'chatterbox_turbo';
+    // WAV keeps the audio as the voice made it. A Chatterbox server makes
+    // WAV by default, but Lumiverse asks an OpenAI-style connection for MP3,
+    // which the server then encodes from the WAV. Fish Audio's docs call WAV
+    // its highest quality. A line too long for one message to the backend
+    // is kept in parts, so a WAV line is still kept.
+    const wav = (provider === 'openai_tts' && eng.id === 'chatterbox_turbo') || provider === 'fish_audio';
     if (wav) body.outputFormat = 'wav';
     if (pick.voice) body.voice = pick.voice;
     if (pick.model) body.model = pick.model;
@@ -3411,6 +3414,11 @@ export function setup(ctx: Ctx, overrides?: any) {
   // The sounds already said to have nothing to play.
   const soundMissSaid = new Set<string>();
 
+  // The most one kept line can be, and the size of each part a longer one
+  // is sent in. The backend holds the same numbers.
+  const CLIP_MAX_MB = 16;
+  const CLIP_PART_BYTES = 2 * 1024 * 1024;
+
   // How many lines of the show playing came from kept audio, for the Log.
   let keptUsed = 0;
   let keptWarned = false;
@@ -3426,10 +3434,23 @@ export function setup(ctx: Ctx, overrides?: any) {
       }
     };
     const mb = blob.size / (1024 * 1024);
-    if (mb > 2.5) return said((line ? 'Line ' + line : 'A line') + ' is too long to keep (' + mb.toFixed(1) + ' MB, the most is 2.5 MB), so it is made again each time it plays.');
+    if (mb > CLIP_MAX_MB) return said((line ? 'Line ' + line : 'A line') + ' is too long to keep (' + mb.toFixed(1) + ' MB, the most is ' + CLIP_MAX_MB + ' MB), so it is made again each time it plays.');
     try {
       const bytes = new Uint8Array(await blob.arrayBuffer());
-      const r = await rpc({ type: 'clip_put', sig, mime: blob.type || 'audio/mpeg', base64: bytesToBase64(bytes) }, 30000);
+      const mime = blob.type || 'audio/mpeg';
+      let r: any;
+      if (bytes.length <= CLIP_PART_BYTES) r = await rpc({ type: 'clip_put', sig, mime, base64: bytesToBase64(bytes) }, 30000);
+      else {
+        // Lumiverse takes a message from the panel of up to 4 MB, so a
+        // longer line goes in parts, put together by the backend.
+        const n = Math.ceil(bytes.length / CLIP_PART_BYTES);
+        const upload = rid('up').replace(/[^a-z0-9]/gi, '');
+        for (let i = 0; i < n; i++) {
+          const part = bytes.subarray(i * CLIP_PART_BYTES, (i + 1) * CLIP_PART_BYTES);
+          r = await rpc({ type: 'clip_part', sig, mime, upload, i, n, base64: bytesToBase64(part) }, 30000);
+          if (!r || r.ok === false || r.type === 'failed') break;
+        }
+      }
       if (r && r.ok === false && r.error) said(r.error);
       else if (r && r.type === 'failed') said(String(r.error || 'The line could not be kept.'));
     } catch (_) {
@@ -22482,6 +22503,8 @@ export function setup(ctx: Ctx, overrides?: any) {
     acts.appendChild(audio);
     acts.appendChild(video);
     box.appendChild(acts);
+    const mp3 = hint('Download audio saves a WAV. For an MP3, see <a href="https://github.com/starlitcode/Lumiverse-Auto-Foley/blob/stable/docs/studio.md#getting-an-mp3" target="_blank" rel="noopener" data-af-quickmp3>Getting an MP3</a> on GitHub.');
+    box.appendChild(mp3);
     box.appendChild(pick);
     const said = el('<p class="af-note" role="status" aria-live="polite" data-af-quicksaid></p>');
     box.appendChild(said);
