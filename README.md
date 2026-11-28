@@ -21,7 +21,7 @@ It works only with models that act: ElevenLabs v3 and v4, Fish Audio S2 and Dram
 Auto Foley is a replacement for Lumiverse's own TTS, with more options. By using it, you accept that:
 
 - It reads your messages with its own player and its own settings, in place of Lumiverse's.
-- It speaks through your TTS connections in Lumiverse, and adds settings of its own, such as how a line is said and a higher quality. See [Sound quality, and where it replaces Lumiverse's TTS](docs/engines.md#sound-quality-and-where-it-replaces-lumiverses-tts).
+- It speaks through your TTS connections in Lumiverse, with its own voice settings in place of the ones saved on the connection, such as how a line is said and a higher quality. See [Sound quality, and where it replaces Lumiverse's TTS](docs/engines.md#sound-quality-and-where-it-replaces-lumiverses-tts).
 - A voice can sound different than with Lumiverse's own TTS. This is on purpose.
 
 ## Install
