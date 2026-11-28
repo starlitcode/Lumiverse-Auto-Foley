@@ -167,6 +167,7 @@ With **Use a Decision model** on:
 - It picks who says each quoted line, from up to 12 people in the cast. A pick it is less sure of than **How sure it must be** is left to the Director.
 - With sounds on, it gives the chance that each narration line describes a sound. The Director is told these chances. With **Only sounds the text shows** on, a line at or over **How sure it must be** keeps its sounds.
 - **How sure it must be** is 50% by default, from 10% to 95%. It sits under **Use a Decision model**.
+- **How sure for your own characters** is 80% by default, under it. A reply is mostly the other characters speaking. So in a reply, a line goes to one of your personas only at this or higher, unless the text names them. Below it, the line is left to the Director. In your own message, **How sure it must be** applies.
 - The Log lists every answer under **What the Decision model answered**: who it picked for each quote and how sure it was, the next two it considered, and the chance for each line. Each says whether it was used.
 - A Decision model gives numbers, not written thinking. The chances in the Log are everything it sends back.
 - If it cannot be asked, the Log says why, and the Director does the whole job. The reasons it gives: no Decision connection, none set as the default, the one picked is gone, no key saved, the permission refused, or a Lumiverse too old to have Decision connections.

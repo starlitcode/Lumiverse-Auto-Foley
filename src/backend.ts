@@ -199,6 +199,9 @@ interface Settings {
   // How sure the Decision model must be, in percent, before its answer is
   // used: a speaker it picks, or a line it finds likely to be a sound.
   decisionSure: number;
+  // In a reply, a line goes to one of the reader's own characters, a
+  // persona, only at this or higher, unless the text names them.
+  decisionSureOwn: number;
   // Sounds.
   makeSounds: boolean;
   // Where a sound the library does not have comes from: Freesound first and
@@ -532,6 +535,7 @@ const DEFAULT_SETTINGS: Settings = {
   decisionsOn: false,
   decisionConnection: '',
   decisionSure: 50,
+  decisionSureOwn: 80,
   makeSounds: true,
   soundFrom: 'both',
   freesoundLicense: 'free',
@@ -1365,6 +1369,7 @@ function cleanSettings(raw: any): Settings {
     decisionsOn: bool(r.decisionsOn, d.decisionsOn),
     decisionConnection: str(r.decisionConnection, 80),
     decisionSure: Math.round(num(r.decisionSure, 10, 95, d.decisionSure)),
+    decisionSureOwn: Math.round(num(r.decisionSureOwn, 10, 95, d.decisionSureOwn)),
     makeSounds: bool(r.makeSounds, d.makeSounds),
     soundFrom: pick(r.soundFrom, ['both', 'freesound', 'eleven'] as const, d.soundFrom),
     freesoundLicense: pick(r.freesoundLicense, ['any', 'free', 'cc0'] as const, d.freesoundLicense),
@@ -3467,6 +3472,12 @@ async function askDecisions(
 ): Promise<{ speakers: Record<number, string>; hints: Record<number, number>; log: string[]; decided: string[]; cost: number }> {
   const out = { speakers: {} as Record<number, string>, hints: {} as Record<number, number>, log: [] as string[], decided: [] as string[], cost: 0 };
   const sure = s.decisionSure / 100;
+  // A reply is mostly the other characters speaking, so a guess that a line
+  // is the reader's own character needs a higher bar. In the reader's own
+  // message it is the usual one.
+  const writer = findMember(s.cast, author);
+  const ownMessage = !!writer && writer.kind === 'persona';
+  const ownSure = Math.max(sure, s.decisionSureOwn / 100);
   if (!hasDecisions()) {
     out.log.push('The Decision model was not used: this Lumiverse has no Decision connections for extensions. Update Lumiverse to use it.');
     return out;
@@ -3543,13 +3554,15 @@ async function askDecisions(
           return (j >= 0 && people[j] ? people[j].name : 'someone else') + ' ' + pct(Number(probs[key]));
         });
       const also = others.length ? ' Next: ' + others.join(', ') + '.' : '';
-      if (k >= 0 && people[k] && known && conf >= sure) {
+      const own = k >= 0 && !!people[k] && people[k].kind === 'persona' && !ownMessage;
+      if (k >= 0 && people[k] && known && conf >= (own ? ownSure : sure)) {
         out.speakers[i] = people[k].name;
         picked++;
         out.decided.push('"' + textOf(i) + '" is ' + pickName + ', ' + pct(conf) + ' sure. Used.' + also);
       } else {
         unsure++;
-        out.decided.push('"' + textOf(i) + '" is ' + pickName + (known ? ', ' + pct(conf) + ' sure' : '') + '. Left to the Director.' + also);
+        const why = own && known && conf >= sure ? ' Left to the Director, since one of your own characters needs ' + s.decisionSureOwn + '% in a reply.' : '. Left to the Director.';
+        out.decided.push('"' + textOf(i) + '" is ' + pickName + (known ? ', ' + pct(conf) + ' sure' : '') + (why.charAt(0) === '.' ? why : '.' + why) + also);
       }
     } else if (key.indexOf('sound_') === 0) {
       const i = Number(key.slice(6));
@@ -3559,7 +3572,11 @@ async function askDecisions(
       out.decided.push('"' + textOf(i) + '" describes a sound: ' + pct(chance) + (chance >= sure ? '. Its sounds are kept.' : '.'));
     }
   }
-  if (out.decided.length) out.decided.unshift(name + ' answered. An answer is used at ' + s.decisionSure + '% sure or more.');
+  if (out.decided.length)
+    out.decided.unshift(
+      name + ' answered. An answer is used at ' + s.decisionSure + '% sure or more' +
+        (!ownMessage && people.some((c) => c.kind === 'persona') ? ', and at ' + Math.max(s.decisionSure, s.decisionSureOwn) + '% for one of your own characters in a reply.' : '.'),
+    );
   if (speech.length && people.length > 1)
     out.log.push(name + ' picked the speaker for ' + picked + ' of ' + speech.length + ' quoted lines' + (unsure ? ', and left ' + unsure + ' to the Director' : '') + '.');
   return out;

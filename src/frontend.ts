@@ -2418,6 +2418,7 @@ const DEFAULTS: any = {
   decisionsOn: false,
   decisionConnection: '',
   decisionSure: 50,
+  decisionSureOwn: 80,
   makeSounds: true,
   soundFrom: 'both',
   musicOn: false,
@@ -15808,7 +15809,9 @@ export function setup(ctx: Ctx, overrides?: any) {
         });
         const line = numberRow('How sure it must be (%)', Number(S.decisionSure) || 50, 10, 95, 5, (v) => set({ decisionSure: Math.round(v) }), '50% by default. A speaker it picks, or a sound it finds likely, is used only at this or higher. The Log shows each answer.');
         line.setAttribute('data-af-sure', '');
-        return [box, line].concat(fields);
+        const ownLine = numberRow('How sure for your own characters (%)', Number(S.decisionSureOwn) || 80, 10, 95, 5, (v) => set({ decisionSureOwn: Math.round(v) }), '80% by default. In a reply, a line goes to one of your personas only at this or higher, unless the text names them.');
+        ownLine.setAttribute('data-af-sureown', '');
+        return [box, line, ownLine].concat(fields);
       }),
     );
     page.appendChild(dec);

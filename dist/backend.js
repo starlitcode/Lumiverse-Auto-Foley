@@ -40,6 +40,7 @@ const DEFAULT_SETTINGS = {
     decisionsOn: false,
     decisionConnection: '',
     decisionSure: 50,
+    decisionSureOwn: 80,
     makeSounds: true,
     soundFrom: 'both',
     freesoundLicense: 'free',
@@ -880,6 +881,7 @@ function cleanSettings(raw) {
         decisionsOn: bool(r.decisionsOn, d.decisionsOn),
         decisionConnection: str(r.decisionConnection, 80),
         decisionSure: Math.round(num(r.decisionSure, 10, 95, d.decisionSure)),
+        decisionSureOwn: Math.round(num(r.decisionSureOwn, 10, 95, d.decisionSureOwn)),
         makeSounds: bool(r.makeSounds, d.makeSounds),
         soundFrom: pick(r.soundFrom, ['both', 'freesound', 'eleven'], d.soundFrom),
         freesoundLicense: pick(r.freesoundLicense, ['any', 'free', 'cc0'], d.freesoundLicense),
@@ -2895,6 +2897,12 @@ function candidates(cast, text, author) {
 async function askDecisions(userId, s, segs, author, known) {
     const out = { speakers: {}, hints: {}, log: [], decided: [], cost: 0 };
     const sure = s.decisionSure / 100;
+    // A reply is mostly the other characters speaking, so a guess that a line
+    // is the reader's own character needs a higher bar. In the reader's own
+    // message it is the usual one.
+    const writer = findMember(s.cast, author);
+    const ownMessage = !!writer && writer.kind === 'persona';
+    const ownSure = Math.max(sure, s.decisionSureOwn / 100);
     if (!hasDecisions()) {
         out.log.push('The Decision model was not used: this Lumiverse has no Decision connections for extensions. Update Lumiverse to use it.');
         return out;
@@ -2976,14 +2984,16 @@ async function askDecisions(userId, s, segs, author, known) {
                 return (j >= 0 && people[j] ? people[j].name : 'someone else') + ' ' + pct(Number(probs[key]));
             });
             const also = others.length ? ' Next: ' + others.join(', ') + '.' : '';
-            if (k >= 0 && people[k] && known && conf >= sure) {
+            const own = k >= 0 && !!people[k] && people[k].kind === 'persona' && !ownMessage;
+            if (k >= 0 && people[k] && known && conf >= (own ? ownSure : sure)) {
                 out.speakers[i] = people[k].name;
                 picked++;
                 out.decided.push('"' + textOf(i) + '" is ' + pickName + ', ' + pct(conf) + ' sure. Used.' + also);
             }
             else {
                 unsure++;
-                out.decided.push('"' + textOf(i) + '" is ' + pickName + (known ? ', ' + pct(conf) + ' sure' : '') + '. Left to the Director.' + also);
+                const why = own && known && conf >= sure ? ' Left to the Director, since one of your own characters needs ' + s.decisionSureOwn + '% in a reply.' : '. Left to the Director.';
+                out.decided.push('"' + textOf(i) + '" is ' + pickName + (known ? ', ' + pct(conf) + ' sure' : '') + (why.charAt(0) === '.' ? why : '.' + why) + also);
             }
         }
         else if (key.indexOf('sound_') === 0) {
@@ -2996,7 +3006,8 @@ async function askDecisions(userId, s, segs, author, known) {
         }
     }
     if (out.decided.length)
-        out.decided.unshift(name + ' answered. An answer is used at ' + s.decisionSure + '% sure or more.');
+        out.decided.unshift(name + ' answered. An answer is used at ' + s.decisionSure + '% sure or more' +
+            (!ownMessage && people.some((c) => c.kind === 'persona') ? ', and at ' + Math.max(s.decisionSure, s.decisionSureOwn) + '% for one of your own characters in a reply.' : '.'));
     if (speech.length && people.length > 1)
         out.log.push(name + ' picked the speaker for ' + picked + ' of ' + speech.length + ' quoted lines' + (unsure ? ', and left ' + unsure + ' to the Director' : '') + '.');
     return out;

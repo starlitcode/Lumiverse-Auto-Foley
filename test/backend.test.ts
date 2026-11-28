@@ -2751,3 +2751,44 @@ describe("a file handed to Lumiverse to save", () => {
     expect([...h.staged.keys()]).toEqual(["file-3", "file-4", "file-5", "file-6"]);
   });
 });
+
+describe("the Decision model and the reader's own characters", () => {
+  // A reply by Mara, with a quoted line nothing in the text names a speaker
+  // for. Wren is the reader's persona, and Tobin is in the scene.
+  const reply = { type: "direct", chatId: "c1", messageId: "m2", swipeId: 0, name: "Mara Vell", text: 'The rain eased off. "Better now," came the answer.' };
+  const mine = { type: "direct", chatId: "c1", messageId: "m3", swipeId: 0, name: "Wren", text: 'The rain eased off. "Better now," came the answer.' };
+  const cast = [{ id: "a", name: "Mara Vell", kind: "character" }, { id: "b", name: "Tobin", kind: "npc" }, { id: "w", name: "Wren", kind: "persona" }];
+  const deciding = (sure: number) => (input: any) => {
+    const answers: any = {};
+    for (const k of Object.keys(input.questions)) {
+      const crit = input.questions[k].criteria || {};
+      if (k.startsWith("who_")) answers[k] = { type: "choice", choice: Object.keys(crit).find((c) => crit[c].startsWith("Wren"))!, confidence: sure, probabilities: {} };
+      else answers[k] = { type: "noul", noul: 0 };
+    }
+    return { model: "maker/fast-judge", answers };
+  };
+  const lines = [JSON.stringify({ lines: [{ i: 0, speaker: "Narrator", text: "The rain eased off." }, { i: 1, speaker: "Mara Vell", text: "Better now," }, { i: 2, speaker: "Narrator", text: "came the answer." }] })];
+  const run = async (sure: number, message: any, settings: any = {}) => {
+    const h = host({ answers: lines, decide: deciding(sure) });
+    await h.ask({ type: "save", settings: Object.assign({ decisionsOn: true, cast }, settings) });
+    const out = await h.ask(message);
+    return { sent: JSON.parse(h.calls.generate[0].messages[1].content).lines, script: out.find((m) => m.type === "script").script };
+  };
+  test("in a reply, a line goes to the reader's own character only at 80% or more", async () => {
+    const half = await run(0.55, reply);
+    expect(half.sent.find((l: any) => l.i === 1).speaker).not.toBe("Wren");
+    expect(half.script.decided).toContain('"Better now," is Wren, 55% sure. Left to the Director, since one of your own characters needs 80% in a reply.');
+    expect(half.script.decided[0]).toBe("fast-judge answered. An answer is used at 50% sure or more, and at 80% for one of your own characters in a reply.");
+    const sure = await run(0.85, reply);
+    expect(sure.sent.find((l: any) => l.i === 1).speaker).toBe("Wren");
+  });
+  test("in the reader's own message, the usual line applies", async () => {
+    const own = await run(0.55, mine);
+    expect(own.sent.find((l: any) => l.i === 1).speaker).toBe("Wren");
+    expect(own.script.decided[0]).toBe("fast-judge answered. An answer is used at 50% sure or more.");
+  });
+  test("the line for the reader's own characters can be changed", async () => {
+    const low = await run(0.55, reply, { decisionSureOwn: 50 });
+    expect(low.sent.find((l: any) => l.i === 1).speaker).toBe("Wren");
+  });
+});

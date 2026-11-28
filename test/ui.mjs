@@ -2671,6 +2671,19 @@ if (section("decision line")) {
     });
     check(!!got && got.before === "50" && got.after === "70" && got.saved === 70, size.name + ": How sure it must be is a box at 50 and saves a new value (" + JSON.stringify(got) + ")");
     check(!!got && got.right <= got.vw + 0.5, size.name + ": the box stays on screen");
+    const own = await page.evaluate(async () => {
+      const row = document.querySelector("[data-af-sureown]");
+      if (!row) return null;
+      const r = row.querySelector('input[type="number"]');
+      const before = r.value;
+      r.value = "90";
+      r.dispatchEvent(new Event("input", { bubbles: true }));
+      r.dispatchEvent(new Event("change", { bubbles: true }));
+      await new Promise((x) => setTimeout(x, 400));
+      const box = row.getBoundingClientRect();
+      return { before, saved: window.__settings.decisionSureOwn, right: box.right, vw: document.documentElement.clientWidth };
+    });
+    check(!!own && own.before === "80" && own.saved === 90 && own.right <= own.vw + 0.5, size.name + ": How sure for your own characters is a box at 80 that saves a new value and stays on screen (" + JSON.stringify(own) + ")");
     await toTab(page, "stage");
     await page.waitForTimeout(300);
     const kind = await page.evaluate(async () => {
