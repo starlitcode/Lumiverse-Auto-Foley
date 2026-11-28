@@ -35,7 +35,7 @@ A sung line on an engine that cannot sing is spoken.
 
 ## What it sends
 
-Auto Foley replaces Lumiverse's own TTS. It speaks through your TTS connections, with settings of its own. A voice can sound different than with Lumiverse's own TTS.
+Auto Foley replaces Lumiverse's own TTS. It speaks through your TTS connections, with settings of its own. A voice can sound different than with Lumiverse's own TTS. See [Sound quality, and where it replaces Lumiverse's TTS](#sound-quality-and-where-it-replaces-lumiverses-tts).
 
 Each line goes to Lumiverse's own TTS route, with:
 
@@ -47,6 +47,17 @@ Each line goes to Lumiverse's own TTS route, with:
 - For Fish Audio: latency `normal`, as WAV. See [Fish Audio](#fish-audio).
 - For Cartesia: WAV.
 - For Gemini 3.8, on a line with no note: an empty style. See [Gemini](#gemini).
+
+## Sound quality, and where it replaces Lumiverse's TTS
+
+### In short
+
+- Auto Foley replaces Lumiverse's TTS where the two overlap. It uses your TTS connections in Lumiverse, with its own player and its own settings.
+- It asks each voice service for its best quality, as the service's own docs describe it, and not a choice Lumiverse made on its own.
+- Where a setting saved on the connection, or a default of Lumiverse's own, would change how Auto Foley's lines are acted, Auto Foley sends its own value instead. Each one is listed below.
+- Most engines send WAV, which is not compressed, so the audio is exactly as the voice made it. ElevenLabs's best formats need a paid plan, so its format comes from the connection.
+- A few limits are in Lumiverse itself. Auto Foley cannot change them. They are listed below.
+- A proxy may drop some settings. See [Proxies](#proxies).
 
 ### Settings saved on the connection
 
@@ -84,6 +95,17 @@ WAV files are larger. A line of up to 16 MB is kept, about 3 minutes of Fish Aud
 ### Audio you already kept
 
 The latency, the format and the empty values are left out when Auto Foley checks whether a line was kept before. So a line kept before Auto Foley sent them still plays from what was kept, and is not paid for again.
+
+### What only Lumiverse can change
+
+Lumiverse makes the call to each voice service, and some of what it sends cannot be changed by an extension:
+
+- **Cartesia** audio is made at 22.05 kHz. Cartesia's own default is 44.1 kHz.
+- **ElevenLabs** is always sent similarity, speed and speaker boost, even on Eleven v3, which ElevenLabs says does not use them. Some ElevenLabs settings, such as a seed or text normalization, are never sent.
+- **Through OpenRouter**, only the text, the voice, the speed and Gemini's style reach the model. Stability, Fish Audio's own settings and the like cannot be sent.
+- **OpenVox** is always sent English as the language.
+
+Each of these needs a change in Lumiverse. When Lumiverse makes it, Auto Foley gets the better sound with no update of its own.
 
 ## An example
 
