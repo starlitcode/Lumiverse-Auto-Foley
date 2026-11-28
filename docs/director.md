@@ -204,6 +204,7 @@ The built-in prompt follows the same approach as Auto Refine's:
 - **The user sets the tone.** A scene comes out at the strength it went in. The Director adds no drama and takes none away.
 - **Reading the room.** Tags come from the page: the mood the narration sets, and each person's note in the cast. People sound like people, in a quiet scene, a fight or a sex scene, at the strength the page is written at.
 - **Worn-out tags.** It names the habits that make tagged speech sound fake, such as `[sighs]` on every line, `[chuckles]` after every joke, `[seductively]` all through a sex scene, or tags picked by gender, so the Director avoids them.
+- **Be specific.** A tag names what is happening to this person on this page, such as `[through a yawn]` or `[mouth full]`, rather than something that would fit any scene.
 - **Stock voice words.** It names words such as gravelly, husky, clipped and deliberate, which push a voice toward a stock performance. The Director writes what a listener would hear instead, such as how fast someone talks or where they stop. See [Words to leave out](writing.md#words-to-leave-out).
 - **A clean run.** A line that sounds right with no tags goes back with none.
 

@@ -2521,6 +2521,8 @@ Put a tag where the delivery changes, usually right before the words it shapes. 
 
 Keep it short. [low, shaking with anger] works. A whole stage direction doesn't make it sound any more real.
 
+Be specific. A tag that would fit anybody in any scene is a wasted tag. [quietly] is fine, but [through a yawn], [mouth full] or [talking over the rain] tells the voice exactly what's going on, and it's still a few plain words. Same with a "style" and an "about": name what's on this page and what's true of this person.
+
 You can put a word in CAPITALS to lean on it, and use an ellipsis or a dash for a pause or a line that breaks off. That's the whole toolbox. Outside the brackets the words stay exactly as written, typos and all, in the language they're written in.
 
 Anything you can only see has no place in a tag. [smiles], [nods], [looks away] and [crosses her arms] make no sound, and the voice will sometimes read them out loud.
