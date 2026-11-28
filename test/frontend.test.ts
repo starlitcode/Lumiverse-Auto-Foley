@@ -728,3 +728,24 @@ describe("a comma said with no pause", () => {
     }
   });
 });
+
+describe("a comma said with a clear pause", () => {
+  const { partTimes } = __testing;
+  test("is paired with it, so the next phrase starts when the voice does", () => {
+    // The on and off pattern of a real narrator line, in 20 ms frames,
+    // starting with quiet: a quick first phrase with short stops in it, a
+    // clear pause at its comma, a second comma with a pause, then the rest.
+    // The weights are of 15 words, with a comma after the 5th and the 8th.
+    const runs = [41, 30, 10, 7, 5, 1, 7, 2, 39, 36, 8, 12, 27, 17, 11, 21, 9, 18, 9, 38];
+    const voiced: boolean[] = [];
+    runs.forEach((n, k) => voiced.push(...new Array(n).fill(k % 2 === 1)));
+    const weights = [1, 3, 1, 1, 1, 2, 1, 1, 3, 1, 2, 2, 1, 1, 1];
+    const ends = [0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 2];
+    const t = partTimes(weights, voiced, voiced.length * 0.02, ends);
+    // The 6th word starts when the voice comes back after the first comma's
+    // pause, and the 9th after the second's.
+    const back = (pause: number) => runs.slice(0, pause + 1).reduce((a, b) => a + b, 0) * 0.02;
+    expect(Math.abs(t[5] - back(8))).toBeLessThan(0.05);
+    expect(Math.abs(t[8] - back(12))).toBeLessThan(0.05);
+  });
+});

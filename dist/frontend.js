@@ -683,8 +683,10 @@ function phraseEnd(word) {
 //   its words, near the speed of the whole line. A sentence can be said
 //   faster or slower than the next, so speed is judged by ratio.
 // - A sentence end is nearly always followed by a pause, and a comma often
-//   is not. Pairing one gains more, and leaving a sentence end unpaired
-//   costs a little.
+//   is not. Pairing a sentence end gains a little more than a comma, and
+//   leaving one unpaired costs a little.
+// - The weights were then checked on real narrator lines, where a comma
+//   said with a clear pause has to be paired with it.
 // - A pause left unpaired is a stop inside a phrase, and costs a little.
 // The weights come from many made-up readings with an uneven pace, a speed
 // of their own for each sentence, pauses at most sentence ends, at some
@@ -773,7 +775,7 @@ function partTimes(weights, voiced, duration, ends = []) {
                 // The end of the line pairs only with the end of the sound.
                 if ((i === m + 1) !== (j === n + 1))
                     continue;
-                const gain = i === m + 1 ? 0 : pauses[j - 1].strength * (breaks[i - 1].strong ? 1.5 : 0.6);
+                const gain = i === m + 1 ? 0 : pauses[j - 1].strength * (breaks[i - 1].strong ? 1.5 : 1);
                 for (let i0 = Math.max(0, i - PAIR_REACH); i0 < i; i0++)
                     for (let j0 = Math.max(0, j - PAIR_REACH); j0 < j; j0++) {
                         if (best[i0][j0] === -Infinity)
