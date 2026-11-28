@@ -13971,6 +13971,27 @@ export function setup(ctx, overrides) {
         }
         catch (_) { }
     }
+    // Where the clip playing is, in seconds, read every frame. Some devices
+    // move the audio's clock on only every few frames, so the lit word would
+    // jump several words at once. While it stands still between frames, the
+    // time it has been playing since it last moved is added, up to 0.3
+    // seconds, at the clip's own speed.
+    let clockAt = { el: null, ct: -1, wall: 0 };
+    function audioClock(el2) {
+        const ct = Number(el2.currentTime) || 0;
+        const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
+        if (el2.paused || clockAt.el !== el2 || ct !== clockAt.ct) {
+            clockAt = { el: el2, ct, wall: now };
+            return ct;
+        }
+        const rate = Number(el2.playbackRate) || 1;
+        return ct + Math.min(0.3, ((now - clockAt.wall) / 1000) * rate);
+    }
+    // The time last used for the lit words, by line. Within a line it never
+    // steps back by less than 0.4 seconds, so a lit word does not go dark
+    // again when the clock catches up or the sound delay is first read. A
+    // larger step back is a jump, such as Back, and is followed.
+    let litAt = { item: '', t: -1 };
     function voiceNow() {
         const el2 = audio;
         if (!show || !el2 || !el2.dataset || el2.dataset.kind !== 'voice')
@@ -13994,7 +14015,10 @@ export function setup(ctx, overrides) {
         // A word is lit when it is heard: the audio's clock, less the time the
         // device takes to play what the clock says.
         readSoundDelay();
-        const now = Number(el2.currentTime) - soundDelay;
+        const raw = audioClock(el2) - soundDelay;
+        const item = show.startedAt + ':' + show.index;
+        const now = litAt.item === item && raw < litAt.t && raw > litAt.t - 0.4 ? litAt.t : raw;
+        litAt = { item, t: now };
         const st = syncCache.starts;
         let k = -1;
         for (let j = 0; j < st.length; j++)

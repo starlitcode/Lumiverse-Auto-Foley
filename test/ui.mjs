@@ -321,7 +321,9 @@ window.__makeWav = (quiet, loud, amp = 12000) => {
 class FakeAudio {
   constructor() { this.dataset = {}; this.volume = 1; this.paused = true; this.at = 0; FakeAudio.all.push(this); }
   get duration() { return (window.__clipMs || 40) / 1000; }
-  get currentTime() { return this.paused ? this.at : this.at + (Date.now() - this.t0) / 1000; }
+  // window.__coarseClock: the clock moves on in steps of that many seconds,
+  // as on some devices.
+  get currentTime() { const t = this.paused ? this.at : this.at + (Date.now() - this.t0) / 1000; const q = window.__coarseClock; return q ? Math.floor(t / q) * q : t; }
   play() { if (window.__badAudio) { setTimeout(() => this.onerror && this.onerror(), 5); return Promise.resolve(); } this.paused = false; this.t0 = Date.now(); window.__played = (window.__played || 0) + 1; clearTimeout(this.t); this.t = setTimeout(() => { this.paused = true; this.onended && this.onended(); }, (window.__clipMs || 40) - this.at * 1000); return Promise.resolve(); }
   pause() { if (!this.paused) this.at = this.currentTime; this.paused = true; clearTimeout(this.t); }
 }
@@ -1542,6 +1544,37 @@ if (section("sync")) {
     check(!errors.length, "first word: no console errors. " + errors.slice(0, 2).join("; "));
     await context.close();
   }
+}
+
+if (section("steady clock")) {
+  console.log("On a device whose audio clock moves in steps, the lit words still move one at a time");
+  const { context, page, errors } = await open(THEMES[0], SIZES[1]);
+  // 12 words over 1.2 s of voice, and a clock that moves every 0.25 s, so
+  // each step of the clock is about 2.5 words.
+  await page.evaluate(() => {
+    window.__wav = [0.05, 1.2];
+    window.__clipMs = 1300;
+    window.__coarseClock = 0.25;
+  });
+  await toTab(page, "stage");
+  await page.waitForTimeout(200);
+  await pressMessage(page);
+  await page.waitForFunction(() => document.querySelector('[data-af="theater"]') && document.querySelector('[data-af="theater"]').dataset.state === "voice", null, { timeout: 8000 });
+  const counts = await page.evaluate(async () => {
+    const out = [];
+    for (let k = 0; k < 75; k++) {
+      await new Promise((r) => requestAnimationFrame(r));
+      out.push(document.querySelectorAll('[data-af="line"] .af-w.af-said').length);
+    }
+    return out;
+  });
+  let most = 0;
+  for (let k = 1; k < counts.length; k++) if (counts[k] > counts[k - 1]) most = Math.max(most, counts[k] - counts[k - 1]);
+  check(Math.max(...counts) >= 8, "the words light as the voice goes (" + Math.max(...counts) + " lit)");
+  check(most <= 2, "at most 2 words light in one frame (most: " + most + ", " + counts.join(",") + ")");
+  check(counts.every((c, k) => k === 0 || c >= counts[k - 1]), "a lit word never goes dark again while the line plays (" + counts.join(",") + ")");
+  check(!errors.length, "no console errors. " + errors.slice(0, 2).join("; "));
+  await context.close();
 }
 
 if (section("script status")) {
