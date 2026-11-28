@@ -673,118 +673,143 @@ function phraseEnd(word) {
 // spread over the whole clip.
 //
 // A voice pauses where the text has a comma or a full stop. So with `ends`,
-// each phrase end is matched to a pause in the sound that falls about where
-// the end is expected, and the next phrase starts when that pause ends. The
-// words of each phrase are then spread over the voiced frames between its
-// pauses. A breath or a quiet stretch in a pause then only moves the words
-// of one phrase, rather than every word after it.
+// phrase ends are paired with pauses in the sound, and each phrase starts
+// when its pause ends. The words of each phrase are then spread over the
+// voiced frames between its pauses, so a breath or a quiet stretch only
+// moves the words of one phrase.
+//
+// The pairing is the one that best fits how speech goes:
+// - Each stretch between two pairings is spoken at a believable speed for
+//   its words, near the speed of the whole line. A sentence can be said
+//   faster or slower than the next, so speed is judged by ratio.
+// - A sentence end is nearly always followed by a pause, and a comma often
+//   is not. Pairing one gains more, and leaving a sentence end unpaired
+//   costs a little.
+// - A pause left unpaired is a stop inside a phrase, and costs a little.
+// The weights come from many made-up readings with an uneven pace, a speed
+// of their own for each sentence, pauses at most sentence ends, at some
+// commas and now and then inside a phrase.
 const PAUSE_FRAMES = 8;
+const PAIR_REACH = 8;
 function partTimes(weights, voiced, duration, ends = []) {
+    const at = new Array(weights.length).fill(0);
     const on = [];
     voiced.forEach((v, k) => {
         if (v)
             on.push(k);
     });
-    const spread = (from, to, frames, startFrame, at) => {
-        const total = weights.slice(from, to).reduce((a, b) => a + b, 0);
+    const spread = (from, to, a, b) => {
+        const frames = [];
+        for (let k = a; k < b; k++)
+            if (voiced[k])
+                frames.push(k);
+        const total = weights.slice(from, to).reduce((x, y) => x + y, 0);
         let run = 0;
         for (let i = from; i < to; i++) {
             const share = total > 0 ? run / total : 0;
             if (frames.length)
                 at[i] = frames[Math.min(frames.length - 1, Math.floor(share * frames.length))] * FRAME_SECS;
-            else if (startFrame >= 0)
-                at[i] = startFrame * FRAME_SECS;
+            else if (on.length)
+                at[i] = a * FRAME_SECS;
             else
                 at[i] = share * (duration > 0 ? duration : 0);
             run += weights[i];
         }
     };
-    const at = new Array(weights.length).fill(0);
     if (!on.length) {
-        spread(0, weights.length, [], -1, at);
+        spread(0, weights.length, 0, 0);
         return at;
     }
     const first = on[0];
     const last = on[on.length - 1];
-    // The pauses inside the speech, with how much of the speech is done
-    // when each starts.
+    // Voiced frames before each frame.
+    const voicedTo = [0];
+    for (let k = 0; k < voiced.length; k++)
+        voicedTo.push(voicedTo[k] + (voiced[k] ? 1 : 0));
+    // The pauses inside the speech, and how strong each is: a pause of 0.35
+    // seconds or more counts in full.
     const pauses = [];
-    let voicedBefore = 0;
     for (let k = first; k <= last; k++) {
-        if (voiced[k]) {
-            voicedBefore++;
+        if (voiced[k])
             continue;
-        }
         let e = k;
         while (e <= last && !voiced[e])
             e++;
         if (e - k >= PAUSE_FRAMES)
-            pauses.push({ from: k, to: e, secs: (e - k) * FRAME_SECS, done: voicedBefore / on.length });
+            pauses.push({ from: k, to: e, strength: Math.min(1, ((e - k) * FRAME_SECS) / 0.35) });
         k = e - 1;
     }
-    // The phrase ends, with how much of the weight comes before each.
-    const total = weights.reduce((a, b) => a + b, 0);
     const breaks = [];
-    let run = 0;
-    for (let i = 0; i < weights.length; i++) {
-        run += weights[i];
-        if (i < weights.length - 1 && ends[i] && total > 0)
-            breaks.push({ part: i + 1, expect: run / total, strong: ends[i] === 2 });
-    }
-    // Each phrase end matched to at most one pause, in order, for the best
-    // total: a longer pause scores more, a sentence end more than a comma,
-    // and a pause far from where the end is expected scores less, or not at
-    // all.
+    for (let i = 0; i < weights.length - 1; i++)
+        if (ends[i])
+            breaks.push({ part: i + 1, strong: ends[i] === 2 });
     const m = breaks.length;
     const n = pauses.length;
-    const anchors = [];
-    if (m && n) {
-        const score = (b, p) => Math.min(1, p.secs / 0.35) * (b.strong ? 1.2 : 1) - 3 * Math.abs(p.done - b.expect);
+    const weightTo = [0];
+    for (const w of weights)
+        weightTo.push(weightTo[weightTo.length - 1] + w);
+    if (m && n && weightTo[weights.length] > 0) {
+        // Index 0 is the start of the line and m + 1 or n + 1 its end.
+        const partOf = (i) => (i === 0 ? 0 : i === m + 1 ? weights.length : breaks[i - 1].part);
+        const startOf = (j) => (j === 0 ? first : pauses[j - 1].to);
+        const endOf = (j) => (j === n + 1 ? last + 1 : pauses[j - 1].from);
+        const lineRate = on.length / weightTo[weights.length];
+        // What leaving pauses or sentence ends unpaired costs, added up in order.
+        const pauseCost = [0];
+        for (const p of pauses)
+            pauseCost.push(pauseCost[pauseCost.length - 1] + 0.5 * p.strength);
+        const breakCost = [0];
+        for (const b of breaks)
+            breakCost.push(breakCost[breakCost.length - 1] + (b.strong ? 0.8 : 0));
         const best = [];
-        const how = [];
-        for (let i = 0; i <= m; i++) {
-            best.push(new Array(n + 1).fill(0));
-            how.push(new Array(n + 1).fill(0));
+        const from = [];
+        for (let i = 0; i <= m + 1; i++) {
+            best.push(new Array(n + 2).fill(-Infinity));
+            from.push(new Array(n + 2).fill(null));
         }
-        for (let i = 1; i <= m; i++)
-            for (let j = 1; j <= n; j++) {
-                let v = best[i - 1][j];
-                let h = 1;
-                if (best[i][j - 1] > v) {
-                    v = best[i][j - 1];
-                    h = 2;
-                }
-                const s = score(breaks[i - 1], pauses[j - 1]);
-                if (s > 0 && best[i - 1][j - 1] + s > v) {
-                    v = best[i - 1][j - 1] + s;
-                    h = 3;
-                }
-                best[i][j] = v;
-                how[i][j] = h;
+        best[0][0] = 0;
+        for (let i = 1; i <= m + 1; i++)
+            for (let j = 1; j <= n + 1; j++) {
+                // The end of the line pairs only with the end of the sound.
+                if ((i === m + 1) !== (j === n + 1))
+                    continue;
+                const gain = i === m + 1 ? 0 : pauses[j - 1].strength * (breaks[i - 1].strong ? 1.5 : 0.6);
+                for (let i0 = Math.max(0, i - PAIR_REACH); i0 < i; i0++)
+                    for (let j0 = Math.max(0, j - PAIR_REACH); j0 < j; j0++) {
+                        if (best[i0][j0] === -Infinity)
+                            continue;
+                        const w = weightTo[partOf(i)] - weightTo[partOf(i0)];
+                        const v = voicedTo[endOf(j)] - voicedTo[startOf(j0)];
+                        if (w <= 0 || v <= 0)
+                            continue;
+                        const cost = 2 * Math.abs(Math.log(v / w / lineRate)) +
+                            (pauseCost[j - 1] - pauseCost[j0]) +
+                            (breakCost[i - 1] - breakCost[i0]);
+                        const total = best[i0][j0] + gain - cost;
+                        if (total > best[i][j]) {
+                            best[i][j] = total;
+                            from[i][j] = [i0, j0];
+                        }
+                    }
             }
-        for (let i = m, j = n; i > 0 && j > 0;) {
-            const h = how[i][j];
-            if (h === 3) {
-                anchors.unshift({ part: breaks[i - 1].part, frame: pauses[j - 1].to });
-                i--;
-                j--;
+        if (best[m + 1][n + 1] > -Infinity) {
+            const marks = [];
+            let cur = [m + 1, n + 1];
+            while (cur) {
+                marks.unshift({ part: partOf(cur[0]), frame: cur[0] === m + 1 ? last + 1 : startOf(cur[1]) });
+                if (cur[0] === 0)
+                    break;
+                cur = from[cur[0]][cur[1]];
             }
-            else if (h === 1)
-                i--;
-            else
-                j--;
+            if (marks.length && marks[0].part === 0) {
+                marks[0].frame = first;
+                for (let s = 0; s < marks.length - 1; s++)
+                    spread(marks[s].part, marks[s + 1].part, marks[s].frame, marks[s + 1].frame);
+                return at;
+            }
         }
     }
-    const marks = [{ part: 0, frame: first }].concat(anchors).concat([{ part: weights.length, frame: last + 1 }]);
-    for (let s = 0; s < marks.length - 1; s++) {
-        const a = marks[s];
-        const b = marks[s + 1];
-        const frames = [];
-        for (let k = a.frame; k < b.frame; k++)
-            if (voiced[k])
-                frames.push(k);
-        spread(a.part, b.part, frames, a.frame, at);
-    }
+    spread(0, weights.length, first, last + 1);
     return at;
 }
 // What an engine can do, in one short line for the panel.

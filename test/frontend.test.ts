@@ -702,3 +702,29 @@ describe("words pinned to the pauses at punctuation", () => {
     expect(partTimes([1, 1], [], 2, [1, 0])).toEqual([0, 1]);
   });
 });
+
+describe("a comma said with no pause", () => {
+  const { partTimes, wordWeight, phraseEnd } = __testing;
+  test("does not take the pause after the sentence end, so no phrase starts a pause early", () => {
+    const text = "Wren is not asking them, honestly. Pell keeps humming old songs and Dace keeps tapping the table by the door. You owe me, friend.";
+    const words = text.split(/\s+/);
+    const w = words.map(wordWeight);
+    const ends = words.map(phraseEnd);
+    // The first sentence is said slowly, with no pause at its comma. The
+    // second has a short stop in the middle. Each full stop has a pause.
+    const voiced: boolean[] = new Array(10).fill(false);
+    const starts: number[] = [];
+    words.forEach((_, i) => {
+      starts.push(voiced.length * 0.02);
+      voiced.push(...new Array(Math.round(w[i] * (i < 6 ? 11 : 6))).fill(true));
+      if (words[i] === "songs") voiced.push(...new Array(9).fill(false));
+      if (ends[i] === 2) voiced.push(...new Array(25).fill(false));
+    });
+    const t = partTimes(w, voiced, voiced.length * 0.02, ends);
+    // Each sentence's first word starts when the pause before it ends.
+    for (const word of ["Pell", "You"]) {
+      const i = words.indexOf(word);
+      expect(Math.abs(t[i] - starts[i])).toBeLessThan(0.05);
+    }
+  });
+});

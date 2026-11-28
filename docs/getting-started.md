@@ -249,7 +249,7 @@ With **Keep made audio** on, in the Settings tab:
 
 - The word being spoken is lit in the message itself, as it is said.
 - The timing comes from the audio itself: a word moves on only while the voice sounds. A breath or a soft sound in a pause does not count as voice.
-- A voice pauses at a comma or a full stop. Each of those in the text is matched to a pause in the audio, so the next words start when the voice starts again.
+- A voice pauses at a full stop, and sometimes at a comma. Each of those in the text is paired with a pause in the audio where the words around it fit, at a believable speed. The next words then start when the voice starts again. A comma said with no pause is left unpaired, so it does not move the rest of the line.
 - Each line's audio is read before its first word is lit.
 - Some devices move the audio's clock on only every few frames. Between those steps, the time since the last one is counted, so the words still light one at a time. A lit word does not go dark again while its line plays.
 - A phone, and more so Bluetooth headphones, plays sound a moment after the audio says it played. Auto Foley reads that delay from the device and lights each word when you hear it.
