@@ -3249,8 +3249,12 @@ if (section("play in sight")) {
     check(await seen('[data-af-studio="play"]'), where + ": Play the preview is in sight with nothing scrolled");
     check(await seen('[data-af-studio="full"]'), where + ": Full screen is in sight with nothing scrolled");
     // Making a video says so, with a time that moves, where it can be seen.
+    const lineTop = () => page.evaluate(() => { const n = document.querySelector("[data-af-ws-stage] [data-af-timeline]"); return n ? Math.round(n.getBoundingClientRect().top) : null; });
+    const before = await lineTop();
     await page.locator('[data-af-ws-acts] [data-af-studio="video"]').click();
     await page.waitForTimeout(2500);
+    const during = await lineTop();
+    check(before !== null && before === during, where + ": the timeline does not move when the line under Play fills (" + before + " then " + during + ")");
     const first = await page.evaluate(() => (document.querySelector('[data-af-ws-stage] [data-af-studio="said"]') || {}).textContent || "");
     const said = await seen('[data-af-studio="said"]');
     await page.waitForTimeout(1500);

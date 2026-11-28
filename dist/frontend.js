@@ -1286,6 +1286,9 @@ const PANEL_CSS = `
 .af-theater { overflow: hidden; }
 .af-cardh > span:first-child { flex: 1; min-width: 0; }
 .af-note { margin: 0; font-size: 12px; line-height: 1.45; color: var(--af-muted); }
+/* The Studio's status line, under Play the preview, keeps room for two
+   lines, so a status that comes and goes does not move the timeline under it. */
+.af-ws-stage [data-af-studio="said"] { min-height: calc(2 * 1.45em); }
 .af-count { text-align: right; font-variant-numeric: tabular-nums; }
 .af-count[data-near] { color: var(--af-text); font-weight: 600; }
 .af-note a { color: var(--af-accent-text); }
