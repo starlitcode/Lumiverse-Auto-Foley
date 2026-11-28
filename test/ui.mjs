@@ -3195,6 +3195,42 @@ if (section("see-through pictures")) {
   check(!solid.errs.length && !clear.errs.length, "video: no page errors. " + solid.errs.concat(clear.errs).slice(0, 2).join(" | "));
 }
 
+if (section("play in sight")) {
+  console.log("In the Studio, Play the preview and the line that counts a video's seconds are in sight, on a phone too");
+  for (const size of SIZES) {
+    const where = size.name;
+    const { context, page, errors } = await open(THEMES[0], size);
+    await page.evaluate(() => { window.__wav = [0.1, 1.4]; window.__clipMs = 150; });
+    await pressMessage(page);
+    await page.waitForTimeout(8000);
+    await openWs(page);
+    await page.waitForTimeout(1500);
+    // In sight: inside the preview's part with it scrolled to the top, and
+    // inside the window.
+    const seen = (sel) => page.evaluate((sel) => {
+      const stage = document.querySelector("[data-af-ws-stage]");
+      stage.scrollTop = 0;
+      const n = stage.querySelector(sel);
+      if (!n) return false;
+      const b = n.getBoundingClientRect(), s = stage.getBoundingClientRect();
+      return b.height > 0 && b.top >= s.top && b.bottom <= s.bottom + 1 && b.bottom <= innerHeight;
+    }, sel);
+    check(await seen('[data-af-studio="play"]'), where + ": Play the preview is in sight with nothing scrolled");
+    check(await seen('[data-af-studio="full"]'), where + ": Full screen is in sight with nothing scrolled");
+    // Making a video says so, with a time that moves, where it can be seen.
+    await page.locator('[data-af-ws-acts] [data-af-studio="video"]').click();
+    await page.waitForTimeout(2500);
+    const first = await page.evaluate(() => (document.querySelector('[data-af-ws-stage] [data-af-studio="said"]') || {}).textContent || "");
+    const said = await seen('[data-af-studio="said"]');
+    await page.waitForTimeout(1500);
+    const later = await page.evaluate(() => (document.querySelector('[data-af-ws-stage] [data-af-studio="said"]') || {}).textContent || "");
+    check(said && /Making the video|Getting the/.test(first), where + ": making a video says so, in sight (" + first + ")");
+    check(first !== later, where + ": and what it says moves on (" + first + " then " + later + ")");
+    check(!errors.length, where + ": no page errors. " + errors.slice(0, 2).join(" | "));
+    await context.close();
+  }
+}
+
 if (section("still working")) {
   console.log("A slow Director is waited for while the backend says it is still working");
   for (const size of SIZES) {

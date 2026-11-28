@@ -18,6 +18,7 @@ _2026-11-28_
 
 ### Fixed
 
+- **Play the preview is in sight on a phone.** In the Studio on a phone, **Play the preview**, **Full screen** and the line that says what is happening were below the timeline, out of sight. So there was no way to see the preview play, or that a video was being made. They are now straight under **Where**, and the line counts the video's time as it is made.
 - **The status line no longer flickers while the Director writes.** Under **Getting ready**, the line switched twice a second between two counts of seconds, such as "25 s" and "25 s (26 s)". It now shows one count, the seconds since the Director started.
 
 ### Changed

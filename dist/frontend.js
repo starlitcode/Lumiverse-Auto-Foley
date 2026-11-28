@@ -24041,6 +24041,11 @@ export function setup(ctx, overrides) {
         vc.appendChild(flashNote);
         const said = el('<p class="af-note" data-af-studio="said" role="status"></p>');
         vc.appendChild(said);
+        // Play, Full screen and the line that says what is happening, such as
+        // the seconds a video has taken, go straight under Where. On a phone the
+        // preview's part is only so tall, and below the timeline they would be
+        // out of sight.
+        scrubRow.after(vRow, flashNote, said);
         const look = () => studioBuild(false);
         vc.appendChild(fold('Shape and words', (b) => {
             b.appendChild(select('Shape', VIDEO_SHAPES.map((x) => ({ id: x.id, label: x.label })), S.videoShape || 'wide', (v) => {
