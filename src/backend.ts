@@ -15,7 +15,7 @@ declare const spindle: any;
 declare function setTimeout(fn: () => void, ms: number): any;
 declare function clearTimeout(handle: any): void;
 
-const VERSION = '1.11.0';
+const VERSION = '1.12.0';
 
 // ---------------------------------------------------------------------------
 // Settings
@@ -885,7 +885,7 @@ function cleanStops(v: any, dflt: string, max = 5): string[] {
 // At most 12 backgrounds, and 40 shapes in each.
 const BACKS_MAX = 12;
 const SHAPES_MAX = 40;
-const SHAPE_KINDS = ['rect', 'round', 'ellipse', 'tri', 'line', 'text', 'heart', 'star', 'poly', 'diamond', 'arrow', 'bubble', 'ring', 'moon', 'cloud', 'sparkle', 'cat', 'dog', 'bunny', 'paw', 'bone', 'fish', 'carrot', 'bat', 'rose', 'checker', 'broken', 'stripes', 'snowflake', 'ornament', 'holly', 'pumpkin', 'ghost', 'leaf', 'firework', 'lantern', 'diya', 'menorah', 'shamrock', 'egg', 'flower'] as const;
+const SHAPE_KINDS = ['rect', 'round', 'ellipse', 'tri', 'line', 'text', 'heart', 'star', 'poly', 'diamond', 'arrow', 'bubble', 'ring', 'moon', 'cloud', 'sparkle', 'cat', 'dog', 'bunny', 'paw', 'bone', 'fish', 'carrot', 'bat', 'rose', 'checker', 'broken', 'stripes', 'snowflake', 'ornament', 'holly', 'pumpkin', 'ghost', 'leaf', 'firework', 'lantern', 'diya', 'menorah', 'shamrock', 'egg', 'flower', 'balloon', 'cake', 'gift', 'confetti', 'note', 'disco', 'mic', 'mask', 'mushroom', 'butterfly', 'bow', 'book', 'candle', 'palm', 'umbrella', 'shell', 'waves', 'column', 'laurel', 'castle', 'fan', 'planet', 'skyline', 'gear'] as const;
 function cleanShape(v: any): VideoShapeDef | null {
   if (!v || typeof v !== 'object') return null;
   const kind = pick(v.kind, SHAPE_KINDS, 'rect');

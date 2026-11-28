@@ -6,6 +6,28 @@ Versions follow [Semantic Versioning](https://semver.org). A new major version m
 
 ---
 
+## 1.12.0
+
+_2026-11-28_
+
+### Added
+
+- **21 new templates, each a scene of its own.** They differ in where the words sit, the box behind them, the shape of the pictures, the fonts and the colors of the words.
+  - **Parties**, a new group: Nightclub, Birthday party, Pool party, Wedding, Karaoke night and Masquerade ball.
+  - **History**, a new group: Ancient marble, Medieval, Roaring twenties and Steampunk.
+  - **Future**, a new group: Cyberpunk city, Deep space, Solarpunk and Hologram.
+  - **Aesthetics** has six more: Cottagecore, Coquette, Y2K, Fairycore, Dark academia and Witchy.
+  - **Scenes** has Beach.
+
+  See [Templates](docs/studio.md#templates).
+- **24 new shapes for a design of your own**: a balloon, a birthday cake, a gift, confetti, music notes, a disco ball, a microphone, a masquerade mask, a mushroom, a butterfly, a bow, a book, a candle, a palm tree, a beach umbrella, a seashell, waves, a column, a laurel wreath, a castle, an art deco fan, a planet, a city skyline and a gear.
+
+### Fixed
+
+- **An outline on a shape with a face or other details follows the shape.** On a shape such as a cat face or a holly sprig, **Outline, in pixels** traced the last detail drawn, such as the mouth or the berries, instead of the edge of the shape.
+
+---
+
 ## 1.11.0
 
 _2026-11-28_

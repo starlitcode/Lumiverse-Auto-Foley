@@ -13,7 +13,7 @@
 
 type Ctx = any;
 
-const VERSION = '1.11.0';
+const VERSION = '1.12.0';
 // The marks Lumiverse puts on another extension's part of the page. Nothing
 // inside one is read, written or pressed.
 const OTHER_UI = '[data-spindle-extension-root],[data-spindle-ext],[data-spindle-modal]';
@@ -4787,7 +4787,7 @@ export function setup(ctx: Ctx, overrides?: any) {
   // grad is none, linear or radial. stops are the colors after fill, so a
   // gradient has fill and then each stop, spread evenly. dir is a linear
   // gradient's direction.
-  type ShapeKind = 'rect' | 'round' | 'ellipse' | 'tri' | 'line' | 'text' | 'heart' | 'star' | 'poly' | 'diamond' | 'arrow' | 'bubble' | 'ring' | 'moon' | 'cloud' | 'sparkle' | 'cat' | 'dog' | 'bunny' | 'paw' | 'bone' | 'fish' | 'carrot' | 'bat' | 'rose' | 'checker' | 'broken' | 'stripes' | 'snowflake' | 'ornament' | 'holly' | 'pumpkin' | 'ghost' | 'leaf' | 'firework' | 'lantern' | 'diya' | 'menorah' | 'shamrock' | 'egg' | 'flower';
+  type ShapeKind = 'rect' | 'round' | 'ellipse' | 'tri' | 'line' | 'text' | 'heart' | 'star' | 'poly' | 'diamond' | 'arrow' | 'bubble' | 'ring' | 'moon' | 'cloud' | 'sparkle' | 'cat' | 'dog' | 'bunny' | 'paw' | 'bone' | 'fish' | 'carrot' | 'bat' | 'rose' | 'checker' | 'broken' | 'stripes' | 'snowflake' | 'ornament' | 'holly' | 'pumpkin' | 'ghost' | 'leaf' | 'firework' | 'lantern' | 'diya' | 'menorah' | 'shamrock' | 'egg' | 'flower' | 'balloon' | 'cake' | 'gift' | 'confetti' | 'note' | 'disco' | 'mic' | 'mask' | 'mushroom' | 'butterfly' | 'bow' | 'book' | 'candle' | 'palm' | 'umbrella' | 'shell' | 'waves' | 'column' | 'laurel' | 'castle' | 'fan' | 'planet' | 'skyline' | 'gear';
   // points and depth are a star's, sides a polygon's, tail the side a
   // speech bubble's tail points to, thick a ring's thickness in percent.
   // line and lineW are an outline, flipX and flipY mirror it. ink is the
@@ -5412,10 +5412,278 @@ export function setup(ctx: Ctx, overrides?: any) {
       g.closePath();
     }],
     flower: (w, h) => [0, 1, 2, 3, 4].map((i) => oval(Math.cos((i * Math.PI * 2) / 5 - Math.PI / 2) * 0.26 * w, Math.sin((i * Math.PI * 2) / 5 - Math.PI / 2) * 0.26 * h, 0.2 * w, 0.2 * h)),
+    balloon: (w, h) => {
+      const t = 0.012 * Math.min(w, h);
+      return [oval(0, -0.1 * h, 0.36 * w, 0.4 * h), pts([[0, 0.27 * h], [0.07 * w, 0.36 * h], [-0.07 * w, 0.36 * h]]), bar(0, 0.36 * h, 0.05 * w, 0.43 * h, t), bar(0.05 * w, 0.43 * h, -0.02 * w, 0.5 * h, t)];
+    },
+    cake: (w, h) => {
+      const out: Piece[] = [
+        pts([[-0.3 * w, -0.16 * h], [0.3 * w, -0.16 * h], [0.3 * w, 0.08 * h], [-0.3 * w, 0.08 * h]]),
+        pts([[-0.44 * w, 0.08 * h], [0.44 * w, 0.08 * h], [0.44 * w, 0.42 * h], [-0.44 * w, 0.42 * h]]),
+        pts([[-0.5 * w, 0.42 * h], [0.5 * w, 0.42 * h], [0.5 * w, 0.48 * h], [-0.5 * w, 0.48 * h]]),
+      ];
+      for (const x of [-0.15, 0, 0.15]) out.push(pts([[(x - 0.025) * w, -0.34 * h], [(x + 0.025) * w, -0.34 * h], [(x + 0.025) * w, -0.16 * h], [(x - 0.025) * w, -0.16 * h]]));
+      return out;
+    },
+    gift: (w, h) => [
+      pts([[-0.42 * w, -0.08 * h], [0.42 * w, -0.08 * h], [0.42 * w, 0.46 * h], [-0.42 * w, 0.46 * h]]),
+      pts([[-0.48 * w, -0.22 * h], [0.48 * w, -0.22 * h], [0.48 * w, -0.06 * h], [-0.48 * w, -0.06 * h]]),
+      oval(-0.15 * w, -0.32 * h, 0.15 * w, 0.1 * h, 0.35),
+      oval(0.15 * w, -0.32 * h, 0.15 * w, 0.1 * h, -0.35),
+    ],
+    confetti: (w, h) => CONFETTI.map(([x, y, a], i) =>
+      i % 2 ? oval(x * w, y * h, 0.035 * w, 0.035 * h) : bar((x - Math.cos(a) * 0.06) * w, (y - Math.sin(a) * 0.06) * h, (x + Math.cos(a) * 0.06) * w, (y + Math.sin(a) * 0.06) * h, 0.035 * Math.min(w, h)),
+    ),
+    note: (w, h) => [
+      oval(-0.24 * w, 0.3 * h, 0.17 * w, 0.12 * h, -0.35),
+      oval(0.26 * w, 0.22 * h, 0.17 * w, 0.12 * h, -0.35),
+      pts([[-0.11 * w, -0.3 * h], [-0.06 * w, -0.3 * h], [-0.06 * w, 0.28 * h], [-0.11 * w, 0.28 * h]]),
+      pts([[0.39 * w, -0.4 * h], [0.44 * w, -0.4 * h], [0.44 * w, 0.2 * h], [0.39 * w, 0.2 * h]]),
+      pts([[-0.11 * w, -0.36 * h], [0.44 * w, -0.46 * h], [0.44 * w, -0.32 * h], [-0.11 * w, -0.22 * h]]),
+    ],
+    disco: (w, h) => [oval(0, 0.04 * h, 0.44 * w, 0.44 * h), bar(0, -0.41 * h, 0, -0.5 * h, 0.02 * Math.min(w, h))],
+    mic: (w, h) => [
+      oval(0, -0.28 * h, 0.4 * w, 0.2 * h),
+      pts([[-0.22 * w, -0.1 * h], [0.22 * w, -0.1 * h], [0.12 * w, 0.48 * h], [-0.12 * w, 0.48 * h]]),
+      pts([[-0.3 * w, -0.12 * h], [0.3 * w, -0.12 * h], [0.26 * w, -0.04 * h], [-0.26 * w, -0.04 * h]]),
+    ],
+    // The eye holes go the other way round, so the fill leaves them open.
+    mask: (w, h) => [(g) => {
+      g.moveTo(0, -0.14 * h);
+      g.bezierCurveTo(0.12 * w, -0.34 * h, 0.4 * w, -0.44 * h, 0.5 * w, -0.2 * h);
+      g.bezierCurveTo(0.5 * w, 0.1 * h, 0.4 * w, 0.36 * h, 0.22 * w, 0.34 * h);
+      g.bezierCurveTo(0.1 * w, 0.33 * h, 0.06 * w, 0.16 * h, 0, 0.16 * h);
+      g.bezierCurveTo(-0.06 * w, 0.16 * h, -0.1 * w, 0.33 * h, -0.22 * w, 0.34 * h);
+      g.bezierCurveTo(-0.4 * w, 0.36 * h, -0.5 * w, 0.1 * h, -0.5 * w, -0.2 * h);
+      g.bezierCurveTo(-0.4 * w, -0.44 * h, -0.12 * w, -0.34 * h, 0, -0.14 * h);
+      g.closePath();
+      for (const side of [-1, 1]) {
+        g.moveTo(side * 0.23 * w + 0.13 * w, 0);
+        g.ellipse(side * 0.23 * w, 0, 0.13 * w, 0.09 * h, 0, 0, Math.PI * 2, true);
+        g.closePath();
+      }
+    }],
+    mushroom: (w, h) => [(g) => {
+      g.moveTo(-0.48 * w, 0);
+      g.bezierCurveTo(-0.48 * w, -0.5 * h, 0.48 * w, -0.5 * h, 0.48 * w, 0);
+      g.quadraticCurveTo(0, 0.1 * h, -0.48 * w, 0);
+      g.closePath();
+    }, pts([[-0.14 * w, 0.04 * h], [0.14 * w, 0.04 * h], [0.18 * w, 0.46 * h], [-0.18 * w, 0.46 * h]])],
+    butterfly: (w, h) => {
+      const t = 0.015 * Math.min(w, h);
+      return [
+        oval(-0.25 * w, -0.15 * h, 0.24 * w, 0.28 * h, -0.5),
+        oval(0.25 * w, -0.15 * h, 0.24 * w, 0.28 * h, 0.5),
+        oval(-0.2 * w, 0.2 * h, 0.17 * w, 0.2 * h, 0.5),
+        oval(0.2 * w, 0.2 * h, 0.17 * w, 0.2 * h, -0.5),
+        oval(0, 0.02 * h, 0.04 * w, 0.3 * h),
+        bar(-0.01 * w, -0.29 * h, -0.12 * w, -0.46 * h, t),
+        bar(0.01 * w, -0.29 * h, 0.12 * w, -0.46 * h, t),
+      ];
+    },
+    // Each loop and tail goes the same way round as the knot, so where they
+    // meet stays filled.
+    bow: (w, h) => [
+      (g) => {
+        g.moveTo(0, 0);
+        g.bezierCurveTo(-0.2 * w, 0.3 * h, -0.46 * w, 0.3 * h, -0.48 * w, -0.05 * h);
+        g.bezierCurveTo(-0.5 * w, -0.45 * h, -0.15 * w, -0.5 * h, 0, 0);
+        g.closePath();
+      },
+      (g) => {
+        g.moveTo(0, 0);
+        g.bezierCurveTo(0.15 * w, -0.5 * h, 0.5 * w, -0.45 * h, 0.48 * w, -0.05 * h);
+        g.bezierCurveTo(0.46 * w, 0.3 * h, 0.2 * w, 0.3 * h, 0, 0);
+        g.closePath();
+      },
+      pts([[-0.06 * w, 0.02 * h], [-0.02 * w, 0.08 * h], [-0.24 * w, 0.5 * h], [-0.34 * w, 0.42 * h]]),
+      pts([[0.34 * w, 0.42 * h], [0.24 * w, 0.5 * h], [0.02 * w, 0.08 * h], [0.06 * w, 0.02 * h]]),
+      oval(0, 0, 0.09 * w, 0.13 * h),
+    ],
+    book: (w, h) => [
+      (g) => {
+        g.moveTo(0, -0.3 * h);
+        g.quadraticCurveTo(-0.24 * w, -0.44 * h, -0.48 * w, -0.36 * h);
+        g.lineTo(-0.48 * w, 0.36 * h);
+        g.quadraticCurveTo(-0.24 * w, 0.28 * h, 0, 0.42 * h);
+        g.closePath();
+      },
+      (g) => {
+        g.moveTo(0, -0.3 * h);
+        g.quadraticCurveTo(0.24 * w, -0.44 * h, 0.48 * w, -0.36 * h);
+        g.lineTo(0.48 * w, 0.36 * h);
+        g.quadraticCurveTo(0.24 * w, 0.28 * h, 0, 0.42 * h);
+        g.closePath();
+      },
+    ],
+    candle: (w, h) => [
+      pts([[-0.22 * w, -0.18 * h], [0.22 * w, -0.18 * h], [0.22 * w, 0.42 * h], [-0.22 * w, 0.42 * h]]),
+      pts([[-0.42 * w, 0.4 * h], [0.42 * w, 0.4 * h], [0.42 * w, 0.48 * h], [-0.42 * w, 0.48 * h]]),
+      pts([[-0.02 * w, -0.26 * h], [0.02 * w, -0.26 * h], [0.02 * w, -0.18 * h], [-0.02 * w, -0.18 * h]]),
+    ],
+    // A trunk that leans, and fronds from its top. Every frond goes the same
+    // way round, so where they meet stays filled.
+    palm: (w, h) => {
+      const tx = -0.08 * w, ty = -0.2 * h;
+      const out: Piece[] = [(g) => {
+        g.moveTo(0.02 * w, 0.5 * h);
+        g.bezierCurveTo(-0.02 * w, 0.2 * h, 0.02 * w, -0.02 * h, tx - 0.035 * w, ty);
+        g.lineTo(tx + 0.035 * w, ty);
+        g.bezierCurveTo(0.08 * w, -0.02 * h, 0.06 * w, 0.2 * h, 0.12 * w, 0.5 * h);
+        g.closePath();
+      }];
+      for (const a of [Math.PI + 0.45, -2.6, -2.0, -1.35, -0.7, -0.1, 0.45]) out.push(leafPiece(tx + Math.cos(a) * 0.17 * w, ty + Math.sin(a) * 0.17 * h, 0.17 * w, 0.045 * h, a));
+      return out;
+    },
+    umbrella: (w, h) => [
+      canopy(w, h),
+      oval(0, -0.45 * h, 0.03 * w, 0.03 * h),
+      pts([[-0.015 * w, -0.06 * h], [0.015 * w, -0.06 * h], [0.015 * w, 0.5 * h], [-0.015 * w, 0.5 * h]]),
+    ],
+    shell: (w, h) => [
+      (g) => {
+        const cy = 0.3 * h, n = 7, a0 = Math.PI + 0.3, a1 = Math.PI * 2 - 0.3;
+        const at = (a: number, k = 1): [number, number] => [Math.cos(a) * 0.46 * w * k, cy + Math.sin(a) * 0.72 * h * k];
+        g.moveTo(0, cy);
+        g.lineTo(...at(a0));
+        for (let i = 1; i <= n; i++) {
+          const a = a0 + ((a1 - a0) * i) / n, mid = a0 + ((a1 - a0) * (i - 0.5)) / n;
+          const [qx, qy] = at(mid, 1.1);
+          g.quadraticCurveTo(qx, qy, ...at(a));
+        }
+        g.closePath();
+      },
+      pts([[-0.07 * w, 0.28 * h], [0.07 * w, 0.28 * h], [0.05 * w, 0.4 * h], [-0.05 * w, 0.4 * h]]),
+    ],
+    waves: (w, h) => [(g) => {
+      g.moveTo(-0.5 * w, 0.5 * h);
+      for (let i = 0; i <= 48; i++) {
+        const x = -0.5 + i / 48;
+        g.lineTo(x * w, (-0.25 + Math.sin(x * Math.PI * 6) * 0.15) * h);
+      }
+      g.lineTo(0.5 * w, 0.5 * h);
+      g.closePath();
+    }],
+    column: (w, h) => [
+      pts([[-0.5 * w, -0.5 * h], [0.5 * w, -0.5 * h], [0.5 * w, -0.45 * h], [-0.5 * w, -0.45 * h]]),
+      pts([[-0.4 * w, -0.45 * h], [0.4 * w, -0.45 * h], [0.3 * w, -0.41 * h], [-0.3 * w, -0.41 * h]]),
+      pts([[-0.27 * w, -0.41 * h], [0.27 * w, -0.41 * h], [0.31 * w, 0.42 * h], [-0.31 * w, 0.42 * h]]),
+      pts([[-0.38 * w, 0.42 * h], [0.38 * w, 0.42 * h], [0.42 * w, 0.46 * h], [-0.42 * w, 0.46 * h]]),
+      pts([[-0.5 * w, 0.46 * h], [0.5 * w, 0.46 * h], [0.5 * w, 0.5 * h], [-0.5 * w, 0.5 * h]]),
+    ],
+    // Two branches of leaves around an open middle, with a gap at the top.
+    laurel: (w, h) => {
+      const out: Piece[] = [];
+      for (const side of [-1, 1]) {
+        // Each leaf grows along the branch, turned to the outside and the
+        // inside in turn.
+        for (let i = 0; i < 9; i++) {
+          const t = Math.PI / 2 + side * (0.3 + i * 0.28);
+          const cx = Math.cos(t) * 0.38 * w, cy = Math.sin(t) * 0.38 * h;
+          const a = t + side * (Math.PI / 2) + (i % 2 ? -0.55 : 0.55) * side;
+          out.push(leafPiece(cx + Math.cos(a) * 0.065 * w, cy + Math.sin(a) * 0.065 * h, 0.065 * w, 0.028 * h, a));
+        }
+      }
+      return out;
+    },
+    castle: (w, h) => {
+      const box = (x0: number, y0: number, x1: number, y1: number) => pts([[x0 * w, y0 * h], [x1 * w, y0 * h], [x1 * w, y1 * h], [x0 * w, y1 * h]]);
+      const out: Piece[] = [
+        box(-0.5, 0, 0.5, 0.5),
+        box(-0.48, -0.22, -0.28, 0.5),
+        box(0.28, -0.22, 0.48, 0.5),
+        box(-0.12, -0.3, 0.12, 0.5),
+        pts([[-0.38 * w, -0.46 * h], [-0.26 * w, -0.22 * h], [-0.5 * w, -0.22 * h]]),
+        pts([[0.38 * w, -0.46 * h], [0.5 * w, -0.22 * h], [0.26 * w, -0.22 * h]]),
+        box(-0.008, -0.5, 0.008, -0.38),
+        pts([[0, -0.5 * h], [0.11 * w, -0.46 * h], [0, -0.42 * h]]),
+      ];
+      for (const x of [-0.12, -0.03, 0.06]) out.push(box(x, -0.38, x + 0.06, -0.3));
+      for (const x of [-0.26, -0.19, 0.14, 0.21]) out.push(box(x, -0.07, x + 0.04, 0));
+      return out;
+    },
+    // A sunburst of rays over a half circle, from the middle of the bottom.
+    fan: (w, h) => {
+      const out: Piece[] = [];
+      const cy = 0.5 * h, n = 9, gap = 0.04;
+      for (let i = 0; i < n; i++) {
+        const a0 = Math.PI + (i * Math.PI) / n + gap, a1 = Math.PI + ((i + 1) * Math.PI) / n - gap;
+        out.push((g) => {
+          g.moveTo(0, cy);
+          g.lineTo(Math.cos(a0) * 0.5 * w, cy + Math.sin(a0) * h);
+          g.ellipse(0, cy, 0.5 * w, h, 0, a0, a1);
+          g.closePath();
+        });
+      }
+      out.push((g) => {
+        g.moveTo(-0.17 * w, cy);
+        g.ellipse(0, cy, 0.17 * w, 0.34 * h, 0, Math.PI, Math.PI * 2);
+        g.closePath();
+      });
+      return out;
+    },
+    // A ball with a tilted ring. The ring's middle goes the other way round,
+    // so it is open beside the ball.
+    planet: (w, h) => [
+      oval(0, 0, 0.3 * w, 0.38 * h),
+      (g) => {
+        g.moveTo(0.5 * w * Math.cos(-0.3), 0.5 * w * Math.sin(-0.3));
+        g.ellipse(0, 0, 0.5 * w, 0.16 * h, -0.3, 0, Math.PI * 2);
+        g.closePath();
+        g.moveTo(0.38 * w * Math.cos(-0.3), 0.38 * w * Math.sin(-0.3));
+        g.ellipse(0, 0, 0.38 * w, 0.09 * h, -0.3, 0, Math.PI * 2, true);
+        g.closePath();
+      },
+    ],
+    skyline: (w, h) => {
+      const out: Piece[] = [];
+      SKYLINE.forEach((top, i) => {
+        const x0 = -0.5 + i / SKYLINE.length, x1 = x0 + 1 / SKYLINE.length;
+        out.push(pts([[x0 * w, top * h], [x1 * w, top * h], [x1 * w, 0.5 * h], [x0 * w, 0.5 * h]]));
+      });
+      out.push(pts([[0.04 * w, -0.5 * h], [0.05 * w, -0.5 * h], [0.05 * w, -0.4 * h], [0.04 * w, -0.4 * h]]));
+      return out;
+    },
+    // Teeth around the edge, and a hole in the middle that goes the other
+    // way round.
+    gear: (w, h) => [(g) => {
+      const n = 10;
+      for (let i = 0; i < n; i++) {
+        const a = (i * Math.PI * 2) / n, s2 = Math.PI / n;
+        const p = (r: number, b: number): [number, number] => [Math.cos(b) * r * w, Math.sin(b) * r * h];
+        const pts4: [number, number][] = [p(0.38, a - s2 * 0.5), p(0.48, a - s2 * 0.32), p(0.48, a + s2 * 0.32), p(0.38, a + s2 * 0.5)];
+        pts4.forEach(([x, y], j) => (i === 0 && j === 0 ? g.moveTo(x, y) : g.lineTo(x, y)));
+        g.ellipse(0, 0, 0.38 * w, 0.38 * h, 0, a + s2 * 0.5, a + 2 * s2 - s2 * 0.5);
+      }
+      g.closePath();
+      g.moveTo(0.13 * w, 0);
+      g.ellipse(0, 0, 0.13 * w, 0.13 * h, 0, 0, Math.PI * 2, true);
+      g.closePath();
+    }],
   };
-  // The parts drawn over a shape's fill: a face's eyes, nose and cheeks, a
-  // rose's curl, a fish's eye, a carrot's leaves in green, and the crack of
-  // a broken heart.
+  // An umbrella's canopy: a half circle with a scalloped edge.
+  const canopy = (w: number, h: number): Piece => (g) => {
+    g.moveTo(-0.48 * w, -0.05 * h);
+    g.ellipse(0, -0.05 * h, 0.48 * w, 0.4 * h, 0, Math.PI, Math.PI * 2);
+    const xs = [0.48, 0.16, -0.16, -0.48];
+    for (let i = 1; i < xs.length; i++) g.quadraticCurveTo(((xs[i - 1] + xs[i]) / 2) * w, -0.14 * h, xs[i] * w, -0.05 * h);
+    g.closePath();
+  };
+  // The top of each building in a skyline, as a share of the shape's height
+  // from its middle.
+  const SKYLINE = [-0.05, 0.15, -0.3, 0.05, -0.18, 0.25, -0.4, 0.0, -0.12, 0.2, -0.28, 0.1];
+  // Where each piece of confetti sits, as shares of the shape, and how it is
+  // turned. Every other piece is a strip, and the rest are dots.
+  const CONFETTI: [number, number, number][] = [[-0.38, -0.34, 0.4], [-0.1, -0.42, -0.7], [0.22, -0.36, 1.1], [0.4, -0.18, 0.2], [-0.28, -0.08, -0.3], [0.04, -0.2, 0.9], [0.3, 0.06, -1.0], [-0.42, 0.16, 0.7], [-0.12, 0.22, -0.2], [0.16, 0.3, 0.5], [0.38, 0.38, -0.6], [-0.3, 0.4, 1.3], [0.0, 0.44, 0.1]];
+  // A small still flame, its tip above x, y.
+  const flamePiece = (x: number, y: number, r: number): Piece => (g) => {
+    g.moveTo(x, y - r * 2.2);
+    g.quadraticCurveTo(x + r * 1.4, y - r * 0.2, x, y + r);
+    g.quadraticCurveTo(x - r * 1.4, y - r * 0.2, x, y - r * 2.2);
+    g.closePath();
+  };
+  // The parts drawn over a shape's fill, such as a face's eyes, nose and
+  // cheeks, a rose's curl, the flames on a cake and a disco ball's tiles.
   const FACES = ['cat', 'dog', 'bunny'];
   function shapeDetails(g: CanvasRenderingContext2D, sh: VideoShapeDef, w: number, h: number) {
     const k = sh.kind;
@@ -5509,6 +5777,260 @@ export function setup(ctx: Ctx, overrides?: any) {
       if (k === 'diya') flame(0, -0.02 * h, 0.08 * m);
       else for (let i = 0; i < 9; i++) flame(-0.44 * w + (i * 0.88 * w) / 8, (i === 4 ? -0.3 * h : -0.18 * h) - 0.04 * m, 0.035 * m);
       g.fill();
+    } else if (k === 'balloon') {
+      g.fillStyle = 'rgba(255,255,255,0.35)';
+      g.beginPath();
+      oval(-0.14 * w, -0.24 * h, 0.07 * w, 0.12 * h, -0.5)(g);
+      g.fill();
+    } else if (k === 'cake') {
+      // Frosting along the top of each tier, and a flame on each candle.
+      g.fillStyle = 'rgba(255,255,255,0.6)';
+      g.beginPath();
+      pts([[-0.3 * w, -0.16 * h], [0.3 * w, -0.16 * h], [0.3 * w, -0.1 * h], [-0.3 * w, -0.1 * h]])(g);
+      pts([[-0.44 * w, 0.08 * h], [0.44 * w, 0.08 * h], [0.44 * w, 0.14 * h], [-0.44 * w, 0.14 * h]])(g);
+      g.fill();
+      g.fillStyle = '#ffb627';
+      g.beginPath();
+      for (const x of [-0.15, 0, 0.15]) flamePiece(x * w, -0.34 * h - 0.035 * m, 0.035 * m)(g);
+      g.fill();
+    } else if (k === 'gift') {
+      // The ribbon and the bow, lighter than the box.
+      g.fillStyle = 'rgba(255,255,255,0.5)';
+      g.beginPath();
+      pts([[-0.05 * w, -0.22 * h], [0.05 * w, -0.22 * h], [0.05 * w, 0.46 * h], [-0.05 * w, 0.46 * h]])(g);
+      oval(-0.15 * w, -0.32 * h, 0.15 * w, 0.1 * h, 0.35)(g);
+      oval(0.15 * w, -0.32 * h, 0.15 * w, 0.1 * h, -0.35)(g);
+      g.fill();
+    } else if (k === 'disco') {
+      // The mirror tiles: lines across and around the ball, a few lit
+      // tiles, and a shine, all inside the ball.
+      const cy = 0.04 * h;
+      g.beginPath();
+      oval(0, cy, 0.44 * w, 0.44 * h)(g);
+      g.clip();
+      g.strokeStyle = 'rgba(0,0,0,0.22)';
+      g.lineWidth = Math.max(1, 0.012 * m);
+      g.beginPath();
+      for (let i = -3; i <= 3; i++) {
+        g.moveTo(-0.5 * w, cy + i * 0.11 * h);
+        g.lineTo(0.5 * w, cy + i * 0.11 * h);
+      }
+      for (const rx of [0.11, 0.22, 0.33]) {
+        g.moveTo(rx * w, cy);
+        g.ellipse(0, cy, rx * w, 0.44 * h, 0, 0, Math.PI * 2);
+      }
+      g.moveTo(0, cy - 0.44 * h);
+      g.lineTo(0, cy + 0.44 * h);
+      g.stroke();
+      g.fillStyle = 'rgba(255,255,255,0.55)';
+      g.beginPath();
+      for (const [x, y] of [[-0.22, -0.18], [0.11, -0.29], [0.22, 0.04], [-0.11, 0.15], [0.0, -0.07]]) pts([[x * w, y * h + cy], [(x + 0.1) * w, y * h + cy], [(x + 0.1) * w, (y + 0.1) * h + cy], [x * w, (y + 0.1) * h + cy]])(g);
+      g.fill();
+      g.fillStyle = 'rgba(255,255,255,0.4)';
+      g.beginPath();
+      oval(-0.18 * w, cy - 0.2 * h, 0.08 * w, 0.06 * h, -0.6)(g);
+      g.fill();
+    } else if (k === 'mic') {
+      g.save();
+      g.beginPath();
+      oval(0, -0.28 * h, 0.4 * w, 0.2 * h)(g);
+      g.clip();
+      g.strokeStyle = 'rgba(0,0,0,0.25)';
+      g.lineWidth = Math.max(1, 0.012 * m);
+      g.beginPath();
+      for (let i = -4; i <= 4; i++) {
+        g.moveTo(i * 0.1 * w - 0.4 * w, -0.48 * h);
+        g.lineTo(i * 0.1 * w + 0.4 * w, -0.08 * h);
+        g.moveTo(i * 0.1 * w + 0.4 * w, -0.48 * h);
+        g.lineTo(i * 0.1 * w - 0.4 * w, -0.08 * h);
+      }
+      g.stroke();
+      g.restore();
+      g.fillStyle = 'rgba(255,255,255,0.35)';
+      g.beginPath();
+      pts([[-0.3 * w, -0.12 * h], [0.3 * w, -0.12 * h], [0.26 * w, -0.04 * h], [-0.26 * w, -0.04 * h]])(g);
+      g.fill();
+    } else if (k === 'mushroom') {
+      // A cream stem and white spots on the cap.
+      g.fillStyle = '#f3e6cf';
+      g.beginPath();
+      pts([[-0.14 * w, 0.04 * h], [0.14 * w, 0.04 * h], [0.18 * w, 0.46 * h], [-0.18 * w, 0.46 * h]])(g);
+      g.fill();
+      g.fillStyle = 'rgba(255,255,255,0.85)';
+      g.beginPath();
+      oval(-0.22 * w, -0.16 * h, 0.07 * m, 0.07 * m)(g);
+      oval(0.08 * w, -0.27 * h, 0.06 * m, 0.06 * m)(g);
+      oval(0.28 * w, -0.09 * h, 0.05 * m, 0.05 * m)(g);
+      g.fill();
+    } else if (k === 'butterfly') {
+      g.fillStyle = 'rgba(255,255,255,0.45)';
+      g.beginPath();
+      oval(-0.28 * w, -0.18 * h, 0.08 * w, 0.09 * h)(g);
+      oval(0.28 * w, -0.18 * h, 0.08 * w, 0.09 * h)(g);
+      oval(-0.21 * w, 0.22 * h, 0.05 * w, 0.06 * h)(g);
+      oval(0.21 * w, 0.22 * h, 0.05 * w, 0.06 * h)(g);
+      g.fill();
+      g.fillStyle = ink;
+      g.beginPath();
+      oval(0, 0.02 * h, 0.04 * w, 0.3 * h)(g);
+      g.fill();
+    } else if (k === 'bow') {
+      g.fillStyle = 'rgba(0,0,0,0.18)';
+      g.beginPath();
+      oval(0, 0, 0.09 * w, 0.13 * h)(g);
+      g.fill();
+    } else if (k === 'book') {
+      // Lines of words on each page, and the fold between them.
+      g.strokeStyle = 'rgba(0,0,0,0.18)';
+      g.lineWidth = Math.max(1, 0.015 * m);
+      g.lineCap = 'round';
+      g.beginPath();
+      for (let i = 0; i < 5; i++) {
+        const y = -0.2 * h + i * 0.11 * h;
+        g.moveTo(-0.4 * w, y);
+        g.lineTo(-0.08 * w, y + 0.03 * h);
+        g.moveTo(0.08 * w, y + 0.03 * h);
+        g.lineTo(0.4 * w, y);
+      }
+      g.stroke();
+      g.strokeStyle = 'rgba(0,0,0,0.3)';
+      g.beginPath();
+      g.moveTo(0, -0.3 * h);
+      g.lineTo(0, 0.42 * h);
+      g.stroke();
+    } else if (k === 'candle') {
+      g.fillStyle = 'rgba(0,0,0,0.25)';
+      g.beginPath();
+      pts([[-0.42 * w, 0.4 * h], [0.42 * w, 0.4 * h], [0.42 * w, 0.48 * h], [-0.42 * w, 0.48 * h]])(g);
+      g.fill();
+      g.fillStyle = '#ffb627';
+      g.beginPath();
+      flamePiece(0, -0.26 * h - 0.1 * m, 0.1 * m)(g);
+      g.fill();
+    } else if (k === 'palm') {
+      // Coconuts under the fronds.
+      g.fillStyle = '#6b4423';
+      g.beginPath();
+      oval(-0.1 * w, -0.16 * h, 0.035 * m, 0.035 * m)(g);
+      oval(-0.04 * w, -0.15 * h, 0.035 * m, 0.035 * m)(g);
+      g.fill();
+    } else if (k === 'umbrella') {
+      // White panels on the canopy.
+      g.save();
+      g.beginPath();
+      canopy(w, h)(g);
+      g.clip();
+      g.fillStyle = 'rgba(255,255,255,0.75)';
+      g.beginPath();
+      for (const [a0, a1] of [[Math.PI * 1.17, Math.PI * 1.33], [Math.PI * 1.5, Math.PI * 1.67], [Math.PI * 1.83, Math.PI * 2]]) {
+        g.moveTo(0, 0.1 * h);
+        g.lineTo(Math.cos(a0) * w, 0.1 * h + Math.sin(a0) * h);
+        g.lineTo(Math.cos(a1) * w, 0.1 * h + Math.sin(a1) * h);
+        g.closePath();
+      }
+      g.fill();
+      g.restore();
+    } else if (k === 'shell') {
+      g.strokeStyle = 'rgba(0,0,0,0.18)';
+      g.lineWidth = Math.max(1, 0.02 * m);
+      g.beginPath();
+      for (let i = 1; i < 7; i++) {
+        const a = Math.PI + 0.3 + ((Math.PI - 0.6) * i) / 7;
+        g.moveTo(0, 0.3 * h);
+        g.lineTo(Math.cos(a) * 0.42 * w, 0.3 * h + Math.sin(a) * 0.66 * h);
+      }
+      g.stroke();
+    } else if (k === 'waves') {
+      // Foam along each crest.
+      g.strokeStyle = 'rgba(255,255,255,0.6)';
+      g.lineWidth = Math.max(1, 0.03 * h);
+      g.lineCap = 'round';
+      g.beginPath();
+      for (let i = 0; i <= 48; i++) {
+        const x = -0.5 + i / 48;
+        const y = (-0.25 + Math.sin(x * Math.PI * 6) * 0.15) * h;
+        if (i) g.lineTo(x * w, y);
+        else g.moveTo(x * w, y);
+      }
+      g.stroke();
+    } else if (k === 'column') {
+      // Grooves down the shaft.
+      g.strokeStyle = 'rgba(0,0,0,0.16)';
+      g.lineWidth = Math.max(1, 0.03 * w);
+      g.beginPath();
+      for (const x of [-0.16, -0.05, 0.05, 0.16]) {
+        g.moveTo(x * w, -0.4 * h);
+        g.lineTo(x * 1.12 * w, 0.41 * h);
+      }
+      g.stroke();
+    } else if (k === 'castle') {
+      g.fillStyle = 'rgba(0,0,0,0.35)';
+      g.beginPath();
+      g.moveTo(-0.07 * w, 0.5 * h);
+      g.lineTo(-0.07 * w, 0.3 * h);
+      g.quadraticCurveTo(0, 0.18 * h, 0.07 * w, 0.3 * h);
+      g.lineTo(0.07 * w, 0.5 * h);
+      g.closePath();
+      for (const x of [-0.4, 0.36]) pts([[x * w, -0.12 * h], [(x + 0.04) * w, -0.12 * h], [(x + 0.04) * w, 0.0], [x * w, 0.0]])(g);
+      pts([[-0.02 * w, -0.2 * h], [0.02 * w, -0.2 * h], [0.02 * w, -0.08 * h], [-0.02 * w, -0.08 * h]])(g);
+      g.fill();
+    } else if (k === 'planet') {
+      // Bands on the ball, and the near half of the ring lit.
+      g.save();
+      g.beginPath();
+      oval(0, 0, 0.3 * w, 0.38 * h)(g);
+      g.clip();
+      g.fillStyle = 'rgba(0,0,0,0.14)';
+      g.beginPath();
+      for (const y of [-0.22, -0.02, 0.18]) pts([[-0.5 * w, y * h], [0.5 * w, (y - 0.1) * h], [0.5 * w, (y - 0.04) * h], [-0.5 * w, (y + 0.06) * h]])(g);
+      g.fill();
+      g.restore();
+      g.save();
+      g.beginPath();
+      g.rect(-0.5 * w, 0, w, 0.5 * h);
+      g.clip();
+      g.fillStyle = 'rgba(255,255,255,0.3)';
+      g.beginPath();
+      g.moveTo(0.5 * w * Math.cos(-0.3), 0.5 * w * Math.sin(-0.3));
+      g.ellipse(0, 0, 0.5 * w, 0.16 * h, -0.3, 0, Math.PI * 2);
+      g.closePath();
+      g.moveTo(0.38 * w * Math.cos(-0.3), 0.38 * w * Math.sin(-0.3));
+      g.ellipse(0, 0, 0.38 * w, 0.09 * h, -0.3, 0, Math.PI * 2, true);
+      g.closePath();
+      g.fill();
+      g.restore();
+    } else if (k === 'skyline') {
+      // Lit windows, the same ones every frame.
+      g.fillStyle = sh.ink ? hexOr(sh.ink, '#ffe7a3') : 'rgba(255,231,163,0.8)';
+      g.beginPath();
+      const n = SKYLINE.length;
+      SKYLINE.forEach((top, i) => {
+        const x0 = -0.5 + i / n;
+        for (let r = 0; top + 0.06 + r * 0.08 < 0.46; r++) {
+          for (let c = 0; c < 3; c++) {
+            if ((i * 7 + r * 3 + c * 5) % 4 === 0) continue;
+            const wx = (x0 + (0.18 + c * 0.25) / n) * w, wy = (top + 0.06 + r * 0.08) * h;
+            pts([[wx, wy], [wx + (0.12 / n) * w, wy], [wx + (0.12 / n) * w, wy + 0.04 * h], [wx, wy + 0.04 * h]])(g);
+          }
+        }
+      });
+      g.fill();
+    } else if (k === 'laurel') {
+      // The stem along each branch, in the leaves' own color.
+      g.strokeStyle = hexOr(sh.fill, shapeInk(k));
+      g.lineWidth = Math.max(1, 0.018 * m);
+      g.lineCap = 'round';
+      g.beginPath();
+      g.ellipse(0, 0, 0.38 * w, 0.38 * h, 0, Math.PI / 2 + 0.3, Math.PI / 2 + 0.3 + 8 * 0.28);
+      g.moveTo(Math.cos(Math.PI / 2 - 0.3) * 0.38 * w, Math.sin(Math.PI / 2 - 0.3) * 0.38 * h);
+      g.ellipse(0, 0, 0.38 * w, 0.38 * h, 0, Math.PI / 2 - 0.3, Math.PI / 2 - 0.3 - 8 * 0.28, true);
+      g.stroke();
+    } else if (k === 'gear') {
+      g.strokeStyle = 'rgba(0,0,0,0.22)';
+      g.lineWidth = Math.max(1, 0.03 * m);
+      g.beginPath();
+      oval(0, 0, 0.26 * w, 0.26 * h)(g);
+      g.stroke();
     } else if (k === 'flower') {
       g.fillStyle = '#ffd54a';
       g.beginPath();
@@ -5610,6 +6132,9 @@ export function setup(ctx: Ctx, overrides?: any) {
         // An outline of its own, drawn over the fill.
         const lw = Math.min(40, Math.max(0, numOr(sh.lineW, 0)));
         if (lw > 0) {
+          // The details leave their own path behind, so the shape's outline
+          // is made again first.
+          if (sh.kind in SHAPE_PARTS) shapePath(g, sh, w, h);
           g.lineWidth = lw * u;
           g.lineJoin = 'round';
           g.strokeStyle = hexOr(sh.line, '#ffffff');
@@ -17061,6 +17586,30 @@ export function setup(ctx: Ctx, overrides?: any) {
     { id: 'shamrock', label: 'Shamrock' },
     { id: 'egg', label: 'Egg' },
     { id: 'flower', label: 'Flower' },
+    { id: 'balloon', label: 'Balloon' },
+    { id: 'cake', label: 'Birthday cake' },
+    { id: 'gift', label: 'Gift' },
+    { id: 'confetti', label: 'Confetti' },
+    { id: 'note', label: 'Music notes' },
+    { id: 'disco', label: 'Disco ball' },
+    { id: 'mic', label: 'Microphone' },
+    { id: 'mask', label: 'Masquerade mask' },
+    { id: 'mushroom', label: 'Mushroom' },
+    { id: 'butterfly', label: 'Butterfly' },
+    { id: 'bow', label: 'Bow' },
+    { id: 'book', label: 'Book' },
+    { id: 'candle', label: 'Candle' },
+    { id: 'palm', label: 'Palm tree' },
+    { id: 'umbrella', label: 'Beach umbrella' },
+    { id: 'shell', label: 'Seashell' },
+    { id: 'waves', label: 'Waves' },
+    { id: 'column', label: 'Column' },
+    { id: 'laurel', label: 'Laurel wreath' },
+    { id: 'castle', label: 'Castle' },
+    { id: 'fan', label: 'Art deco fan' },
+    { id: 'planet', label: 'Planet' },
+    { id: 'skyline', label: 'City skyline' },
+    { id: 'gear', label: 'Gear' },
   ];
   const SHAPES_MAX = 40;
   // Whether the Background is set to a design while the Studio is drawn, so
@@ -17130,7 +17679,7 @@ export function setup(ctx: Ctx, overrides?: any) {
   });
   function newShape(kind: VideoShapeDef['kind']): VideoShapeDef {
     const n = shapesNow().length;
-    const size: Record<string, [number, number]> = { rect: [520, 300], round: [520, 300], ellipse: [360, 360], tri: [420, 360], line: [640, 14], text: [760, 120], heart: [340, 320], star: [360, 360], poly: [360, 360], diamond: [300, 380], arrow: [480, 220], bubble: [520, 340], ring: [360, 360], moon: [300, 300], cloud: [520, 300], sparkle: [260, 260], cat: [300, 300], dog: [320, 300], bunny: [280, 340], paw: [240, 240], bone: [300, 120], fish: [300, 180], carrot: [160, 320], bat: [420, 220], rose: [260, 260], checker: [900, 80], broken: [320, 300], stripes: [900, 120], snowflake: [260, 260], ornament: [220, 260], holly: [300, 200], pumpkin: [300, 260], ghost: [240, 300], leaf: [220, 280], firework: [320, 320], lantern: [220, 300], diya: [300, 200], menorah: [420, 300], shamrock: [240, 280], egg: [200, 260], flower: [260, 260] };
+    const size: Record<string, [number, number]> = { rect: [520, 300], round: [520, 300], ellipse: [360, 360], tri: [420, 360], line: [640, 14], text: [760, 120], heart: [340, 320], star: [360, 360], poly: [360, 360], diamond: [300, 380], arrow: [480, 220], bubble: [520, 340], ring: [360, 360], moon: [300, 300], cloud: [520, 300], sparkle: [260, 260], cat: [300, 300], dog: [320, 300], bunny: [280, 340], paw: [240, 240], bone: [300, 120], fish: [300, 180], carrot: [160, 320], bat: [420, 220], rose: [260, 260], checker: [900, 80], broken: [320, 300], stripes: [900, 120], snowflake: [260, 260], ornament: [220, 260], holly: [300, 200], pumpkin: [300, 260], ghost: [240, 300], leaf: [220, 280], firework: [320, 320], lantern: [220, 300], diya: [300, 200], menorah: [420, 300], shamrock: [240, 280], egg: [200, 260], flower: [260, 260], balloon: [200, 300], cake: [300, 280], gift: [260, 260], confetti: [360, 360], note: [240, 260], disco: [260, 260], mic: [160, 320], mask: [320, 180], mushroom: [240, 240], butterfly: [300, 240], bow: [320, 200], book: [300, 240], candle: [120, 300], palm: [300, 420], umbrella: [340, 300], shell: [220, 200], waves: [1200, 200], column: [160, 700], laurel: [300, 300], castle: [520, 360], fan: [420, 220], planet: [360, 280], skyline: [1400, 360], gear: [260, 260] };
     const [w, h] = size[kind] || [400, 240];
     return {
       id: rid('sh').replace(/[^a-z0-9]/gi, '').slice(0, 24),
@@ -18908,7 +19457,10 @@ export function setup(ctx: Ctx, overrides?: any) {
   // the reader's own: the line under the title, watermarks, pictures, fonts
   // they added, the title's words or notes. A template that is meant to be
   // plain stays plain.
-  type Template = { id: string; name: string; suits: string; look: Record<string, any>; back: VideoBack; cat: string };
+  // added is the version a template came in, for one added after the
+  // first templates. It keeps the notice that the templates changed from
+  // showing when templates were only added.
+  type Template = { id: string; name: string; suits: string; look: Record<string, any>; back: VideoBack; cat: string; added?: string };
   // The groups the templates are listed in, each picked with a chip.
   const TEMPLATE_CATS = [
     { id: 'all', label: 'All' },
@@ -18920,6 +19472,9 @@ export function setup(ctx: Ctx, overrides?: any) {
     { id: 'aesthetics', label: 'Aesthetics' },
     { id: 'pride', label: 'Pride' },
     { id: 'holidays', label: 'Holidays' },
+    { id: 'parties', label: 'Parties' },
+    { id: 'history', label: 'History' },
+    { id: 'future', label: 'Future' },
   ];
   let tplCat = 'all';
   const shape = (kind: VideoShapeDef['kind'], x: number, y: number, w: number, h: number, fill: string, more: Partial<VideoShapeDef> = {}): VideoShapeDef =>
@@ -19507,6 +20062,45 @@ export function setup(ctx: Ctx, overrides?: any) {
       cat: 'scenes',
     },
     {
+      id: 'beach',
+      name: 'Beach',
+      suits: 'A day at the beach: sky, sea and sand, with a palm tree, an umbrella and shells.',
+      look: {
+        videoFont: 'round', videoSize: 104, videoInk: '#ffffff', videoWords: 'fade', videoPlace: 'middle', videoQuotes: true, videoWordFill: 'solid',
+        videoWordStops: ['#f2b880'], videoWordDir: 'down', videoWordShadow: true, videoWordShadowInk: '#0b3954', videoWordShadowDark: 80,
+        videoWordShadowSoft: 10, videoWordShadowFar: 2, videoBox: true, videoBoxColor: '#0b3954', videoBoxClear: 45, videoBoxRound: 24,
+        videoBoxWidth: 'fit', videoOwnColors: true,
+        videoKindColors: { narrator: '#0b3954', character: '#a8401b', persona: '#0b5c7a', npc: '#2e6b30' }, videoBackRules: false,
+        videoCaptions: true, videoCaptionInk: '#ffffff', videoCapFill: 'solid', videoCapStops: ['#f2b880'], videoCapDir: 'right',
+        videoNameFont: 'round', videoNameSize: 104, videoNameColor: 'kind', videoNameFill: 'solid', videoNameStops: ['#f2b880'],
+        videoNameDir: 'right', videoNameShadow: false, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18,
+        videoNameShadowFar: 2, videoPicShape: 'circle', videoPicSize: 170, videoPicRing: true, videoPicRingWidth: 5, videoPicMove: true,
+        videoTwo: true, videoMoodPics: true, videoQuiet: 'fade', videoQuietStrength: 45,
+        videoAnims: { lines: { id: 'slide-angle', secs: 0.6, delay: 0 } }, videoEdges: 0, videoEdgeColor: '', videoMove: 'slide', videoMoveSecs: 0.45,
+        videoTitleOn: true, videoFadeOut: 1.5, videoBylineInk: '#ffffff', videoBylineFont: '', videoBylineFill: 'solid',
+        videoBylineStops: ['#f2b880'], videoBylineDir: 'right', videoBylineShadow: true, videoBylineShadowInk: '#0b3954', videoBylineShadowDark: 65,
+        videoBylineShadowSoft: 18, videoBylineShadowFar: 0, studioMusic: true,
+      },
+      back: backOf('Beach', {
+        kind: 'design', color: '#7cc8f2', fill: 'linear', stops: ['#fde3b8'], dir: 'down',
+        shapes: [
+          shape('ellipse', 0.7, 0.56, 240, 240, '#ffd27a', { clear: 10 }),
+          shape('rect', 0.5, 0.67, 2400, 140, '#2a9fd6'),
+          shape('waves', 0.5, 0.73, 2400, 90, '#4fc0ea'),
+          shape('rect', 0.5, 0.88, 2400, 300, '#f2d39b'),
+          shape('waves', 0.5, 0.765, 2400, 50, '#ffffff', { clear: 35 }),
+          shape('palm', 0.1, 0.5, 420, 700, '#3f8f4a'),
+          shape('umbrella', 0.84, 0.8, 300, 260, '#ff6b8b', { rot: -8 }),
+          shape('shell', 0.32, 0.92, 90, 80, '#f7c8a8', { rot: -10 }),
+          shape('shell', 0.6, 0.95, 70, 62, '#ffe1c9', { rot: 12 }),
+          shape('cloud', 0.4, 0.12, 240, 120, '#ffffff', { clear: 10 }),
+          shape('cloud', 0.82, 0.18, 180, 90, '#ffffff', { clear: 25 }),
+        ],
+      }),
+      cat: 'scenes',
+      added: '1.12.0',
+    },
+    {
       id: 'night',
       name: 'After dark',
       suits: 'Intimate and sexual scenes between adults, slow and warm.',
@@ -19992,6 +20586,278 @@ export function setup(ctx: Ctx, overrides?: any) {
         ],
       }),
       cat: 'aesthetics',
+    },
+    {
+      id: 'cottage',
+      name: 'Cottagecore',
+      suits: 'Rolling green hills under a soft sky, with mushrooms and flowers, and the words on a cream card.',
+      look: {
+        videoFont: 'book', videoSize: 104, videoInk: '#3b3320', videoWords: 'fade', videoPlace: 'lower', videoQuotes: true, videoWordFill: 'solid',
+        videoWordStops: ['#f2b880'], videoWordDir: 'down', videoWordShadow: false, videoWordShadowInk: '', videoWordShadowDark: 55,
+        videoWordShadowSoft: 14, videoWordShadowFar: 2, videoBox: true, videoBoxColor: '#fbf5e4', videoBoxClear: 8, videoBoxRound: 30,
+        videoBoxWidth: 'fit', videoOwnColors: true,
+        videoKindColors: { narrator: '#6f8f3e', character: '#6f8f3e', persona: '#6f8f3e', npc: '#6f8f3e' }, videoBackRules: false,
+        videoCaptions: true, videoCaptionInk: '#fbf5e4', videoCapFill: 'solid', videoCapStops: ['#f2b880'], videoCapDir: 'right',
+        videoNameFont: 'book', videoNameSize: 104, videoNameColor: 'words', videoNameFill: 'solid', videoNameStops: ['#f2b880'],
+        videoNameDir: 'right', videoNameShadow: false, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18,
+        videoNameShadowFar: 2, videoPicShape: 'rounded', videoPicSize: 170, videoPicRing: true, videoPicRingWidth: 4, videoPicMove: true,
+        videoTwo: true, videoMoodPics: true, videoQuiet: 'fade', videoQuietStrength: 45, videoAnims: { lines: { id: 'rise', secs: 0.6, delay: 0 } },
+        videoEdges: 0, videoEdgeColor: '', videoMove: 'dissolve', videoMoveSecs: 0.6, videoTitleOn: true, videoFadeOut: 1.5,
+        videoBylineInk: '#5b6b30', videoBylineFont: '', videoBylineFill: 'solid', videoBylineStops: ['#f2b880'], videoBylineDir: 'right',
+        videoBylineShadow: false, videoBylineShadowInk: '', videoBylineShadowDark: 65, videoBylineShadowSoft: 18, videoBylineShadowFar: 0,
+        studioMusic: true,
+      },
+      back: backOf('Cottagecore', {
+        kind: 'design', color: '#f7efd6', fill: 'linear', stops: ['#dcebc3'], dir: 'down',
+        shapes: [
+          shape('ellipse', 0.82, 0.16, 170, 170, '#ffe7a3', { clear: 10 }),
+          shape('ellipse', 0.2, 1.05, 1400, 600, '#a9c47f'),
+          shape('ellipse', 0.85, 1.08, 1300, 560, '#8fb066'),
+          shape('ellipse', 0.5, 1.08, 2000, 420, '#7a9c52'),
+          shape('mushroom', 0.08, 0.68, 150, 150, '#c8553d'),
+          shape('mushroom', 0.15, 0.71, 90, 90, '#d9785e', { rot: 8 }),
+          shape('flower', 0.9, 0.66, 80, 80, '#f2b8c6'),
+          shape('flower', 0.95, 0.72, 60, 60, '#ffffff'),
+          shape('flower', 0.3, 0.6, 50, 50, '#f7d6a0'),
+          shape('leaf', 0.1, 0.1, 90, 120, '#8aa65c', { rot: -30 }),
+          shape('leaf', 0.2, 0.06, 60, 80, '#a3bd72', { rot: 20 }),
+          shape('butterfly', 0.62, 0.12, 90, 72, '#f2b8c6', { rot: 12 }),
+        ],
+      }),
+      cat: 'aesthetics',
+      added: '1.12.0',
+    },
+    {
+      id: 'coquette',
+      name: 'Coquette',
+      suits: 'Pale pink with a big bow, a string of pearls and hearts, and soft pink words.',
+      look: {
+        videoFont: 'book', videoSize: 108, videoInk: '#6b2440', videoWords: 'fade', videoPlace: 'middle', videoQuotes: true, videoWordFill: 'linear',
+        videoWordStops: ['#c4507a'], videoWordDir: 'down', videoWordShadow: false, videoWordShadowInk: '', videoWordShadowDark: 55,
+        videoWordShadowSoft: 14, videoWordShadowFar: 2, videoBox: false, videoBoxColor: '#000000', videoBoxClear: 40, videoBoxRound: 16,
+        videoBoxWidth: 'fit', videoOwnColors: true,
+        videoKindColors: { narrator: '#d9668f', character: '#d9668f', persona: '#d9668f', npc: '#d9668f' }, videoBackRules: false,
+        videoCaptions: true, videoCaptionInk: '#a8406a', videoCapFill: 'solid', videoCapStops: ['#f2b880'], videoCapDir: 'right',
+        videoNameFont: 'book', videoNameSize: 104, videoNameColor: 'kind', videoNameFill: 'solid', videoNameStops: ['#f2b880'], videoNameDir: 'right',
+        videoNameShadow: false, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18, videoNameShadowFar: 2,
+        videoPicShape: 'circle', videoPicSize: 170, videoPicRing: true, videoPicRingWidth: 7, videoPicMove: true, videoTwo: true, videoMoodPics: true,
+        videoQuiet: 'fade', videoQuietStrength: 45,
+        videoAnims: { title: { id: 'thru-heart', secs: 1.2, delay: 0 }, lines: { id: 'words-rise', secs: 1.2, delay: 0 } }, videoEdges: 0,
+        videoEdgeColor: '', videoMove: 'dissolve', videoMoveSecs: 0.6, videoTitleOn: true, videoFadeOut: 1.5, videoBylineInk: '#a8406a',
+        videoBylineFont: '', videoBylineFill: 'solid', videoBylineStops: ['#f2b880'], videoBylineDir: 'right', videoBylineShadow: false,
+        videoBylineShadowInk: '', videoBylineShadowDark: 65, videoBylineShadowSoft: 18, videoBylineShadowFar: 0, studioMusic: true,
+      },
+      back: backOf('Coquette', {
+        kind: 'design', color: '#fff3f6', fill: 'radial', stops: ['#fbd5df'], dir: 'down',
+        shapes: [
+          shape('ellipse', 0.08, 0.04, 30, 30, '#fffaf5'),
+          shape('ellipse', 0.14, 0.062, 30, 30, '#fffaf5'),
+          shape('ellipse', 0.2, 0.083, 30, 30, '#fffaf5'),
+          shape('ellipse', 0.26, 0.102, 30, 30, '#fffaf5'),
+          shape('ellipse', 0.32, 0.118, 30, 30, '#fffaf5'),
+          shape('ellipse', 0.38, 0.13, 30, 30, '#fffaf5'),
+          shape('ellipse', 0.44, 0.137, 30, 30, '#fffaf5'),
+          shape('ellipse', 0.5, 0.14, 30, 30, '#fffaf5'),
+          shape('ellipse', 0.56, 0.137, 30, 30, '#fffaf5'),
+          shape('ellipse', 0.62, 0.13, 30, 30, '#fffaf5'),
+          shape('ellipse', 0.68, 0.118, 30, 30, '#fffaf5'),
+          shape('ellipse', 0.74, 0.102, 30, 30, '#fffaf5'),
+          shape('ellipse', 0.8, 0.083, 30, 30, '#fffaf5'),
+          shape('ellipse', 0.86, 0.062, 30, 30, '#fffaf5'),
+          shape('ellipse', 0.92, 0.04, 30, 30, '#fffaf5'),
+          shape('bow', 0.5, 0.2, 300, 190, '#f4a3bb'),
+          shape('heart', 0.1, 0.5, 90, 84, '#e9799c', { clear: 20 }),
+          shape('heart', 0.9, 0.5, 90, 84, '#e9799c', { clear: 20 }),
+          shape('heart', 0.16, 0.86, 60, 56, '#f4a3bb', { clear: 30 }),
+          shape('heart', 0.84, 0.86, 60, 56, '#f4a3bb', { clear: 30 }),
+          shape('bow', 0.5, 0.93, 150, 95, '#f4a3bb', { clear: 20 }),
+        ],
+      }),
+      cat: 'aesthetics',
+      added: '1.12.0',
+    },
+    {
+      id: 'y2k',
+      name: 'Y2K',
+      suits: 'A bright pink and blue gradient, with butterflies, stars and big shiny words.',
+      look: {
+        videoFont: 'round', videoSize: 116, videoInk: '#ffffff', videoWords: 'all', videoPlace: 'middle', videoQuotes: true, videoWordFill: 'linear',
+        videoWordStops: ['#c9f3ff'], videoWordDir: 'down', videoWordShadow: true, videoWordShadowInk: '#5a00a0', videoWordShadowDark: 70,
+        videoWordShadowSoft: 0, videoWordShadowFar: 5, videoBox: false, videoBoxColor: '#000000', videoBoxClear: 40, videoBoxRound: 16,
+        videoBoxWidth: 'fit', videoOwnColors: true,
+        videoKindColors: { narrator: '#ffb3f0', character: '#9fe8ff', persona: '#c7f9a6', npc: '#ffe28a' }, videoBackRules: false,
+        videoCaptions: true, videoCaptionInk: '#ffffff', videoCapFill: 'solid', videoCapStops: ['#f2b880'], videoCapDir: 'right',
+        videoNameFont: 'round', videoNameSize: 104, videoNameColor: 'kind', videoNameFill: 'solid', videoNameStops: ['#f2b880'],
+        videoNameDir: 'right', videoNameShadow: false, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18,
+        videoNameShadowFar: 2, videoPicShape: 'rounded', videoPicSize: 170, videoPicRing: true, videoPicRingWidth: 5, videoPicMove: true,
+        videoTwo: true, videoMoodPics: true, videoQuiet: 'fade', videoQuietStrength: 45,
+        videoAnims: { open: { id: 'diamond', secs: 1.0, delay: 0 }, lines: { id: 'slide-r', secs: 0.4, delay: 0 } }, videoEdges: 0,
+        videoEdgeColor: '', videoMove: 'slide', videoMoveSecs: 0.35, videoTitleOn: true, videoFadeOut: 1.5, videoBylineInk: '#ffffff',
+        videoBylineFont: '', videoBylineFill: 'solid', videoBylineStops: ['#f2b880'], videoBylineDir: 'right', videoBylineShadow: false,
+        videoBylineShadowInk: '', videoBylineShadowDark: 65, videoBylineShadowSoft: 18, videoBylineShadowFar: 0, studioMusic: true,
+      },
+      back: backOf('Y2K', {
+        kind: 'design', color: '#6a3cff', fill: 'linear', stops: ['#ff4fb8'], dir: 'diag',
+        shapes: [
+          shape('star', 0.86, 0.18, 260, 260, '#ffe28a', { clear: 30, points: 4, depth: 70 }),
+          shape('star', 0.12, 0.84, 220, 220, '#9fe8ff', { clear: 35, points: 4, depth: 70 }),
+          shape('butterfly', 0.14, 0.16, 220, 176, '#9fe8ff', { rot: -12 }),
+          shape('butterfly', 0.88, 0.82, 190, 152, '#ffb3f0', { rot: 14 }),
+          shape('sparkle', 0.3, 0.08, 60, 60, '#ffffff'),
+          shape('sparkle', 0.7, 0.92, 50, 50, '#ffffff'),
+          shape('sparkle', 0.96, 0.5, 40, 40, '#ffffff', { clear: 20 }),
+          shape('sparkle', 0.04, 0.5, 36, 36, '#ffffff', { clear: 20 }),
+          shape('heart', 0.62, 0.08, 50, 48, '#ff9fe0', { clear: 10 }),
+        ],
+      }),
+      cat: 'aesthetics',
+      added: '1.12.0',
+    },
+    {
+      id: 'fairy',
+      name: 'Fairycore',
+      suits: 'A dark forest glade at night, with a ring of mushrooms, butterflies and glowing words.',
+      look: {
+        videoFont: 'book', videoSize: 106, videoInk: '#f3ecff', videoWords: 'blur', videoPlace: 'middle', videoQuotes: true, videoWordFill: 'solid',
+        videoWordStops: ['#f2b880'], videoWordDir: 'down', videoWordShadow: true, videoWordShadowInk: '#a98bff', videoWordShadowDark: 80,
+        videoWordShadowSoft: 26, videoWordShadowFar: 0, videoBox: false, videoBoxColor: '#000000', videoBoxClear: 40, videoBoxRound: 16,
+        videoBoxWidth: 'fit', videoOwnColors: true,
+        videoKindColors: { narrator: '#c9b6ff', character: '#a8e6c1', persona: '#ffd6f0', npc: '#fff1a8' }, videoBackRules: false,
+        videoCaptions: true, videoCaptionInk: '#c9b6ff', videoCapFill: 'solid', videoCapStops: ['#f2b880'], videoCapDir: 'right',
+        videoNameFont: 'book', videoNameSize: 104, videoNameColor: 'kind', videoNameFill: 'solid', videoNameStops: ['#f2b880'], videoNameDir: 'right',
+        videoNameShadow: false, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18, videoNameShadowFar: 2,
+        videoPicShape: 'circle', videoPicSize: 160, videoPicRing: true, videoPicRingWidth: 3, videoPicMove: true, videoTwo: true, videoMoodPics: true,
+        videoQuiet: 'fade', videoQuietStrength: 45,
+        videoAnims: { open: { id: 'focus', secs: 0.8, delay: 0 }, lines: { id: 'blur-rise', secs: 0.6, delay: 0 } }, videoEdges: 40,
+        videoEdgeColor: '#000000', videoMove: 'focus', videoMoveSecs: 0.6, videoTitleOn: true, videoFadeOut: 1.5, videoBylineInk: '#c9b6ff',
+        videoBylineFont: '', videoBylineFill: 'solid', videoBylineStops: ['#f2b880'], videoBylineDir: 'right', videoBylineShadow: false,
+        videoBylineShadowInk: '', videoBylineShadowDark: 65, videoBylineShadowSoft: 18, videoBylineShadowFar: 0, studioMusic: true,
+      },
+      back: backOf('Fairycore', {
+        kind: 'design', color: '#24423a', fill: 'linear', stops: ['#1a1430'], dir: 'down',
+        shapes: [
+          shape('mushroom', 0.215, 0.935, 90, 90, '#b28bd6'),
+          shape('mushroom', 0.312, 0.899, 90, 90, '#b28bd6'),
+          shape('mushroom', 0.5, 0.88, 90, 90, '#b28bd6'),
+          shape('mushroom', 0.688, 0.899, 90, 90, '#b28bd6'),
+          shape('mushroom', 0.785, 0.935, 90, 90, '#b28bd6'),
+          shape('moon', 0.86, 0.14, 170, 170, '#f4f1d0'),
+          shape('butterfly', 0.13, 0.2, 200, 160, '#c9b6ff', { rot: -10 }),
+          shape('butterfly', 0.9, 0.42, 140, 112, '#a8e6c1', { rot: 10 }),
+          shape('sparkle', 0.3, 0.1, 34, 34, '#fff1a8'),
+          shape('sparkle', 0.4, 0.24, 22, 22, '#fff1a8', { clear: 20 }),
+          shape('sparkle', 0.62, 0.16, 28, 28, '#fff1a8', { clear: 10 }),
+          shape('sparkle', 0.72, 0.3, 20, 20, '#ffffff', { clear: 30 }),
+          shape('sparkle', 0.22, 0.4, 24, 24, '#ffffff', { clear: 30 }),
+          shape('flower', 0.06, 0.9, 70, 70, '#ffd6f0', { clear: 10 }),
+          shape('flower', 0.94, 0.92, 60, 60, '#ffd6f0', { clear: 10 }),
+        ],
+      }),
+      cat: 'aesthetics',
+      added: '1.12.0',
+    },
+    {
+      id: 'academia',
+      name: 'Dark academia',
+      suits: 'A wall of old books and candlelight, with the words typed out on a page at the bottom.',
+      look: {
+        videoFont: 'type', videoSize: 94, videoInk: '#2b1d10', videoWords: 'appear', videoPlace: 'lower', videoQuotes: true, videoWordFill: 'solid',
+        videoWordStops: ['#f2b880'], videoWordDir: 'down', videoWordShadow: false, videoWordShadowInk: '', videoWordShadowDark: 55,
+        videoWordShadowSoft: 14, videoWordShadowFar: 2, videoBox: true, videoBoxColor: '#efe2c4', videoBoxClear: 0, videoBoxRound: 4,
+        videoBoxWidth: 'wide', videoOwnColors: true,
+        videoKindColors: { narrator: '#c9a15a', character: '#c9a15a', persona: '#c9a15a', npc: '#c9a15a' }, videoBackRules: false,
+        videoCaptions: true, videoCaptionInk: '#e8d8b4', videoCapFill: 'solid', videoCapStops: ['#f2b880'], videoCapDir: 'right',
+        videoNameFont: 'book', videoNameSize: 104, videoNameColor: 'kind', videoNameFill: 'solid', videoNameStops: ['#f2b880'], videoNameDir: 'right',
+        videoNameShadow: false, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18, videoNameShadowFar: 2,
+        videoPicShape: 'rounded', videoPicSize: 170, videoPicRing: true, videoPicRingWidth: 3, videoPicMove: true, videoTwo: true,
+        videoMoodPics: true, videoQuiet: 'fade', videoQuietStrength: 45,
+        videoAnims: { open: { id: 'iris', secs: 0.8, delay: 0 }, lines: { id: 'type', secs: 1.2, delay: 0 } }, videoEdges: 45,
+        videoEdgeColor: '#000000', videoMove: 'black', videoMoveSecs: 0.8, videoTitleOn: true, videoFadeOut: 1.5, videoBylineInk: '#c9a15a',
+        videoBylineFont: '', videoBylineFill: 'solid', videoBylineStops: ['#f2b880'], videoBylineDir: 'right', videoBylineShadow: false,
+        videoBylineShadowInk: '', videoBylineShadowDark: 65, videoBylineShadowSoft: 18, videoBylineShadowFar: 0, studioMusic: true,
+      },
+      back: backOf('Dark academia', {
+        kind: 'design', color: '#3a2a1d', fill: 'radial', stops: ['#140d07'], dir: 'down',
+        shapes: [
+          shape('rect', 0.5, 0.33, 2400, 22, '#2a1c10'),
+          shape('rect', 0.016, 0.186, 60, 230, '#5a2e1e'),
+          shape('rect', 0.046, 0.172, 44, 260, '#2f3f2a'),
+          shape('rect', 0.079, 0.2, 70, 200, '#6b4a24'),
+          shape('rect', 0.114, 0.177, 52, 250, '#3a2433'),
+          shape('rect', 0.14, 0.191, 38, 220, '#7a5a2e'),
+          shape('rect', 0.17, 0.181, 64, 240, '#24304a'),
+          shape('rect', 0.205, 0.186, 60, 230, '#5e3a1c'),
+          shape('rect', 0.235, 0.172, 44, 260, '#41301f'),
+          shape('rect', 0.268, 0.2, 70, 200, '#5a2e1e'),
+          shape('rect', 0.303, 0.177, 52, 250, '#2f3f2a'),
+          shape('rect', 0.33, 0.191, 38, 220, '#6b4a24'),
+          shape('rect', 0.359, 0.181, 64, 240, '#3a2433'),
+          shape('rect', 0.395, 0.186, 60, 230, '#7a5a2e'),
+          shape('rect', 0.425, 0.172, 44, 260, '#24304a'),
+          shape('rect', 0.458, 0.2, 70, 200, '#5e3a1c'),
+          shape('rect', 0.493, 0.177, 52, 250, '#41301f'),
+          shape('rect', 0.519, 0.191, 38, 220, '#5a2e1e'),
+          shape('rect', 0.549, 0.181, 64, 240, '#2f3f2a'),
+          shape('rect', 0.584, 0.186, 60, 230, '#6b4a24'),
+          shape('rect', 0.615, 0.172, 44, 260, '#3a2433'),
+          shape('rect', 0.647, 0.2, 70, 200, '#7a5a2e'),
+          shape('rect', 0.682, 0.177, 52, 250, '#24304a'),
+          shape('rect', 0.709, 0.191, 38, 220, '#5e3a1c'),
+          shape('rect', 0.739, 0.181, 64, 240, '#41301f'),
+          shape('rect', 0.774, 0.186, 60, 230, '#5a2e1e'),
+          shape('rect', 0.804, 0.172, 44, 260, '#2f3f2a'),
+          shape('rect', 0.837, 0.2, 70, 200, '#6b4a24'),
+          shape('rect', 0.872, 0.177, 52, 250, '#3a2433'),
+          shape('rect', 0.898, 0.191, 38, 220, '#7a5a2e'),
+          shape('rect', 0.928, 0.181, 64, 240, '#24304a'),
+          shape('candle', 0.12, 0.58, 80, 230, '#efe3c6'),
+          shape('candle', 0.18, 0.62, 60, 160, '#efe3c6'),
+          shape('book', 0.85, 0.6, 230, 180, '#e8d8b4', { rot: -6 }),
+          shape('leaf', 0.93, 0.48, 70, 95, '#8a4b24', { rot: 25, clear: 10 }),
+        ],
+      }),
+      cat: 'aesthetics',
+      added: '1.12.0',
+    },
+    {
+      id: 'witchy',
+      name: 'Witchy',
+      suits: 'A big moon over a dark purple night, with candles, stars and mushrooms.',
+      look: {
+        videoFont: 'book', videoSize: 106, videoInk: '#f4ecff', videoWords: 'blur', videoPlace: 'middle', videoQuotes: true, videoWordFill: 'solid',
+        videoWordStops: ['#f2b880'], videoWordDir: 'down', videoWordShadow: true, videoWordShadowInk: '#000000', videoWordShadowDark: 75,
+        videoWordShadowSoft: 16, videoWordShadowFar: 0, videoBox: false, videoBoxColor: '#000000', videoBoxClear: 40, videoBoxRound: 16,
+        videoBoxWidth: 'fit', videoOwnColors: true,
+        videoKindColors: { narrator: '#b892ff', character: '#8fd6b8', persona: '#f5c06b', npc: '#ff9fc4' }, videoBackRules: false,
+        videoCaptions: true, videoCaptionInk: '#b892ff', videoCapFill: 'solid', videoCapStops: ['#f2b880'], videoCapDir: 'right',
+        videoNameFont: 'book', videoNameSize: 104, videoNameColor: 'kind', videoNameFill: 'linear', videoNameStops: ['#f5c06b'],
+        videoNameDir: 'right', videoNameShadow: false, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18,
+        videoNameShadowFar: 2, videoPicShape: 'circle', videoPicSize: 160, videoPicRing: true, videoPicRingWidth: 3, videoPicMove: true,
+        videoTwo: true, videoMoodPics: true, videoQuiet: 'fade', videoQuietStrength: 45,
+        videoAnims: { open: { id: 'thru-star', secs: 1.2, delay: 0 }, lines: { id: 'letters-fall', secs: 1.2, delay: 0 } }, videoEdges: 40,
+        videoEdgeColor: '#000000', videoMove: 'black', videoMoveSecs: 0.7, videoTitleOn: true, videoFadeOut: 1.5, videoBylineInk: '#b892ff',
+        videoBylineFont: '', videoBylineFill: 'solid', videoBylineStops: ['#f2b880'], videoBylineDir: 'right', videoBylineShadow: true,
+        videoBylineShadowInk: '#000000', videoBylineShadowDark: 65, videoBylineShadowSoft: 18, videoBylineShadowFar: 0, studioMusic: true,
+      },
+      back: backOf('Witchy', {
+        kind: 'design', color: '#2a1844', fill: 'linear', stops: ['#0c0718'], dir: 'down',
+        shapes: [
+          shape('ellipse', 0.82, 0.22, 330, 330, '#e9dcff', { clear: 10 }),
+          shape('cloud', 0.74, 0.3, 260, 90, '#2a1844', { clear: 30 }),
+          shape('star', 0.2, 0.1, 50, 50, '#f5c06b', { clear: 15 }),
+          shape('star', 0.4, 0.06, 34, 34, '#f5c06b', { clear: 25 }),
+          shape('sparkle', 0.6, 0.12, 34, 34, '#ffffff', { clear: 20 }),
+          shape('sparkle', 0.1, 0.3, 26, 26, '#ffffff', { clear: 30 }),
+          shape('rect', 0.5, 0.97, 2400, 80, '#160c28'),
+          shape('candle', 0.08, 0.84, 80, 230, '#c9b3f0'),
+          shape('candle', 0.15, 0.88, 60, 160, '#9f86d6'),
+          shape('candle', 0.92, 0.86, 70, 200, '#c9b3f0'),
+          shape('mushroom', 0.24, 0.9, 110, 110, '#7d4fbf'),
+          shape('mushroom', 0.82, 0.91, 80, 80, '#9b6fd6'),
+        ],
+      }),
+      cat: 'aesthetics',
+      added: '1.12.0',
     },
     {
       id: 'pride',
@@ -20817,6 +21683,569 @@ export function setup(ctx: Ctx, overrides?: any) {
       }),
       cat: 'holidays',
     },
+    {
+      id: 'club',
+      name: 'Nightclub',
+      suits: 'Clubs and dance floors at night, with a disco ball, colored lights and a checkered floor. The words sit in a dark box at the bottom.',
+      look: {
+        videoFont: 'clean', videoSize: 100, videoInk: '#ffffff', videoWords: 'appear', videoPlace: 'lower', videoQuotes: true,
+        videoWordFill: 'linear', videoWordStops: ['#ff9fe0'], videoWordDir: 'right', videoWordShadow: false, videoWordShadowInk: '',
+        videoWordShadowDark: 55, videoWordShadowSoft: 14, videoWordShadowFar: 2, videoBox: true, videoBoxColor: '#0a0414', videoBoxClear: 25,
+        videoBoxRound: 28, videoBoxWidth: 'wide', videoOwnColors: true,
+        videoKindColors: { narrator: '#7df9ff', character: '#ff7ad9', persona: '#c9a6ff', npc: '#ffe28a' }, videoBackRules: false,
+        videoCaptions: true, videoCaptionInk: '#7df9ff', videoCapFill: 'solid', videoCapStops: ['#f2b880'], videoCapDir: 'right',
+        videoNameFont: 'clean', videoNameSize: 104, videoNameColor: 'kind', videoNameFill: 'solid', videoNameStops: ['#f2b880'],
+        videoNameDir: 'right', videoNameShadow: false, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18,
+        videoNameShadowFar: 2, videoPicShape: 'rounded', videoPicSize: 180, videoPicRing: true, videoPicRingWidth: 3, videoPicMove: true,
+        videoTwo: true, videoMoodPics: true, videoQuiet: 'fade', videoQuietStrength: 45,
+        videoAnims: { title: { id: 'grow', secs: 0.5, delay: 0 }, lines: { id: 'blur-rise', secs: 0.5, delay: 0 } }, videoEdges: 30,
+        videoEdgeColor: '#000000', videoMove: 'dissolve', videoMoveSecs: 0.4, videoTitleOn: true, videoFadeOut: 1.5, videoBylineInk: '#7df9ff',
+        videoBylineFont: '', videoBylineFill: 'solid', videoBylineStops: ['#f2b880'], videoBylineDir: 'right', videoBylineShadow: false,
+        videoBylineShadowInk: '', videoBylineShadowDark: 65, videoBylineShadowSoft: 18, videoBylineShadowFar: 0, studioMusic: true,
+      },
+      back: backOf('Nightclub', {
+        kind: 'design', color: '#1b0b36', fill: 'linear', stops: ['#05020d'], dir: 'down',
+        shapes: [
+          shape('tri', 0.3, 0.5, 460, 1150, '#ff3fa4', { rot: 22, clear: 82 }),
+          shape('tri', 0.7, 0.5, 460, 1150, '#3fd5ff', { rot: -22, clear: 82 }),
+          shape('tri', 0.5, 0.55, 380, 1150, '#a64dff', { clear: 86 }),
+          shape('disco', 0.5, 0.09, 190, 190, '#d5d8e2'),
+          shape('line', 0.5, 0.02, 4, 60, '#d5d8e2'),
+          shape('checker', 0.5, 0.92, 2400, 110, '#ff3fa4', { clear: 55 }),
+          shape('checker', 0.5, 0.99, 2400, 110, '#3fd5ff', { clear: 55 }),
+          shape('note', 0.08, 0.2, 120, 130, '#ff7ad9', { rot: -12 }),
+          shape('note', 0.92, 0.26, 100, 110, '#7df9ff', { rot: 12 }),
+          shape('sparkle', 0.2, 0.1, 44, 44, '#ffffff', { clear: 10 }),
+          shape('sparkle', 0.8, 0.12, 36, 36, '#ffffff', { clear: 20 }),
+          shape('sparkle', 0.66, 0.3, 26, 26, '#ffffff', { clear: 35 }),
+        ],
+      }),
+      cat: 'parties',
+      added: '1.12.0',
+    },
+    {
+      id: 'birthday',
+      name: 'Birthday party',
+      suits: 'Birthdays, with a string of flags, balloons, a cake, gifts and confetti, in bright colors on cream.',
+      look: {
+        videoFont: 'round', videoSize: 110, videoInk: '#45203d', videoWords: 'fade', videoPlace: 'middle', videoQuotes: true, videoWordFill: 'solid',
+        videoWordStops: ['#f2b880'], videoWordDir: 'down', videoWordShadow: false, videoWordShadowInk: '', videoWordShadowDark: 55,
+        videoWordShadowSoft: 14, videoWordShadowFar: 2, videoBox: false, videoBoxColor: '#000000', videoBoxClear: 40, videoBoxRound: 16,
+        videoBoxWidth: 'fit', videoOwnColors: true,
+        videoKindColors: { narrator: '#e0567f', character: '#d9452e', persona: '#2f7fbf', npc: '#7a4fd1' }, videoBackRules: false,
+        videoCaptions: true, videoCaptionInk: '#b0345c', videoCapFill: 'solid', videoCapStops: ['#f2b880'], videoCapDir: 'right',
+        videoNameFont: 'round', videoNameSize: 104, videoNameColor: 'kind', videoNameFill: 'linear', videoNameStops: ['#ff8a3d'],
+        videoNameDir: 'right', videoNameShadow: false, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18,
+        videoNameShadowFar: 2, videoPicShape: 'circle', videoPicSize: 180, videoPicRing: true, videoPicRingWidth: 8, videoPicMove: true,
+        videoTwo: true, videoMoodPics: true, videoQuiet: 'fade', videoQuietStrength: 45,
+        videoAnims: { open: { id: 'thru-star', secs: 1.2, delay: 0 }, title: { id: 'grow', secs: 0.5, delay: 0 }, lines: { id: 'words-rise', secs: 1.2, delay: 0 } },
+        videoEdges: 0, videoEdgeColor: '', videoMove: 'dissolve', videoMoveSecs: 0.5, videoTitleOn: true, videoFadeOut: 1.5,
+        videoBylineInk: '#b0345c', videoBylineFont: '', videoBylineFill: 'solid', videoBylineStops: ['#f2b880'], videoBylineDir: 'right',
+        videoBylineShadow: false, videoBylineShadowInk: '', videoBylineShadowDark: 65, videoBylineShadowSoft: 18, videoBylineShadowFar: 0,
+        studioMusic: true,
+      },
+      back: backOf('Birthday party', {
+        kind: 'design', color: '#fff6e6', fill: 'linear', stops: ['#ffe3ef'], dir: 'down',
+        shapes: [
+          shape('line', 0.5, 0.07, 2400, 5, '#c9a06a', { rot: 0 }),
+          shape('tri', 0.04, 0.075, 80, 80, '#ff6b8b', { rot: 180 }),
+          shape('tri', 0.132, 0.086, 80, 80, '#ffc53d', { rot: 180 }),
+          shape('tri', 0.224, 0.094, 80, 80, '#5cc8ff', { rot: 180 }),
+          shape('tri', 0.316, 0.1, 80, 80, '#9b7bff', { rot: 180 }),
+          shape('tri', 0.408, 0.104, 80, 80, '#6fd08c', { rot: 180 }),
+          shape('tri', 0.5, 0.105, 80, 80, '#ff6b8b', { rot: 180 }),
+          shape('tri', 0.592, 0.104, 80, 80, '#ffc53d', { rot: 180 }),
+          shape('tri', 0.684, 0.1, 80, 80, '#5cc8ff', { rot: 180 }),
+          shape('tri', 0.776, 0.094, 80, 80, '#9b7bff', { rot: 180 }),
+          shape('tri', 0.868, 0.086, 80, 80, '#6fd08c', { rot: 180 }),
+          shape('tri', 0.96, 0.075, 80, 80, '#ff6b8b', { rot: 180 }),
+          shape('balloon', 0.07, 0.36, 140, 210, '#ff6b8b', { rot: -8 }),
+          shape('balloon', 0.15, 0.3, 120, 180, '#5cc8ff', { rot: 6 }),
+          shape('balloon', 0.93, 0.36, 140, 210, '#ffc53d', { rot: 8 }),
+          shape('balloon', 0.85, 0.3, 120, 180, '#9b7bff', { rot: -6 }),
+          shape('cake', 0.86, 0.85, 260, 240, '#f7a8c4'),
+          shape('gift', 0.12, 0.87, 170, 170, '#5cc8ff'),
+          shape('gift', 0.22, 0.9, 110, 110, '#ff6b8b'),
+          shape('confetti', 0.35, 0.88, 300, 180, '#9b7bff'),
+          shape('confetti', 0.62, 0.9, 300, 180, '#ffc53d', { rot: 20 }),
+        ],
+      }),
+      cat: 'parties',
+      added: '1.12.0',
+    },
+    {
+      id: 'pool',
+      name: 'Pool party',
+      suits: 'Summer days by the pool, with the sun, floats on the water and the words in a white box.',
+      look: {
+        videoFont: 'round', videoSize: 100, videoInk: '#0b3954', videoWords: 'fade', videoPlace: 'middle', videoQuotes: true, videoWordFill: 'solid',
+        videoWordStops: ['#f2b880'], videoWordDir: 'down', videoWordShadow: false, videoWordShadowInk: '', videoWordShadowDark: 55,
+        videoWordShadowSoft: 14, videoWordShadowFar: 2, videoBox: true, videoBoxColor: '#ffffff', videoBoxClear: 12, videoBoxRound: 40,
+        videoBoxWidth: 'fit', videoOwnColors: true,
+        videoKindColors: { narrator: '#ff6b8b', character: '#ff8a3d', persona: '#1b8fc4', npc: '#2bb673' }, videoBackRules: false,
+        videoCaptions: true, videoCaptionInk: '#ffffff', videoCapFill: 'solid', videoCapStops: ['#f2b880'], videoCapDir: 'right',
+        videoNameFont: 'round', videoNameSize: 104, videoNameColor: 'words', videoNameFill: 'solid', videoNameStops: ['#f2b880'],
+        videoNameDir: 'right', videoNameShadow: false, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18,
+        videoNameShadowFar: 2, videoPicShape: 'rounded', videoPicSize: 170, videoPicRing: true, videoPicRingWidth: 5, videoPicMove: true,
+        videoTwo: true, videoMoodPics: true, videoQuiet: 'fade', videoQuietStrength: 45,
+        videoAnims: { lines: { id: 'slide-b', secs: 0.5, delay: 0 } }, videoEdges: 0, videoEdgeColor: '', videoMove: 'wipe', videoMoveSecs: 0.5,
+        videoTitleOn: true, videoFadeOut: 1.5, videoBylineInk: '#ffffff', videoBylineFont: '', videoBylineFill: 'solid',
+        videoBylineStops: ['#f2b880'], videoBylineDir: 'right', videoBylineShadow: false, videoBylineShadowInk: '', videoBylineShadowDark: 65,
+        videoBylineShadowSoft: 18, videoBylineShadowFar: 0, studioMusic: true,
+      },
+      back: backOf('Pool party', {
+        kind: 'design', color: '#7fd3f2', fill: 'linear', stops: ['#1b8fc4'], dir: 'down',
+        shapes: [
+          shape('ellipse', 0.86, 0.14, 200, 200, '#ffd54a'),
+          shape('cloud', 0.16, 0.12, 260, 130, '#ffffff', { clear: 10 }),
+          shape('cloud', 0.36, 0.2, 160, 80, '#ffffff', { clear: 30 }),
+          shape('waves', 0.5, 0.86, 2400, 260, '#26a7d9', { clear: 10 }),
+          shape('waves', 0.5, 0.95, 2400, 200, '#1683b8'),
+          shape('ring', 0.12, 0.8, 200, 120, '#ff6b8b', { thick: 34 }),
+          shape('ring', 0.88, 0.83, 170, 100, '#ffd54a', { thick: 34 }),
+          shape('sparkle', 0.7, 0.78, 40, 40, '#ffffff', { clear: 20 }),
+          shape('sparkle', 0.3, 0.84, 30, 30, '#ffffff', { clear: 30 }),
+        ],
+      }),
+      cat: 'parties',
+      added: '1.12.0',
+    },
+    {
+      id: 'wedding',
+      name: 'Wedding',
+      suits: 'Weddings and vows, in ivory and gold, under an arch of flowers, with the names in gold.',
+      look: {
+        videoFont: 'book', videoSize: 110, videoInk: '#3d2f24', videoWords: 'blur', videoPlace: 'middle', videoQuotes: true, videoWordFill: 'solid',
+        videoWordStops: ['#f2b880'], videoWordDir: 'down', videoWordShadow: false, videoWordShadowInk: '', videoWordShadowDark: 55,
+        videoWordShadowSoft: 14, videoWordShadowFar: 2, videoBox: false, videoBoxColor: '#000000', videoBoxClear: 40, videoBoxRound: 16,
+        videoBoxWidth: 'fit', videoOwnColors: true,
+        videoKindColors: { narrator: '#b8893a', character: '#b8893a', persona: '#b8893a', npc: '#b8893a' }, videoBackRules: false,
+        videoCaptions: true, videoCaptionInk: '#8a5e22', videoCapFill: 'solid', videoCapStops: ['#f2b880'], videoCapDir: 'right',
+        videoNameFont: 'book', videoNameSize: 104, videoNameColor: 'kind', videoNameFill: 'linear', videoNameStops: ['#9a6b2a'],
+        videoNameDir: 'right', videoNameShadow: false, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18,
+        videoNameShadowFar: 2, videoPicShape: 'circle', videoPicSize: 190, videoPicRing: true, videoPicRingWidth: 2, videoPicMove: true,
+        videoTwo: true, videoMoodPics: true, videoQuiet: 'fade', videoQuietStrength: 45,
+        videoAnims: { open: { id: 'thru-heart', secs: 1.2, delay: 0 }, lines: { id: 'focus', secs: 0.5, delay: 0 } }, videoEdges: 0,
+        videoEdgeColor: '', videoMove: 'dissolve', videoMoveSecs: 0.8, videoTitleOn: true, videoFadeOut: 1.5, videoBylineInk: '#8a5e22',
+        videoBylineFont: '', videoBylineFill: 'solid', videoBylineStops: ['#f2b880'], videoBylineDir: 'right', videoBylineShadow: false,
+        videoBylineShadowInk: '', videoBylineShadowDark: 65, videoBylineShadowSoft: 18, videoBylineShadowFar: 0, studioMusic: true,
+      },
+      back: backOf('Wedding', {
+        kind: 'design', color: '#fbf6ee', fill: 'radial', stops: ['#efe2cf'], dir: 'down',
+        shapes: [
+          shape('ring', 0.5, 0.62, 1150, 1150, '#d9b866', { thick: 5, clear: 35 }),
+          shape('flower', 0.24, 0.28, 130, 130, '#f3c4cf'),
+          shape('flower', 0.3, 0.2, 90, 90, '#ffffff'),
+          shape('flower', 0.2, 0.38, 80, 80, '#f7dbe1'),
+          shape('leaf', 0.17, 0.3, 60, 90, '#a8b98a', { rot: -40 }),
+          shape('flower', 0.76, 0.28, 130, 130, '#f3c4cf'),
+          shape('flower', 0.7, 0.2, 90, 90, '#ffffff'),
+          shape('flower', 0.8, 0.38, 80, 80, '#f7dbe1'),
+          shape('leaf', 0.83, 0.3, 60, 90, '#a8b98a', { rot: 40 }),
+          shape('ring', 0.08, 0.88, 110, 110, '#c9a14a', { thick: 12 }),
+          shape('ring', 0.12, 0.9, 110, 110, '#d9b866', { thick: 12 }),
+          shape('sparkle', 0.5, 0.08, 40, 40, '#c9a14a', { clear: 10 }),
+          shape('heart', 0.92, 0.9, 70, 66, '#e8a4b4', { clear: 20 }),
+        ],
+      }),
+      cat: 'parties',
+      added: '1.12.0',
+    },
+    {
+      id: 'karaoke',
+      name: 'Karaoke night',
+      suits: 'Singing and open mic nights, on a stage with a spotlight and a microphone. Each word lights up as it is said, in a box at the bottom.',
+      look: {
+        videoFont: 'clean', videoSize: 104, videoInk: '#ffe066', videoWords: 'light', videoPlace: 'lower', videoQuotes: true, videoWordFill: 'solid',
+        videoWordStops: ['#f2b880'], videoWordDir: 'down', videoWordShadow: false, videoWordShadowInk: '', videoWordShadowDark: 55,
+        videoWordShadowSoft: 14, videoWordShadowFar: 2, videoBox: true, videoBoxColor: '#000000', videoBoxClear: 20, videoBoxRound: 8,
+        videoBoxWidth: 'wide', videoOwnColors: true,
+        videoKindColors: { narrator: '#ffd54a', character: '#ff7ad9', persona: '#5cc8ff', npc: '#c7f9a6' }, videoBackRules: false,
+        videoCaptions: true, videoCaptionInk: '#ffd54a', videoCapFill: 'solid', videoCapStops: ['#f2b880'], videoCapDir: 'right',
+        videoNameFont: 'clean', videoNameSize: 104, videoNameColor: 'kind', videoNameFill: 'solid', videoNameStops: ['#f2b880'],
+        videoNameDir: 'right', videoNameShadow: false, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18,
+        videoNameShadowFar: 2, videoPicShape: 'circle', videoPicSize: 200, videoPicRing: true, videoPicRingWidth: 6, videoPicMove: true,
+        videoTwo: true, videoMoodPics: true, videoQuiet: 'fade', videoQuietStrength: 45,
+        videoAnims: { title: { id: 'slide-t', secs: 0.5, delay: 0 } }, videoEdges: 40, videoEdgeColor: '#000000', videoMove: 'fade',
+        videoMoveSecs: 0.5, videoTitleOn: true, videoFadeOut: 1.5, videoBylineInk: '#ffd54a', videoBylineFont: '', videoBylineFill: 'solid',
+        videoBylineStops: ['#f2b880'], videoBylineDir: 'right', videoBylineShadow: false, videoBylineShadowInk: '', videoBylineShadowDark: 65,
+        videoBylineShadowSoft: 18, videoBylineShadowFar: 0, studioMusic: true,
+      },
+      back: backOf('Karaoke night', {
+        kind: 'design', color: '#2a1660', fill: 'radial', stops: ['#07051a'], dir: 'down',
+        shapes: [
+          shape('ellipse', 0.5, 0.34, 900, 760, '#5c3dbb', { grad: 'radial', stops: ['#2a1660'], clear: 45 }),
+          shape('rect', 0.5, 0.8, 2400, 40, '#3a2470'),
+          shape('rect', 0.5, 0.9, 2400, 160, '#160c38'),
+          shape('mic', 0.12, 0.55, 150, 300, '#d5d8e2', { rot: -14 }),
+          shape('line', 0.135, 0.76, 10, 240, '#5a5a66'),
+          shape('note', 0.86, 0.18, 120, 130, '#ffd54a', { rot: 10 }),
+          shape('note', 0.76, 0.08, 80, 90, '#5cc8ff', { rot: -8 }),
+          shape('note', 0.94, 0.4, 80, 90, '#ff7ad9', { rot: 14 }),
+          shape('star', 0.24, 0.1, 54, 54, '#ffd54a', { clear: 15 }),
+          shape('star', 0.36, 0.04, 34, 34, '#ffd54a', { clear: 30 }),
+        ],
+      }),
+      cat: 'parties',
+      added: '1.12.0',
+    },
+    {
+      id: 'masquerade',
+      name: 'Masquerade ball',
+      suits: 'Balls, galas and mysteries, between velvet curtains, with masks and gold words.',
+      look: {
+        videoFont: 'book', videoSize: 110, videoInk: '#fff2b8', videoWords: 'fade', videoPlace: 'middle', videoQuotes: true, videoWordFill: 'linear',
+        videoWordStops: ['#c9962e'], videoWordDir: 'down', videoWordShadow: true, videoWordShadowInk: '#000000', videoWordShadowDark: 55,
+        videoWordShadowSoft: 12, videoWordShadowFar: 2, videoBox: false, videoBoxColor: '#000000', videoBoxClear: 40, videoBoxRound: 16,
+        videoBoxWidth: 'fit', videoOwnColors: true,
+        videoKindColors: { narrator: '#d4a72c', character: '#e3b4e8', persona: '#d4a72c', npc: '#c98bd0' }, videoBackRules: false,
+        videoCaptions: true, videoCaptionInk: '#d4a72c', videoCapFill: 'solid', videoCapStops: ['#f2b880'], videoCapDir: 'right',
+        videoNameFont: 'book', videoNameSize: 104, videoNameColor: 'words', videoNameFill: 'solid', videoNameStops: ['#f2b880'],
+        videoNameDir: 'right', videoNameShadow: false, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18,
+        videoNameShadowFar: 2, videoPicShape: 'circle', videoPicSize: 170, videoPicRing: true, videoPicRingWidth: 3, videoPicMove: true,
+        videoTwo: true, videoMoodPics: true, videoQuiet: 'fade', videoQuietStrength: 45,
+        videoAnims: { open: { id: 'iris', secs: 0.8, delay: 0 }, title: { id: 'focus', secs: 0.5, delay: 0 }, lines: { id: 'rise', secs: 0.5, delay: 0 } },
+        videoEdges: 30, videoEdgeColor: '#000000', videoMove: 'black', videoMoveSecs: 0.8, videoTitleOn: true, videoFadeOut: 1.5,
+        videoBylineInk: '#d4a72c', videoBylineFont: '', videoBylineFill: 'solid', videoBylineStops: ['#f2b880'], videoBylineDir: 'right',
+        videoBylineShadow: true, videoBylineShadowInk: '#000000', videoBylineShadowDark: 65, videoBylineShadowSoft: 18, videoBylineShadowFar: 0,
+        studioMusic: true,
+      },
+      back: backOf('Masquerade ball', {
+        kind: 'design', color: '#3a1440', fill: 'radial', stops: ['#0d0410'], dir: 'down',
+        shapes: [
+          shape('rect', 0.06, 0.5, 300, 1200, '#6a0f35', { grad: 'linear', stops: ['#2a0616'], dir: 'right' }),
+          shape('rect', 0.94, 0.5, 300, 1200, '#2a0616', { grad: 'linear', stops: ['#6a0f35'], dir: 'right' }),
+          shape('ellipse', 0.5, -0.02, 2400, 120, '#6a0f35'),
+          shape('rect', 0.5, 0.055, 2400, 6, '#d4a72c', { clear: 20 }),
+          shape('mask', 0.5, 0.16, 260, 146, '#d4a72c'),
+          shape('mask', 0.2, 0.86, 200, 112, '#a04aa8', { rot: -12 }),
+          shape('mask', 0.8, 0.86, 200, 112, '#d4a72c', { rot: 12, clear: 10 }),
+          shape('sparkle', 0.34, 0.12, 30, 30, '#d4a72c', { clear: 20 }),
+          shape('sparkle', 0.66, 0.12, 30, 30, '#d4a72c', { clear: 20 }),
+        ],
+      }),
+      cat: 'parties',
+      added: '1.12.0',
+    },
+    {
+      id: 'ancient',
+      name: 'Ancient marble',
+      suits: 'Ancient Greece and Rome: white marble between columns, with a laurel wreath and gold names.',
+      look: {
+        videoFont: 'book', videoSize: 104, videoInk: '#2b2a28', videoWords: 'fade', videoPlace: 'middle', videoQuotes: true, videoWordFill: 'solid',
+        videoWordStops: ['#f2b880'], videoWordDir: 'down', videoWordShadow: false, videoWordShadowInk: '', videoWordShadowDark: 55,
+        videoWordShadowSoft: 14, videoWordShadowFar: 2, videoBox: false, videoBoxColor: '#000000', videoBoxClear: 40, videoBoxRound: 16,
+        videoBoxWidth: 'fit', videoOwnColors: true,
+        videoKindColors: { narrator: '#a8822e', character: '#a8822e', persona: '#a8822e', npc: '#a8822e' }, videoBackRules: false,
+        videoCaptions: true, videoCaptionInk: '#7a5c1e', videoCapFill: 'solid', videoCapStops: ['#f2b880'], videoCapDir: 'right',
+        videoNameFont: 'book', videoNameSize: 104, videoNameColor: 'kind', videoNameFill: 'linear', videoNameStops: ['#7a5c1e'],
+        videoNameDir: 'right', videoNameShadow: false, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18,
+        videoNameShadowFar: 2, videoPicShape: 'circle', videoPicSize: 180, videoPicRing: true, videoPicRingWidth: 4, videoPicMove: true,
+        videoTwo: true, videoMoodPics: true, videoQuiet: 'fade', videoQuietStrength: 45,
+        videoAnims: { title: { id: 'wipe-l', secs: 0.7, delay: 0 }, lines: { id: 'rise', secs: 0.6, delay: 0 } }, videoEdges: 0, videoEdgeColor: '',
+        videoMove: 'dissolve', videoMoveSecs: 0.7, videoTitleOn: true, videoFadeOut: 1.5, videoBylineInk: '#7a5c1e', videoBylineFont: '',
+        videoBylineFill: 'solid', videoBylineStops: ['#f2b880'], videoBylineDir: 'right', videoBylineShadow: false, videoBylineShadowInk: '',
+        videoBylineShadowDark: 65, videoBylineShadowSoft: 18, videoBylineShadowFar: 0, studioMusic: true,
+      },
+      back: backOf('Ancient marble', {
+        kind: 'design', color: '#f4f1ea', fill: 'radial', stops: ['#d9d3c6'], dir: 'down',
+        shapes: [
+          shape('column', 0.08, 0.55, 190, 980, '#ebe6da'),
+          shape('column', 0.92, 0.55, 190, 980, '#ebe6da'),
+          shape('rect', 0.5, 0.04, 2400, 70, '#e2dccd'),
+          shape('rect', 0.5, 0.085, 2400, 10, '#c9b98f'),
+          shape('laurel', 0.5, 0.2, 230, 230, '#8a9a5b'),
+          shape('rect', 0.5, 0.95, 1500, 6, '#c9b98f', { clear: 20 }),
+        ],
+      }),
+      cat: 'history',
+      added: '1.12.0',
+    },
+    {
+      id: 'medieval',
+      name: 'Medieval',
+      suits: 'A castle on a hill and banners, framed like an old manuscript in red, blue and gold.',
+      look: {
+        videoFont: 'book', videoSize: 106, videoInk: '#3a2414', videoWords: 'fade', videoPlace: 'middle', videoQuotes: true, videoWordFill: 'solid',
+        videoWordStops: ['#f2b880'], videoWordDir: 'down', videoWordShadow: false, videoWordShadowInk: '', videoWordShadowDark: 55,
+        videoWordShadowSoft: 14, videoWordShadowFar: 2, videoBox: false, videoBoxColor: '#000000', videoBoxClear: 40, videoBoxRound: 16,
+        videoBoxWidth: 'fit', videoOwnColors: true,
+        videoKindColors: { narrator: '#8e1f2b', character: '#25407a', persona: '#8e1f2b', npc: '#25407a' }, videoBackRules: false,
+        videoCaptions: true, videoCaptionInk: '#8e1f2b', videoCapFill: 'solid', videoCapStops: ['#f2b880'], videoCapDir: 'right',
+        videoNameFont: 'book', videoNameSize: 104, videoNameColor: 'kind', videoNameFill: 'solid', videoNameStops: ['#f2b880'], videoNameDir: 'right',
+        videoNameShadow: false, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18, videoNameShadowFar: 2,
+        videoPicShape: 'rounded', videoPicSize: 170, videoPicRing: true, videoPicRingWidth: 5, videoPicMove: true, videoTwo: true,
+        videoMoodPics: true, videoQuiet: 'fade', videoQuietStrength: 45,
+        videoAnims: { open: { id: 'box', secs: 0.9, delay: 0 }, lines: { id: 'drop', secs: 0.5, delay: 0 } }, videoEdges: 0, videoEdgeColor: '',
+        videoMove: 'fade', videoMoveSecs: 0.6, videoTitleOn: true, videoFadeOut: 1.5, videoBylineInk: '#25407a', videoBylineFont: '',
+        videoBylineFill: 'solid', videoBylineStops: ['#f2b880'], videoBylineDir: 'right', videoBylineShadow: false, videoBylineShadowInk: '',
+        videoBylineShadowDark: 65, videoBylineShadowSoft: 18, videoBylineShadowFar: 0, studioMusic: true,
+      },
+      back: backOf('Medieval', {
+        kind: 'design', color: '#f2e4c2', fill: 'radial', stops: ['#dcc391'], dir: 'down',
+        shapes: [
+          shape('rect', 0.5, 0.02, 2400, 26, '#8e1f2b'),
+          shape('rect', 0.5, 0.98, 2400, 26, '#8e1f2b'),
+          shape('rect', 0.01, 0.5, 26, 1200, '#25407a'),
+          shape('rect', 0.99, 0.5, 26, 1200, '#25407a'),
+          shape('rect', 0.5, 0.045, 2400, 6, '#c9a24a'),
+          shape('rect', 0.5, 0.955, 2400, 6, '#c9a24a'),
+          shape('ellipse', 0.5, 1.06, 2600, 420, '#9aa46a', { clear: 20 }),
+          shape('castle', 0.5, 0.85, 440, 280, '#9a8f80', { clear: 10 }),
+          shape('tri', 0.12, 0.18, 90, 60, '#8e1f2b', { rot: 90 }),
+          shape('line', 0.09, 0.24, 6, 200, '#6b5030'),
+          shape('tri', 0.88, 0.18, 90, 60, '#25407a', { rot: -90 }),
+          shape('line', 0.91, 0.24, 6, 200, '#6b5030'),
+          shape('diamond', 0.5, 0.1, 40, 50, '#c9a24a'),
+          shape('diamond', 0.44, 0.1, 24, 30, '#8e1f2b'),
+          shape('diamond', 0.56, 0.1, 24, 30, '#25407a'),
+        ],
+      }),
+      cat: 'history',
+      added: '1.12.0',
+    },
+    {
+      id: 'twenties',
+      name: 'Roaring twenties',
+      suits: 'Art deco in black and gold: sunburst fans, double gold lines and gold words, as in the 1920s.',
+      look: {
+        videoFont: 'clean', videoSize: 100, videoInk: '#f8e3a1', videoWords: 'fade', videoPlace: 'middle', videoQuotes: true, videoWordFill: 'linear',
+        videoWordStops: ['#c9962e'], videoWordDir: 'down', videoWordShadow: false, videoWordShadowInk: '', videoWordShadowDark: 55,
+        videoWordShadowSoft: 14, videoWordShadowFar: 2, videoBox: false, videoBoxColor: '#000000', videoBoxClear: 40, videoBoxRound: 16,
+        videoBoxWidth: 'fit', videoOwnColors: true,
+        videoKindColors: { narrator: '#d4af37', character: '#d4af37', persona: '#d4af37', npc: '#d4af37' }, videoBackRules: false,
+        videoCaptions: true, videoCaptionInk: '#d4af37', videoCapFill: 'solid', videoCapStops: ['#f2b880'], videoCapDir: 'right',
+        videoNameFont: 'book', videoNameSize: 104, videoNameColor: 'words', videoNameFill: 'solid', videoNameStops: ['#f2b880'],
+        videoNameDir: 'right', videoNameShadow: false, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18,
+        videoNameShadowFar: 2, videoPicShape: 'rounded', videoPicSize: 160, videoPicRing: true, videoPicRingWidth: 3, videoPicMove: true,
+        videoTwo: true, videoMoodPics: true, videoQuiet: 'fade', videoQuietStrength: 45,
+        videoAnims: { open: { id: 'box', secs: 0.9, delay: 0 }, title: { id: 'wipe-l', secs: 0.7, delay: 0 }, lines: { id: 'wipe-l', secs: 0.7, delay: 0 } },
+        videoEdges: 20, videoEdgeColor: '#000000', videoMove: 'slide', videoMoveSecs: 0.4, videoTitleOn: true, videoFadeOut: 1.5,
+        videoBylineInk: '#d4af37', videoBylineFont: '', videoBylineFill: 'solid', videoBylineStops: ['#f2b880'], videoBylineDir: 'right',
+        videoBylineShadow: false, videoBylineShadowInk: '', videoBylineShadowDark: 65, videoBylineShadowSoft: 18, videoBylineShadowFar: 0,
+        studioMusic: true,
+      },
+      back: backOf('Roaring twenties', {
+        kind: 'design', color: '#121212', fill: 'linear', stops: ['#050505'], dir: 'down',
+        shapes: [
+          shape('fan', 0.5, 0.98, 900, 420, '#d4af37', { clear: 70 }),
+          shape('fan', 0.1, 0.1, 300, 150, '#d4af37', { rot: 135, clear: 10 }),
+          shape('fan', 0.9, 0.1, 300, 150, '#d4af37', { rot: -135, clear: 10 }),
+          shape('rect', 0.5, 0.05, 2400, 4, '#d4af37'),
+          shape('rect', 0.5, 0.065, 2400, 2, '#d4af37'),
+          shape('rect', 0.5, 0.935, 2400, 2, '#d4af37'),
+          shape('rect', 0.5, 0.95, 2400, 4, '#d4af37'),
+          shape('diamond', 0.5, 0.12, 40, 60, '#d4af37'),
+          shape('line', 0.36, 0.12, 260, 3, '#d4af37'),
+          shape('line', 0.64, 0.12, 260, 3, '#d4af37'),
+        ],
+      }),
+      cat: 'history',
+      added: '1.12.0',
+    },
+    {
+      id: 'steampunk',
+      name: 'Steampunk',
+      suits: 'Brass gears and copper pipes on dark leather, from a past with steam machines, and the words typed on a dark plate.',
+      look: {
+        videoFont: 'type', videoSize: 96, videoInk: '#f3e2c0', videoWords: 'appear', videoPlace: 'lower', videoQuotes: true, videoWordFill: 'solid',
+        videoWordStops: ['#f2b880'], videoWordDir: 'down', videoWordShadow: false, videoWordShadowInk: '', videoWordShadowDark: 55,
+        videoWordShadowSoft: 14, videoWordShadowFar: 2, videoBox: true, videoBoxColor: '#1e140c', videoBoxClear: 15, videoBoxRound: 6,
+        videoBoxWidth: 'wide', videoOwnColors: true,
+        videoKindColors: { narrator: '#c99a4a', character: '#c99a4a', persona: '#c99a4a', npc: '#c99a4a' }, videoBackRules: false,
+        videoCaptions: true, videoCaptionInk: '#e0a86b', videoCapFill: 'solid', videoCapStops: ['#f2b880'], videoCapDir: 'right',
+        videoNameFont: 'book', videoNameSize: 104, videoNameColor: 'words', videoNameFill: 'solid', videoNameStops: ['#f2b880'],
+        videoNameDir: 'right', videoNameShadow: false, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18,
+        videoNameShadowFar: 2, videoPicShape: 'rounded', videoPicSize: 170, videoPicRing: true, videoPicRingWidth: 6, videoPicMove: true,
+        videoTwo: true, videoMoodPics: true, videoQuiet: 'fade', videoQuietStrength: 45,
+        videoAnims: { open: { id: 'clock', secs: 0.9, delay: 0 }, lines: { id: 'type', secs: 1.2, delay: 0 } }, videoEdges: 40,
+        videoEdgeColor: '#000000', videoMove: 'fade', videoMoveSecs: 0.5, videoTitleOn: true, videoFadeOut: 1.5, videoBylineInk: '#e0a86b',
+        videoBylineFont: '', videoBylineFill: 'solid', videoBylineStops: ['#f2b880'], videoBylineDir: 'right', videoBylineShadow: false,
+        videoBylineShadowInk: '', videoBylineShadowDark: 65, videoBylineShadowSoft: 18, videoBylineShadowFar: 0, studioMusic: true,
+      },
+      back: backOf('Steampunk', {
+        kind: 'design', color: '#4a3020', fill: 'radial', stops: ['#1a0f08'], dir: 'down',
+        shapes: [
+          shape('gear', 0.08, 0.14, 320, 320, '#b5893a'),
+          shape('gear', 0.2, 0.06, 180, 180, '#8c6a2c', { rot: 18 }),
+          shape('gear', 0.93, 0.62, 280, 280, '#b5893a', { rot: 10 }),
+          shape('gear', 0.84, 0.72, 160, 160, '#c27a3f'),
+          shape('rect', 0.5, 0.3, 2400, 26, '#a8622e'),
+          shape('rect', 0.97, 0.4, 26, 240, '#a8622e'),
+          shape('ring', 0.97, 0.3, 60, 60, '#c27a3f', { thick: 40 }),
+          shape('ring', 0.3, 0.3, 50, 50, '#c27a3f', { thick: 40 }),
+          shape('ring', 0.7, 0.3, 50, 50, '#c27a3f', { thick: 40 }),
+        ],
+      }),
+      cat: 'history',
+      added: '1.12.0',
+    },
+    {
+      id: 'cyber',
+      name: 'Cyberpunk city',
+      suits: 'A night city of tall buildings and neon, with the words in a dark box at the bottom, shifting from blue to pink.',
+      look: {
+        videoFont: 'clean', videoSize: 100, videoInk: '#38f2ff', videoWords: 'appear', videoPlace: 'lower', videoQuotes: true,
+        videoWordFill: 'linear', videoWordStops: ['#ff4fd8'], videoWordDir: 'right', videoWordShadow: false, videoWordShadowInk: '',
+        videoWordShadowDark: 55, videoWordShadowSoft: 14, videoWordShadowFar: 2, videoBox: true, videoBoxColor: '#05020c', videoBoxClear: 8,
+        videoBoxRound: 2, videoBoxWidth: 'wide', videoOwnColors: true,
+        videoKindColors: { narrator: '#38f2ff', character: '#ff4fd8', persona: '#f9f871', npc: '#9d7bff' }, videoBackRules: false,
+        videoCaptions: true, videoCaptionInk: '#f9f871', videoCapFill: 'solid', videoCapStops: ['#f2b880'], videoCapDir: 'right',
+        videoNameFont: 'clean', videoNameSize: 104, videoNameColor: 'kind', videoNameFill: 'solid', videoNameStops: ['#f2b880'],
+        videoNameDir: 'right', videoNameShadow: false, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18,
+        videoNameShadowFar: 2, videoPicShape: 'rounded', videoPicSize: 170, videoPicRing: true, videoPicRingWidth: 3, videoPicMove: true,
+        videoTwo: true, videoMoodPics: true, videoQuiet: 'fade', videoQuietStrength: 45,
+        videoAnims: { open: { id: 'wobble', secs: 0.7, delay: 0 }, title: { id: 'split', secs: 0.6, delay: 0 }, lines: { id: 'slice', secs: 0.6, delay: 0 } },
+        videoEdges: 30, videoEdgeColor: '#000000', videoMove: 'zoom', videoMoveSecs: 0.4, videoTitleOn: true, videoFadeOut: 1.5,
+        videoBylineInk: '#f9f871', videoBylineFont: '', videoBylineFill: 'solid', videoBylineStops: ['#f2b880'], videoBylineDir: 'right',
+        videoBylineShadow: false, videoBylineShadowInk: '', videoBylineShadowDark: 65, videoBylineShadowSoft: 18, videoBylineShadowFar: 0,
+        studioMusic: true,
+      },
+      back: backOf('Cyberpunk city', {
+        kind: 'design', color: '#2a0a4a', fill: 'linear', stops: ['#070212'], dir: 'down',
+        shapes: [
+          shape('ellipse', 0.5, 0.62, 1600, 500, '#ff2e88', { grad: 'radial', stops: ['#2a0a4a'], clear: 40 }),
+          shape('skyline', 0.5, 0.56, 2400, 560, '#1a0f33', { ink: '#ff4fd8' }),
+          shape('skyline', 0.4, 0.66, 2600, 420, '#0d0820', { ink: '#38f2ff', flipX: true }),
+          shape('rect', 0.5, 0.92, 2400, 240, '#05020c'),
+          shape('rect', 0.5, 0.81, 2400, 4, '#38f2ff', { clear: 30 }),
+          shape('rect', 0.5, 0.04, 2400, 3, '#ff4fd8', { clear: 30 }),
+        ],
+      }),
+      cat: 'future',
+      added: '1.12.0',
+    },
+    {
+      id: 'space',
+      name: 'Deep space',
+      suits: 'The dark of space, with stars, a ringed planet and a small moon.',
+      look: {
+        videoFont: 'clean', videoSize: 100, videoInk: '#e8f0ff', videoWords: 'fade', videoPlace: 'middle', videoQuotes: true, videoWordFill: 'solid',
+        videoWordStops: ['#f2b880'], videoWordDir: 'down', videoWordShadow: true, videoWordShadowInk: '#000000', videoWordShadowDark: 55,
+        videoWordShadowSoft: 10, videoWordShadowFar: 2, videoBox: false, videoBoxColor: '#000000', videoBoxClear: 40, videoBoxRound: 16,
+        videoBoxWidth: 'fit', videoOwnColors: true,
+        videoKindColors: { narrator: '#9fc4ff', character: '#ffb48a', persona: '#8fe8d0', npc: '#d8a6ff' }, videoBackRules: false,
+        videoCaptions: true, videoCaptionInk: '#9fc4ff', videoCapFill: 'solid', videoCapStops: ['#f2b880'], videoCapDir: 'right',
+        videoNameFont: 'clean', videoNameSize: 104, videoNameColor: 'kind', videoNameFill: 'solid', videoNameStops: ['#f2b880'],
+        videoNameDir: 'right', videoNameShadow: false, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18,
+        videoNameShadowFar: 2, videoPicShape: 'circle', videoPicSize: 150, videoPicRing: true, videoPicRingWidth: 2, videoPicMove: true,
+        videoTwo: true, videoMoodPics: true, videoQuiet: 'fade', videoQuietStrength: 45,
+        videoAnims: { open: { id: 'thru-circle', secs: 0.8, delay: 0 }, lines: { id: 'blur-rise', secs: 0.6, delay: 0 } }, videoEdges: 0,
+        videoEdgeColor: '', videoMove: 'focus', videoMoveSecs: 0.6, videoTitleOn: true, videoFadeOut: 1.5, videoBylineInk: '#9fc4ff',
+        videoBylineFont: '', videoBylineFill: 'solid', videoBylineStops: ['#f2b880'], videoBylineDir: 'right', videoBylineShadow: true,
+        videoBylineShadowInk: '#000000', videoBylineShadowDark: 65, videoBylineShadowSoft: 18, videoBylineShadowFar: 0, studioMusic: true,
+      },
+      back: backOf('Deep space', {
+        kind: 'design', color: '#0b1030', fill: 'radial', stops: ['#020309'], dir: 'down',
+        shapes: [
+          shape('sparkle', 0.05, 0.08, 26, 26, '#ffffff', { clear: 35 }),
+          shape('ellipse', 0.18, 0.2, 8, 8, '#ffffff', { clear: 10 }),
+          shape('ellipse', 0.3, 0.05, 8, 8, '#ffffff', { clear: 35 }),
+          shape('sparkle', 0.45, 0.15, 26, 26, '#ffffff', { clear: 10 }),
+          shape('ellipse', 0.6, 0.07, 8, 8, '#ffffff', { clear: 35 }),
+          shape('ellipse', 0.7, 0.22, 8, 8, '#ffffff', { clear: 10 }),
+          shape('sparkle', 0.82, 0.06, 26, 26, '#ffffff', { clear: 35 }),
+          shape('ellipse', 0.95, 0.18, 8, 8, '#ffffff', { clear: 10 }),
+          shape('ellipse', 0.08, 0.45, 8, 8, '#ffffff', { clear: 35 }),
+          shape('sparkle', 0.92, 0.42, 26, 26, '#ffffff', { clear: 10 }),
+          shape('ellipse', 0.15, 0.7, 8, 8, '#ffffff', { clear: 35 }),
+          shape('ellipse', 0.88, 0.75, 8, 8, '#ffffff', { clear: 10 }),
+          shape('sparkle', 0.4, 0.9, 26, 26, '#ffffff', { clear: 35 }),
+          shape('ellipse', 0.65, 0.88, 8, 8, '#ffffff', { clear: 10 }),
+          shape('ellipse', 0.26, 0.36, 8, 8, '#ffffff', { clear: 35 }),
+          shape('sparkle', 0.75, 0.4, 26, 26, '#ffffff', { clear: 10 }),
+          shape('ellipse', 0.12, 0.95, 900, 700, '#3a2f6b', { grad: 'radial', stops: ['#0b1030'], clear: 40 }),
+          shape('planet', 0.14, 0.86, 520, 400, '#e0a86b', { rot: -8 }),
+          shape('ellipse', 0.86, 0.18, 110, 110, '#c9d2e8'),
+          shape('ellipse', 0.88, 0.17, 50, 50, '#aab4cc', { clear: 40 }),
+        ],
+      }),
+      cat: 'future',
+      added: '1.12.0',
+    },
+    {
+      id: 'solar',
+      name: 'Solarpunk',
+      suits: 'A bright green future: a city with gardens, a big sun and leaves, and the words on a white card.',
+      look: {
+        videoFont: 'round', videoSize: 100, videoInk: '#1e3d2a', videoWords: 'fade', videoPlace: 'lower', videoQuotes: true, videoWordFill: 'solid',
+        videoWordStops: ['#f2b880'], videoWordDir: 'down', videoWordShadow: false, videoWordShadowInk: '', videoWordShadowDark: 55,
+        videoWordShadowSoft: 14, videoWordShadowFar: 2, videoBox: true, videoBoxColor: '#ffffff', videoBoxClear: 10, videoBoxRound: 36,
+        videoBoxWidth: 'fit', videoOwnColors: true,
+        videoKindColors: { narrator: '#2f8f5b', character: '#d98a1f', persona: '#2a7fb8', npc: '#8a5bd1' }, videoBackRules: false,
+        videoCaptions: true, videoCaptionInk: '#ffffff', videoCapFill: 'solid', videoCapStops: ['#f2b880'], videoCapDir: 'right',
+        videoNameFont: 'round', videoNameSize: 104, videoNameColor: 'words', videoNameFill: 'solid', videoNameStops: ['#f2b880'],
+        videoNameDir: 'right', videoNameShadow: false, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18,
+        videoNameShadowFar: 2, videoPicShape: 'rounded', videoPicSize: 170, videoPicRing: true, videoPicRingWidth: 5, videoPicMove: true,
+        videoTwo: true, videoMoodPics: true, videoQuiet: 'fade', videoQuietStrength: 45,
+        videoAnims: { title: { id: 'grow', secs: 0.5, delay: 0 }, lines: { id: 'rise', secs: 0.5, delay: 0 } }, videoEdges: 0, videoEdgeColor: '',
+        videoMove: 'rise', videoMoveSecs: 0.5, videoTitleOn: true, videoFadeOut: 1.5, videoBylineInk: '#ffffff', videoBylineFont: '',
+        videoBylineFill: 'solid', videoBylineStops: ['#f2b880'], videoBylineDir: 'right', videoBylineShadow: false, videoBylineShadowInk: '',
+        videoBylineShadowDark: 65, videoBylineShadowSoft: 18, videoBylineShadowFar: 0, studioMusic: true,
+      },
+      back: backOf('Solarpunk', {
+        kind: 'design', color: '#bfeaf5', fill: 'linear', stops: ['#f3f7d6'], dir: 'down',
+        shapes: [
+          shape('ellipse', 0.5, 0.3, 420, 420, '#ffd75e', { grad: 'radial', stops: ['#ffb347'] }),
+          shape('fan', 0.5, 0.32, 900, 460, '#ffe8a0', { clear: 55 }),
+          shape('skyline', 0.5, 0.62, 2400, 420, '#8cc7a1'),
+          shape('rect', 0.5, 0.86, 2400, 300, '#6fb07e'),
+          shape('leaf', 0.06, 0.1, 120, 170, '#3f9a5a', { rot: -35 }),
+          shape('leaf', 0.14, 0.05, 90, 130, '#5cb370', { rot: 15 }),
+          shape('leaf', 0.94, 0.1, 120, 170, '#3f9a5a', { rot: 35 }),
+          shape('flower', 0.08, 0.62, 70, 70, '#ffffff', { clear: 10 }),
+          shape('flower', 0.92, 0.6, 60, 60, '#ffd75e'),
+        ],
+      }),
+      cat: 'future',
+      added: '1.12.0',
+    },
+    {
+      id: 'holo',
+      name: 'Hologram',
+      suits: 'A blue screen of light from the future, with circles and grid lines, and the words typed out in glowing letters.',
+      look: {
+        videoFont: 'type', videoSize: 96, videoInk: '#aef6ff', videoWords: 'appear', videoPlace: 'middle', videoQuotes: true, videoWordFill: 'solid',
+        videoWordStops: ['#f2b880'], videoWordDir: 'down', videoWordShadow: true, videoWordShadowInk: '#00b8ff', videoWordShadowDark: 90,
+        videoWordShadowSoft: 20, videoWordShadowFar: 0, videoBox: false, videoBoxColor: '#000000', videoBoxClear: 40, videoBoxRound: 16,
+        videoBoxWidth: 'fit', videoOwnColors: true,
+        videoKindColors: { narrator: '#38e8ff', character: '#38e8ff', persona: '#38e8ff', npc: '#38e8ff' }, videoBackRules: false,
+        videoCaptions: true, videoCaptionInk: '#38e8ff', videoCapFill: 'solid', videoCapStops: ['#f2b880'], videoCapDir: 'right',
+        videoNameFont: 'clean', videoNameSize: 104, videoNameColor: 'words', videoNameFill: 'solid', videoNameStops: ['#f2b880'],
+        videoNameDir: 'right', videoNameShadow: false, videoNameShadowInk: '', videoNameShadowDark: 65, videoNameShadowSoft: 18,
+        videoNameShadowFar: 2, videoPicShape: 'rounded', videoPicSize: 160, videoPicRing: true, videoPicRingWidth: 2, videoPicMove: true,
+        videoTwo: true, videoMoodPics: true, videoQuiet: 'fade', videoQuietStrength: 45,
+        videoAnims: { open: { id: 'wipe-t', secs: 0.7, delay: 0 }, title: { id: 'type', secs: 1.2, delay: 0 }, lines: { id: 'type', secs: 1.2, delay: 0 } },
+        videoEdges: 50, videoEdgeColor: '#000814', videoMove: 'dissolve', videoMoveSecs: 0.3, videoTitleOn: true, videoFadeOut: 1.5,
+        videoBylineInk: '#38e8ff', videoBylineFont: '', videoBylineFill: 'solid', videoBylineStops: ['#f2b880'], videoBylineDir: 'right',
+        videoBylineShadow: true, videoBylineShadowInk: '#00b8ff', videoBylineShadowDark: 65, videoBylineShadowSoft: 18, videoBylineShadowFar: 0,
+        studioMusic: true,
+      },
+      back: backOf('Hologram', {
+        kind: 'design', color: '#04213a', fill: 'radial', stops: ['#010a14'], dir: 'down',
+        shapes: [
+          shape('ring', 0.5, 0.45, 1000, 1000, '#38e8ff', { thick: 2, clear: 75 }),
+          shape('ring', 0.5, 0.45, 820, 820, '#38e8ff', { thick: 3, clear: 70 }),
+          shape('ring', 0.5, 0.45, 640, 640, '#38e8ff', { thick: 2, clear: 80 }),
+          shape('line', 0.5, 0.1, 2400, 2, '#38e8ff', { clear: 85 }),
+          shape('line', 0.5, 0.2, 2400, 2, '#38e8ff', { clear: 85 }),
+          shape('line', 0.5, 0.3, 2400, 2, '#38e8ff', { clear: 85 }),
+          shape('line', 0.5, 0.7, 2400, 2, '#38e8ff', { clear: 85 }),
+          shape('line', 0.5, 0.8, 2400, 2, '#38e8ff', { clear: 85 }),
+          shape('line', 0.5, 0.9, 2400, 2, '#38e8ff', { clear: 85 }),
+          shape('line', 0.1, 0.5, 2, 1200, '#38e8ff', { clear: 85 }),
+          shape('line', 0.2, 0.5, 2, 1200, '#38e8ff', { clear: 85 }),
+          shape('line', 0.8, 0.5, 2, 1200, '#38e8ff', { clear: 85 }),
+          shape('line', 0.9, 0.5, 2, 1200, '#38e8ff', { clear: 85 }),
+          shape('rect', 0.06, 0.06, 90, 6, '#38e8ff'),
+          shape('rect', 0.035, 0.085, 6, 60, '#38e8ff'),
+          shape('rect', 0.94, 0.94, 90, 6, '#38e8ff'),
+          shape('rect', 0.965, 0.915, 6, 60, '#38e8ff'),
+        ],
+      }),
+      cat: 'future',
+      added: '1.12.0',
+    },
   ];
   // Every setting that changes the drawn frame, and music on or off. The
   // reader's own content stays: the words of the line under the title and
@@ -20824,7 +22253,15 @@ export function setup(ctx: Ctx, overrides?: any) {
   // it goes, so a template keeps it too. Each template gives a value for
   // every one of these, so nothing is left from the look before.
   const TEMPLATE_KEYS = LOOK_KEYS.filter((k) => k !== 'videoByline' && k !== 'videoMarks' && k !== 'videoStickers' && k !== 'videoShape').concat(['studioMusic']);
-  const TEMPLATES_MARK = markText(JSON.stringify(TEMPLATES.map((t) => [t.id, t.look, t.back])));
+  const markOfTemplates = (list: Template[]) => markText(JSON.stringify(list.map((t) => [t.id, t.look, t.back])));
+  const TEMPLATES_MARK = markOfTemplates(TEMPLATES);
+  // The mark each earlier version would have saved: every template but the
+  // ones added since. A mark saved by one of them means templates were only
+  // added, and none that was there before changed.
+  const versionNum = (v: string) => v.split('.').reduce((n, p) => n * 1000 + (Number(p) || 0), 0);
+  const TEMPLATES_MARKS_BEFORE = Array.from(new Set(TEMPLATES.map((t) => t.added || '').filter(Boolean))).map((v) =>
+    markOfTemplates(TEMPLATES.filter((t) => !t.added || versionNum(t.added) < versionNum(v))),
+  );
   function templateLook(t: Template): Record<string, any> {
     const patch: Record<string, any> = {};
     for (const k of TEMPLATE_KEYS) patch[k] = JSON.parse(JSON.stringify(DEFAULTS[k]));
@@ -21019,7 +22456,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     box.appendChild(hint('Each one sets the whole look. Your line under the title, watermarks, pictures and fonts stay. Press one to try it on the preview.'));
     // Said only to someone who used a template before. Got it keeps it away,
     // on the account.
-    if (S.templatesSeen && S.templatesSeen !== TEMPLATES_MARK) {
+    if (S.templatesSeen && S.templatesSeen !== TEMPLATES_MARK && TEMPLATES_MARKS_BEFORE.indexOf(S.templatesSeen) < 0) {
       const row = el('<div class="af-row"></div>');
       const n = noticeWithButtons('warn', 'The built-in templates changed in this update. A template you used before may look a little different if you use it again.', row);
       n.setAttribute('data-af-tplmoved', '');

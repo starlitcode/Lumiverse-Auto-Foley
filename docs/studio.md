@@ -294,7 +294,7 @@ With no performance in the Studio, the preview shows an example clip, about 25 s
 
 Leaving **Templates** or closing the Studio while you try one puts your look back. A template you try is not saved, to your account or to the open project, until you press **Use this template**.
 
-The chips above the templates show one group at a time: **All**, **Moods**, **Scenes**, **Styles**, **Colors**, **Pets**, **Aesthetics**, **Pride** and **Holidays**.
+The chips above the templates show one group at a time: **All**, **Moods**, **Scenes**, **Styles**, **Colors**, **Pets**, **Aesthetics**, **Pride**, **Holidays**, **Parties**, **History** and **Future**.
 
 **Moods**
 
@@ -314,6 +314,7 @@ The chips above the templates show one group at a time: **All**, **Moods**, **Sc
 | **Rain on the window** | Quiet, sad or thoughtful scenes on a gray day. | Fade out, then in, 0.6 seconds |
 | **By the fire** | Quiet talks indoors: kitchens, taverns, a fire at night. | Fade and rise, 0.5 seconds |
 | **On the radio** | Talk shows, phone calls and stories told as a broadcast. | Dissolve, 0.4 seconds |
+| **Beach** | A day at the beach: sky, sea and sand, with a palm tree, an umbrella and shells. | Slide across, 0.45 seconds |
 
 **Styles**
 
@@ -343,6 +344,12 @@ The chips above the templates show one group at a time: **All**, **Moods**, **Sc
 | **Goth** | Dark and elegant, with bats, roses and a crescent moon. | Through black, 0.8 seconds |
 | **Emo** | Black with hot pink, stars, broken hearts and a checkerboard. | Slide across, 0.35 seconds |
 | **Kawaii** | Pastel pink, baby blue and mint, with hearts, stars and clouds. | Dissolve, 0.5 seconds |
+| **Cottagecore** | Rolling green hills under a soft sky, with mushrooms and flowers, and the words on a cream card. | Dissolve, 0.6 seconds |
+| **Coquette** | Pale pink with a big bow, a string of pearls and hearts, and soft pink words. | Dissolve, 0.6 seconds |
+| **Y2K** | A bright pink and blue gradient, with butterflies, stars and big shiny words. | Slide across, 0.35 seconds |
+| **Fairycore** | A dark forest glade at night, with a ring of mushrooms, butterflies and glowing words. | Soft focus, 0.6 seconds |
+| **Dark academia** | A wall of old books and candlelight, with the words typed out on a page at the bottom. | Through black, 0.8 seconds |
+| **Witchy** | A big moon over a dark purple night, with candles, stars and mushrooms. | Through black, 0.7 seconds |
 
 **Pride**
 
@@ -380,13 +387,44 @@ Each shows its flag's colors as a band of stripes near the bottom, on a dark bac
 | **Easter** | Pastel eggs and spring flowers. | Dissolve, 0.6 seconds |
 | **Fourth of July** | Navy, red and white, with stars and fireworks. | Fade out, then in, 0.6 seconds |
 
+**Parties**
+
+| Template | What it suits | Transition |
+| --- | --- | --- |
+| **Nightclub** | Clubs and dance floors at night, with a disco ball, colored lights and a checkered floor. The words sit in a dark box at the bottom. | Dissolve, 0.4 seconds |
+| **Birthday party** | Birthdays, with a string of flags, balloons, a cake, gifts and confetti, in bright colors on cream. | Dissolve, 0.5 seconds |
+| **Pool party** | Summer days by the pool, with the sun, floats on the water and the words in a white box. | Soft wipe, 0.5 seconds |
+| **Wedding** | Weddings and vows, in ivory and gold, under an arch of flowers, with the names in gold. | Dissolve, 0.8 seconds |
+| **Karaoke night** | Singing and open mic nights, on a stage with a spotlight and a microphone. Each word lights up as it is said, in a box at the bottom. | Fade out, then in, 0.5 seconds |
+| **Masquerade ball** | Balls, galas and mysteries, between velvet curtains, with masks and gold words. | Through black, 0.8 seconds |
+
+**History**
+
+| Template | What it suits | Transition |
+| --- | --- | --- |
+| **Ancient marble** | Ancient Greece and Rome: white marble between columns, with a laurel wreath and gold names. | Dissolve, 0.7 seconds |
+| **Medieval** | A castle on a hill and banners, framed like an old manuscript in red, blue and gold. | Fade out, then in, 0.6 seconds |
+| **Roaring twenties** | Art deco in black and gold: sunburst fans, double gold lines and gold words, as in the 1920s. | Slide across, 0.4 seconds |
+| **Steampunk** | Brass gears and copper pipes on dark leather, from a past with steam machines, and the words typed on a dark plate. | Fade out, then in, 0.5 seconds |
+
+**Future**
+
+| Template | What it suits | Transition |
+| --- | --- | --- |
+| **Cyberpunk city** | A night city of tall buildings and neon, with the words in a dark box at the bottom, shifting from blue to pink. | Gentle zoom, 0.4 seconds |
+| **Deep space** | The dark of space, with stars, a ringed planet and a small moon. | Soft focus, 0.6 seconds |
+| **Solarpunk** | A bright green future: a city with gardens, a big sun and leaves, and the words on a white card. | Fade and rise, 0.5 seconds |
+| **Hologram** | A blue screen of light from the future, with circles and grid lines, and the words typed out in glowing letters. | Dissolve, 0.3 seconds |
+
+The lights in **Nightclub** and the neon in **Cyberpunk city** stay still. No template flashes.
+
 **Colors**
 
 Red, Orange, Yellow, Green, Blue, Indigo, Violet and Pink share one simple layout: a soft gradient of the color, light words, and rings and names in the color. Each uses Fade out, then in, 0.5 seconds.
 
 Each template sets every setting that changes the drawn frame, and **Music** under **The performance**, so nothing is left from the look before. It also turns on **Colors of their own in the video** with its own colors, and turns off **Use backgrounds for scenes**, so a template looks the same on every account, whatever your general colors and other backgrounds are. Templates use only built-in transitions. Switching templates fades the preview from one frame to the next over 0.2 seconds, which Reduce motion turns off.
 
-If a later update changes the templates, **Templates** says so, to someone who used a template before. **Got it** puts that notice away.
+If a later update changes the templates, **Templates** says so, to someone who used a template before. **Got it** puts that notice away. An update that only adds templates does not show it.
 
 ### Shape and words
 
@@ -614,7 +652,7 @@ To put it back, tick the same part under what to take from a file, and press **I
 
 ### In short
 
-- **A design of your own** is a background made of shapes: rectangles, rounded rectangles, ellipses, triangles, lines, text boxes, hearts, stars, polygons, diamonds, arrows, speech bubbles, rings, crescent moons, clouds, sparkles, cat, dog and bunny faces, paw prints, bones, fish, carrots, bats, roses, checkerboard strips, broken hearts, stripes, snowflakes, ornaments, holly, pumpkins, ghosts, autumn leaves, fireworks, lanterns, diya lamps, menorahs, shamrocks, eggs and flowers.
+- **A design of your own** is a background made of shapes: rectangles, rounded rectangles, ellipses, triangles, lines, text boxes, hearts, stars, polygons, diamonds, arrows, speech bubbles, rings, crescent moons, clouds, sparkles, cat, dog and bunny faces, paw prints, bones, fish, carrots, bats, roses, checkerboard strips, broken hearts, stripes, snowflakes, ornaments, holly, pumpkins, ghosts, autumn leaves, fireworks, lanterns, diya lamps, menorahs, shamrocks, eggs, flowers, balloons, birthday cakes, gifts, confetti, music notes, disco balls, microphones, masquerade masks, mushrooms, butterflies, bows, books, candles, palm trees, beach umbrellas, seashells, waves, columns, laurel wreaths, castles, art deco fans, planets, city skylines and gears.
 - The shapes stay where you put them for the whole video.
 - You place them on the preview with a finger or the mouse, or type exact numbers.
 - Each shape has its own color, an optional gradient, and how see-through it is.

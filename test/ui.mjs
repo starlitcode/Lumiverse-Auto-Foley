@@ -6664,7 +6664,7 @@ if (section("templates")) {
     await wsSec(page, "Templates");
     await page.waitForFunction(() => [...document.querySelectorAll("[data-af-tpl] img")].every((i) => i.getAttribute("src")), null, { timeout: 30000 }).catch(() => {});
     const thumbs = await page.evaluate(() => [...document.querySelectorAll("[data-af-tpl] img")].map((i) => i.getAttribute("src") || ""));
-    check(thumbs.length >= 8 && thumbs.length <= 60 && thumbs.every(Boolean), size.name + ": there are 8 to 60 templates, each with a picture drawn (" + thumbs.length + ")");
+    check(thumbs.length >= 8 && thumbs.length <= 100 && thumbs.every(Boolean), size.name + ": there are 8 to 100 templates, each with a picture drawn (" + thumbs.length + ")");
     check(new Set(thumbs).size === thumbs.length, size.name + ": no two pictures are the same");
     // Each one tried on the preview, at the same moment: readable words.
     const ids = await page.evaluate(() => [...document.querySelectorAll("[data-af-tpl]")].map((b) => b.getAttribute("data-af-tpl")));
@@ -7538,14 +7538,22 @@ if (section("template groups")) {
     await wsSec(page, "Templates");
     await page.waitForTimeout(400);
     const chips = await page.evaluate(() => [...document.querySelectorAll("[data-af-tplcat]")].map((b) => ({ id: b.getAttribute("data-af-tplcat"), text: b.textContent, h: b.getBoundingClientRect().height, cut: b.scrollWidth > b.clientWidth + 1 })));
-    check(chips.length === 9 && chips[0].id === "all" && chips.every((c) => c.h >= 32 && !c.cut), size.name + ": nine chips, All first, each 32 pixels tall or more and not cut (" + chips.map((c) => c.text + " " + Math.round(c.h)).join(", ") + ")");
+    check(chips.length === 12 && chips[0].id === "all" && chips.every((c) => c.h >= 32 && !c.cut), size.name + ": twelve chips, All first, each 32 pixels tall or more and not cut (" + chips.map((c) => c.text + " " + Math.round(c.h)).join(", ") + ")");
     const shown = () => page.evaluate(() => [...document.querySelectorAll("[data-af-tpl]")].filter((b) => !b.hidden).map((b) => b.getAttribute("data-af-tpl")));
     const all = await shown();
-    const tap = async (id) => { const b = page.locator('[data-af-tplcat="' + id + '"]'); const box = await b.boundingBox(); if (size.touch) await page.touchscreen.tap(box.x + box.width / 2, box.y + box.height / 2); else await b.click(); await page.waitForTimeout(250); };
+    const tap = async (id) => { const b = page.locator('[data-af-tplcat="' + id + '"]'); await b.scrollIntoViewIfNeeded(); const box = await b.boundingBox(); if (size.touch) await page.touchscreen.tap(box.x + box.width / 2, box.y + box.height / 2); else await b.click(); await page.waitForTimeout(250); };
     await tap("colors");
     const colors = await shown();
     await tap("moods");
     const moods = await shown();
+    await tap("parties");
+    const parties = await shown();
+    check(parties.join() === "club,birthday,pool,wedding,karaoke,masquerade", size.name + ": Parties shows its six templates (" + parties.join() + ")");
+    await tap("history");
+    const history = await shown();
+    await tap("future");
+    const future = await shown();
+    check(history.join() === "ancient,medieval,twenties,steampunk" && future.join() === "cyber,space,solar,holo", size.name + ": History and Future show their four templates each (" + history.join() + " / " + future.join() + ")");
     await tap("all");
     const back = await shown();
     check(colors.join() === "red,orange,yellow,green,blue,indigo,violet,pink" && moods.length >= 3 && moods.indexOf("red") < 0 && back.length === all.length, size.name + ": Colors shows the eight colors, Moods its own, and All every template (" + [all.length, colors.length, moods.length].join(", ") + ")");
@@ -7582,6 +7590,13 @@ if (section("templates notice")) {
     check(!(await r.page.$("[data-af-tplmoved]")), size.name + ": and after a reload");
     check(!errors.length && !r.errors.length, size.name + ": no page errors. " + errors.concat(r.errors).slice(0, 2).join(" | "));
     await r.context.close();
+    // The mark 1.11.0 saved. Templates were only added since, so no notice.
+    const o = await open(THEMES[0], size, 1, `window.__settings.templatesSeen = "141sdi9";`);
+    await openWs(o.page);
+    await wsSec(o.page, "Templates");
+    await o.page.waitForTimeout(300);
+    check(!(await o.page.$("[data-af-tplmoved]")), size.name + ": with the mark from before templates were only added, there is no notice");
+    await o.context.close();
   }
 }
 
@@ -7594,6 +7609,16 @@ if (section("new shapes")) {
     cat: [[0, 0.3], [0, -0.45]], dog: [[0, -0.2], [0.47, -0.47]], bunny: [[0, 0.35], [0, -0.3]], paw: [[0, 0.16], [0, -0.1]],
     bone: [[0, 0], [0, 0.35]], fish: [[-0.1, 0.2], [0.3, 0.4]], carrot: [[0, 0], [0.3, 0.3]], bat: [[0, 0.1], [0, 0.4]],
     rose: [[0.1, 0.1], [0.45, 0.45]], checker: [[-0.25, -0.25], [0.25, -0.25]], broken: [[-0.25, -0.1], [0.47, 0.47]],
+    balloon: [[0, -0.1], [0.45, -0.45]], cake: [[0, 0.25], [0.47, -0.4]], gift: [[0.25, 0.2], [0.47, -0.45]], confetti: [[-0.38, -0.34], [0, 0]],
+    note: [[-0.24, 0.3], [-0.4, -0.4]], disco: [[0, 0.1], [0.45, -0.45]], mic: [[0, 0.2], [0.45, -0.45]],
+    // Outside a mask is the middle of an eye hole.
+    mask: [[0.4, -0.08], [0.23, 0]], mushroom: [[0, -0.2], [0.45, 0.4]], butterfly: [[-0.25, -0.15], [0, 0.45]],
+    bow: [[-0.3, -0.1], [0, -0.45]], book: [[-0.25, 0], [0, -0.45]], candle: [[0, 0.1], [0.45, -0.45]],
+    palm: [[0.05, 0.4], [0.45, 0.45]], umbrella: [[0, -0.25], [0.3, 0.3]], shell: [[0, 0], [0.45, 0.45]], waves: [[0, 0.3], [0, -0.48]],
+    column: [[0, 0], [0.45, 0]], laurel: [[-0.38, 0], [0, 0]], castle: [[0.3, 0.3], [0.2, -0.45]], fan: [[0, -0.1], [0.48, -0.45]],
+    // Outside a planet is the gap between the ball and its ring, outside a
+    // skyline is above its lowest building, and outside a gear is its hole.
+    planet: [[0, -0.25], [0.325, -0.1]], skyline: [[0, 0.45], [-0.042, 0.1]], gear: [[0.43, 0], [0, 0]],
   };
   const size = SIZES.find((x) => !x.touch) || SIZES[0];
   const frameOf = async (shape) => {
@@ -7604,7 +7629,7 @@ if (section("new shapes")) {
     const px = await o.page.evaluate(() => {
       const c = document.querySelector("[data-af-videopreview]");
       const d = c.getContext("2d").getImageData(0, 0, c.width, c.height).data;
-      return { w: c.width, h: c.height, raw: Array.from(d.filter((_, i) => i % 4 === 0)), green: d.filter((_, i) => i % 4 === 1).reduce((n, v, i) => n + (v > 150 && d[i * 4] < 80 ? 1 : 0), 0) };
+      return { w: c.width, h: c.height, raw: Array.from(d.filter((_, i) => i % 4 === 0)), rawG: Array.from(d.filter((_, i) => i % 4 === 1)), green: d.filter((_, i) => i % 4 === 1).reduce((n, v, i) => n + (v > 150 && d[i * 4] < 80 ? 1 : 0), 0) };
     });
     await o.context.close();
     return px;
@@ -7625,6 +7650,11 @@ if (section("new shapes")) {
   check(xor > count(five) * 0.1, size.name + ": a star with 8 points draws a different outline from one with 5 (" + xor + " pixels differ of " + count(five) + ")");
   const ring = await frameOf({ id: "s1", kind: "ellipse", lineW: 20, line: "#00ff00", x: 0.5, y: 0.5, w: 800, h: 800, rot: 0, fill: "#000000", grad: "none", stops: [], dir: "down", clear: 0, text: "" });
   check(ring.green > 1000, size.name + ": an outline draws in its own color (" + ring.green + " green pixels)");
+  // A shape with details, such as a cat's face, has its outline on its own
+  // edge: at the left of the head and at the bottom of it.
+  const catLine = await frameOf({ id: "s1", kind: "cat", lineW: 20, line: "#00ff00", x: 0.5, y: 0.5, w: 800, h: 800, rot: 0, fill: "#000000", grad: "none", stops: [], dir: "down", clear: 0, text: "" });
+  const greenAt = (f, nx, ny) => { const sz = (800 * Math.min(f.w, f.h)) / 1080; const x = Math.round(f.w / 2 + nx * sz), y = Math.round(f.h / 2 + ny * sz); return f.rawG[y * f.w + x] > 150; };
+  check(greenAt(catLine, -0.42, 0.08) && greenAt(catLine, 0, 0.46), size.name + ": the outline of a cat face is on the edge of the head, not on its mouth");
   // The picker: a grid of pictures with names, fitting a phone.
   for (const sz2 of SIZES) {
     const { context, page, errors } = await open(THEMES[0], sz2, 1, `window.__settings.videoBacks = [{ id: "main", name: "Main", kind: "design", color: "#000000", fill: "solid", stops: [], dir: "down", dim: 40, blur: 0, shapes: [], use: "match", moods: [], places: [] }]; window.__settings.videoBackPick = "main";`);
@@ -7632,7 +7662,7 @@ if (section("new shapes")) {
     await wsSec(page, "Background");
     await page.waitForTimeout(400);
     const kinds = await page.evaluate(() => [...document.querySelectorAll("[data-af-shapekind]")].map((b) => ({ id: b.getAttribute("data-af-shapekind"), h: b.getBoundingClientRect().height, cut: b.scrollWidth > b.clientWidth + 1 })));
-    check(kinds.length === 41 && kinds.every((k) => k.h >= 32 && !k.cut), sz2.name + ": the shape picker shows all 41 shapes with their names, each 32 pixels tall or more");
+    check(kinds.length === 65 && kinds.every((k) => k.h >= 32 && !k.cut), sz2.name + ": the shape picker shows all 65 shapes with their names, each 32 pixels tall or more");
     await page.click('[data-af-shapekind="star"]');
     await page.click("[data-af-shape-add]");
     await page.waitForTimeout(600);

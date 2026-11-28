@@ -11,7 +11,7 @@
 // One backend process can serve every account on a server, so everything that
 // belongs to a person is kept per user id, in spindle.userStorage, and every
 // reply goes back addressed to that user.
-const VERSION = '1.11.0';
+const VERSION = '1.12.0';
 const DEFAULT_SETTINGS = {
     enabled: true,
     ttsConnection: '',
@@ -365,7 +365,7 @@ function cleanStops(v, dflt, max = 5) {
 // At most 12 backgrounds, and 40 shapes in each.
 const BACKS_MAX = 12;
 const SHAPES_MAX = 40;
-const SHAPE_KINDS = ['rect', 'round', 'ellipse', 'tri', 'line', 'text', 'heart', 'star', 'poly', 'diamond', 'arrow', 'bubble', 'ring', 'moon', 'cloud', 'sparkle', 'cat', 'dog', 'bunny', 'paw', 'bone', 'fish', 'carrot', 'bat', 'rose', 'checker', 'broken', 'stripes', 'snowflake', 'ornament', 'holly', 'pumpkin', 'ghost', 'leaf', 'firework', 'lantern', 'diya', 'menorah', 'shamrock', 'egg', 'flower'];
+const SHAPE_KINDS = ['rect', 'round', 'ellipse', 'tri', 'line', 'text', 'heart', 'star', 'poly', 'diamond', 'arrow', 'bubble', 'ring', 'moon', 'cloud', 'sparkle', 'cat', 'dog', 'bunny', 'paw', 'bone', 'fish', 'carrot', 'bat', 'rose', 'checker', 'broken', 'stripes', 'snowflake', 'ornament', 'holly', 'pumpkin', 'ghost', 'leaf', 'firework', 'lantern', 'diya', 'menorah', 'shamrock', 'egg', 'flower', 'balloon', 'cake', 'gift', 'confetti', 'note', 'disco', 'mic', 'mask', 'mushroom', 'butterfly', 'bow', 'book', 'candle', 'palm', 'umbrella', 'shell', 'waves', 'column', 'laurel', 'castle', 'fan', 'planet', 'skyline', 'gear'];
 function cleanShape(v) {
     if (!v || typeof v !== 'object')
         return null;
