@@ -8,14 +8,15 @@
 - **Fish Audio direction** is sent to Fish Audio with every line of theirs. Write how they always sound.
 - **Notes for each voice engine**, on the Director tab, tell the Director how an engine reads tags.
 - The voice you pick does the most. Age, gender and accent come from the voice first.
+- Write what a listener would hear, such as "talks fast" or "goes quiet when hurt". Stock words such as gravelly or husky push a voice toward a stock performance. See [Words to leave out](#words-to-leave-out).
 
 ## Which box is which
 
 | Box | Where | Read by | What to write | Example |
 | --- | --- | --- | --- | --- |
-| **Acting notes** | Cast tab, on the person's card | The Director only. Never sent to the voice. | How they act, and how that changes | "Calm and patient. Gets quiet, not loud, when upset." |
-| **Gemini style** | Cast tab, under **More settings**, on Gemini 3.8 | Gemini 3.8, with every line of theirs | How they always sound | "Warm and unhurried, with a light Southern accent." On a voice you designed, often empty. |
-| **Fish Audio direction** | Cast tab, under **More settings**, on Fish Audio | Fish Audio, with every line of theirs | How they always sound | "a warm, steady young man, relaxed and unhurried" |
+| **Acting notes** | Cast tab, on the person's card | The Director only. Never sent to the voice. | How they act, and how that changes | "Talks slowly and patiently. Gets quieter when upset." |
+| **Gemini style** | Cast tab, under **More settings**, on Gemini 3.8 | Gemini 3.8, with every line of theirs | How they always sound | "Slow and easy, with a light Southern accent." On a voice you designed, often empty. |
+| **Fish Audio direction** | Cast tab, under **More settings**, on Fish Audio | Fish Audio, with every line of theirs | How they always sound | "a young man who talks slowly and evenly" |
 | **Notes for each voice engine** | Director tab | The Director, for the engine in use | A rule for every line on that engine | "Use at most two tags in a line." |
 
 - **Gemini style** and **Fish Audio direction** are optional. Left empty, each line still gets the Director's own note or tags.
@@ -27,11 +28,21 @@ The Director's own prompt can be changed too, in the Director tab. See [The prom
 ## Steps
 
 1. Pick the person's voice first, in the Cast tab. Press **Hear a sample** to compare voices. A designed or cloned voice can fit the person better, but test it. See [With a custom voice](#with-a-custom-voice).
-2. Write **Acting notes** in plain words: how they act, and what changes when they feel something. For example: "gruff and short with people, sighs before bad news".
+2. Write **Acting notes** in plain words: how they act, and what changes when they feel something. For example: "answers in as few words as they can, sighs before bad news".
 3. On Gemini 3.8 or Fish Audio, write how they always sound in **Gemini style** or **Fish Audio direction**, under **More settings**.
 4. Play a message and listen.
 5. If a feeling is missing, add it to **Acting notes** in the words the engine can use. [What helps on each engine](#what-helps-on-each-engine) says what each engine can use.
 6. Only if the whole engine needs a rule, change its note under **Notes for each voice engine**.
+
+## Words to leave out
+
+Some words are used so often to describe voices that a voice engine, or the Director, reads them as a stock performance. The result is an overdone performance, and it comes back on every line.
+
+- Words such as gravelly, husky, sultry, smoky, velvety, silky, honeyed, raspy, gruff, sharp, clipped, crisp, measured, deliberate, commanding, steely, icy, purring, warm and rich.
+- Write what you would hear instead: how fast they talk, how loud, where they stop, and what changes when they feel something.
+- For example, "answers in two words and does not wait for a reply" in place of "curt", and "gets slower and quieter when angry" in place of "icy".
+
+The Director's built-in prompt asks it to do the same. When a note holds one of these words, it works out what the word means for each line, instead of writing it back as a tag such as `[gruffly]`.
 
 ## What it sends
 
@@ -43,39 +54,39 @@ The Director's own prompt can be changed too, in the Director tab. See [The prom
 
 ## An example
 
-Pell Arden is a ferry pilot in a made-up story. Their **Acting notes** say: "gruff and short with people, sighs before bad news".
+Pell Arden is a ferry pilot in a made-up story. Their **Acting notes** say: "answers in as few words as they can, sighs before bad news".
 
-The Director writes this for one of Pell's lines, with the note `gruff and tired`:
+The Director writes this for one of Pell's lines, with the note `flat and tired`:
 
-`[gruffly] Tide turns at six. [sighs] Miss it, and we wait a whole day.`
+`[flatly] Tide turns at six. [sighs] Miss it, and we wait a whole day.`
 
 Here is what each engine is sent:
 
 | Engine | The line sent | The note sent |
 | --- | --- | --- |
-| Eleven v3 or v4 | `[gruffly] Tide turns at six. [sighs] Miss it, and we wait a whole day.` | None |
-| Fish Audio S2 | `[gruffly] Tide turns at six. [gruffly] [sighs] Miss it, and we wait a whole day.` | None |
-| Gemini 3.8 | `Tide turns at six. <sigh> Miss it, and we wait a whole day.` | `gruff and tired` |
+| Eleven v3 or v4 | `[flatly] Tide turns at six. [sighs] Miss it, and we wait a whole day.` | None |
+| Fish Audio S2 | `[flatly] Tide turns at six. [flatly] [sighs] Miss it, and we wait a whole day.` | None |
+| Gemini 3.8 | `Tide turns at six. <sigh> Miss it, and we wait a whole day.` | `flat and tired` |
 | Chatterbox-Turbo | `Tide turns at six. [sigh] Miss it, and we wait a whole day.` | None |
 | OmniVoice | `Tide turns at six. [sigh] Miss it, and we wait a whole day.` | None |
 | Cartesia | `Tide turns at six. Miss it, and we wait a whole day.` | None |
 
-- On Fish Audio, `[gruffly]` goes again at the start of the second sentence, so both are said the same way. `[sighs]` is a sound, so it is not repeated.
-- On Gemini 3.8, how the line is said goes in the note, and only the sigh stays in the line. If Pell's **Gemini style** were "low and gravelly", the note sent would be `low and gravelly. This line: gruff and tired`.
-- On Chatterbox-Turbo and OmniVoice, `[sighs]` becomes their own `[sigh]`, and `[gruffly]` is taken out, since they cannot read it. The voice you picked has to carry the gruffness.
+- On Fish Audio, `[flatly]` goes again at the start of the second sentence, so both are said the same way. `[sighs]` is a sound, so it is not repeated.
+- On Gemini 3.8, how the line is said goes in the note, and only the sigh stays in the line. If Pell's **Gemini style** were "low and slow", the note sent would be `low and slow. This line: flat and tired`.
+- On Chatterbox-Turbo and OmniVoice, `[sighs]` becomes their own `[sigh]`, and `[flatly]` is taken out, since they cannot read it. The voice you picked has to carry the flat delivery.
 - On Cartesia, neither tag is a feeling on its list, so both are taken out. Given Cartesia's list, the Director writes a feeling instead, such as `[tired]` at the start of the line, and it is sent beside the line.
 
 ## Splitting up a voice description
 
 A description written for a voice service often holds several kinds of thing at once. Each part goes in a different place. Here is a made-up one:
 
-> A woman in her forties with a husky voice and a soft Irish lilt. Kind, slow and patient, but sharp when someone is rude. Studio quality audio.
+> A woman in her forties with a low voice and an Irish accent. She is kind and patient, and she talks slowly. When someone is rude, she gets short and loud. Studio quality audio.
 
 | Part | Where it goes |
 | --- | --- |
-| "A woman in her forties with a husky voice" | The voice you pick. Pick a husky, mature voice and listen with **Hear a sample**. |
-| "a soft Irish lilt", "kind, slow and patient" | **Gemini style** or **Fish Audio direction**, since it is how she always sounds: "Kind, slow and patient, with a soft Irish lilt." |
-| "sharp when someone is rude" | **Acting notes**, since it changes from line to line: "Kind and patient. Gets sharp and short when someone is rude." |
+| "A woman in her forties with a low voice" | The voice you pick. Pick a low, older voice and listen with **Hear a sample**. |
+| "an Irish accent", "kind and patient", "talks slowly" | **Gemini style** or **Fish Audio direction**, since it is how she always sounds: "Kind and patient, talks slowly, with an Irish accent." |
+| "gets short and loud when someone is rude" | **Acting notes**, since it changes from line to line: "Kind and patient. Gets short and loud when someone is rude." |
 | "Studio quality audio" | Nowhere. It is not about how she speaks. |
 
 Writing the whole description in both **Acting notes** and **Gemini style** does no harm, but most of it is wasted. The Director cannot change the voice, and the voice service does not need the moments that change.
@@ -84,7 +95,7 @@ Writing the whole description in both **Acting notes** and **Gemini style** does
 
 A voice you designed or cloned already carries its sound: the pitch, the texture, the age, and often the accent. So **Gemini style** and **Fish Audio direction** can stay short, or empty.
 
-- Write only how they speak, such as "measured and restrained, a little tired". Leave out what the voice already does.
+- Write only how they speak, such as "slow and quiet, a little tired". Leave out what the voice already does.
 - Add the accent only if the voice loses it on some lines.
 - To check, play the same message with the box filled and with it empty, and listen.
 
@@ -116,9 +127,9 @@ Google's [Voice Design guide](https://aistudio.google.com/docs/voice-design) giv
 
 Marisol is a made-up cheerful baker:
 
-- **Voice Design description:** `A cheerful woman in her mid 30s with a bright, slightly raspy alto and a light Puerto Rican accent, speaking quickly and warmly.`
+- **Voice Design description:** `A cheerful woman in her mid 30s with an alto voice and a light Puerto Rican accent, who talks quickly and laughs easily.`
 - **Gemini style:** empty, since the voice already has her sound and her accent.
-- **Acting notes:** `Quick and warm. Talks faster when excited about a new recipe. Goes flat and short when someone wastes her time.`
+- **Acting notes:** `Talks quickly and laughs easily. Talks even faster when excited about a new recipe. Goes flat and short when someone wastes her time.`
 - A line where the Director writes `flat and short` is sent with only that as its style.
 
 ## Examples for each engine
@@ -136,16 +147,16 @@ Quill is a nervous young courier.
 
 Bram is a patient old blacksmith.
 
-- **Acting notes:** `Calm and slow. Gets sharp and loud when someone is careless at the forge. Laughs warmly at children.`
-- **Fish Audio direction:** `a deep, gravelly old man, calm and unhurried`
+- **Acting notes:** `Calm and slow. Gets loud and short when someone is careless at the forge. Laughs easily with children.`
+- **Fish Audio direction:** `an old man with a deep voice, slow and calm`
 
 ### Gemini 3.8
 
 Tobiah is a soft-spoken young bookbinder, on a stock Gemini voice.
 
 - **Acting notes:** `Steady and unhurried, even when things are tense. Gets quieter, not louder, when upset. Teases his friends in a dry way.`
-- **Gemini style:** `Warm, relaxed and unhurried, in a smooth low voice, with a light Southern accent.`
-- A line where the Director writes `quiet and hurt` is sent with: `Warm, relaxed and unhurried, in a smooth low voice, with a light Southern accent. This line: quiet and hurt`
+- **Gemini style:** `Relaxed and slow, in a low voice, with a light Southern accent.`
+- A line where the Director writes `quiet and hurt` is sent with: `Relaxed and slow, in a low voice, with a light Southern accent. This line: quiet and hurt`
 - His **Gemini style** holds his low voice and his accent because a stock voice does not have them. On a voice designed for him, they go in the design instead. See [Designing a Gemini voice](#designing-a-gemini-voice).
 
 ### Chatterbox-Turbo
@@ -180,15 +191,15 @@ Dace is a guard who hates his job.
 
 ### Fish Audio S2 and Drama 3
 
-- It reads free tags in square brackets, and a tag can be a few plain words, such as `[warm and happy]`.
+- It reads free tags in square brackets, and a tag can be a few plain words, such as `[happy, talking fast]`.
 - Fish Audio's guide says a tag for how the words are said works best at the start of the sentence it is for, with one main feeling for each sentence. Auto Foley repeats that tag for each sentence. See [Fish Audio](engines.md#fish-audio).
-- **Fish Audio direction** is a few plain words sent with every line of theirs, such as "warm and tired". Keep it to how they always sound. Leave single moments to the Director's tags.
+- **Fish Audio direction** is a few plain words sent with every line of theirs, such as "slow and a little tired". Keep it to how they always sound. Leave single moments to the Director's tags.
 - Sounds are played as sound effects, not in the voice.
 
 ### Gemini 3.8
 
 - How a line is said goes in its note, such as `hushed and nervous`. Tags are only for vocal sounds and pauses, such as `<sigh>` and `<short pause>`.
-- **Gemini style** is sent with every line of theirs, before the line's own note, such as "calm and dry". Write it like a note to an actor, in a few plain words.
+- **Gemini style** is sent with every line of theirs, before the line's own note, such as "slow and quiet". Write it like a note to an actor, in a few plain words.
 - In **Acting notes**, describe the delivery in words the Director can put in notes: "flat and quiet, speeds up when angry".
 
 ### Chatterbox-Turbo

@@ -16,6 +16,9 @@ _2026-11-27_
 
 ### Changed
 
+- **The Director leaves out stock voice words.** The built-in prompt now names words such as gravelly, husky, clipped and deliberate, which push a voice toward a stock performance. It asks the Director to write what a listener would hear instead, such as how fast someone talks or where they stop. When a person's **Acting notes** hold one of those words, the Director works out what it means for each line instead of writing it back as a tag. If you use your own prompt, a notice says the built-in one changed. See [Words to leave out](docs/writing.md#words-to-leave-out).
+- **More worn-out tags in the Director's prompt.** It now also names `[seductively]` all through a sex scene, tags picked by gender, a villain's `[chuckles darkly]`, `[trembling]` on every scared line, several feelings stacked on one line, and too many ellipses or capitals. It also asks for delivery that sounds like real people, in quiet scenes, fights and sex scenes alike, at the strength the text is written at.
+- **Plainer examples for how someone sounds.** The hints under **Acting notes**, and the examples in **Acting notes**, **Fish Audio direction** and **Gemini style**, now say what you would hear, such as "talks quietly and slowly". The examples in [Writing for each voice engine](docs/writing.md) do the same.
 - **The Debug info box has no highlight.** The box no longer lights up its border when you point at it with a mouse. The full-size editor that **Expand** opens it in no longer lights up its border when you point at it or type in it. This matches Auto Retry and Auto Refine.
 
 ---

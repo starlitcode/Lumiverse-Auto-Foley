@@ -15023,11 +15023,11 @@ export function setup(ctx, overrides) {
         if (!eng.supported)
             return 'Pick a model that acts first. The note is used once their engine can take directions.';
         if (eng.id === 'eleven_v3')
-            return 'On ElevenLabs: describe their manner in a few words, such as dry, clipped, laughs at their own jokes. The Director turns it into tags like [deadpan] or [chuckles].';
+            return 'On ElevenLabs: say what you would hear, such as talks fast, answers in few words, laughs at their own jokes. The Director turns it into tags like [quietly] or [chuckles].';
         if (eng.id === 'fish')
-            return 'On Fish Audio: describe how they act, such as calm, sharp when angry. The Director turns it into tags like [shouting]. How they always sound goes in Fish Audio direction, under More settings.';
+            return 'On Fish Audio: say what you would hear, such as slow and calm, loud and fast when angry. The Director turns it into tags like [shouting]. How they always sound goes in Fish Audio direction, under More settings.';
         if (eng.id === 'gemini')
-            return 'On Gemini 3.8: describe how they act, such as hushed when scared. The Director writes a note for each line. How they always sound goes in Gemini style, under More settings.';
+            return 'On Gemini 3.8: say what you would hear, such as quiet and fast when scared. The Director writes a note for each line. How they always sound goes in Gemini style, under More settings.';
         if (eng.id === 'omnivoice')
             return 'On OmniVoice: say when they laugh, sigh or make a questioning sound. It marks only sounds like those, so how they speak comes from the voice and the punctuation.';
         if (eng.id === 'cartesia')
@@ -15091,16 +15091,16 @@ export function setup(ctx, overrides) {
             out.push(words('lang', 'Language', 'en, de, ja', 'Empty lets ElevenLabs tell each line\u2019s language, so leave it empty for someone who speaks more than one. A code, such as en, reads every line in that language.'));
         }
         if (prov === 'fish_audio') {
-            out.push(words('direction', 'Fish Audio direction', 'warm and tired', 'Optional. Sent to Fish Audio with every line of theirs, such as warm and tired. A custom voice may not need it.', 300));
+            out.push(words('direction', 'Fish Audio direction', 'slow and a little tired', 'Optional. Sent to Fish Audio with every line of theirs, such as slow and a little tired. A custom voice may not need it.', 300));
             out.push(num('temperature', 'Temperature', 0, 1, 0.05, 0.7, 'How much each take varies. 0.70 by default. Lower is steadier.'));
             out.push(num('top_p', 'Top P', 0, 1, 0.05, 0.7, 'How wide the choice of sounds is. 0.70 by default.'));
             out.push(personSwitch('Steady loudness', 'On by default. Keeps lines at the same loudness.', own.normalize !== false, (v) => setP('normalize', v ? undefined : false)));
         }
         if (prov === 'openrouter_tts' && eng.style)
-            out.push(words('style_base', 'Gemini style', 'calm and dry', 'Optional. Sent to Gemini with every line of theirs, before that line\u2019s own note, such as calm and dry. A custom voice may not need it.', 300));
+            out.push(words('style_base', 'Gemini style', 'slow and quiet', 'Optional. Sent to Gemini with every line of theirs, before that line\u2019s own note, such as slow and quiet. A custom voice may not need it.', 300));
         if (prov === 'google_tts' || prov === 'google_vertex_tts') {
             if (eng.style)
-                out.push(words('style_base', 'Gemini style', 'calm and dry', 'Optional. Sent to Gemini with every line of theirs, before that line\u2019s own note, such as calm and dry. A custom voice may not need it.', 300));
+                out.push(words('style_base', 'Gemini style', 'slow and quiet', 'Optional. Sent to Gemini with every line of theirs, before that line\u2019s own note, such as slow and quiet. A custom voice may not need it.', 300));
             out.push(num('temperature', 'Temperature', 0, 2, 0.05, 1, 'How much each take varies. 1.00 by default.'));
             out.push(words('lang', 'Language', 'en-US', 'Empty lets Gemini tell each line\u2019s language, so leave it empty for someone who speaks more than one. A code, such as en-US, reads every line in that language.'));
         }
@@ -15402,7 +15402,7 @@ export function setup(ctx, overrides) {
         const speakBox = area('Acting notes', m.note, (v) => {
             m.note = v.slice(0, NOTE_MAX);
             save();
-        }, { max: NOTE_MAX, placeholder: 'Soft-spoken and dry. Rarely raises their voice.', help: 'Read only by the Director, when it decides how each of their lines is said. It is never sent to the voice. The line under the box says what helps most on their engine.' });
+        }, { max: NOTE_MAX, placeholder: 'Talks quietly and slowly. Rarely raises their voice.', help: 'Read only by the Director, when it decides how each of their lines is said. It is never sent to the voice. The line under the box says what helps most on their engine.' });
         speakBox.setAttribute('data-af-speak', '');
         // What to write depends on the engine the person speaks through, since
         // each takes different directions.

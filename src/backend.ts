@@ -2495,11 +2495,13 @@ A JSON object with:
 <reading_the_room>
 Every tag comes from the page. Read the narration around a line before you touch it. If it says she's hiding behind a door, she's quiet. If he's three drinks in and grinning, he's loose and loud. Whatever the text shows about the moment is your direction.
 
-Each person keeps their own voice. Check their note in the cast. A dry, clipped character takes bad news dry and clipped, and a bubbly one doesn't turn into a brooding poet because the scene got heavy. Two people who sound different going in still sound different coming out.
+Each person keeps their own voice. Check their note in the cast. Someone who answers in as few words as they can takes bad news the same way, and someone who talks fast and laughs at everything doesn't turn into a brooding poet because the scene got heavy. Two people who sound different going in still sound different coming out.
 
-The narrator isn't a character. They carry the mood of the scene in how they read: low and tight when things are tense, easy when nothing's at stake. They don't laugh or sob at the story.
+The narrator isn't a character. They carry the mood of the scene in how they read: slower and quieter when things are tense, quicker and looser when nothing's at stake. They don't laugh or sob at the story.
 
 Mood carries. Once a scene goes hushed, it stays hushed until something on the page breaks it. You don't need to re-tag every line to keep it there.
+
+Real people don't perform their feelings at you. They mumble, lose the end of a sentence, laugh in the middle of a word, talk too fast when they're scared and too slow when they're furious. Go for that, wherever the scene is. A quiet breakfast can be small and a bit sleepy. A fight can sound ugly. In a sex scene, people still sound like themselves, just closer and quieter, with breath getting in the way of the words. Keep it raw and true to the page, at whatever heat the page is at.
 </reading_the_room>
 
 <how_to_tag>
@@ -2509,7 +2511,7 @@ Mood carries. Once a scene goes hushed, it stays hushed until something on the p
 
 When "tag_list" is there, those are the only tags this voice knows. Use them exactly as written, in square brackets. Anything else you put in brackets gets cut before it reaches the voice.
 
-When "line_style" is true, each line can also carry a "style": a few plain words on how it's said, like "hushed and nervous" or "bright, talking fast". That's where delivery goes for this voice. It follows the same rules as a tag: it comes from the page, and most lines are fine with "style" left as "".
+When "line_style" is true, each line can also carry a "style": a few plain words on how it's said, like "quiet, long gaps between words" or "fast and a bit too loud". That's where delivery goes for this voice. It follows the same rules as a tag: it comes from the page, and most lines are fine with "style" left as "".
 
 A tag sits in square brackets and describes something you'd hear: a delivery like [quietly], [through gritted teeth], [deadpan] or [half asleep], or a sound a voice makes like [exhales] or [laughs under her breath]. One to four plain words. When "breaths_and_laughs" is false, leave out every sound a voice makes, like sighs, laughs, gasps and breaths.
 
@@ -2531,12 +2533,26 @@ Voice tags have their own clichés, and listeners hear them fast. Each of these 
 - [whispers] on every tender or sexy line. Most intimate talk is just quiet, close and plain.
 - [voice breaking] or [tearfully] on anything sad. Save it for the moment someone actually comes apart.
 - A tag that names what the words already show. "GET OUT!" doesn't need [shouting]. "I'm so sorry, I didn't mean it" doesn't need [apologetically].
-- Bare feelings like [sad] or [angry]. They're vague. Say how it sounds instead, like [flat] or [bright and fast].
+- Bare feelings like [sad] or [angry]. They're vague. Say how it sounds instead, like [flat] or [fast and loud].
 - The same tag twice in a few lines when nobody's repeating themselves.
 - A tag on every line. The scene starts to sound like a demo reel.
+- [seductively], [sultry] or [breathy] all through a sex scene. That's the cheap phone-line purr, and it kills the heat. Wanting someone mostly sounds like ordinary talk that's gone slow and close, or keeps getting cut off by breath.
+- Tags handed out by gender: [giggles] because she's a woman, [growls] because he's a man. Go by the person and the page.
+- The villain's [chuckles darkly] or [menacingly]. A threat said calmly is scarier, and the words already carry it.
+- [trembling] or [voice shaking] on every scared line. Fear is just as often fast and flat.
+- Stacked feelings like [nervous] [excited] [whispering] on one line. The voice can't do three things at once, so it does none of them well.
+- Pile-ups of punctuation. An ellipsis after every phrase drags the read into slow motion, and CAPITALS on half the words turns it into yelling. Use each where one moment needs it.
 
 When a line works fine plain, leave it plain. A clean line is a good line.
 </worn_out_tags>
+
+<stock_voice_words>
+Models describe voices with the same small pile of words: gravelly, husky, sultry, smoky, velvety, silky, honeyed, raspy, gruff, sharp, clipped, crisp, measured, deliberate, commanding, steely, icy, purring, warm, rich. Every voice engine has heard them a million times. Put one in a tag, a "style" or an "about" and you've asked for the stock version of that voice, the movie-trailer growl or the cartoon villain, and you'll get it on every line.
+
+So write what a listener would actually hear. How fast they go, how loud, where they stop, what happens at the end of a sentence, what changes when they're scared or pissed off. "Answers in two words and doesn't wait for a reply" tells the voice more than [curtly] ever will. "Gets slower and quieter when she's angry" beats [icily]. Tags can stay just as plain: [slowly], [quietly], [fast, hardly stopping to breathe].
+
+A cast note might use one of those words anyway, since people write them. Don't hand it back as [gruffly] or [huskily]. Work out what it means for this line, maybe fewer words or a lower volume, and tag that. Or leave the line plain and let the voice the user picked carry it.
+</stock_voice_words>
 
 <who_speaks>
 For narration, the speaker is "Narrator". For speech, pick the right person from the cast. Use the clues around the quote: who's named in the narration next to it, who was just talking, who's being answered, whose name is in the line. People in "in_scene" are the likeliest. If "speaker" is already filled in, keep it.
@@ -2576,7 +2592,7 @@ When "scenes" is true in the rules, the video can change what's behind the words
 </scenes>
 
 <new_speakers>
-When "find_speakers" is true and someone speaks who isn't in the cast, use the name the text gives them, or a short plain one if it gives none, like "Bartender". List them in "new_speakers" with "gender" (female, male, nonbinary or unknown), "role" (main or minor) and "about": a few words on how they sound, like "gravelly older man" or "bright, quick young woman". Use nonbinary only when the text says it, like "they" for one person or the word itself, and unknown when you can't tell. A main role is someone the story follows, and a minor one is a bartender or a passerby. Anyone in a sex scene is an adult.
+When "find_speakers" is true and someone speaks who isn't in the cast, use the name the text gives them, or a short plain one if it gives none, like "Bartender". List them in "new_speakers" with "gender" (female, male, nonbinary or unknown), "role" (main or minor) and "about": a few words on how they sound, like "older man, talks slowly, long pauses" or "young woman, talks fast, laughs a lot". Take it from the text, and keep the stock voice words out of it. Use nonbinary only when the text says it, like "they" for one person or the word itself, and unknown when you can't tell. A main role is someone the story follows, and a minor one is a bartender or a passerby. Anyone in a sex scene is an adult.
 </new_speakers>
 
 <clean_run>

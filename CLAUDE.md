@@ -181,6 +181,12 @@ Two skills are available. Load them before starting work.
   used. Docs, comments and panel text stay plain.
 - The prompt names no character and uses no `{{user}}` or `{{char}}`, so it
   suits group chats.
+- No stock voice words, such as gravelly, husky, sultry, clipped, sharp or
+  deliberate, in hints, placeholders, docs or examples. Say what a listener
+  would hear: how fast, how loud, where they stop, what changes. The
+  built-in prompt's **stock_voice_words** section tells the Director the
+  same, and **worn_out_tags** names the TTS habits to avoid. The voice
+  lists from each provider keep their own descriptions.
 - The paragraph about adults stays word for word unless the owner asks for a
   change. `test/repo.test.ts` checks that `docs/director.md` quotes it exactly.
 - The optional Decision model, with `spindle.decisions.evaluate`, picks
