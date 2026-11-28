@@ -3070,6 +3070,43 @@ if (section("bug report edge")) {
   }
 }
 
+if (section("picture edge")) {
+  console.log("A picture fills its circle, with no color from behind it at the edge");
+  // A plain gray picture: red and green are equal in it, and the panel
+  // behind is purple, so any pixel with more green than red is the teal of
+  // a persona's circle showing through.
+  const GRAY = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAIAAACQkWg2AAAAFElEQVR4nGNoIBEwjGoY1TB8NQAAJYSAEGy7FvQAAAAASUVORK5CYII=";
+  for (const size of SIZES) {
+    const { context, page, errors } = await open(THEMES[0], size, 1, `
+      window.__settings = Object.assign({}, window.__settings, { cast: window.__settings.cast.map((m) => m.id === "c" ? Object.assign({}, m, { picture: "${GRAY}" }) : m) });
+    `);
+    await toTab(page, "cast");
+    await page.waitForTimeout(400);
+    const face = page.locator('.af-person[data-kind="persona"] .af-person-head .af-avatar').first();
+    await face.scrollIntoViewIfNeeded();
+    await page.waitForTimeout(300);
+    const b = await face.boundingBox();
+    const shot = (await page.screenshot({ clip: { x: b.x - 2, y: b.y - 2, width: b.width + 4, height: b.height + 4 } })).toString("base64");
+    const got = await page.evaluate(async (shot) => {
+      const img = new Image();
+      await new Promise((ok) => { img.onload = ok; img.src = "data:image/png;base64," + shot; });
+      const c = document.createElement("canvas");
+      c.width = img.naturalWidth; c.height = img.naturalHeight;
+      const g = c.getContext("2d");
+      g.drawImage(img, 0, 0);
+      const d = g.getImageData(0, 0, c.width, c.height).data;
+      let green = -999;
+      for (let k = 0; k < d.length; k += 4) green = Math.max(green, d[k + 1] - d[k]);
+      const m = g.getImageData(Math.floor(c.width / 2), Math.floor(c.height / 2), 1, 1).data;
+      return { green, middle: [m[0], m[1], m[2]] };
+    }, shot);
+    check(got.middle.every((v) => Math.abs(v - 128) <= 6), size.name + ": the picture is in the circle (" + got.middle + ")");
+    check(got.green <= 6, size.name + ": no teal shows at its edge (most green over red: " + got.green + ")");
+    check(!errors.length, size.name + ": no page errors. " + errors.slice(0, 2).join(" | "));
+    await context.close();
+  }
+}
+
 if (section("still working")) {
   console.log("A slow Director is waited for while the backend says it is still working");
   for (const size of SIZES) {

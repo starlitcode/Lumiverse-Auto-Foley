@@ -10,6 +10,10 @@ Versions follow [Semantic Versioning](https://semver.org). A new major version m
 
 _2026-11-27_
 
+### Fixed
+
+- **No colored edge around a picture.** A person with a picture showed a thin teal or pink edge around it, from the color behind it for people with no picture. It flickered while a group opened or closed. The circle now shows only the picture.
+
 ### Changed
 
 - **The Debug info box has no highlight.** The box no longer lights up its border when you point at it with a mouse. The full-size editor that **Expand** opens it in no longer lights up its border when you point at it or type in it. This matches Auto Retry and Auto Refine.

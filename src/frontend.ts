@@ -1494,6 +1494,16 @@ html[data-af-still] .af-making-room { transition: none; }
 .af-person[data-kind="character"] .af-avatar { box-shadow: inset 0 0 0 2px var(--af-k-character); }
 .af-person[data-kind="persona"] .af-avatar { background: var(--af-kc-persona-soft, rgba(45,212,191,.14)); box-shadow: inset 0 0 0 2px var(--af-k-persona); }
 .af-person[data-kind="npc"] .af-avatar { background: var(--af-kc-npc-soft, rgba(244,114,182,.14)); box-shadow: inset 0 0 0 2px var(--af-k-npc); }
+/* The color and the ring are for someone with no picture. A picture covers
+   the whole circle, and anything behind it shows as a thin colored edge,
+   which flickers while the row moves. So a circle with a picture has
+   neither. The floating player's glow for who is speaking is drawn outside
+   the circle, and is set again here. */
+.af-avatar:has(> img) { background: transparent !important; box-shadow: none !important; }
+.af-pl-ch[data-speaking="true"] .af-avatar:has(> img) {
+  box-shadow: 0 0 0 2px var(--af-good), 0 0 10px 2px rgba(34,197,94,.4) !important;
+  box-shadow: 0 0 0 2px var(--af-good), 0 0 10px 2px color-mix(in srgb, var(--af-good) 40%, transparent) !important;
+}
 .af-parts button[data-who="narrator"] { --af-k: var(--af-k-narrator); }
 .af-parts button[data-who="character"] { --af-k: var(--af-k-character); }
 .af-parts button[data-who="persona"] { --af-k: var(--af-k-persona); }
