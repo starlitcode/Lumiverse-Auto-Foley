@@ -124,6 +124,14 @@ Two skills are available. Load them before starting work.
   add a tag or a setting of its own on top of Auto Foley's, such as a
   default style or a direction saved on the connection, Auto Foley sends
   its own value so Lumiverse's is not used.
+- Each engine follows its provider's own docs and defaults, not a choice
+  Lumiverse made on its own. Where Lumiverse picks something the provider
+  does not, such as MP3 from a Chatterbox server whose own default is WAV,
+  or Gemini's "understated" style, Auto Foley sends the provider's choice.
+  Within that, it asks for the provider's best quality, such as Fish Audio's
+  latency normal and its highest MP3 bitrate, unless that needs a paid plan
+  some readers do not have. What only Lumiverse can change goes to Lumiverse
+  as a pull request.
 - Auto Foley is only for models that act out tags. It speaks through a TTS
   connection in Lumiverse, with Lumiverse's own `/api/v1/tts/synthesize`
   route. Lumiverse keeps every speech key.
