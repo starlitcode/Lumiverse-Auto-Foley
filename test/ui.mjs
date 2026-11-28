@@ -301,6 +301,8 @@ window.__fetch = async (url, init) => {
   // window.__quota429: that many lines come back with Google's rate limit
   // answer, as Lumiverse passes it on.
   if (u.includes('/tts/synthesize') && window.__quota429) { window.__quota429--; window.__limitAt = (window.__limitAt || []).concat(Date.now()); return new Response(JSON.stringify({ error: 'Google AI Studio TTS tts synthesize failed (429): You exceeded your current quota, please check your plan and billing details. Please retry in 1.5s.' }), { status: 429, headers: { 'Content-Type': 'application/json' } }); }
+  // window.__quotaDay: every line comes back with Google's daily limit.
+  if (u.includes('/tts/synthesize') && window.__quotaDay) { window.__dayAsks = (window.__dayAsks || 0) + 1; return new Response(JSON.stringify({ error: 'Google AI Studio TTS tts synthesize failed (429): You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/usage?tab=rate-limit. \\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_requests_per_model_per_day, limit: 100, model: gemini-3.8-flash-tts\\nPlease retry in 41.5s.' }), { status: 429, headers: { 'Content-Type': 'application/json' } }); }
   if (u.includes('/tts/synthesize') && window.__emptyOnce) { window.__emptyOnce--; window.__emptyAt = (window.__emptyAt || []).concat(Date.now()); return new Response(JSON.stringify({ error: 'Google AI Studio tts synthesize failed: No audio payload in Gemini TTS response' }), { status: 502, headers: { 'Content-Type': 'application/json' } }); }
   if (u.includes('/tts/synthesize') && window.__synthMs) await new Promise((r) => setTimeout(r, window.__synthMs));
   if (u.includes('/tts/synthesize') && window.__bigClip) { window.__synth = (window.__synth || []).concat(JSON.parse(init.body)); const b = new Uint8Array(window.__bigClip); for (let k = 0; k < b.length; k++) b[k] = k % 251; return new Response(new Blob([b], { type: 'audio/wav' }), { status: 200 }); }
@@ -3690,6 +3692,24 @@ if (section("rate limit")) {
   check(got.ok.length && got.limits.length && got.ok[0] - got.limits[0] >= 1400, "after the first limit answer, no line asks again until the named wait is over (" + (got.ok[0] - got.limits[0]) + " ms)");
   check(!errors.length, "no page errors. " + errors.slice(0, 2).join(" | "));
   await context.close();
+
+  console.log("A limit per day is said at once, with the limit and when it resets, and is not waited out");
+  const day = await open(THEMES[0], SIZES[1], 1, () => {
+    window.__ttsList = [{ id: "t1", name: "Gemini here", provider: "google_tts", model: "gemini-3.8-flash-tts", is_default: true, has_api_key: true }];
+    window.__settings.ttsConnection = "t1";
+  });
+  await day.page.evaluate(() => { window.__clipMs = 200; window.__quotaDay = true; });
+  await toTab(day.page, "stage");
+  await day.page.waitForTimeout(150);
+  await pressMessage(day.page);
+  await day.page.waitForTimeout(4000);
+  const daySaid = await day.page.evaluate(() => Array.from(document.querySelectorAll(".af-log-line")).map((n) => n.textContent).join(" | "));
+  const asks = await day.page.evaluate(() => window.__dayAsks || 0);
+  check(/limit of 100 lines a day/.test(daySaid) && /midnight Pacific/.test(daySaid), "the Log names the daily limit and when it resets (" + daySaid.slice(-300) + ")");
+  check(!/Trying again/.test(daySaid) && !/out of credits/.test(daySaid), "a daily limit is not waited out, nor called being out of credits");
+  check(asks <= 3, "each line asks once (" + asks + " asks)");
+  check(!day.errors.length, "no page errors. " + day.errors.slice(0, 2).join(" | "));
+  await day.context.close();
 }
 
 if (section("still working")) {

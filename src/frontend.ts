@@ -1040,6 +1040,19 @@ async function hostTrouble(res: Response, what: string): Promise<string> {
 const OUT_OF_CREDITS = /\bcredits?\b|insufficient (?:balance|funds)|payment required|\b402\b|balance (?:is )?too low/i;
 const RATE_LIMITED = /\b429\b|rate.?limit|too many requests|quota|resource.?exhausted/i;
 
+// Google names the limit that was reached, such as "Quota exceeded for
+// metric: ...generate_requests_per_model_per_day, limit: 100". A limit per
+// day cannot be waited out, and one per minute can.
+function limitSpan(said: string): 'day' | 'minute' | '' {
+  if (/per_?day|perday|per day|daily/i.test(said)) return 'day';
+  if (/per_?minute|perminute|per minute/i.test(said)) return 'minute';
+  return '';
+}
+function limitCount(said: string): number {
+  const m = /\blimit:\s*(\d+)/i.exec(said);
+  return m ? Number(m[1]) : 0;
+}
+
 // The words for a failed call, and the same failure in the shape errorKind
 // reads, "failed (status): detail", to decide whether waiting can fix it.
 async function readTrouble(res: Response, what: string, who = 'the voice service'): Promise<{ why: string; raw: string }> {
@@ -1060,8 +1073,15 @@ async function readTrouble(res: Response, what: string, who = 'the voice service
   if (res.status === 404) return wrap(what + ' failed because Lumiverse could not find it.' + tail);
   if (/No API key/i.test(said)) return wrap(what + ' failed because your connection to ' + who + ' in Lumiverse has no key saved.' + tail);
   if (OUT_OF_CREDITS.test(said)) return wrap(what + ' failed because your account with ' + who + ' is out of credits.' + tail);
-  if (res.status === 429 || RATE_LIMITED.test(said))
-    return wrap(what + ' failed because ' + who + ' has a limit on how many lines your account can ask for in a minute or a day, and it was reached. This is not about the money in your account.' + tail);
+  if (res.status === 429 || RATE_LIMITED.test(said)) {
+    const span = limitSpan(said);
+    const n = limitCount(said);
+    const notMoney = ' This is not about the money in your account.';
+    if (span === 'day')
+      return wrap(what + ' failed because ' + who + ' reached its limit of ' + (n ? n + ' ' : '') + 'lines a day for your account.' + notMoney + (/gemini/i.test(who) ? ' It resets at midnight Pacific time.' : ' It resets tomorrow.') + tail);
+    if (span === 'minute') return wrap(what + ' failed because ' + who + ' reached its limit of ' + (n ? n + ' ' : '') + 'lines a minute for your account.' + notMoney + tail);
+    return wrap(what + ' failed because ' + who + ' has a limit on how many lines your account can ask for in a minute or a day, and it was reached.' + notMoney + tail);
+  }
   if (/401|invalid.*key|unauthori/i.test(said)) return wrap(what + ' failed because ' + who + ' refused the key saved on your connection.' + tail);
   if (/429|rate|busy|too many/i.test(said)) return wrap(what + ' failed because ' + who + ' is busy. Try again in a moment.' + tail);
   if (/ECONNREFUSED|fetch failed|Unable to connect|connect(ion)? refused|unreachable|timed? ?out/i.test(said))
@@ -3671,12 +3691,14 @@ export function setup(ctx: Ctx, overrides?: any) {
         why = netTrouble(e, what);
         raw = 'network error';
       }
-      // An account out of credits is said at once, since waiting cannot
-      // change it. A rate limit is waited out, as a busy service is.
+      // An account out of credits, or a limit per day, is said at once,
+      // since waiting cannot change it. Any other rate limit is waited out,
+      // as a busy service is.
       const limited = !OUT_OF_CREDITS.test(raw) && RATE_LIMITED.test(raw);
-      const kind = OUT_OF_CREDITS.test(raw) ? 'hard' : raw === 'empty' || limited ? 'wait' : errorKind(raw);
+      const span = limited ? limitSpan(raw) : '';
+      const kind = OUT_OF_CREDITS.test(raw) || span === 'day' ? 'hard' : raw === 'empty' || limited ? 'wait' : errorKind(raw);
       if (kind !== 'wait' || wait >= (Number(S.rateWaits) || 0)) {
-        if (limited && kind === 'wait')
+        if (limited && kind === 'wait' && !span)
           return { why: why + ' If it keeps happening, the limit may be for the day.' + (/gemini/i.test(who) ? ' Gemini\u2019s resets at midnight Pacific time.' : '') };
         return { why };
       }
@@ -3692,7 +3714,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       if (limited) rateUntil = Math.max(rateUntil, Date.now() + ms);
       if (onWait) onWait(ms, wait + 1);
       log(
-        who.charAt(0).toUpperCase() + who.slice(1) + (noAudio ? ' sent back no audio' : limited ? ' reached its limit on lines in a minute or a day' : ' is busy') + ' for line ' + (line.i + 1) + '. Trying again in ' + Math.max(1, Math.round(ms / 1000)) + ' s (wait ' + (wait + 1) + ' of ' + S.rateWaits + ').',
+        who.charAt(0).toUpperCase() + who.slice(1) + (noAudio ? ' sent back no audio' : limited ? (span === 'minute' ? ' reached its limit on lines in a minute' : ' reached its limit on lines in a minute or a day') : ' is busy') + ' for line ' + (line.i + 1) + '. Trying again in ' + Math.max(1, Math.round(ms / 1000)) + ' s (wait ' + (wait + 1) + ' of ' + S.rateWaits + ').',
       );
       const went = await pause(ms, signal);
       if (onWait) onWait(0, 0);
