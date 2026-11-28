@@ -6,6 +6,16 @@ Versions follow [Semantic Versioning](https://semver.org). A new major version m
 
 ---
 
+## 1.10.2
+
+_2026-11-27_
+
+### Changed
+
+- **The Debug info box has no highlight.** The box no longer lights up its border when you point at it with a mouse. The full-size editor that **Expand** opens it in no longer lights up its border when you point at it or type in it. This matches Auto Retry and Auto Refine.
+
+---
+
 ## 1.10.1
 
 _2026-11-27_

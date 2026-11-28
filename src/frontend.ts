@@ -13,7 +13,7 @@
 
 type Ctx = any;
 
-const VERSION = '1.10.1';
+const VERSION = '1.10.2';
 // The marks Lumiverse puts on another extension's part of the page. Nothing
 // inside one is read, written or pressed.
 const OTHER_UI = '[data-spindle-extension-root],[data-spindle-ext],[data-spindle-modal]';
@@ -1292,7 +1292,8 @@ const PANEL_CSS = `
   transition: border-color var(--af-fast), box-shadow var(--af-fast);
 }
 input.af-field:focus, textarea.af-field:focus { outline: none; border-color: var(--af-accent); box-shadow: 0 0 0 2px var(--af-accent-soft); }
-/* The Debug info box keeps its plain edge while typed in, as in Auto Retry. */
+/* The Debug info box keeps its plain edge while typed in or pointed at, as
+   in Auto Retry, and so does the full-size editor Expand opens it in. */
 textarea.af-field.af-debugarea:focus { border-color: var(--af-line); box-shadow: none; }
 select.af-field { cursor: pointer; }
 /* A pressed dropdown keeps its plain edge, as in Auto Retry and Auto Refine:
@@ -1316,7 +1317,8 @@ input.af-field[type=search]::-webkit-search-cancel-button {
 textarea.af-field { resize: vertical; min-height: 64px; }
 textarea.af-mono, .af-mono { font-family: var(--lumiverse-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace); font-size: 12px; }
 textarea.af-tall { min-height: 260px; }
-@media (hover: hover) { .af-field:hover:not(:focus):not(:disabled) { border-color: var(--af-accent-line); } }
+/* A Debug info box takes no mark on hover either, the same as on focus. */
+@media (hover: hover) { .af-field:hover:not(:focus):not(:disabled):not(.af-debugarea) { border-color: var(--af-accent-line); } }
 
 .af-seg { display: flex; border-radius: var(--af-r); overflow: hidden; border: 1px solid var(--af-line); }
 .af-segbtn {
@@ -10715,13 +10717,16 @@ export function setup(ctx: Ctx, overrides?: any) {
   // the box on the way in, since that raises the keyboard on a phone and
   // covers what was opened. Escape, a tap outside, or Cancel closes it.
   let closeBig: (() => void) | null = null;
-  function openBig(label: string, initial: string, done?: (v: string) => void, max?: number) {
+  // plain gives the editor the Debug info box's plain edge, with no mark when
+  // it is focused.
+  function openBig(label: string, initial: string, done?: (v: string) => void, max?: number, plain?: boolean) {
     if (closeBig) closeBig();
     const over = el('<div class="af-over"></div>');
     const box = el('<div class="af-bigbox af"></div>');
     box.appendChild(el('<h3 class="af-cardh"><span></span></h3>'));
     (box.querySelector('.af-cardh span') as HTMLElement).textContent = label;
     const ta = el('<textarea class="af-field af-mono af-bigta" spellcheck="false"></textarea>') as HTMLTextAreaElement;
+    if (plain) ta.classList.add('af-debugarea');
     ta.value = initial;
     ta.setAttribute('aria-label', label);
     if (!done) ta.readOnly = true;
@@ -10782,7 +10787,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         t.value = v;
         if (onChange) onChange(v);
         t.dispatchEvent(new Event('input', { bubbles: true }));
-      }, t.maxLength > 0 ? t.maxLength : undefined),
+      }, t.maxLength > 0 ? t.maxLength : undefined, t.classList.contains('af-debugarea')),
     );
     big.setAttribute('aria-label', 'Open ' + label + ' at full size');
     return big;

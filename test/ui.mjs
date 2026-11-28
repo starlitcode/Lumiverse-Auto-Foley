@@ -2996,6 +2996,80 @@ if (section("dropdown press")) {
   }
 }
 
+if (section("bug report edge")) {
+  console.log("The Debug info box keeps its plain edge when focused or pointed at, on the card and at full size");
+  // What is drawn along the edge, from four thin screenshots around the
+  // border, before and after it takes focus. Only the edge: focus moves the
+  // cursor and can scroll the text inside, which is not what this is about.
+  const drawn = async (page, sel) => {
+    const b = await page.locator(sel).first().boundingBox();
+    // The border line and the 4 pixels outside it. The padding inside is
+    // left out, since scrolled text shows in it.
+    const x = Math.max(0, b.x - 4), y = Math.max(0, b.y - 4), w = b.width + 8, h = b.height + 8;
+    const strips = [
+      { x, y, width: w, height: 5 },
+      { x, y: y + h - 5, width: w, height: 5 },
+      { x, y, width: 5, height: h },
+      { x: x + w - 5, y, width: 5, height: h },
+    ];
+    const shots = [];
+    for (const clip of strips) shots.push(await page.screenshot({ clip }));
+    return Buffer.concat(shots);
+  };
+  // Changes on focus, and on hover where there is a mouse: the edge with
+  // the mouse away and nothing focused, then pointed at, then focused.
+  const edgeOnFocus = async (page, sel, mouse) => {
+    await page.mouse.move(1, 1);
+    await page.evaluate((sel) => { document.querySelector(sel).blur(); }, sel);
+    await page.waitForTimeout(400);
+    const plain = await drawn(page, sel);
+    let hover = false;
+    if (mouse) {
+      const b = await page.locator(sel).first().boundingBox();
+      await page.mouse.move(b.x + b.width / 2, b.y + Math.min(40, b.height / 2));
+      await page.waitForTimeout(400);
+      hover = !plain.equals(await drawn(page, sel));
+      await page.mouse.move(1, 1);
+    }
+    await page.evaluate((sel) => { document.querySelector(sel).focus(); }, sel);
+    await page.waitForTimeout(400);
+    return hover || !plain.equals(await drawn(page, sel));
+  };
+  for (const size of SIZES) {
+    const { context, page, errors } = await open(THEMES[0], size);
+    // A box that does light up, so a screenshot that shows no change is
+    // known to be able to show one.
+    await toTab(page, "director");
+    await page.waitForTimeout(250);
+    await page.locator('.af-card:has(textarea.af-tall) .af-btn:has-text("Expand")').click();
+    await page.waitForTimeout(400);
+    check(await edgeOnFocus(page, ".af-bigbox textarea", false), size.name + ": the Director prompt at full size does light up when focused, so the screenshots can show it");
+    if (!size.touch) {
+      await page.evaluate(() => document.querySelector(".af-bigbox textarea").blur());
+      const b = await page.locator(".af-bigbox textarea").boundingBox();
+      await page.mouse.move(1, 1);
+      await page.waitForTimeout(400);
+      const away = await drawn(page, ".af-bigbox textarea");
+      await page.mouse.move(b.x + b.width / 2, b.y + 40);
+      await page.waitForTimeout(400);
+      check(!away.equals(await drawn(page, ".af-bigbox textarea")), size.name + ": and lights up when pointed at, so the screenshots can show that too");
+    }
+    await page.locator('.af-bigbox .af-btn:has-text("Cancel")').click();
+    await page.waitForTimeout(400);
+    await toTab(page, "settings");
+    await page.waitForTimeout(250);
+    await page.locator('.af-btn:has-text("Build preview")').click();
+    await page.waitForTimeout(200);
+    await page.locator('textarea[aria-label="Debug info"]').scrollIntoViewIfNeeded();
+    check(!(await edgeOnFocus(page, 'textarea.af-debugarea[aria-label="Debug info"]', !size.touch)), size.name + ": the Debug info box on the card looks the same when focused" + (size.touch ? "" : " or pointed at"));
+    await page.locator('.af-card:has(textarea.af-debugarea) .af-btn:has-text("Expand")').click();
+    await page.waitForTimeout(400);
+    check(!(await edgeOnFocus(page, ".af-bigbox textarea", !size.touch)), size.name + ": the Debug info box opened with Expand looks the same when focused" + (size.touch ? "" : " or pointed at"));
+    check(!errors.length, size.name + ": no page errors. " + errors.slice(0, 2).join(" | "));
+    await context.close();
+  }
+}
+
 if (section("still working")) {
   console.log("A slow Director is waited for while the backend says it is still working");
   for (const size of SIZES) {
