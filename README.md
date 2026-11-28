@@ -27,7 +27,12 @@ Auto Foley is a replacement for Lumiverse's own TTS, with more options. By using
 ## Install
 
 1. In Lumiverse, open **Settings**, then **Extensions**, then **Install**.
-2. Enter `https://github.com/starlitcode/Lumiverse-Auto-Foley`.
+2. Install from this address:
+
+   ```
+   https://github.com/starlitcode/Lumiverse-Auto-Foley
+   ```
+
 3. Turn on Auto Foley and grant its permissions.
 4. To see it, open the drawer and choose the **Foley** tab, with a headphones icon. **Play**, under **Now playing** on the Stage tab, performs the latest reply.
 
