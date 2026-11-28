@@ -11,7 +11,7 @@
 // One backend process can serve every account on a server, so everything that
 // belongs to a person is kept per user id, in spindle.userStorage, and every
 // reply goes back addressed to that user.
-const VERSION = '1.10.2';
+const VERSION = '1.11.0';
 const DEFAULT_SETTINGS = {
     enabled: true,
     ttsConnection: '',

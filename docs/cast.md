@@ -38,16 +38,39 @@ Someone the AI added has no voice picked. The first time they speak, Auto Foley 
 - **Or type a voice name or ID.** For a voice the list does not show, such as one you made or cloned, a Gemini voice name, or a voice file on a Chatterbox server. A name or ID that matches a voice in the list picks that voice. Anything else is sent as you typed it. It is saved when you leave the box.
 - **Model.** Empty uses the connection's model. The line under it names the engine and what it can do. See [Voice engines](engines.md).
 - **Stability.** ElevenLabs only. Lower is more expressive. On Eleven v3 it has three settings: Creative, Natural and Robust.
-- **Similarity.** Eleven v4 only. Auto Foley does not send it to Eleven v3.
-- **Speed.** Fish Audio, Chatterbox, OmniVoice and Cartesia. ElevenLabs' docs say Eleven v4 takes no speed, and Auto Foley sends none to Eleven v3. Gemini has none either.
-- **More settings.** A fold under the voice, with only the settings their engine takes. **Back to defaults** clears them.
-- **Language**, in **More settings**, on ElevenLabs and Gemini. Empty, the voice service tells the language of each line from its words. A code, such as `en-US` on Gemini or `en` on ElevenLabs, reads every line in that language.
+- **Similarity.** Eleven v4 only. ElevenLabs' guide says Eleven v3 does not use it.
+- **Speed.** Fish Audio, Chatterbox, OmniVoice and Cartesia. ElevenLabs' guide says Eleven v3 and Eleven v4 do not use speed. Gemini has none either.
+- **More settings.** A fold under the voice, with only the settings their engine takes. **Back to defaults** clears them. A setting left as it is uses the voice service's own default, not the one saved on the connection in Lumiverse. See [Settings saved on the connection](engines.md#settings-saved-on-the-connection).
+- **Language**, in **More settings**, on ElevenLabs, Gemini and Cartesia. Empty, the voice service tells the language of each line from its words. A code, such as `en-US` on Gemini or `en` on ElevenLabs, reads every line in that language.
   - Leave it empty for someone who speaks more than one language. For example, a person who flirts in French and talks in English then has the French lines read as French. With `en-US`, those lines may sound English.
 - **Acting notes.** A note for the Director, such as "soft-spoken and dry, rarely raises their voice". It holds up to 1000 characters. See [How much a box holds](#how-much-a-box-holds), and [Writing for each voice engine](writing.md) for what helps on each engine.
 - **Do not voice.** Their lines are skipped.
 - **Hear a sample** speaks a test line with these settings. It costs a few credits.
 - **Remove** takes them out of the cast. The narrator cannot be removed, since it reads everything outside quotes. If it were taken out, it would be added back at once. To skip narration, set **Narration** in the Settings tab to **Skip**.
 - The narrator has no **Voice type**. A voice type is only used to pick a voice for someone new, and the narrator uses the connection's voice until you pick one.
+
+### Fish Audio settings
+
+On Fish Audio, **More settings** has every setting Lumiverse shows for Fish Audio. Each starts at Fish Audio's own default:
+
+| Setting | Default | What it does |
+| --- | --- | --- |
+| Fish Audio direction | Empty | How they always sound, sent with every line of theirs. |
+| Temperature | 0.70 | How much each take varies. Lower is steadier. |
+| Top P | 0.70 | How wide the choice of sounds is. |
+| Repetition penalty | 1.20 | Above 1 stops the voice repeating the same sound. |
+| Volume (dB) | 0 | Louder above 0, quieter below. Auto Foley holds it from -20 to 20. |
+| Steady loudness | On | Keeps lines at the same loudness. S2 models only. |
+| Read numbers as words | On | Reads 42 as forty-two, and dates and units the same way. |
+| Quality guard | Off | Asks Fish Audio to catch a bad take. Some models do not have it. |
+| Keep the voice the same across parts | On | A long line is made in parts, and each part hears the one before it. |
+| Part length | 300 | How many characters Fish Audio makes at a time, from 100 to 300. |
+| Shortest part | 50 | The fewest characters before a new part starts, from 0 to 100. |
+| Most audio per part (tokens) | 1024 | A low number can cut a line short. Auto Foley holds it from 1 to 4096. |
+| Early stop | 1 | Fish Audio's early stop setting for work done in batches, from 0 to 1. |
+| Dictionary ID and version | Empty | A pronunciation dictionary you published on Fish Audio. Both are needed. |
+
+On Cartesia, **More settings** has **Volume**, from 0.5 to 2 and 1 by default, and **Language**.
 
 ## Pictures for moods
 

@@ -3821,6 +3821,64 @@ if (section("fish saved")) {
   await context.close();
 }
 
+if (section("connection settings")) {
+  console.log("Every voice setting is the person's own or the service's default, never the one saved on the connection");
+  // Fish Audio: every setting Lumiverse would take from the connection.
+  const fishSaved = { temperature: 0.3, top_p: 0.2, repetition_penalty: 1.6, volume: 4, normalize: false, quality_guard: true, condition_on_previous_chunks: false, chunk_length: 120, min_chunk_length: 10, max_new_tokens: 200, early_stop_threshold: 0.5, normalize_loudness: false, sample_rate: 24000, mp3_bitrate: "64", speed: 1.4, pronunciation_dictionary_id: "d1", pronunciation_dictionary_version: "v1" };
+  const cases = [
+    { name: "Fish Audio", conn: { provider: "fish_audio", model: "s2.1-pro", default_parameters: fishSaved }, own: { repetition: 1.4 }, want: (p) => p.repetition_penalty === 1.4 && Object.keys(fishSaved).filter((k) => k !== "repetition_penalty").every((k) => p[k] === "" || (k === "speed" && p[k] === 1)) },
+    { name: "ElevenLabs", conn: { provider: "elevenlabs", model: "eleven_v3", default_parameters: { similarity_boost: 0.2, speed: 1.2, use_speaker_boost: false, style: 0.8, output_format: "mp3_22050_32" } }, own: {}, want: (p) => p.similarity_boost === 0.75 && p.speed === 1 && p.use_speaker_boost === true && p.style === 0 && p.output_format === "mp3_44100_128" },
+    { name: "Cartesia", conn: { provider: "cartesia", model: "sonic-3.6", default_parameters: { volume: 1.8, language: "de", speed: 1.3 } }, own: { lang: "fr" }, want: (p) => p.volume === 1 && p.language === "fr" && p.speed === 1 },
+  ];
+  for (const c of cases) {
+    // open() runs its setup with no argument, so this case goes in as text.
+    const pre = "(" + ((c2) => {
+      window.__ttsList = [Object.assign({ id: "t1", name: "Here", is_default: true, has_api_key: true }, c2.conn)];
+      window.__settings.ttsConnection = "t1";
+      window.__settings.cast = window.__settings.cast.map((m) => (m.id === "a" ? Object.assign({}, m, { params: c2.own }) : m));
+    }).toString() + ")(" + JSON.stringify({ conn: c.conn, own: c.own }) + ")";
+    const { context, page, errors } = await open(THEMES[0], SIZES[1], 1, pre);
+    await page.evaluate(() => { window.__clipMs = 200; window.__synth = []; });
+    await toTab(page, "stage");
+    await page.waitForTimeout(150);
+    await pressMessage(page);
+    await page.waitForTimeout(2500);
+    const sent = await page.evaluate(() => (window.__synth || []).map((b) => ({ text: b.text, parameters: b.parameters || {} })));
+    const hers = sent.find((b) => /You are late/.test(b.text || ""));
+    check(!!hers && c.want(hers.parameters), c.name + ": nothing saved on the connection is used, and the person's own setting is sent (" + JSON.stringify(hers && hers.parameters) + ")");
+    check(!errors.length, c.name + ": no page errors. " + errors.slice(0, 2).join(" | "));
+    await context.close();
+  }
+  // The rows, on a phone and on a laptop.
+  for (const size of SIZES) {
+    const where = size.name;
+    const { context, page, errors } = await open(THEMES[0], size, 1, () => {
+      window.__ttsList = [{ id: "t1", name: "Fish here", provider: "fish_audio", model: "s2.1-pro", is_default: true, has_api_key: true }];
+      window.__settings.ttsConnection = "t1";
+    });
+    await toTab(page, "cast");
+    await page.waitForTimeout(300);
+    await page.locator('.af-person[data-person="a"] .af-person-head').click();
+    await page.waitForTimeout(600);
+    await page.locator('.af-person[data-person="a"] [data-af-more] .af-fold').first().click();
+    await page.waitForTimeout(500);
+    const labels = await page.evaluate(() => Array.from(document.querySelectorAll('.af-person[data-person="a"] [data-af-more] .af-lab')).map((x) => x.textContent.trim()));
+    const want = ["Repetition penalty", "Volume (dB)", "Read numbers as words", "Quality guard", "Keep the voice the same across parts", "Part length", "Shortest part", "Most audio per part (tokens)", "Early stop", "Dictionary ID", "Dictionary version"];
+    check(want.every((x) => labels.some((l) => l.indexOf(x) === 0)), where + ": More settings has every Fish Audio setting (" + labels.join(", ") + ")");
+    // A number is held to its range when the box is left.
+    const box = page.locator('.af-person[data-person="a"] [data-af-more] .af-col', { hasText: "Part length" }).locator("input").first();
+    await box.fill("999");
+    await box.blur();
+    await page.waitForTimeout(400);
+    const held = await page.evaluate(() => (window.__settings.cast.find((m) => m.id === "a").params || {}).chunk);
+    check(held === 300 && (await box.inputValue()) === "300", where + ": Part length is held to 300 (" + held + ")");
+    const m = await page.evaluate(MEASURE, !!size.touch);
+    check(!m.overflow.length && !m.small.length, where + ": the rows fit, with tap targets big enough. " + m.overflow.concat(m.small).slice(0, 3).join("; "));
+    check(!errors.length, where + ": no page errors. " + errors.slice(0, 2).join(" | "));
+    await context.close();
+  }
+}
+
 if (section("colors")) {
   console.log("Colors for the player and the lit word, picked in their own editor");
   // The color drawn at the middle of an element, read from a screenshot.

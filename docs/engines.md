@@ -54,28 +54,31 @@ Each line goes to Lumiverse's own TTS route, with:
 
 - Auto Foley replaces Lumiverse's TTS where the two overlap. It uses your TTS connections in Lumiverse, with its own player and its own settings.
 - It asks each voice service for its best quality, as the service's own docs describe it, and not a choice Lumiverse made on its own.
-- Where a setting saved on the connection, or a default of Lumiverse's own, would change how Auto Foley's lines are acted, Auto Foley sends its own value instead. Each one is listed below.
-- Most engines send WAV, which is not compressed, so the audio is exactly as the voice made it. ElevenLabs's best formats need a paid plan, so its format comes from the connection.
+- Auto Foley does not use the voice settings saved on a TTS connection in Lumiverse. It sends each person's own settings from the Cast tab, or the voice service's own defaults.
+- Most engines send WAV, which is not compressed, so the audio is exactly as the voice made it. ElevenLabs' best formats need a paid plan, so it sends MP3 at ElevenLabs' own default.
 - A few limits are in Lumiverse itself. Auto Foley cannot change them. They are listed below.
 - A proxy may drop some settings. See [Proxies](#proxies).
 
 ### Settings saved on the connection
 
-Lumiverse adds what is saved on the connection, and some defaults of its own, to each line. Where that would sit on top of Auto Foley's own tags and settings, Auto Foley sends its own value, or an empty one, so Lumiverse's is not used:
+Lumiverse adds what is saved on the connection to each line, unless the line sends its own value. So Auto Foley sends every setting with each line:
 
-| Engine | What Lumiverse would add | What Auto Foley sends |
-| --- | --- | --- |
-| Gemini 3.8 | A style saved on the connection, or Lumiverse's own "casual, relaxed conversation" style | The line's style, or an empty one |
-| Gemini | A language saved on the connection | The person's language, or an empty one, so each line's language is found |
-| Fish Audio | A direction saved on the connection, at the start of every line | The person's **Fish Audio direction**, or an empty one |
-| Fish Audio | A lower latency, or a compressed format such as MP3, saved on the connection | Latency `normal`, as WAV |
-| Cartesia | A compressed format such as MP3 saved on the connection | WAV |
-| ElevenLabs | A style saved on the connection, which makes the voice more extreme | Style 0, as ElevenLabs advises |
-| ElevenLabs | A language saved on the connection | The person's language, or an empty one, so each line's language is found |
-| Cartesia | A feeling saved on the connection, on every line | The line's feeling, or an empty one |
-| Chatterbox server | A format saved on the connection | WAV |
+- A setting the person has under **More settings**, in the Cast tab, is sent as they set it.
+- Any other setting is sent as the voice service's own default. Where Lumiverse leaves an empty setting out, Auto Foley sends it empty, and the service uses its own default.
 
-Other settings saved on the connection, such as a temperature or a volume, are still used when the person has none of their own in the Cast tab.
+From the connection, Auto Foley takes only its address and key, which Lumiverse keeps, and its model and voice when a person has none picked.
+
+What Auto Foley sends in place of the connection's settings:
+
+| Engine | What Auto Foley sends |
+| --- | --- |
+| Gemini 3.8 | The line's style, or an empty one. Lumiverse would otherwise add its own "casual, relaxed conversation" style. |
+| Gemini | The person's language and temperature, or empty ones, so each line's language is found. |
+| Fish Audio | The person's own settings, or empty ones. Latency `normal`, as WAV at 44.1 kHz. |
+| ElevenLabs | Stability from the Cast tab, and on Eleven v4 similarity too. Style 0, as ElevenLabs advises. The person's language, or an empty one. The rest at ElevenLabs' own defaults. |
+| Cartesia | The line's feeling, or an empty one. The person's speed, volume and language, or the defaults. WAV. |
+| Chatterbox server, OmniVoice | The person's speed, or 1. A Chatterbox server is asked for WAV. |
+| Through OpenRouter | The voice and the text, with speed 1. |
 
 ### The format each engine sends
 
@@ -87,7 +90,7 @@ Auto Foley asks for audio as the voice made it, with no compression, wherever th
 | Fish Audio | WAV, 44.1 kHz |
 | Cartesia | WAV, at the 22.05 kHz Lumiverse asks for |
 | Chatterbox, OmniVoice | WAV, 24 kHz |
-| ElevenLabs | The format saved on the connection, MP3 by default. Its uncompressed formats at full quality need a paid plan, so Auto Foley does not ask for them. |
+| ElevenLabs | MP3, 44.1 kHz, 128 kbps, ElevenLabs' own default. Its uncompressed formats at full quality need a paid plan, so Auto Foley does not ask for them. |
 | Through OpenRouter | Gemini as WAV. ElevenLabs and Fish Audio as MP3. |
 
 WAV files are larger. A line of up to 16 MB is kept, about 3 minutes of Fish Audio's WAV. Lumiverse takes a message of up to 4 MB from the panel, so a longer line is sent to the backend in parts and put back together there.
@@ -145,6 +148,7 @@ A person can speak through a connection of their own. Open them in the **Cast** 
 - Eleven v3 has three stability settings: Creative, Natural and Robust.
 - A big moment loosens the voice so it can swing further.
 - Style is sent as 0, as ElevenLabs advises, so a style saved on the connection does not make the voice more extreme on top of its tags.
+- ElevenLabs' guide says Eleven v3 does not use similarity, speed or speaker boost, and Eleven v4 does not use style or speed. Lumiverse sends them all, so Auto Foley sends ElevenLabs' defaults for the ones a model does not use.
 
 ### Fish Audio
 
@@ -158,6 +162,7 @@ A person can speak through a connection of their own. Open them in the **Cast** 
 - Fish Audio's docs say latency `normal` gives the best quality, and `balanced` is used when none is sent. Lumiverse shows `normal` as the default, but sends a latency only when one is saved on the connection. So Auto Foley always asks for `normal`.
 - Auto Foley also asks for WAV, which Fish's docs call its highest quality. WAV is not compressed, so the audio is exactly as Fish made it.
 - A **Fish Audio direction** saved on the connection in Lumiverse is not used. Each person's own direction, in the Cast tab, is used instead.
+- Every Fish Audio setting Lumiverse shows is under **More settings** on each person, in the Cast tab. One left as it is uses Fish Audio's own default, the same number the box shows. See [The Cast tab](cast.md#fish-audio-settings).
 
 #### Drama 3
 
@@ -239,6 +244,7 @@ Cartesia is a voice service with its own key. In Lumiverse, add a TTS connection
 - Cartesia's docs say six feelings work the best: `neutral`, `calm`, `angry`, `content`, `sad` and `scared`. Feelings work best with the voices Cartesia marks **Emotive**, and in English. They are in beta at Cartesia.
 - Cartesia's docs say a feeling works only when it fits the words. The Director is told to pick only a feeling the line already carries.
 - Speed goes from 0.6 to 1.5.
+- Volume and language are under **More settings** on each person, in the Cast tab.
 - A feeling saved on the connection in Lumiverse is not used. A line with no feeling of its own is sent with none.
 - Models older than Sonic 3 take no tags, so Auto Foley does not use them.
 

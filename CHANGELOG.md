@@ -6,6 +6,22 @@ Versions follow [Semantic Versioning](https://semver.org). A new major version m
 
 ---
 
+## 1.11.0
+
+_2026-11-28_
+
+### Added
+
+- **Every Fish Audio setting on each person.** **More settings** in the Cast tab now has Repetition penalty, Volume, Read numbers as words, Quality guard, Keep the voice the same across parts, Part length, Shortest part, Most audio per part, Early stop, and a pronunciation dictionary. Each starts at Fish Audio's own default. See [Fish Audio settings](docs/cast.md#fish-audio-settings).
+- **Volume and Language for Cartesia on each person**, in **More settings** in the Cast tab.
+
+### Changed
+
+- **Voice settings saved on a connection in Lumiverse are no longer used.** Auto Foley replaces Lumiverse's TTS, so it now sends every voice setting with each line: the person's own from the Cast tab, or the voice service's own default. Before, a setting such as a Fish Audio repetition penalty or a Cartesia volume came from the connection when the person had none. To change one, set it on the person in the Cast tab. See [Settings saved on the connection](docs/engines.md#settings-saved-on-the-connection).
+- **ElevenLabs is asked for its own default format.** Each line asks for MP3 at 44.1 kHz and 128 kbps, ElevenLabs' default, the best MP3 every plan can ask for. Before, a format saved on the connection was used.
+
+---
+
 ## 1.10.2
 
 _2026-11-28_

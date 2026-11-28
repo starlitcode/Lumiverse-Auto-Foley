@@ -13,7 +13,7 @@
 
 type Ctx = any;
 
-const VERSION = '1.10.2';
+const VERSION = '1.11.0';
 // The marks Lumiverse puts on another extension's part of the page. Nothing
 // inside one is read, written or pressed.
 const OTHER_UI = '[data-spindle-extension-root],[data-spindle-ext],[data-spindle-modal]';
@@ -763,6 +763,23 @@ function geminiStyle(base: string, line: string): string {
 // Eleven v3 has three stability settings, not a range: Creative, Natural and
 // Robust, at 0, 0.5 and 1. Any other value is moved to the nearest one.
 const V3_STEPS = [0, 0.5, 1];
+// A Fish Audio setting of the person's own, by its key in the person's
+// settings, and the name Lumiverse takes it by. Fish Audio's own defaults are
+// in docs/engines.md, under Fish Audio.
+const FISH_OWN: Array<[string, string]> = [
+  ['temperature', 'temperature'],
+  ['top_p', 'top_p'],
+  ['repetition', 'repetition_penalty'],
+  ['volume', 'volume'],
+  ['readNumbers', 'normalize'],
+  ['qualityGuard', 'quality_guard'],
+  ['context', 'condition_on_previous_chunks'],
+  ['chunk', 'chunk_length'],
+  ['minChunk', 'min_chunk_length'],
+  ['maxTokens', 'max_new_tokens'],
+  ['earlyStop', 'early_stop_threshold'],
+];
+
 function stabilityFor(model: string, base: number, big: boolean): number {
   const b = Math.min(1, Math.max(0, Number(base) || 0));
   if (/^eleven_v3/.test(model)) {
@@ -3218,22 +3235,29 @@ export function setup(ctx: Ctx, overrides?: any) {
       auto.push(k);
     };
     if (eng.eleven && provider === 'elevenlabs') {
-      // Eleven v3 takes Stability only, and Eleven v4 Stability and
-      // Similarity. Neither takes Speed, Style or Speaker boost, so those
-      // are not sent. Lumiverse's OpenRouter connection sends only the text,
-      // the voice and the speed, so none of these reach it there.
-      if (m) {
-        params.stability = stabilityFor(model, m.stability, line.big);
-        if (/^eleven_v4/.test(model)) params.similarity_boost = m.similarity;
-      }
+      // ElevenLabs' guide says Eleven v3 takes Stability, and Eleven v4
+      // Stability and Similarity. Lumiverse sends every voice setting, with
+      // the one saved on the connection or its own default, so the rest go
+      // at ElevenLabs' own defaults. Lumiverse's OpenRouter connection sends
+      // only the text, the voice and the speed, so none of these reach it
+      // there.
+      if (m) params.stability = stabilityFor(model, m.stability, line.big);
+      if (m && /^eleven_v4/.test(model)) params.similarity_boost = m.similarity;
+      else over('similarity_boost', 0.75);
+      over('speed', 1);
+      over('use_speaker_boost', true);
       // Style exaggerates the voice on top of its tags. ElevenLabs says to
-      // keep it at 0, and Lumiverse sends the one saved on the connection.
+      // keep it at 0.
       over('style', 0);
       // A language saved on the connection would read every line in it.
       if (has('lang')) params.language_code = own.lang;
       else over('language_code', '');
-    } else if (!eng.eleven && speed !== 1 && provider !== 'google_tts' && provider !== 'google_vertex_tts' && provider !== 'openrouter_tts') {
-      params.speed = eng.speed ? Math.min(eng.speed[1], Math.max(eng.speed[0], speed)) : speed;
+      // ElevenLabs' own default, the best MP3 every plan can ask for.
+      over('output_format', 'mp3_44100_128');
+    } else if (provider !== 'google_tts' && provider !== 'google_vertex_tts' && provider !== 'chatterbox_direct') {
+      // A speed saved on the connection would be used on every line.
+      if (speed !== 1 && provider !== 'openrouter_tts') params.speed = eng.speed ? Math.min(eng.speed[1], Math.max(eng.speed[0], speed)) : speed;
+      else over('speed', 1);
     }
     // Cartesia: the first emotion the line names is sent for the whole line.
     // Its text keeps only [laughter].
@@ -3249,6 +3273,15 @@ export function setup(ctx: Ctx, overrides?: any) {
       // An emotion saved on the connection would be read on every line.
       if (!params.emotion) over('emotion', '');
     }
+    if (provider === 'cartesia') {
+      // Lumiverse sends any volume other than 1, so 1 is sent when the
+      // person has none. An empty language is left out, and Cartesia uses
+      // its own default.
+      if (has('volume')) params.volume = own.volume;
+      else over('volume', 1);
+      if (has('lang')) params.language = own.lang;
+      else over('language', '');
+    }
     // Fish Audio names Drama 3 drama-3, and reads a name it does not know as
     // S2.1 without saying so. Lumiverse lists Drama 3 as drama-3-preview, so
     // the line asks for drama-3. Lumiverse adds Fish Audio direction only for
@@ -3256,9 +3289,26 @@ export function setup(ctx: Ctx, overrides?: any) {
     // start of the text here, in the same form Lumiverse uses.
     const fishDrama = provider === 'fish_audio' && /^drama-3(-preview)?$/i.test(model.trim());
     if (provider === 'fish_audio') {
-      if (has('temperature')) params.temperature = own.temperature;
-      if (has('top_p')) params.top_p = own.top_p;
+      // Every Fish Audio setting is the person's own, or empty. Lumiverse
+      // reads an empty one as not set and leaves it out, so Fish Audio uses
+      // its own default.
+      for (const [k, as] of FISH_OWN) {
+        if (has(k)) params[as] = own[k];
+        else over(as, '');
+      }
       if (typeof own.normalize === 'boolean') params.normalize_loudness = own.normalize;
+      else over('normalize_loudness', '');
+      // Lumiverse refuses a dictionary with only one of the two.
+      if (has('dictId') && has('dictVersion')) {
+        params.pronunciation_dictionary_id = own.dictId;
+        params.pronunciation_dictionary_version = own.dictVersion;
+      } else {
+        over('pronunciation_dictionary_id', '');
+        over('pronunciation_dictionary_version', '');
+      }
+      // The format is sent as WAV below. A sample rate or bitrate saved on
+      // the connection is left out, so Fish Audio uses 44.1 kHz.
+      for (const k of ['format', 'sample_rate', 'mp3_bitrate', 'opus_bitrate']) over(k, '');
       // A direction saved on the connection would be put at the start of
       // every line, so only the person's own is used.
       if (has('direction') && !fishDrama) params.voice_direction = own.direction;
@@ -3272,7 +3322,9 @@ export function setup(ctx: Ctx, overrides?: any) {
     // from the parameters.
     if (provider === 'cartesia') over('output_format', 'wav');
     if (provider === 'google_tts' || provider === 'google_vertex_tts') {
+      // Lumiverse sends a temperature only when it is a number.
       if (has('temperature')) params.temperature = own.temperature;
+      else over('temperature', '');
       // A language saved on the connection would read every line in it.
       if (has('lang')) params.language_code = own.lang;
       else over('language_code', '');
@@ -14612,7 +14664,22 @@ export function setup(ctx: Ctx, overrides?: any) {
       out.push(words('direction', 'Fish Audio direction', 'slow and a little tired', 'Optional. Sent to Fish Audio with every line of theirs, such as slow and a little tired. A custom voice may not need it.', 300));
       out.push(num('temperature', 'Temperature', 0, 1, 0.05, 0.7, 'How much each take varies. 0.70 by default. Lower is steadier.'));
       out.push(num('top_p', 'Top P', 0, 1, 0.05, 0.7, 'How wide the choice of sounds is. 0.70 by default.'));
+      out.push(num('repetition', 'Repetition penalty', 1, 2, 0.05, 1.2, 'Above 1 stops the voice repeating the same sound. 1.20 by default.'));
+      out.push(num('volume', 'Volume (dB)', -20, 20, 0.5, 0, 'Louder above 0, quieter below. 0 by default, no change.'));
       out.push(personSwitch('Steady loudness', 'On by default. Keeps lines at the same loudness.', own.normalize !== false, (v) => setP('normalize', v ? undefined : false)));
+      out.push(personSwitch('Read numbers as words', 'On by default. Reads 42 as forty-two, and dates and units the same way.', own.readNumbers !== false, (v) => setP('readNumbers', v ? undefined : false)));
+      out.push(personSwitch('Quality guard', 'Off by default. Asks Fish Audio to catch a bad take. Some models do not have it.', own.qualityGuard === true, (v) => setP('qualityGuard', v ? true : undefined)));
+      out.push(personSwitch('Keep the voice the same across parts', 'On by default. A long line is made in parts, and each part hears the one before it.', own.context !== false, (v) => setP('context', v ? undefined : false)));
+      out.push(wholeBox('chunk', 'Part length', 100, 300, 300, 'How many characters Fish Audio makes at a time, from 100 to 300. 300 by default.'));
+      out.push(wholeBox('minChunk', 'Shortest part', 0, 100, 50, 'The fewest characters before a new part starts. 50 by default.'));
+      out.push(wholeBox('maxTokens', 'Most audio per part (tokens)', 1, 4096, 1024, '1024 by default. A low number can cut a line short.'));
+      out.push(num('earlyStop', 'Early stop', 0, 1, 0.05, 1, 'Fish Audio\u2019s early stop setting for work done in batches. 1 by default.'));
+      out.push(words('dictId', 'Dictionary ID', '', 'Optional. A pronunciation dictionary you published on Fish Audio. Needs the version too.', 128));
+      out.push(words('dictVersion', 'Dictionary version', '', 'The version ID of that dictionary.', 128));
+    }
+    if (prov === 'cartesia') {
+      out.push(num('volume', 'Volume', 0.5, 2, 0.05, 1, 'From 0.5 to 2. 1 by default, no change.'));
+      out.push(words('lang', 'Language', 'en, fr, ja', 'Empty uses Cartesia\u2019s own default. A code, such as en, reads every line in that language.'));
     }
     if (prov === 'openrouter_tts' && eng.id === 'fish')
       out.push(words('direction', 'Fish Audio direction', 'slow and a little tired', 'Optional. Written at the start of every line of theirs, since OpenRouter does not pass it on to Fish Audio. A custom voice may not need it.', 300));
