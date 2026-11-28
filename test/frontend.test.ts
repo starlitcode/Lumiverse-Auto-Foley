@@ -630,3 +630,26 @@ describe("built-in animation ids", () => {
     expect(back.slice().sort()).toEqual(BUILT_IN_ANIMS.map((a: any) => a.id).sort());
   });
 });
+
+// A connection that goes to another host than its service's own is named
+// as a proxy, since a proxy can drop settings on the way.
+describe("proxyNote", () => {
+  const { proxyNote } = __testing as any;
+  test("a direct connection, or one with no address, has none", () => {
+    expect(proxyNote({ provider: "fish_audio", api_url: "" })).toBe("");
+    expect(proxyNote({ provider: "fish_audio", api_url: "https://api.fish.audio/v1" })).toBe("");
+    expect(proxyNote({ provider: "elevenlabs", api_url: "https://api.eu.residency.elevenlabs.io" })).toBe("");
+    expect(proxyNote({ provider: "google_tts", api_url: "https://generativelanguage.googleapis.com/v1beta" })).toBe("");
+  });
+  test("another host is named as a proxy", () => {
+    expect(proxyNote({ provider: "fish_audio", api_url: "https://relay.example.net/fish" })).toBe(
+      "This connection goes through relay.example.net, not straight to Fish Audio. A proxy may drop some settings, so if a voice sounds off, compare it on a direct connection.",
+    );
+    expect(proxyNote({ provider: "elevenlabs", api_url: "https://notelevenlabs.io.example.com" })).toContain("goes through notelevenlabs.io.example.com");
+  });
+  test("a server of the reader's own is not a proxy", () => {
+    expect(proxyNote({ provider: "openai_tts", api_url: "http://192.0.2.10:8004/v1" })).toBe("");
+    expect(proxyNote({ provider: "openvox_tts", api_url: "http://localhost:7860" })).toBe("");
+  });
+});
+

@@ -42,8 +42,14 @@ Each line goes to Lumiverse's own TTS route, with:
 - For ElevenLabs: stability from the Cast tab, and on Eleven v4 similarity too.
 - For Gemini 3.8: the line's note, as the speech style.
 - For Fish Audio, Chatterbox, OmniVoice and Cartesia: the speed, when it is not 1.
+- For Fish Audio: latency `normal` and 192 kbps MP3, unless the connection has its own saved. See [Fish Audio](#fish-audio).
+- For Gemini 3.8, on a line with no note: an empty style, unless the connection has one saved. See [Gemini](#gemini).
 
-A line with no note uses the speech style saved on the connection in Lumiverse.
+Anything saved on the connection in Lumiverse is still used, unless Auto Foley sends the same setting.
+
+### Audio you already kept
+
+The latency, the bitrate and the empty style are left out when Auto Foley checks whether a line was kept before. So a line kept before Auto Foley sent them still plays from what was kept, and is not paid for again.
 
 ## An example
 
@@ -92,6 +98,9 @@ A person can speak through a connection of their own. Open them in the **Cast** 
 - A sentence with its own tag starts a new way of speaking for the sentences after it.
 - Sounds and pauses, such as `[sighs]` or `[short pause]`, happen once and are never repeated.
 - S1 does not act, so Auto Foley does not use it. Fish Audio is retiring it.
+- Fish Audio's docs say latency `normal` gives the best quality, and `balanced` is used when none is sent. Lumiverse shows `normal` as the default, but sends a latency only when one is saved on the connection. So Auto Foley asks for `normal`.
+- Auto Foley also asks for 192 kbps MP3. Fish uses 128 kbps when none is sent. Lumiverse sends the bitrate only for MP3.
+- A latency or bitrate saved on the connection in Lumiverse is used instead.
 
 #### Drama 3
 
@@ -107,7 +116,8 @@ Gemini 3.8:
 - Gemini 3.8 knows only vocal sounds and pauses as tags, such as `<sigh>`, `<laugh>`, `<growl>` and `<short pause>`. Auto Foley writes them in Gemini's angle brackets. A tag in square brackets is not acted on, so it is never sent that way.
 - Gemini 3.8 reads its text word for word. A few words in `|pipes|` are said by a second voice in the background, and a word in `/slashes/` is read as a phonetic spelling. Auto Foley takes pipes, angle brackets and slash pairs out of the message first, so only its own tags are read that way.
 - How a line is said goes in its note, such as `hushed and nervous`.
-- With no note, the line uses the speech style saved on the connection in Lumiverse. With none saved there, Lumiverse uses its own: relaxed conversation.
+- With no note, the line uses the speech style saved on the connection in Lumiverse.
+- With none saved there, Auto Foley sends an empty style. Otherwise Lumiverse adds its own, "casual, relaxed conversation, natural pacing, understated expression", which would hold back a loud or tense line. Google's guide says most lines need no style at all.
 - Now and then Gemini answers with no audio. Auto Foley asks again after a moment.
 
 Gemini 2.5 and 3.1:
@@ -126,7 +136,7 @@ An **OpenRouter TTS** connection in Lumiverse can run ElevenLabs, Fish Audio and
 
 - OpenRouter's other voice models do not act, so Auto Foley does not use them.
 - Lumiverse sends OpenRouter only the text, the voice and the speed. So through OpenRouter, Stability, Similarity, Speed, Language and Fish Audio's own settings are not shown, since they cannot be sent. Big moments only let the audience cheer.
-- A person's **More settings** has only their usual way of speaking, for Gemini 3.8.
+- A person's **More settings** has their usual way of speaking, for Gemini 3.8, and **Fish Audio direction**, for Fish Audio. OpenRouter does not pass the direction on, so Auto Foley writes it at the start of each of their lines, as a tag.
 - Each model has its own voices on OpenRouter. ElevenLabs has 21, such as `george`, `sarah` and `river`. Gemini has its 30. Auto Foley picks from the model's own list.
 - Fish Audio on OpenRouter has no list of voices. Type a Fish Audio voice ID under **Or type a voice name or ID**, in the Cast tab. With none, the voice saved on the connection in Lumiverse is used.
 
@@ -143,6 +153,7 @@ Chatterbox runs on your own computer, through a server such as Chatterbox-TTS-Se
 - Chatterbox-Turbo knows nine tags: `[clear throat]`, `[sigh]`, `[shush]`, `[cough]`, `[groan]`, `[sniff]`, `[gasp]`, `[chuckle]` and `[laugh]`. It reads English only.
 - Chatterbox-Multilingual takes no tags, so Auto Foley does not use it. A connection with "multilingual" in its name is taken to run it.
 - OpenVox can run Chatterbox Turbo too. See [OmniVoice, through OpenVox](#omnivoice-through-openvox).
+- The server makes WAV by default. Lumiverse asks an OpenAI TTS connection for MP3, which the server then makes from the WAV. So Auto Foley asks for WAV, unless a format is saved on the connection in Lumiverse.
 
 ### OmniVoice, through OpenVox
 
@@ -190,6 +201,8 @@ Lumiverse sends back only the audio, with no price. Auto Foley counts what it se
 ## Proxies
 
 Auto Foley never calls a voice service itself. Lumiverse makes the call, to the address saved on the connection. So a proxy set up in Lumiverse works with Auto Foley.
+
+A proxy may drop or change some settings on the way, such as stability, the style or the latency. A voice can then sound different than on a direct connection. When a connection for ElevenLabs, Fish Audio, Gemini, OpenRouter or Cartesia has an address on another host, the Settings tab says so, under the engine. If a voice sounds wrong, play the same line through a direct connection to compare, before reporting a problem.
 
 - **TTS connections.** An ElevenLabs, Fish Audio, Gemini or OpenRouter connection can point at a proxy address in Lumiverse. Auto Foley reads only the connection's provider and model to find the engine, never its address.
 - **The Director and the Decision model.** They are asked through your Lumiverse connections, so a proxy on those works too.

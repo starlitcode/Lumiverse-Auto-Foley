@@ -235,6 +235,36 @@ const NO_TAGS = { id: 'none', label: 'A model with no tags', tags: 'none', list:
 // The providers Auto Foley lists. Chatterbox runs behind an OpenAI-style
 // connection.
 const USABLE_PROVIDERS = ['elevenlabs', 'fish_audio', 'google_tts', 'google_vertex_tts', 'openrouter_tts', 'openvox_tts', 'cartesia', 'openai_tts'];
+// Each hosted service's own domain, and its name in the panel. A connection
+// whose address is on another host goes through a proxy.
+const SERVICE_HOSTS = {
+    elevenlabs: { domain: 'elevenlabs.io', name: 'ElevenLabs' },
+    fish_audio: { domain: 'fish.audio', name: 'Fish Audio' },
+    google_tts: { domain: 'googleapis.com', name: 'Google' },
+    google_vertex_tts: { domain: 'googleapis.com', name: 'Google' },
+    openrouter_tts: { domain: 'openrouter.ai', name: 'OpenRouter' },
+    cartesia: { domain: 'cartesia.ai', name: 'Cartesia' },
+};
+// A line for a connection that goes through a proxy. A proxy can drop or
+// change settings on the way, so a voice can sound different there than on
+// a direct connection. Empty for a direct connection, and for a server of
+// the reader's own, such as OpenVox or an OpenAI-style one.
+function proxyNote(conn) {
+    const svc = conn && SERVICE_HOSTS[String(conn.provider || '').toLowerCase()];
+    const url = conn && typeof conn.api_url === 'string' ? conn.api_url.trim() : '';
+    if (!svc || !url)
+        return '';
+    let host = '';
+    try {
+        host = new URL(url).hostname.toLowerCase();
+    }
+    catch (_) {
+        return '';
+    }
+    if (host === svc.domain || host.endsWith('.' + svc.domain))
+        return '';
+    return 'This connection goes through ' + host + ', not straight to ' + svc.name + '. A proxy may drop some settings, so if a voice sounds off, compare it on a direct connection.';
+}
 const ENGINES = {};
 for (const e of ENGINE_LIST)
     ENGINES[e.id] = e;
@@ -3020,6 +3050,14 @@ export function setup(ctx, overrides) {
         const speed = m ? Number(m.speed) || 1 : 1;
         const own = (m && m.params) || {};
         const has = (k) => own[k] !== undefined && own[k] !== '';
+        // What is saved on the Lumiverse connection. Lumiverse adds it under
+        // what is sent here, so a value sent here replaces it.
+        const saved = (conn.default_parameters && typeof conn.default_parameters === 'object' && conn.default_parameters) || {};
+        const unsaved = (k) => saved[k] === undefined || saved[k] === null || saved[k] === '';
+        // Values sent for quality when the connection has none of its own. They
+        // are left out of the fingerprint of kept audio, so a line kept before
+        // they were sent still plays from what was kept.
+        const auto = [];
         if (eng.eleven && provider === 'elevenlabs') {
             // Eleven v3 takes Stability only, and Eleven v4 Stability and
             // Similarity. Neither takes Speed, Style or Speaker boost, so those
@@ -3063,6 +3101,18 @@ export function setup(ctx, overrides) {
                 params.normalize_loudness = own.normalize;
             if (has('direction') && !fishDrama)
                 params.voice_direction = own.direction;
+            // Fish Audio makes its best audio at latency normal, and uses balanced
+            // when none is sent. Lumiverse lists normal as the default but sends a
+            // latency only when one is saved on the connection. MP3 is 128 kbps
+            // unless asked for more; Lumiverse sends the bitrate only for MP3.
+            if (unsaved('latency')) {
+                params.latency = 'normal';
+                auto.push('latency');
+            }
+            if (unsaved('mp3_bitrate')) {
+                params.mp3_bitrate = '192';
+                auto.push('mp3_bitrate');
+            }
         }
         if (provider === 'google_tts' || provider === 'google_vertex_tts') {
             if (has('temperature'))
@@ -3076,25 +3126,44 @@ export function setup(ctx, overrides) {
                     params[k] = own[k];
         // Gemini 3.8 takes it as its speech style: the person's Gemini style and
         // the line's note together. With neither, the style saved on the
-        // connection is used.
+        // connection is used. With none saved there either, an empty style is
+        // sent: Lumiverse otherwise adds its own "casual, relaxed conversation,
+        // natural pacing, understated expression" to the line, and Google's
+        // guide says most lines need no style at all.
         const baseStyle = eng.style && has('style_base') ? String(own.style_base) : '';
         const told = geminiStyle(baseStyle, style);
         if (told)
             params.speech_style = told;
+        else if (eng.style && unsaved('speech_style') && unsaved('instructions')) {
+            params.speech_style = '';
+            auto.push('speech_style');
+        }
         let said = text;
-        if (fishDrama && has('direction')) {
+        // OpenRouter sends Fish Audio only the text, so the direction goes at the
+        // start of it there too, the same as for Drama 3.
+        const fishOpenRouter = provider === 'openrouter_tts' && eng.id === 'fish';
+        if ((fishDrama || fishOpenRouter) && has('direction')) {
             const dir = String(own.direction).replace(/[\[\]]/g, '').replace(/\s+/g, ' ').trim();
             if (dir)
                 said = '[' + dir + '] ' + text;
         }
         const body = { connectionId: conn.id, text: said, parameters: params };
+        // A Chatterbox server makes WAV by default, but Lumiverse asks an
+        // OpenAI-style connection for MP3, which the server then encodes from
+        // the WAV. WAV is asked for, unless a format is saved on the connection.
+        const wav = provider === 'openai_tts' && eng.id === 'chatterbox_turbo' && unsaved('output_format');
+        if (wav)
+            body.outputFormat = 'wav';
         if (pick.voice)
             body.voice = pick.voice;
         if (pick.model)
             body.model = pick.model;
         if (fishDrama)
             body.model = 'drama-3';
-        const sig = fingerprint(JSON.stringify([conn.id, conn.model || '', conn.voice || '', body]));
+        const kept = auto.length || wav ? Object.assign({}, body, { parameters: Object.fromEntries(Object.entries(params).filter(([k]) => auto.indexOf(k) < 0)) }) : body;
+        if (wav)
+            delete kept.outputFormat;
+        const sig = fingerprint(JSON.stringify([conn.id, conn.model || '', conn.voice || '', kept]));
         return { body, sig, conn };
     }
     // A spoken line, with how many characters were sent for it when it was
@@ -15096,6 +15165,8 @@ export function setup(ctx, overrides) {
             out.push(num('top_p', 'Top P', 0, 1, 0.05, 0.7, 'How wide the choice of sounds is. 0.70 by default.'));
             out.push(personSwitch('Steady loudness', 'On by default. Keeps lines at the same loudness.', own.normalize !== false, (v) => setP('normalize', v ? undefined : false)));
         }
+        if (prov === 'openrouter_tts' && eng.id === 'fish')
+            out.push(words('direction', 'Fish Audio direction', 'slow and a little tired', 'Optional. Written at the start of every line of theirs, since OpenRouter does not pass it on to Fish Audio. A custom voice may not need it.', 300));
         if (prov === 'openrouter_tts' && eng.style)
             out.push(words('style_base', 'Gemini style', 'slow and quiet', 'Optional. Sent to Gemini with every line of theirs, before that line\u2019s own note, such as slow and quiet. A custom voice may not need it.', 300));
         if (prov === 'google_tts' || prov === 'google_vertex_tts') {
@@ -24335,6 +24406,12 @@ export function setup(ctx, overrides) {
                 connBox.appendChild(hint(esc((eng.supported ? 'Engine: ' + eng.label + '. ' : '') + engineAbility(eng))));
                 for (const w of engineWarnings(eng, conn, conn.model))
                     connBox.appendChild(notice(eng.supported ? 'warn' : 'bad', w));
+                const proxied = proxyNote(conn);
+                if (proxied) {
+                    const p = hint(esc(proxied));
+                    p.setAttribute('data-af-proxy', '');
+                    connBox.appendChild(p);
+                }
             }
         };
         drawConn();
@@ -25703,7 +25780,7 @@ export function setup(ctx, overrides) {
         catch (_) { }
     };
 }
-export const __testing = { bezier, animAt, BUILT_IN_ANIMS, ANIM_PLACES, EASES, feelingOf, BUILT_IN_MOODS, plainWord, hideList, hiddenWords, geminiStyle, sortCast, CAST_SORTS, keyCombo, PAUSE_KEY_DEFAULT, wavBlob, noConnectionWhy, perSentence, clipLevel, levelGain, voiceGender, describeWords, markText, movedFor, movedRowMark, MOVED_DEFAULTS, looksLikeDate, voicedFrames, wordWeight, partTimes, engineOf, noTagsWhy, openRouterVoices, colorCode, hexHsl, hslHex, computedHex, fitTag, tagSound, textFor, styleFor, stripTags, stabilityFor, ENGINES };
+export const __testing = { bezier, animAt, BUILT_IN_ANIMS, ANIM_PLACES, EASES, feelingOf, BUILT_IN_MOODS, plainWord, hideList, hiddenWords, geminiStyle, sortCast, CAST_SORTS, keyCombo, PAUSE_KEY_DEFAULT, wavBlob, noConnectionWhy, perSentence, clipLevel, levelGain, voiceGender, describeWords, markText, movedFor, movedRowMark, MOVED_DEFAULTS, looksLikeDate, voicedFrames, wordWeight, partTimes, engineOf, noTagsWhy, proxyNote, openRouterVoices, colorCode, hexHsl, hslHex, computedHex, fitTag, tagSound, textFor, styleFor, stripTags, stabilityFor, ENGINES };
 // The built-in cheer: "Cheering and clapping crowd 1" by freesound_community,
 // a free sound from Pixabay (pixabay.com/sound-effects/people-cheering-and-clapping-crowd-1-5995/),
 // made mono at 64 kbps so it stays small. assets/applause.mp3 is the same

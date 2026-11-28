@@ -21,7 +21,7 @@
 
 - **Gemini style** and **Fish Audio direction** are optional. Left empty, each line still gets the Director's own note or tags.
 - **Gemini style** shows on Gemini 3.8 direct and through OpenRouter.
-- **Fish Audio direction** shows only on a Fish Audio connection. Through OpenRouter, Lumiverse sends only the text, the voice and the speed, so it is not shown there.
+- **Fish Audio direction** shows on a Fish Audio connection, and for a Fish Audio model through OpenRouter. OpenRouter does not pass it on, so there Auto Foley writes it at the start of each line, as a tag.
 
 The Director's own prompt can be changed too, in the Director tab. See [The prompt](director.md#the-prompt).
 

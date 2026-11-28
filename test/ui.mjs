@@ -3158,9 +3158,27 @@ if (section("gemini style")) {
   const hers = sent.find((b) => /You are late/.test(b.text || ""));
   check(!!hers && hers.style === "Warm and unhurried, with a light Southern accent. This line: quiet and hurt", "her line is sent with her Gemini style first, then its own note (" + JSON.stringify(hers) + ")");
   const narr = sent.find((b) => /set the cup down/.test(b.text || ""));
-  check(!!narr && !narr.style, "the narrator, with neither, sends no style of its own (" + JSON.stringify(narr) + ")");
+  check(!!narr && narr.style === "", "the narrator, with neither, sends an empty style, so Lumiverse adds none of its own (" + JSON.stringify(narr) + ")");
   check(!errors.length, "no page errors. " + errors.slice(0, 2).join(" | "));
   await context.close();
+  // A style saved on the connection is left for Lumiverse to send.
+  {
+    const { context, page, errors } = await open(THEMES[0], SIZES[1], 1, () => {
+      window.__ttsList = [{ id: "t1", name: "Gemini here", provider: "google_tts", model: "gemini-3.8-flash-tts", is_default: true, has_api_key: true, default_parameters: { speech_style: "slow and quiet" } }];
+      window.__settings.ttsConnection = "t1";
+      window.__script = JSON.parse(JSON.stringify(SCRIPT));
+    });
+    await page.evaluate(() => { window.__clipMs = 200; window.__synth = []; });
+    await toTab(page, "stage");
+    await page.waitForTimeout(150);
+    await pressMessage(page);
+    await page.waitForTimeout(2500);
+    const sent = await page.evaluate(() => (window.__synth || []).map((b) => ({ text: b.text, has: "speech_style" in (b.parameters || {}) })));
+    const narr = sent.find((b) => /set the cup down/.test(b.text || ""));
+    check(!!narr && !narr.has, "with a style saved on the connection, a line with no note sends none, so the saved one is used (" + JSON.stringify(narr) + ")");
+    check(!errors.length, "saved style: no page errors. " + errors.slice(0, 2).join(" | "));
+    await context.close();
+  }
 }
 
 if (section("display name")) {
@@ -3674,9 +3692,90 @@ if (section("fish drama")) {
     } else {
       check(sent.length > 0 && sent.every((b) => b.model !== "drama-3" && (b.parameters || {}).voice_direction === "low and [tired]" && !/^\[low and tired\]/.test(b.text)), model + ": other Fish models are sent as before, with the direction beside the line");
     }
+    check(sent.length > 0 && sent.every((b) => (b.parameters || {}).latency === "normal" && (b.parameters || {}).mp3_bitrate === "192"), model + ": with nothing saved on the connection, each line asks for latency normal and 192 kbps (" + JSON.stringify(one.parameters) + ")");
     check(!errors.length, model + ": no page errors. " + errors.slice(0, 2).join(" | "));
     await context.close();
   }
+}
+
+if (section("routes")) {
+  console.log("Fish Audio through OpenRouter gets its direction in the line, and a Chatterbox server is asked for WAV");
+  const run = async (list, params) => {
+    const { context, page, errors } = await open(THEMES[0], SIZES[0]);
+    await page.evaluate(({ list, params }) => {
+      window.__teardown();
+      document.getElementById("drawer").innerHTML = "";
+      window.__ttsList = list;
+      window.__settings = Object.assign({}, window.__settings, { ttsConnection: "t1", cast: window.__settings.cast.map((m) => Object.assign({}, m, { params })) });
+      window.__synth = [];
+      window.__clipMs = 40;
+      window.__teardown = window.__setup(window.__ctx, { fetch: window.__fetch, Audio: window.__Audio });
+    }, { list, params });
+    await page.waitForTimeout(400);
+    await pressMessage(page);
+    await page.waitForFunction(() => (window.__synth || []).length > 0, null, { timeout: 10000 }).catch(() => {});
+    await page.waitForTimeout(600);
+    const sent = await page.evaluate(() => window.__synth || []);
+    await context.close();
+    return { sent, errors };
+  };
+  let r = await run([{ id: "t1", name: "Router", provider: "openrouter_tts", model: "fish-audio/s2.1-pro", voice: "abc123", is_default: true, has_api_key: true }], { direction: "low and [tired]" });
+  check(r.sent.length > 0 && r.sent.every((b) => /^\[low and tired\] /.test(b.text) && !(b.parameters || {}).voice_direction), "OpenRouter Fish: the direction is at the start of each line (" + String((r.sent[0] || {}).text).slice(0, 40) + ")");
+  check(!r.errors.length, "OpenRouter Fish: no page errors. " + r.errors.slice(0, 2).join(" | "));
+  r = await run([{ id: "t1", name: "Router", provider: "openrouter_tts", model: "google/gemini-3.8-flash-tts", is_default: true, has_api_key: true }], { direction: "low and [tired]" });
+  check(r.sent.length > 0 && r.sent.every((b) => !/^\[low and tired\]/.test(b.text)), "OpenRouter Gemini: a Fish direction is not added");
+  r = await run([{ id: "t1", name: "Box at home", provider: "openai_tts", api_url: "http://192.0.2.10:8004/v1", model: "chatterbox", is_default: true, has_api_key: true }], {});
+  check(r.sent.length > 0 && r.sent.every((b) => b.outputFormat === "wav"), "Chatterbox server: each line asks for WAV (" + (r.sent[0] || {}).outputFormat + ")");
+  r = await run([{ id: "t1", name: "Box at home", provider: "openai_tts", api_url: "http://192.0.2.10:8004/v1", model: "chatterbox", is_default: true, has_api_key: true, default_parameters: { output_format: "opus" } }], {});
+  check(r.sent.length > 0 && r.sent.every((b) => !("outputFormat" in b)), "Chatterbox server: a format saved on the connection is left as it is");
+  check(!r.errors.length, "Chatterbox: no page errors. " + r.errors.slice(0, 2).join(" | "));
+}
+
+if (section("proxy note")) {
+  console.log("A connection through a proxy says so in the Settings tab, and a direct one does not");
+  for (const size of SIZES) {
+    for (const [label, url, want] of [["proxy", "https://relay.example.net/fish", true], ["direct", "https://api.fish.audio", false]]) {
+      const { context, page, errors } = await open(THEMES[0], size, 1, `
+        window.__ttsList = [{ id: "t1", name: "Fish here", provider: "fish_audio", model: "s2.1-pro", api_url: "${url}", is_default: true, has_api_key: true }];
+        window.__settings.ttsConnection = "t1";
+      `);
+      await toTab(page, "settings");
+      await page.waitForTimeout(500);
+      const got = await page.evaluate(() => {
+        const n = document.querySelector("[data-af-proxy]");
+        const r = n && n.getBoundingClientRect();
+        const box = document.querySelector(".af") && document.querySelector(".af").getBoundingClientRect();
+        return { shown: !!n && !!n.offsetParent, text: n ? n.textContent : "", inside: !r || !box || r.right <= box.right + 1, sideways: document.documentElement.scrollWidth > innerWidth + 1 };
+      });
+      if (want) check(got.shown && /goes through relay\.example\.net, not straight to Fish Audio/.test(got.text), size.name + ", " + label + ": the note names the proxy (" + got.text + ")");
+      else check(!got.shown, size.name + ", " + label + ": no note");
+      check(got.inside && !got.sideways, size.name + ", " + label + ": nothing runs off the side");
+      check(!errors.length, size.name + ", " + label + ": no page errors. " + errors.slice(0, 2).join(" | "));
+      await context.close();
+    }
+  }
+}
+
+if (section("fish saved")) {
+  console.log("A Fish Audio latency or bitrate saved on the connection is left as it is");
+  const { context, page, errors } = await open(THEMES[0], SIZES[0]);
+  await page.evaluate(() => {
+    window.__teardown();
+    document.getElementById("drawer").innerHTML = "";
+    window.__ttsList = [{ id: "t1", name: "Fish here", provider: "fish_audio", model: "s2.1-pro", is_default: true, has_api_key: true, default_parameters: { latency: "low", mp3_bitrate: "64" } }];
+    window.__settings = Object.assign({}, window.__settings, { ttsConnection: "t1" });
+    window.__synth = [];
+    window.__clipMs = 40;
+    window.__teardown = window.__setup(window.__ctx, { fetch: window.__fetch, Audio: window.__Audio });
+  });
+  await page.waitForTimeout(400);
+  await pressMessage(page);
+  await page.waitForFunction(() => (window.__synth || []).length > 0, null, { timeout: 10000 }).catch(() => {});
+  await page.waitForTimeout(600);
+  const sent = await page.evaluate(() => window.__synth || []);
+  check(sent.length > 0 && sent.every((b) => !("latency" in (b.parameters || {})) && !("mp3_bitrate" in (b.parameters || {}))), "neither is sent, so the saved ones are used (" + JSON.stringify((sent[0] || {}).parameters) + ")");
+  check(!errors.length, "no page errors. " + errors.slice(0, 2).join(" | "));
+  await context.close();
 }
 
 if (section("colors")) {
