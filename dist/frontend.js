@@ -8558,6 +8558,8 @@ export function setup(ctx, overrides) {
             ctx.sendToBackend({ type: 'direct_stop' });
         }
         catch (_) { }
+        fillPlayers();
+        paintPlayers();
     }
     // The text each message had when it was directed, so an edit made after,
     // by the reader or by another extension, can be noticed.
@@ -8628,6 +8630,10 @@ export function setup(ctx, overrides) {
         directorWriting = false;
         phase = busyWords();
         const started = Date.now();
+        // The message's player opens at the press, while the script is written,
+        // rather than when something else on the page draws the players again.
+        fillPlayers();
+        paintPlayers();
         paintButtons();
         if (tab === 'stage')
             renderTab();
@@ -8647,6 +8653,9 @@ export function setup(ctx, overrides) {
         if (busyMessage !== messageId)
             return;
         busyMessage = '';
+        // A message with no script, and nothing saved, closes its player again.
+        if (!got.script)
+            fillPlayers();
         if (!got.script) {
             phase = got.why || 'The message could not be read.';
             log(phase, 'bad');

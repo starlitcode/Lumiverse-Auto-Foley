@@ -3465,6 +3465,59 @@ if (section("picture motion")) {
   await context.close();
 }
 
+if (section("player at the press")) {
+  console.log("A message's player opens at the press, while the script is written, and closes smoothly when its audio is cleared");
+  for (const size of SIZES) {
+    const where = size.name;
+    const { context, page, errors } = await open(THEMES[0], size);
+    await page.evaluate(() => {
+      const msg = document.querySelector('[data-message-id="m1"]');
+      const p = msg.querySelector("p");
+      const content = document.createElement("div");
+      content.setAttribute("data-component", "MessageContent");
+      p.replaceWith(content);
+      content.appendChild(p);
+      const mount = document.createElement("span");
+      mount.setAttribute("data-spindle-mount", "message_body_after");
+      mount.setAttribute("data-spindle-scope", "message:m1:minimal:body-after");
+      mount.style.display = "contents";
+      content.after(mount);
+      window.__directHold = 3000;
+      window.__directingAt = 50;
+    });
+    await page.waitForTimeout(400);
+    const opening = await page.evaluate(async () => {
+      document.querySelector('#mount [data-af-slot="message"]').click();
+      const out = [];
+      for (let k = 0; k < 30; k++) {
+        await new Promise((r) => requestAnimationFrame(r));
+        const b = document.querySelector("[data-af-player]");
+        out.push(b ? Math.round(b.getBoundingClientRect().height) : -1);
+      }
+      return out;
+    });
+    const top = Math.max(...opening);
+    check(opening[0] >= 0, where + ": the player is there in the first frame after the press (" + opening.slice(0, 6).join(",") + ")");
+    check(opening.some((h) => h > 0 && h < top - 4), where + ": and it opens over several frames (" + opening.slice(0, 20).join(",") + ")");
+    await page.waitForTimeout(6000);
+    await page.click('.af-tab[data-tab="settings"]');
+    await page.waitForTimeout(500);
+    await page.locator('[data-af-row="keepAudio"] .af-btn', { hasText: "Clear kept audio" }).click();
+    const closing = await page.evaluate(async () => {
+      const out = [];
+      for (let k = 0; k < 40; k++) {
+        await new Promise((r) => requestAnimationFrame(r));
+        const b = document.querySelector("[data-af-player]");
+        out.push(b ? Math.round(b.getBoundingClientRect().height) : -1);
+      }
+      return out;
+    });
+    check(closing.some((h) => h > 0 && h < top - 4) && closing[closing.length - 1] === -1, where + ": when its audio is cleared, it closes over several frames, then it is gone (" + closing.slice(0, 22).join(",") + ")");
+    check(!errors.length, where + ": no page errors. " + errors.slice(0, 2).join(" | "));
+    await context.close();
+  }
+}
+
 if (section("still working")) {
   console.log("A slow Director is waited for while the backend says it is still working");
   for (const size of SIZES) {
