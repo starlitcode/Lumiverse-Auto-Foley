@@ -672,3 +672,33 @@ describe("a line with far too little voice for its words", () => {
     expect(tooShort(5, 0)).toBe(false);
   });
 });
+
+describe("words pinned to the pauses at punctuation", () => {
+  const { partTimes, phraseEnd } = __testing;
+  test("a word ending a sentence or a phrase is marked", () => {
+    expect(["dusk.", "Wait!", "Why?”", "fine,", "so;", "this:", "(aside)", "word"].map(phraseEnd)).toEqual([2, 2, 2, 1, 1, 1, 1, 0]);
+  });
+  test("the phrase after a comma starts when the pause ends", () => {
+    // "Rook waited, then the lantern went out": 2 words, a pause, 5 words.
+    // The first phrase is short, so by weight alone "then" would start
+    // late, in the middle of the second phrase's sound.
+    const voiced = [...new Array(20).fill(true), ...new Array(30).fill(false), ...new Array(80).fill(true)];
+    const weights = [1, 1, 1, 1, 1, 1, 1];
+    const ends = [0, 1, 0, 0, 0, 0, 0];
+    const plain = partTimes(weights, voiced, 2.6);
+    const pinned = partTimes(weights, voiced, 2.6, ends);
+    expect(plain[2]).not.toBeCloseTo(1.0, 1);
+    expect(pinned[2]).toBeCloseTo(1.0, 5);
+    expect(pinned[0]).toBe(0);
+  });
+  test("a pause far from where the end is expected is not used", () => {
+    // One comma near the start, and the only pause near the end.
+    const voiced = [...new Array(90).fill(true), ...new Array(20).fill(false), ...new Array(10).fill(true)];
+    const weights = new Array(10).fill(1);
+    const ends = [1, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+    expect(partTimes(weights, voiced, 2.4, ends)).toEqual(partTimes(weights, voiced, 2.4));
+  });
+  test("with no voiced frames the words are spread over the clip", () => {
+    expect(partTimes([1, 1], [], 2, [1, 0])).toEqual([0, 1]);
+  });
+});

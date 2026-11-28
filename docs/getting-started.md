@@ -248,7 +248,9 @@ With **Keep made audio** on, in the Settings tab:
 **Light up words in the chat**, in the Settings tab, is on by default.
 
 - The word being spoken is lit in the message itself, as it is said.
-- The timing comes from the audio itself: a word moves on only while the voice sounds. Each line's audio is read before its first word is lit.
+- The timing comes from the audio itself: a word moves on only while the voice sounds. A breath or a soft sound in a pause does not count as voice.
+- A voice pauses at a comma or a full stop. Each of those in the text is matched to a pause in the audio, so the next words start when the voice starts again.
+- Each line's audio is read before its first word is lit.
 - A phone, and more so Bluetooth headphones, plays sound a moment after the audio says it played. Auto Foley reads that delay from the device and lights each word when you hear it.
 - Nothing in the message is changed.
 - Some older browsers cannot light words. The audio still plays.

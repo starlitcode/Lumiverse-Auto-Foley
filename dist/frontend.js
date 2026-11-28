@@ -479,7 +479,8 @@ function fitTag(tag, list) {
 // ---- Word timing ----
 // The words of the line playing are lit as they are spoken. The time is read
 // from the clip's own sound: it is cut into 20 ms frames, and a frame counts
-// as voiced when it is louder than a share of the loudest part. Words move on
+// as voiced when it is at least a quarter as loud as the loud part, about
+// 12 dB down. A breath, or a soft sound in a pause, is quieter than that. Words move on
 // only while the voice sounds, so the silence at each end, a pause at a comma
 // and a held breath do not push them ahead.
 const FRAME_SECS = 0.02;
@@ -499,7 +500,7 @@ function voicedFrames(samples, rate) {
     // click does not set the bar for the whole clip.
     const sorted = rms.slice().sort((a, b) => a - b);
     const loud = sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * 0.95))];
-    const bar = Math.max(loud * 0.1, 0.004);
+    const bar = Math.max(loud * 0.25, 0.004);
     const out = rms.map((v) => v > bar);
     // A gap shorter than 80 ms inside speech is the space between two sounds
     // of one word, not a pause.
@@ -656,25 +657,133 @@ function wordWeight(word) {
     const letters = (w.match(/[\p{L}\p{N}]/gu) || []).length;
     return letters ? Math.max(1, Math.round(letters / 2)) : 0;
 }
+// How a word ends a phrase, for where the voice pauses: 2 after the end of
+// a sentence, 1 after a comma, a semicolon, a colon, a dash or a closing
+// bracket, and 0 for none. A closing quote mark after it is skipped.
+function phraseEnd(word) {
+    const w = String(word || '').replace(/["”’'*_)\]]+$/, '');
+    if (/[.!?…]$/.test(w))
+        return 2;
+    if (/[,;:—–-]$/.test(w) || /\)["”’']*$/.test(String(word || '')))
+        return 1;
+    return 0;
+}
 // The time each part of a line starts, in seconds, from how heavy each part
 // is and which frames are voiced. With no voiced frames, the parts are
 // spread over the whole clip.
-function partTimes(weights, voiced, duration) {
-    const total = weights.reduce((a, b) => a + b, 0);
-    const at = [];
+//
+// A voice pauses where the text has a comma or a full stop. So with `ends`,
+// each phrase end is matched to a pause in the sound that falls about where
+// the end is expected, and the next phrase starts when that pause ends. The
+// words of each phrase are then spread over the voiced frames between its
+// pauses. A breath or a quiet stretch in a pause then only moves the words
+// of one phrase, rather than every word after it.
+const PAUSE_FRAMES = 8;
+function partTimes(weights, voiced, duration, ends = []) {
     const on = [];
     voiced.forEach((v, k) => {
         if (v)
             on.push(k);
     });
+    const spread = (from, to, frames, startFrame, at) => {
+        const total = weights.slice(from, to).reduce((a, b) => a + b, 0);
+        let run = 0;
+        for (let i = from; i < to; i++) {
+            const share = total > 0 ? run / total : 0;
+            if (frames.length)
+                at[i] = frames[Math.min(frames.length - 1, Math.floor(share * frames.length))] * FRAME_SECS;
+            else if (startFrame >= 0)
+                at[i] = startFrame * FRAME_SECS;
+            else
+                at[i] = share * (duration > 0 ? duration : 0);
+            run += weights[i];
+        }
+    };
+    const at = new Array(weights.length).fill(0);
+    if (!on.length) {
+        spread(0, weights.length, [], -1, at);
+        return at;
+    }
+    const first = on[0];
+    const last = on[on.length - 1];
+    // The pauses inside the speech, with how much of the speech is done
+    // when each starts.
+    const pauses = [];
+    let voicedBefore = 0;
+    for (let k = first; k <= last; k++) {
+        if (voiced[k]) {
+            voicedBefore++;
+            continue;
+        }
+        let e = k;
+        while (e <= last && !voiced[e])
+            e++;
+        if (e - k >= PAUSE_FRAMES)
+            pauses.push({ from: k, to: e, secs: (e - k) * FRAME_SECS, done: voicedBefore / on.length });
+        k = e - 1;
+    }
+    // The phrase ends, with how much of the weight comes before each.
+    const total = weights.reduce((a, b) => a + b, 0);
+    const breaks = [];
     let run = 0;
-    for (const w of weights) {
-        const share = total > 0 ? run / total : 0;
-        if (on.length)
-            at.push(on[Math.min(on.length - 1, Math.floor(share * on.length))] * FRAME_SECS);
-        else
-            at.push(share * (duration > 0 ? duration : 0));
-        run += w;
+    for (let i = 0; i < weights.length; i++) {
+        run += weights[i];
+        if (i < weights.length - 1 && ends[i] && total > 0)
+            breaks.push({ part: i + 1, expect: run / total, strong: ends[i] === 2 });
+    }
+    // Each phrase end matched to at most one pause, in order, for the best
+    // total: a longer pause scores more, a sentence end more than a comma,
+    // and a pause far from where the end is expected scores less, or not at
+    // all.
+    const m = breaks.length;
+    const n = pauses.length;
+    const anchors = [];
+    if (m && n) {
+        const score = (b, p) => Math.min(1, p.secs / 0.35) * (b.strong ? 1.2 : 1) - 3 * Math.abs(p.done - b.expect);
+        const best = [];
+        const how = [];
+        for (let i = 0; i <= m; i++) {
+            best.push(new Array(n + 1).fill(0));
+            how.push(new Array(n + 1).fill(0));
+        }
+        for (let i = 1; i <= m; i++)
+            for (let j = 1; j <= n; j++) {
+                let v = best[i - 1][j];
+                let h = 1;
+                if (best[i][j - 1] > v) {
+                    v = best[i][j - 1];
+                    h = 2;
+                }
+                const s = score(breaks[i - 1], pauses[j - 1]);
+                if (s > 0 && best[i - 1][j - 1] + s > v) {
+                    v = best[i - 1][j - 1] + s;
+                    h = 3;
+                }
+                best[i][j] = v;
+                how[i][j] = h;
+            }
+        for (let i = m, j = n; i > 0 && j > 0;) {
+            const h = how[i][j];
+            if (h === 3) {
+                anchors.unshift({ part: breaks[i - 1].part, frame: pauses[j - 1].to });
+                i--;
+                j--;
+            }
+            else if (h === 1)
+                i--;
+            else
+                j--;
+        }
+    }
+    const marks = [{ part: 0, frame: first }].concat(anchors).concat([{ part: weights.length, frame: last + 1 }]);
+    for (let s = 0; s < marks.length - 1; s++) {
+        const a = marks[s];
+        const b = marks[s + 1];
+        const frames = [];
+        for (let k = a.frame; k < b.frame; k++)
+            if (voiced[k])
+                frames.push(k);
+        spread(a.part, b.part, frames, a.frame, at);
     }
     return at;
 }
@@ -3978,7 +4087,7 @@ export function setup(ctx, overrides) {
         if (!it || it.kind !== 'voice' || !it.line)
             return { words: [], times: [] };
         const lp = lineParts(it.line);
-        const all = partTimes(lp.weights, sh.voiced.get(k) || [], len);
+        const all = partTimes(lp.weights, sh.voiced.get(k) || [], len, lp.ends);
         const words = [];
         const times = [];
         lp.parts.forEach((pt, n) => {
@@ -13771,7 +13880,8 @@ export function setup(ctx, overrides) {
                 }
             }
         }
-        return { parts, weights };
+        const ends = parts.map((p) => (p.kind === 'word' ? phraseEnd(p.text) : 0));
+        return { parts, weights, ends };
     }
     function paintTheater() {
         if (!stageRefs)
@@ -13879,7 +13989,7 @@ export function setup(ctx, overrides) {
         const mark = show.startedAt + ':' + show.index + ':' + (voiced ? 'v' : 'n') + ':' + Math.round(dur * 100);
         if (!syncCache || syncCache.mark !== mark) {
             const lp = lineParts(it.line);
-            syncCache = { mark, parts: lp.parts, starts: partTimes(lp.weights, voiced || [], dur) };
+            syncCache = { mark, parts: lp.parts, starts: partTimes(lp.weights, voiced || [], dur, lp.ends) };
         }
         // A word is lit when it is heard: the audio's clock, less the time the
         // device takes to play what the clock says.
@@ -26183,7 +26293,7 @@ export function setup(ctx, overrides) {
         catch (_) { }
     };
 }
-export const __testing = { bezier, animAt, BUILT_IN_ANIMS, ANIM_PLACES, EASES, feelingOf, BUILT_IN_MOODS, plainWord, hideList, hiddenWords, geminiStyle, sortCast, CAST_SORTS, keyCombo, PAUSE_KEY_DEFAULT, wavBlob, noConnectionWhy, perSentence, clipLevel, levelGain, voiceGender, describeWords, markText, movedFor, movedRowMark, MOVED_DEFAULTS, looksLikeDate, voicedFrames, spokenWords, tooShort, wordWeight, partTimes, engineOf, noTagsWhy, proxyNote, openRouterVoices, colorCode, hexHsl, hslHex, computedHex, fitTag, tagSound, textFor, styleFor, stripTags, stabilityFor, ENGINES };
+export const __testing = { bezier, animAt, BUILT_IN_ANIMS, ANIM_PLACES, EASES, feelingOf, BUILT_IN_MOODS, plainWord, hideList, hiddenWords, geminiStyle, sortCast, CAST_SORTS, keyCombo, PAUSE_KEY_DEFAULT, wavBlob, noConnectionWhy, perSentence, clipLevel, levelGain, voiceGender, describeWords, markText, movedFor, movedRowMark, MOVED_DEFAULTS, looksLikeDate, voicedFrames, spokenWords, tooShort, wordWeight, partTimes, phraseEnd, engineOf, noTagsWhy, proxyNote, openRouterVoices, colorCode, hexHsl, hslHex, computedHex, fitTag, tagSound, textFor, styleFor, stripTags, stabilityFor, ENGINES };
 // The built-in cheer: "Cheering and clapping crowd 1" by freesound_community,
 // a free sound from Pixabay (pixabay.com/sound-effects/people-cheering-and-clapping-crowd-1-5995/),
 // made mono at 64 kbps so it stays small. assets/applause.mp3 is the same
