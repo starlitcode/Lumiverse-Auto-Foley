@@ -101,7 +101,7 @@ The latency, the format and the empty values are left out when Auto Foley checks
 Lumiverse makes the call to each voice service, and some of what it sends cannot be changed by an extension:
 
 - **Cartesia** audio is made at 22.05 kHz. Cartesia's own default is 44.1 kHz.
-- **ElevenLabs** is always sent similarity, speed and speaker boost, even on Eleven v3, which ElevenLabs says does not use them. Some ElevenLabs settings, such as a seed or text normalization, are never sent.
+- **ElevenLabs** takes a seed and a text normalization setting, but Lumiverse has no setting for either, so they are never sent.
 - **Through OpenRouter**, only the text, the voice, the speed and Gemini's style reach the model. Stability, Fish Audio's own settings and the like cannot be sent.
 - **OpenVox** is always sent English as the language.
 
