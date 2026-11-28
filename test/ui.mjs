@@ -3398,6 +3398,73 @@ if (section("too little voice")) {
   }
 }
 
+if (section("picture motion")) {
+  console.log("A crop box opens and closes over several frames, and a picture taken out fades; with Reduce motion both happen at once");
+  for (const size of SIZES) {
+    for (const z of size.touch ? [1] : [1, 1.25, 0.85]) {
+      const where = size.name + (z !== 1 ? " at " + z : "");
+      const { context, page, errors } = await open(THEMES[0], size, z, () => {
+        window.__settings.cast = window.__settings.cast.map((m) => (m.id === "a" ? Object.assign({}, m, { picture: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAIAAACQkWg2AAAAFElEQVR4nGNoIBEwjGoY1TB8NQAAJYSAEGy7FvQAAAAASUVORK5CYII=" }) : m));
+      });
+      await page.evaluate(() => (window.__stripes = true));
+      await toTab(page, "cast");
+      await page.waitForTimeout(300);
+      await page.locator('.af-person[data-person="a"] .af-person-head').click();
+      await page.waitForTimeout(600);
+      // Heights of the crop box frame by frame, from the press.
+      const frames = (sel) => page.evaluate(async (sel) => {
+        const out = [];
+        for (let k = 0; k < 30; k++) {
+          await new Promise((r) => requestAnimationFrame(r));
+          const n = document.querySelector(sel);
+          out.push(n && n.isConnected ? Math.round(n.getBoundingClientRect().height) : -1);
+        }
+        return out;
+      }, sel);
+      const crop = '.af-person[data-person="a"] [data-af-row="castPicture"] [data-af-crop]';
+      await page.locator('.af-person[data-person="a"] [data-af-row="castPicture"] button', { hasText: "Choose a picture" }).first().click();
+      const opening = await frames(crop);
+      const top = Math.max(...opening);
+      check(opening.some((h) => h > 0 && h < top - 4), where + ": the crop box opens over several frames (" + opening.slice(0, 12).join(",") + ")");
+      await page.waitForTimeout(300);
+      await page.locator(crop + " .af-btn", { hasText: "Cancel" }).click();
+      const closing = await frames(crop);
+      check(closing.some((h) => h > 0 && h < top - 4) && closing[closing.length - 1] === -1, where + ": Cancel closes it over several frames, then it is gone (" + closing.slice(0, 16).join(",") + ")");
+      // Take it out: the picture fades out, and the letter fades in.
+      await page.waitForTimeout(500);
+      const fades = await page.evaluate(async () => {
+        const face = document.querySelector('.af-person[data-person="a"] [data-af-row="castPicture"] .af-avatar');
+        const take = Array.from(document.querySelectorAll('.af-person[data-person="a"] [data-af-row="castPicture"] .af-btn')).find((b) => /Take it out/.test(b.textContent));
+        if (!face || !take || take.disabled) return null;
+        take.click();
+        const out = [];
+        for (let k = 0; k < 30; k++) {
+          await new Promise((r) => requestAnimationFrame(r));
+          out.push(Math.round(parseFloat(getComputedStyle(face).opacity) * 100) / 100);
+        }
+        return { out, img: !!face.querySelector("img") };
+      });
+      check(!!fades && fades.out.some((o) => o > 0.05 && o < 0.95) && fades.out[fades.out.length - 1] === 1 && !fades.img, where + ": a picture taken out fades out, and the letter fades in (" + (fades ? fades.out.join(",") : "no picture") + ")");
+      check(!errors.length, where + ": no page errors. " + errors.slice(0, 2).join(" | "));
+      await context.close();
+    }
+  }
+  // With Reduce motion the crop box goes at once.
+  const { context, page, errors } = await open(THEMES[0], SIZES[1], 1, () => { window.__settings.reduceMotion = true; });
+  await page.evaluate(() => (window.__stripes = true));
+  await toTab(page, "cast");
+  await page.waitForTimeout(300);
+  await page.locator('.af-person[data-person="a"] .af-person-head').click();
+  await page.waitForTimeout(600);
+  await page.locator('.af-person[data-person="a"] [data-af-row="castPicture"] button', { hasText: "Choose a picture" }).first().click();
+  await page.waitForTimeout(400);
+  await page.locator('.af-person[data-person="a"] [data-af-crop] .af-btn', { hasText: "Cancel" }).click();
+  const gone = await page.evaluate(async () => { await new Promise((r) => requestAnimationFrame(r)); return !document.querySelector('.af-person[data-person="a"] [data-af-crop]'); });
+  check(gone, "with Reduce motion, Cancel takes the crop box away at once");
+  check(!errors.length, "reduce motion: no page errors. " + errors.slice(0, 2).join(" | "));
+  await context.close();
+}
+
 if (section("still working")) {
   console.log("A slow Director is waited for while the backend says it is still working");
   for (const size of SIZES) {

@@ -10665,6 +10665,32 @@ export function setup(ctx: Ctx, overrides?: any) {
   }
   // Several at once, such as the people picked in the cast.
   const leaveAll = (nodes: (Element | null | undefined)[]) => Promise.all(nodes.map((n) => leave(n))).then(() => {});
+  // A picture that changes in place, such as one chosen or taken out, fades
+  // out and the new one fades in. With Reduce motion it changes at once.
+  function softSwap(node: HTMLElement, change: () => void) {
+    const n: any = node;
+    if (calm() || typeof n.animate !== 'function' || !node.isConnected) return change();
+    try {
+      const out = n.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 140, easing: 'ease-in', fill: 'forwards' });
+      out.onfinish = () => {
+        change();
+        n.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 200, easing: 'ease-out' });
+        out.cancel();
+      };
+    } catch (_) {
+      change();
+    }
+  }
+  // A crop box opens in place and closes the same way, like a row under a
+  // switch, so what is under it moves with it.
+  function cropIn(parent: HTMLElement, crop: HTMLElement, before: Node) {
+    crop.hidden = true;
+    parent.insertBefore(crop, before);
+    reveal(crop, true);
+  }
+  function cropOut(crop: HTMLElement) {
+    void leave(crop).then(() => crop.remove());
+  }
   function reveal(box: HTMLElement, open: boolean) {
     const anyBox = box as any;
     const run = (anyBox._afRun = (anyBox._afRun || 0) + 1);
@@ -14275,21 +14301,21 @@ export function setup(ctx: Ctx, overrides?: any) {
       const old = row.querySelector('[data-af-crop]');
       if (old) old.remove();
       const crop = cropPicture(url, img.naturalWidth, img.naturalHeight, (pic) => {
-        crop.remove();
+        cropOut(crop);
         URL.revokeObjectURL(url);
         if (!pic) return;
         m.picture = pic;
         save();
-        paint();
+        softSwap(face, paint);
         paintName();
       });
-      row.insertBefore(crop, said);
+      cropIn(row, crop, said);
     });
     const take = button('Take it out', async () => {
       if (!(await askSure('Take out the picture', 'The picture of ' + m.name + ' is taken out, and the first letter of the name is shown instead.', 'Take it out', true))) return;
       m.picture = '';
       save();
-      paint();
+      softSwap(face, paint);
       paintName();
     }, 'af-danger');
     const fromLumiverse = button('Use their Lumiverse picture', async () => {
@@ -14306,7 +14332,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       said.textContent = '';
       m.picture = pic;
       save();
-      paint();
+      softSwap(face, paint);
       paintName();
     });
     fromLumiverse.setAttribute('data-af-lvpic', '');
@@ -14710,7 +14736,7 @@ export function setup(ctx: Ctx, overrides?: any) {
           if (pic) list.push(f);
           m.moodPics = moodsNow().map((x) => x.id).filter((x) => list.indexOf(x) >= 0);
           save();
-          show(pic);
+          softSwap(thumb, () => show(pic));
         };
         const choose = button('Choose', async () => {
           let files: any[] = [];
@@ -14734,11 +14760,11 @@ export function setup(ctx: Ctx, overrides?: any) {
           const old = line.querySelector('[data-af-crop]');
           if (old) old.remove();
           const crop = cropPicture(url, img.naturalWidth, img.naturalHeight, (pic) => {
-            crop.remove();
+            cropOut(crop);
             URL.revokeObjectURL(url);
             if (pic) void keep(pic);
           });
-          line.insertBefore(crop, said);
+          cropIn(line, crop, said);
         });
         choose.setAttribute('aria-label', 'Choose a picture for ' + label);
         choose.setAttribute('data-af-moodchoose', f);

@@ -27,6 +27,7 @@ _2026-11-28_
 ### Changed
 
 - **Voice settings saved on a connection in Lumiverse are no longer used.** Auto Foley replaces Lumiverse's TTS, so it now sends every voice setting with each line: the person's own from the Cast tab, or the voice service's own default. Before, a setting such as a Fish Audio repetition penalty or a Cartesia volume came from the connection when the person had none. To change one, set it on the person in the Cast tab. See [Settings saved on the connection](docs/engines.md#settings-saved-on-the-connection).
+- **Choosing or taking out a picture moves smoothly.** On the Cast tab, the crop box for a person's picture or a mood picture opens and closes over several frames, so what is under it moves with it. A picture taken out, or a new one, fades out and in. With Reduce motion they change at once.
 - **Sharper pictures of people.** A person's picture and a mood picture are now kept at 320 pixels on a side, up from 128, so they are sharp at every size a video draws them. Pictures are saved as WebP, which keeps more detail than the JPEG used before. Choose a picture again to get the sharper one.
 - **Better sound in videos.** A video's sound is made at 320 kilobits a second, up from 256, the most AAC takes.
 - **ElevenLabs is asked for its own default format.** Each line asks for MP3 at 44.1 kHz and 128 kbps, ElevenLabs' default, the best MP3 every plan can ask for. Before, a format saved on the connection was used.
