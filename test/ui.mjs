@@ -3543,6 +3543,35 @@ if (section("player at the press")) {
   }
 }
 
+if (section("saved in the drawer")) {
+  console.log("Saved audio is on the drawer's Studio tab too, so a saved script can be deleted without opening the Studio");
+  for (const size of SIZES) {
+    const where = size.name;
+    const { context, page, errors } = await open(THEMES[0], size);
+    await page.evaluate(() => {
+      window.__keptList = [{ key: "k1", messageId: "m1", chatId: "chat1", author: "Ysolde", keptAt: Date.UTC(2026, 10, 20, 15), lines: 3, first: "The quay was empty but for the ferry." }];
+    });
+    await page.click('.af-tab[data-tab="studio"]');
+    await page.waitForTimeout(700);
+    const row = page.locator('#drawer [data-af-saved-row]');
+    check((await row.count()) === 1 && ((await row.textContent()) || "").includes("The quay was empty"), where + ": the saved script is listed on the drawer's Studio tab");
+    const m = await page.evaluate(MEASURE, !!size.touch);
+    check(!m.overflow.length && !m.small.length, where + ": the list fits, with tap targets big enough. " + m.overflow.concat(m.small).slice(0, 3).join("; "));
+    await row.locator("[data-af-savedmore-btn]").click();
+    await page.waitForTimeout(400);
+    await row.locator(".af-btn", { hasText: /^Delete$/ }).click();
+    await page.waitForTimeout(1200);
+    const after = await page.evaluate(() => ({ dropped: (window.__dropped || []).map((d) => d.key), rows: document.querySelectorAll('#drawer [data-af-saved-row]').length }));
+    check(after.dropped.indexOf("k1") >= 0 && after.rows === 0, where + ": Delete there deletes it (" + JSON.stringify(after) + ")");
+    // While the Studio is open, it has the only list.
+    await openWs(page);
+    await page.waitForTimeout(600);
+    check((await page.locator('#drawer [data-af-saved-row], #drawer [data-af-saved]').count()) === 0, where + ": with the Studio open, the drawer holds no second list");
+    check(!errors.length, where + ": no page errors. " + errors.slice(0, 2).join(" | "));
+    await context.close();
+  }
+}
+
 if (section("still working")) {
   console.log("A slow Director is waited for while the backend says it is still working");
   for (const size of SIZES) {

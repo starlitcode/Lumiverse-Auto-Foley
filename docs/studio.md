@@ -113,6 +113,7 @@ The drawer's **Studio** tab has **Open the Studio**, and under it **Quick shortc
 - Both use the performance that is loaded. With nothing loaded, they use the newest saved performance in the open chat, and the line above them says which, such as "For: the latest performance in this chat, 3 minutes ago". **Pick another from Saved audio** opens the Studio on **Saved audio**.
 - With nothing saved in the chat, or no chat open, they wait, and the line says to play a message first.
 - To change the look first, open the Studio.
+- Under Quick shortcuts is **Saved audio**, the same list as in the Studio, with find, sort and folders. Each saved script can be played, renamed, moved, downloaded or deleted there without opening the Studio. While the Studio is open, the list is in the Studio only. See [Older performances](#older-performances).
 
 ### Keyboard shortcuts
 

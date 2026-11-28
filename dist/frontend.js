@@ -23990,6 +23990,12 @@ export function setup(ctx, overrides) {
         box.appendChild(said);
         c.appendChild(box);
         page.appendChild(c);
+        // Saved audio, the same as in the Studio, so a saved script can be
+        // played, renamed, downloaded or deleted without opening it. While the
+        // Studio is open it has the list, and this tab is drawn again when the
+        // Studio opens and closes, so there is one list at a time.
+        if (!(ws && !ws.closing))
+            page.appendChild(savedCard());
         quickRefs = { box, forLine, pick, audio, video, said };
         paintQuick();
         // With nothing loaded, the newest saved performance in this chat.
