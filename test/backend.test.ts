@@ -15,6 +15,8 @@ type Host = {
   files: Map<string, any>;
   keys: Map<string, string>;
   calls: { generate: any[]; decisions: any[]; cors: any[]; counted: any[] };
+  uploads: Map<string, Uint8Array>;
+  staged: Map<string, { name: string; size: number; mime: string; parts: Buffer[]; done: boolean; userId?: string }>;
   ask: (payload: any, userId?: string) => Promise<any[]>;
 };
 
@@ -35,6 +37,10 @@ function host(opts: {
   // Each read takes this many milliseconds, as on a slow disk, and
   // answers with the file as it was when the read started.
   readMs?: number;
+  // Files the panel uploaded to Lumiverse, by upload id.
+  uploads?: Map<string, Uint8Array>;
+  // Lumiverse refuses to make room for a file.
+  failCreate?: boolean;
 } = {}): Host {
   const files = new Map<string, any>(opts.files || []);
   const keys = new Map<string, string>();
@@ -42,6 +48,9 @@ function host(opts: {
   const toasts: { kind: string; text: string; userId?: string }[] = [];
   const calls = { generate: [] as any[], decisions: [] as any[], cors: [] as any[], counted: [] as any[] };
   const answers = (opts.answers || []).slice();
+  const uploads = new Map<string, Uint8Array>(opts.uploads || []);
+  const staged = new Map<string, { name: string; size: number; mime: string; parts: Buffer[]; done: boolean; userId?: string }>();
+  let stagedMade = 0;
   let handler: any = null;
   const k = (path: string, userId?: string) => (userId || "-") + "/" + path;
   const spindle: any = {
@@ -141,6 +150,46 @@ function host(opts: {
           },
         }
       : {}),
+    // Lumiverse's staged files: uploads from the panel are read 1 MiB at a
+    // time, and a file is written 1 MiB at a time, in order.
+    files: {
+      async readChunk(src: any, offset: number) {
+        const b = uploads.get(src && src.uploadId);
+        if (!b) throw new Error("Upload not found or expired");
+        const data = b.subarray(offset, offset + 1048576);
+        return { data, offset, size: b.length, eof: offset + data.length >= b.length };
+      },
+      async create(input: any) {
+        if (opts.failCreate) throw new Error("not enough disk space");
+        stagedMade++;
+        const id = "file-" + stagedMade;
+        staged.set(id, { name: input.fileName, size: input.size, mime: input.mimeType, parts: [], done: false, userId: input.userId });
+        return { fileId: id, fileName: input.fileName, size: 0, mimeType: input.mimeType };
+      },
+      async writeChunk(id: string, offset: number, data: Uint8Array) {
+        const f = staged.get(id);
+        if (!f || f.done) throw new Error("File not found");
+        if (data.byteLength < 1 || data.byteLength > 1048576) throw new Error("A chunk is 1 to 1048576 bytes");
+        if (offset !== f.parts.reduce((t, x) => t + x.length, 0)) throw new Error("Writes must be in order");
+        f.parts.push(Buffer.from(data));
+        return offset + data.byteLength;
+      },
+      async finish(id: string) {
+        const f = staged.get(id);
+        if (!f) throw new Error("File not found");
+        if (f.parts.reduce((t, x) => t + x.length, 0) !== f.size) throw new Error("The file is not its size");
+        f.done = true;
+        return { fileId: id };
+      },
+      async delete(id: string) {
+        return staged.delete(id);
+      },
+    },
+    uploads: {
+      async delete(id: string) {
+        return uploads.delete(id);
+      },
+    },
     async cors(url: string, init: any) {
       calls.cors.push({ url, init });
       if (!opts.cors) throw new Error("no cors in this test");
@@ -174,6 +223,8 @@ function host(opts: {
     files,
     keys,
     calls,
+    uploads,
+    staged,
     async ask(payload: any, userId = "u1") {
       const before = sent.length;
       await handler(Object.assign({ requestId: "r" + Math.random() }, payload), userId);
@@ -2645,5 +2696,58 @@ describe("projects", () => {
     const over = (await many.ask({ type: "project_put", name: "One more", project: { look, keptKey: "" } })).find((m: any) => m.type === "project_saved");
     expect(over.ok).toBe(false);
     expect(over.error).toBe("You have 100 projects, which is the most there can be. Delete one to make another.");
+  });
+});
+
+describe("a file handed to Lumiverse to save", () => {
+  // 2.5 MiB of made-up bytes, so the copy takes three reads and three writes.
+  const bytes = new Uint8Array(2.5 * 1048576).map((_, i) => (i * 7) % 251);
+
+  test("an upload is copied into a file Lumiverse offers as a download, then the upload is taken out", async () => {
+    const h = host({ uploads: new Map([["0d7c1f3a-2b4e-4c6d-9e8f-0a1b2c3d4e5f", bytes]]) });
+    const got = (await h.ask({ type: "file_ready", uploadId: "0d7c1f3a-2b4e-4c6d-9e8f-0a1b2c3d4e5f", name: "Harbor at night.mp4", mime: "video/mp4" })).find((m) => m.type === "file_ready");
+    expect(got.ok).toBe(true);
+    const f = h.staged.get(got.fileId)!;
+    expect(f.done).toBe(true);
+    expect(f.name).toBe("Harbor at night.mp4");
+    expect(f.mime).toBe("video/mp4");
+    expect(f.userId).toBe("u1");
+    expect(f.parts.length).toBe(3);
+    expect(Buffer.concat(f.parts).equals(Buffer.from(bytes))).toBe(true);
+    expect(h.uploads.size).toBe(0);
+  });
+
+  test("a name cannot make a path, and an odd type is sent as plain bytes", async () => {
+    const h = host({ uploads: new Map([["11111111-2222-4333-8444-555555555555", bytes.subarray(0, 10)]]) });
+    const got = (await h.ask({ type: "file_ready", uploadId: "11111111-2222-4333-8444-555555555555", name: "../../keys/a:b.json", mime: "text/html<script>" })).find((m) => m.type === "file_ready");
+    const f = h.staged.get(got.fileId)!;
+    expect(f.name).not.toMatch(/[\\/:]/);
+    expect(f.mime).toBe("application/octet-stream");
+  });
+
+  test("an upload that is gone, or no room on disk, is said in plain words, and nothing is left behind", async () => {
+    const gone = host();
+    const a = (await gone.ask({ type: "file_ready", uploadId: "99999999-2222-4333-8444-555555555555", name: "x.wav", mime: "audio/wav" })).find((m) => m.type === "file_ready");
+    expect(a.ok).toBe(false);
+    expect(a.error).toMatch(/could not read the file Auto Foley sent/);
+    const full = host({ failCreate: true, uploads: new Map([["0d7c1f3a-2b4e-4c6d-9e8f-0a1b2c3d4e5f", bytes]]) });
+    const b = (await full.ask({ type: "file_ready", uploadId: "0d7c1f3a-2b4e-4c6d-9e8f-0a1b2c3d4e5f", name: "x.mp4", mime: "video/mp4" })).find((m) => m.type === "file_ready");
+    expect(b.ok).toBe(false);
+    expect(b.error).toMatch(/could not make room for the file: not enough disk space/);
+    expect(full.uploads.size).toBe(0);
+    expect(full.staged.size).toBe(0);
+  });
+
+  test("a bad upload id is refused before anything is read", async () => {
+    const h = host();
+    const got = (await h.ask({ type: "file_ready", uploadId: "../x", name: "x.wav" })).find((m) => m.type === "file_ready");
+    expect(got.ok).toBe(false);
+  });
+
+  test("only the newest few files are kept for an account", async () => {
+    const ids = Array.from({ length: 6 }, (_, i) => "0d7c1f3a-2b4e-4c6d-9e8f-0a1b2c3d4e5" + i);
+    const h = host({ uploads: new Map(ids.map((id) => [id, bytes.subarray(0, 100)])) });
+    for (const id of ids) await h.ask({ type: "file_ready", uploadId: id, name: "x.wav", mime: "audio/wav" });
+    expect([...h.staged.keys()]).toEqual(["file-3", "file-4", "file-5", "file-6"]);
   });
 });

@@ -190,6 +190,13 @@ function answer(msg) {
       window.__clips = Object.assign(window.__clips || {}, { [msg.sig]: { base64: btoa(up.join('')), mime: msg.mime } });
       return reply({ type: 'clip_kept', ok: true });
     }
+    // A file uploaded to Lumiverse, made ready to download, as the backend
+    // does. window.__fileReadyFail makes it fail.
+    case 'file_ready': {
+      window.__fileReady = (window.__fileReady || []).concat({ uploadId: msg.uploadId, name: msg.name, mime: msg.mime });
+      if (window.__fileReadyFail) return reply({ type: 'file_ready', ok: false, error: 'not enough disk space' });
+      return reply({ type: 'file_ready', ok: true, fileId: 'file-' + window.__fileReady.length });
+    }
     case 'clips_state': { const c = window.__clips || {}; return reply({ type: 'clips_state', count: Object.keys(c).length, bytes: Object.values(c).reduce((n, x) => n + x.base64.length * 0.75, 0) }); }
     // As the backend does: the kept audio and the scripts go together.
     case 'clips_clear': window.__clips = {}; window.__keptList = []; return reply({ type: 'clips_state', ok: true, count: 0, bytes: 0 });
@@ -256,6 +263,24 @@ function answer(msg) {
 }
 window.__fetch = async (url, init) => {
   const u = String(url);
+  // Lumiverse's upload route for extensions, as tus 1.0.0.
+  if (u.includes('/spindle-uploads')) {
+    const h = (init && init.headers) || {};
+    if (init && init.method === 'POST') {
+      const meta = Object.fromEntries(String(h['Upload-Metadata'] || '').split(',').map((x) => x.trim().split(' ')).map(([k, v]) => [k, v ? decodeURIComponent(escape(atob(v))) : '']));
+      const id = '0d7c1f3a-2b4e-4c6d-9e8f-' + String(100000000000 + (window.__uploads || []).length);
+      window.__uploads = (window.__uploads || []).concat({ id, meta, length: Number(h['Upload-Length']), tus: h['Tus-Resumable'], bytes: [] });
+      return new Response(null, { status: 201, headers: { Location: '/api/v1/spindle-uploads/' + id, 'Upload-Offset': '0', 'Tus-Resumable': '1.0.0' } });
+    }
+    if (init && init.method === 'PATCH') {
+      const up = (window.__uploads || []).find((x) => u.endsWith('/' + x.id));
+      const got = new Uint8Array(await init.body.arrayBuffer());
+      const at = up.bytes.length;
+      if (Number(h['Upload-Offset']) !== at || h['Content-Type'] !== 'application/offset+octet-stream') return new Response(null, { status: 409 });
+      for (const b of got) up.bytes.push(b);
+      return new Response(null, { status: 204, headers: { 'Upload-Offset': String(up.bytes.length), 'Tus-Resumable': '1.0.0' } });
+    }
+  }
   const json = (o) => new Response(JSON.stringify(o), { status: 200, headers: { 'Content-Type': 'application/json' } });
   if (u.includes('/tts-connections?') && window.__ttsList) return json({ data: window.__ttsList, total: window.__ttsList.length });
   if (u.includes('/tts-connections?')) return json({ data: [{ id: 't1', name: 'My ElevenLabs', provider: 'elevenlabs', model: 'eleven_v3', voice: 'v0', is_default: true, has_api_key: true }, { id: 't2', name: 'Fish on the side', provider: 'fish_audio', model: 's2.1-pro', has_api_key: true }, { id: 't3', name: 'Box at home', provider: 'openai_tts', api_url: 'http://192.0.2.10:8004/v1', model: 'chatterbox', has_api_key: true }, { id: 't4', name: 'Old flash', provider: 'elevenlabs', model: 'eleven_flash_v2_5', has_api_key: true }, { id: 't5', name: 'Kokoro here', provider: 'kokoro', has_api_key: true }], total: 5 });
@@ -300,6 +325,9 @@ class FakeAudio {
 FakeAudio.all = [];
 window.__Audio = FakeAudio;
 window.__ctx = {
+  // Lumiverse's own downloads for extensions, only when a check turns them on.
+  host: { get capabilities() { return window.__hostFiles ? { 'file-transfers-v1': 1 } : {}; } },
+  files: { download(id) { window.__downloads = (window.__downloads || []).concat(id); } },
   dom: {
     addStyle(css) { const s = document.createElement('style'); s.textContent = css; document.head.appendChild(s); styles.push(s); return () => s.remove(); },
     cleanup() {},
@@ -3229,6 +3257,56 @@ if (section("play in sight")) {
     check(!errors.length, where + ": no page errors. " + errors.slice(0, 2).join(" | "));
     await context.close();
   }
+}
+
+if (section("lumiverse downloads")) {
+  console.log("Where Lumiverse offers downloads for extensions, a file goes through it, which the Lumiverse app takes; otherwise the browser download is used");
+  for (const size of SIZES) {
+    const where = size.name;
+    const { context, page, errors } = await open(THEMES[0], size, 1, () => { window.__hostFiles = true; });
+    let pageDownloads = 0;
+    page.on("download", () => pageDownloads++);
+    await page.click('.af-tab[data-tab="director"]');
+    await page.waitForTimeout(400);
+    await page.evaluate(() => document.querySelector("[data-af-promptshare]").click());
+    await page.waitForTimeout(1200);
+    const got = await page.evaluate(() => ({ up: (window.__uploads || [])[0] || null, ready: (window.__fileReady || [])[0] || null, downloads: window.__downloads || [] }));
+    const up = got.up || { meta: {}, bytes: [] };
+    const text = new TextDecoder().decode(new Uint8Array(up.bytes));
+    check(up.tus === "1.0.0" && up.meta.extension === "auto_foley" && up.meta.filename === "auto-foley-director.json" && up.meta.spindle_read_mode === "chunked", where + ": the file is uploaded to Lumiverse, named, for this extension (" + JSON.stringify(up.meta) + ")");
+    check(up.length === up.bytes.length && JSON.parse(text || "{}").kind === "director", where + ": all of it arrives (" + up.bytes.length + " of " + up.length + " bytes)");
+    check(!!got.ready && got.ready.uploadId === up.id && got.ready.name === "auto-foley-director.json", where + ": the backend is asked to make it ready (" + JSON.stringify(got.ready) + ")");
+    check(got.downloads.length === 1 && got.downloads[0] === "file-1", where + ": Lumiverse's own download starts (" + got.downloads.join(",") + ")");
+    check(pageDownloads === 0, where + ": the browser download is not used as well (" + pageDownloads + ")");
+    // When Lumiverse cannot make it ready, the browser download is used, and
+    // the Log says why.
+    await page.evaluate(() => { window.__fileReadyFail = true; });
+    const dl = page.waitForEvent("download", { timeout: 8000 }).catch(() => null);
+    await page.evaluate(() => document.querySelector("[data-af-promptshare]").click());
+    const d = await dl;
+    check(!!d && d.suggestedFilename() === "auto-foley-director.json", where + ": when that fails, the browser download is used (" + (d ? d.suggestedFilename() : "none") + ")");
+    await page.click('.af-tab[data-tab="stage"]');
+    await page.waitForTimeout(400);
+    const said = await page.evaluate(() => Array.from(document.querySelectorAll(".af-log-line")).map((n) => n.textContent).join(" | "));
+    check(/could not offer auto-foley-director\.json as a download: not enough disk space/.test(said), where + ": and the Log says why (" + said.slice(-200) + ")");
+    check(!errors.length, where + ": no page errors. " + errors.slice(0, 2).join(" | "));
+    await context.close();
+  }
+  // A video goes the same way.
+  const size = SIZES[0];
+  const { context, page, errors } = await open(THEMES[0], size, 1, () => { window.__hostFiles = true; });
+  await page.evaluate(() => { window.__wav = [0.1, 1.4]; window.__clipMs = 150; });
+  await pressMessage(page);
+  await page.waitForTimeout(8000);
+  await openWs(page);
+  await page.waitForTimeout(1500);
+  await page.locator('[data-af-ws-acts] [data-af-studio="video"]').click();
+  await page.waitForFunction(() => (window.__downloads || []).length > 0, null, { timeout: 60000 }).catch(() => {});
+  const vid = await page.evaluate(() => ({ ready: (window.__fileReady || [])[0] || null, downloads: window.__downloads || [], said: (document.querySelector('[data-af-ws-stage] [data-af-studio="said"]') || {}).textContent || "" }));
+  check(!!vid.ready && /\.(mp4|webm)$/.test(vid.ready.name) && /^video\//.test(vid.ready.mime) && vid.downloads.length === 1, size.name + ": a finished video is handed to Lumiverse's own download (" + JSON.stringify(vid.ready) + ")");
+  check(/The video is saved/.test(vid.said), size.name + ": and the Studio says it is saved (" + vid.said + ")");
+  check(!errors.length, size.name + ": video: no page errors. " + errors.slice(0, 2).join(" | "));
+  await context.close();
 }
 
 if (section("still working")) {

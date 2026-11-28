@@ -3758,7 +3758,67 @@ export function setup(ctx: Ctx, overrides?: any) {
   }
   let keepLine = '';
 
-  function saveFile(blob: Blob, name: string): boolean {
+  // Lumiverse can offer a file from an extension as a download of its own,
+  // from a Lumiverse address. The Lumiverse app on a phone takes that kind
+  // of download, and not one of a file made in the page.
+  function hostDownloads(): boolean {
+    const host = ctx && ctx.host;
+    const caps = host && host.capabilities;
+    return !!(caps && caps['file-transfers-v1'] === 1 && ctx.files && typeof ctx.files.download === 'function');
+  }
+  // The file is sent to Lumiverse in parts, with the upload method Lumiverse
+  // takes from extensions. Returns the upload's id.
+  const UPLOAD_PART_BYTES = 8 * 1024 * 1024;
+  async function uploadFile(blob: Blob, name: string, said?: (text: string) => void): Promise<string> {
+    const b64 = (t: string) => btoa(unescape(encodeURIComponent(t)));
+    const made = await fetchImpl(API + '/spindle-uploads', {
+      method: 'POST',
+      credentials: 'include',
+      headers: {
+        'Tus-Resumable': '1.0.0',
+        'Upload-Length': String(blob.size),
+        'Upload-Metadata': 'extension ' + b64(OWN_ID) + ',filename ' + b64(name) + ',spindle_read_mode ' + b64('chunked'),
+      },
+    });
+    if (made.status !== 201) throw new Error('Lumiverse did not take the file (' + made.status + ').');
+    const id = String(made.headers.get('Location') || '').split('/').filter(Boolean).pop() || '';
+    if (!id) throw new Error('Lumiverse did not say where the file went.');
+    let at = 0;
+    while (at < blob.size) {
+      const end = Math.min(blob.size, at + UPLOAD_PART_BYTES);
+      const r = await fetchImpl(API + '/spindle-uploads/' + encodeURIComponent(id), {
+        method: 'PATCH',
+        credentials: 'include',
+        headers: { 'Tus-Resumable': '1.0.0', 'Upload-Offset': String(at), 'Content-Type': 'application/offset+octet-stream' },
+        body: blob.slice(at, end),
+      });
+      if (r.status !== 204) throw new Error('Lumiverse stopped taking the file (' + r.status + ').');
+      const next = Number(r.headers.get('Upload-Offset'));
+      at = Number.isFinite(next) && next > at ? next : end;
+      if (said && blob.size > UPLOAD_PART_BYTES) said('Handing the file to Lumiverse: ' + Math.round((at / blob.size) * 100) + '%.');
+    }
+    return id;
+  }
+  // Hands a file to the reader to save. Where Lumiverse can offer it as a
+  // download of its own, it does, and otherwise, or when that fails, the
+  // page's own download is used, as a browser takes it.
+  async function saveFile(blob: Blob, name: string, said?: (text: string) => void): Promise<boolean> {
+    if (hostDownloads()) {
+      try {
+        const id = await uploadFile(blob, name, said);
+        const r = await rpc({ type: 'file_ready', uploadId: id, name, mime: blob.type || '' }, 120000);
+        if (r && r.ok && r.fileId) {
+          ctx.files.download(String(r.fileId));
+          return true;
+        }
+        log('Lumiverse could not offer ' + name + ' as a download: ' + ((r && r.error) || 'no reason given') + ' The browser download was used instead.', 'bad');
+      } catch (e: any) {
+        log('Lumiverse could not offer ' + name + ' as a download: ' + String((e && e.message) || e).slice(0, 200) + ' The browser download was used instead.', 'bad');
+      }
+    }
+    return pageDownload(blob, name);
+  }
+  function pageDownload(blob: Blob, name: string): boolean {
     try {
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -4261,7 +4321,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         blob = wavBlob(m.channels, m.rate);
         name = showName(sh) + '.wav';
       }
-      const ok = saveFile(blob, name);
+      const ok = await saveFile(blob, name, keepSaid);
       const skipped = sh.played.length - (await decodeShow(sh)).length;
       keepSaid(!ok ? 'The browser would not save the file. Some private windows block downloads.' : skipped ? skipped + (skipped === 1 ? ' part' : ' parts') + ' could not be read by the browser, so the file does not have them.' : '');
       if (!ok) notify('warning', 'The audio could not be saved. Some private windows block downloads.');
@@ -4283,12 +4343,12 @@ export function setup(ctx: Ctx, overrides?: any) {
     if (hides) {
       const decoded = (await decodeShow(sh)).find((c) => c.k === k);
       if (!decoded) return keepSaid('This part could not be read by the browser, so it could not be bleeped. Nothing was saved.');
-      const ok = saveFile(wavBlob(partSound(sh, decoded, decoded.data.length), MIX_RATE), showName(sh) + ' part ' + (k + 1) + '.wav');
+      const ok = await saveFile(wavBlob(partSound(sh, decoded, decoded.data.length), MIX_RATE), showName(sh) + ' part ' + (k + 1) + '.wav');
       return keepSaid(ok ? '' : 'The browser would not save the file. Some private windows block downloads.');
     }
     const type = String(got.blob.type || '');
     const ext = /wav/.test(type) ? 'wav' : /ogg|opus/.test(type) ? 'ogg' : /webm/.test(type) ? 'webm' : 'mp3';
-    const ok = saveFile(got.blob, showName(sh) + ' part ' + (k + 1) + '.' + ext);
+    const ok = await saveFile(got.blob, showName(sh) + ' part ' + (k + 1) + '.' + ext);
     keepSaid(ok ? '' : 'The browser would not save the file. Some private windows block downloads.');
   }
 
@@ -7627,7 +7687,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       document.removeEventListener('visibilitychange', away);
       if (raf) cancelAnimationFrame(raf);
       try { src.stop(); } catch (_) {}
-      const done = () => {
+      const done = async () => {
         try { actx.close(); } catch (_) {}
         if (!keep) {
           keepSaid('The video was stopped. Nothing was saved.');
@@ -7643,7 +7703,7 @@ export function setup(ctx: Ctx, overrides?: any) {
           paintStudio();
           return;
         }
-        const ok = saveFile(blob, showName(sh) + (/mp4/.test(type) ? '.mp4' : '.webm'));
+        const ok = await saveFile(blob, showName(sh) + (/mp4/.test(type) ? '.mp4' : '.webm'), keepSaid);
         void decodeShow(sh).then(
           (got) => {
             const skipped = sh.played.length - got.length;
@@ -15510,9 +15570,9 @@ export function setup(ctx: Ctx, overrides?: any) {
     // file. It never holds keys, the cast or anything from a chat.
     const shareRow = el('<div class="af-row af-wrap"></div>');
     const shareSaid = el('<p class="af-note" role="status" data-af-promptsharesaid></p>');
-    const share = button('Share the prompt and notes', () => {
+    const share = button('Share the prompt and notes', async () => {
       const body = { app: 'Auto Foley', kind: 'director', version: VERSION, prompt: S.prompt || '', promptRole: S.promptRole || 'system', askNotes: S.askNotes || {}, askNoteRole: S.askNoteRole || 'user', engineNotes: S.engineNotes || {}, engineNoteRole: S.engineNoteRole || 'rules', decisionQuestions: S.decisionQuestions || {}, skipPatterns: S.skipPatterns || '' };
-      if (!saveFile(new Blob([JSON.stringify(body, null, 2)], { type: 'application/json' }), 'auto-foley-director.json')) setText(shareSaid, 'The browser would not save the file. Some private windows block downloads.');
+      if (!(await saveFile(new Blob([JSON.stringify(body, null, 2)], { type: 'application/json' }), 'auto-foley-director.json'))) setText(shareSaid, 'The browser would not save the file. Some private windows block downloads.');
     });
     share.setAttribute('data-af-promptshare', '');
     const take = button('Add from a file', async () => {
@@ -20737,7 +20797,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       };
     }
     const file = 'auto-foley-look-' + (l.name.replace(/[^a-z0-9]+/gi, '-').toLowerCase().replace(/^-|-$/g, '') || 'look') + '.json';
-    if (!saveFile(new Blob([JSON.stringify(body, null, 2)], { type: 'application/json' }), file)) setText(said, 'The browser would not save the file. Some private windows block downloads.');
+    if (!(await saveFile(new Blob([JSON.stringify(body, null, 2)], { type: 'application/json' }), file))) setText(said, 'The browser would not save the file. Some private windows block downloads.');
     else log('A look was shared as a file: ' + l.name + (body.files ? ', with its pictures and fonts.' : '.'), '', 'setting');
   }
   function drawLooks(box: HTMLElement) {
@@ -24027,15 +24087,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         try {
           const blob = new Blob([JSON.stringify(body, null, 2)], { type: 'application/json' });
           bytes = blob.size;
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement('a');
-          a.href = url;
-          a.download = body.files ? 'auto-foley-backup.json' : 'auto-foley-setup.json';
-          document.body.appendChild(a);
-          a.click();
-          a.remove();
-          setTimeout(() => URL.revokeObjectURL(url), 1000);
-          ok = true;
+          ok = await saveFile(blob, body.files ? 'auto-foley-backup.json' : 'auto-foley-setup.json');
         } catch (_) {}
         const size = bytes >= 1048576 ? (bytes / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(bytes / 1024)) + ' KB';
         transferSaid = ok ? 'Exported ' + parts.length + (parts.length === 1 ? ' part' : ' parts') + ', in a file of ' + size + '.' : 'The browser would not save the file. Some private windows block downloads.';

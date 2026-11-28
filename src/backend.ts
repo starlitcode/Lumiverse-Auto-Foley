@@ -3697,6 +3697,92 @@ const CLIP_PARTS_MAX = Math.ceil(CLIP_MAX_BYTES / CLIP_PART_BYTES);
 const clipUploads = new Map<string, { parts: Uint8Array[]; got: number; at: number }>();
 const CLIP_UPLOAD_MS = 60 * 1000;
 const CLIP_UPLOADS_PER_ACCOUNT = 4;
+// A file for the reader to save, such as a video. The Lumiverse app on a
+// phone does not take a download of a file made in the page, so the panel
+// uploads it to Lumiverse, and it is copied here into a file Lumiverse can
+// offer as a download of its own. Lumiverse removes one 30 minutes after it
+// was last read. The ones made ready, by account, newest last: older ones
+// are taken out when there are more than OFFERED_MAX.
+const offered = new Map<string, string[]>();
+const OFFERED_MAX = 4;
+function fileWhy(e: any): string {
+  return String((e && e.message) || e || 'no reason given').slice(0, 200);
+}
+// A file name with nothing that could make it a path, at most 120 characters.
+function saveName(v: any): string {
+  const t = String(v == null ? '' : v).replace(/[\\/:*?"<>|\x00-\x1f]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 120);
+  return t || 'auto-foley-file';
+}
+async function offerFile(userId: string, uploadId: string, name: string, mime: string): Promise<any> {
+  const fail = (error: string) => ({ type: 'file_ready', ok: false, error });
+  let fileId = '';
+  let done = false;
+  try {
+    let chunk: any;
+    try {
+      chunk = await spindle.files.readChunk({ uploadId }, 0, userId || undefined);
+    } catch (e) {
+      return fail('Lumiverse could not read the file Auto Foley sent it: ' + fileWhy(e));
+    }
+    if (!chunk) return fail('Lumiverse could not find the file Auto Foley sent it.');
+    try {
+      const made = await spindle.files.create({ fileName: name, size: Number(chunk.size) || 0, mimeType: mime, userId: userId || undefined });
+      fileId = String((made && made.fileId) || '');
+    } catch (e) {
+      return fail('Lumiverse could not make room for the file: ' + fileWhy(e));
+    }
+    if (!fileId) return fail('Lumiverse did not make the file.');
+    let offset = 0;
+    for (;;) {
+      // Read by its length, since bytes made in another part of Lumiverse
+      // need not pass an instanceof check here.
+      const data: Uint8Array = chunk.data && typeof chunk.data.byteLength === 'number' ? chunk.data : new Uint8Array(0);
+      if (data.byteLength) {
+        try {
+          offset = await spindle.files.writeChunk(fileId, offset, data, userId || undefined);
+        } catch (e) {
+          return fail('Lumiverse could not write the file: ' + fileWhy(e));
+        }
+      }
+      if (chunk.eof) break;
+      try {
+        chunk = await spindle.files.readChunk({ uploadId }, offset, userId || undefined);
+      } catch (e) {
+        return fail('Lumiverse could not read the file Auto Foley sent it: ' + fileWhy(e));
+      }
+      if (!chunk) return fail('The file Auto Foley sent was gone before it was read.');
+    }
+    try {
+      await spindle.files.finish(fileId, userId || undefined);
+    } catch (e) {
+      return fail('Lumiverse could not finish the file: ' + fileWhy(e));
+    }
+    done = true;
+  } finally {
+    // The upload is copied, or the copy failed, so it is no longer needed,
+    // and neither is a copy that did not finish.
+    try {
+      await spindle.uploads.delete(uploadId, userId || undefined);
+    } catch (_) {}
+    if (!done && fileId) {
+      try {
+        await spindle.files.delete(fileId, userId || undefined);
+      } catch (_) {}
+    }
+  }
+  const who = userId || '';
+  const list = (offered.get(who) || []).concat(fileId);
+  while (list.length > OFFERED_MAX) {
+    const old = list.shift() as string;
+    // A file still being downloaded cannot be taken out, and Lumiverse
+    // removes it later.
+    try {
+      await spindle.files.delete(old, userId || undefined);
+    } catch (_) {}
+  }
+  offered.set(who, list);
+  return { type: 'file_ready', ok: true, fileId };
+}
 interface ClipEntry {
   sig: string;
   mime: string;
@@ -5633,6 +5719,12 @@ async function panelRequest(p: any, userId: string | undefined) {
         const wrong = clipPutWrong(s, sig, mime);
         if (wrong) return answer(wrong);
         return answer(await keepClipBytes(userId, s, sig, mime, fromBase64(str(p.base64, CLIP_PART_BYTES * 2))));
+      }
+      case 'file_ready': {
+        const uploadId = str(p.uploadId, 80);
+        if (!/^[A-Za-z0-9_-]{8,80}$/.test(uploadId)) return answer({ type: 'file_ready', ok: false, error: 'Lumiverse did not say where the file went.' });
+        const mime = /^[a-z]+\/[a-z0-9.+-]+$/i.test(String(p.mime || '')) ? String(p.mime) : 'application/octet-stream';
+        return answer(await offerFile(userId || '', uploadId, saveName(p.name), mime));
       }
       case 'clip_part': {
         // One part of a line too long for one message. The last part keeps
